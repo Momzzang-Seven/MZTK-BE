@@ -737,4 +737,66 @@ class QnaExecutionDraftBuilderAdapterTest {
     assertThat(captured).isEqualTo(expected);
     assertThat(captured).contains(Numeric.toHexString(mockSignatureBytes()).substring(2));
   }
+
+  /**
+   * §MOM-393 follow-up review (comment 3234858579) — idempotency hash must be invariant across
+   * server-sig refresh on repeated prepare calls.
+   *
+   * <p>KMS issues a fresh {@code (signedAt, sig)} pair on every {@code sign(...)} invocation, but
+   * the same logical request must produce the same {@code payloadHash} so that {@code
+   * CreateExecutionIntentService.tryReuseExisting} reuses the existing {@code AWAITING_SIGNATURE}
+   * intent instead of canceling it as {@code IDEMPOTENCY_CONFLICT}. Snapshot JSON, by contrast,
+   * must still vary so the broadcast layer can replay the exact {@code (signedAt, sig)}-embedded
+   * calldata that was last issued — broadcast integrity is carried by the snapshot, not the
+   * idempotency hash.
+   */
+  @Test
+  void build_payloadHashStable_acrossServerSigRefresh() {
+    when(getActiveWalletAddressUseCase.execute(7L)).thenReturn(Optional.of(WALLET));
+    when(eip7702ChainPort.loadPendingAccountNonce(WALLET)).thenReturn(BigInteger.valueOf(12));
+    when(eip7702AuthorizationPort.buildSigningHashHex(
+            11155111L, "0x2222222222222222222222222222222222222222", BigInteger.valueOf(12)))
+        .thenReturn("0x" + "f".repeat(64));
+    when(qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
+        .thenReturn(
+            new QnaContractCallSupport.QnaCallPrevalidationResult(
+                BigInteger.valueOf(180_000),
+                BigInteger.valueOf(2_000_000_000L),
+                BigInteger.valueOf(40_000_000_000L)));
+
+    byte[] sig1 = new byte[65];
+    java.util.Arrays.fill(sig1, (byte) 0x11);
+    byte[] sig2 = new byte[65];
+    java.util.Arrays.fill(sig2, (byte) 0x22);
+    when(signQnaServerSigPort.sign(any(QnaServerSigPreimage.class)))
+        .thenReturn(new QnaServerSigResult(MOCK_SIGNED_AT, sig1))
+        .thenReturn(new QnaServerSigResult(MOCK_SIGNED_AT + 60, sig2));
+
+    QnaEscrowExecutionRequest request =
+        new QnaEscrowExecutionRequest(
+            QnaExecutionResourceType.QUESTION,
+            "101",
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            7L,
+            null,
+            101L,
+            null,
+            "0x4444444444444444444444444444444444444444",
+            new BigInteger("50000000000000000000"),
+            "0x" + "a".repeat(64),
+            null);
+
+    QnaExecutionDraft first = adapter.build(request);
+    QnaExecutionDraft second = adapter.build(request);
+
+    assertThat(second.payloadHash())
+        .as("payloadHash must be stable across refreshed server-sig")
+        .isEqualTo(first.payloadHash());
+    assertThat(second.payloadSnapshotJson())
+        .as("snapshot must still embed the fresh server-sig (broadcast integrity)")
+        .isNotEqualTo(first.payloadSnapshotJson());
+    assertThat(second.calls().getFirst().data())
+        .as("broadcast calldata must reflect the refreshed server-sig")
+        .isNotEqualTo(first.calls().getFirst().data());
+  }
 }

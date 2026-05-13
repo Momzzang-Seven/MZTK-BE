@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
@@ -162,10 +163,14 @@ class QnaEscrowE2ETest extends E2ETestBase {
                       STUB_SIGNED_AT,
                       FAKE_SIGNATURE_HEX);
               String payloadJson = objectMapper.writeValueAsString(payloadSnapshot);
+              // §MOM-393 — production hashes payload.idempotencyView() (server-sig-independent),
+              // not the full payload. Mock must match so QuestionLifecycleExecutionAdapter#
+              // matchesPayloadHash accepts the stored snapshot during recover-create reload.
+              String viewJson = objectMapper.writeValueAsString(payloadSnapshot.idempotencyView());
               String payloadHashHex =
                   Numeric.toHexString(
                       MessageDigest.getInstance("SHA-256")
-                          .digest(payloadJson.getBytes(StandardCharsets.UTF_8)));
+                          .digest(viewJson.getBytes(StandardCharsets.UTF_8)));
               return new QnaExecutionDraft(
                   req.resourceType(),
                   req.resourceId(),
@@ -1442,5 +1447,127 @@ class QnaEscrowE2ETest extends E2ETestBase {
             Map.of("title", title, "content", content, "reward", reward, "tags", List.of()),
             bearerJsonHeaders(accessToken)),
         String.class);
+  }
+
+  /**
+   * §MOM-393 follow-up review (comment 3234858579) — reload (recover-create) 가 매 prepare 마다 새
+   * server-sig 가 발급되어도 동일 AWAITING_SIGNATURE intent 를 재사용하고 stored signedAt 을 surface 해야 한다.
+   *
+   * <p>기존 Order=29 케이스는 {@link #STUB_SIGNED_AT} 만 사용해 server-sig refresh 시나리오를 검증하지 못한다. 본 테스트는
+   * build mock 을 호출별로 다른 {@code signedAt} 을 반환하도록 override 하고:
+   *
+   * <ul>
+   *   <li>응답의 {@code executionIntent.id} 가 첫 prepare 의 intent 와 동일해야 한다 (cancel + 새 attempt 발생 안 함)
+   *   <li>응답의 {@code signatureMeta.signedAt} 이 stored 값과 같아야 한다 (FE expiry mismatch 회귀 가드)
+   *   <li>{@code web3_execution_intents} 행 수가 1개 그대로여야 한다
+   * </ul>
+   *
+   * <p>회귀 가드: {@code CreateExecutionIntentResult.payloadSnapshotJson} 노출 + {@code
+   * SubmitQnaExecutionIntentAdapter} 의 reuse 분기에서 stored signedAt 사용 + {@code
+   * QnaExecutionDraftBuilderAdapter} 가 server-sig 무관 view 로 hash 산출 — 셋 중 하나라도 회귀하면 본 케이스가 fail.
+   */
+  @Test
+  @Order(101)
+  @DisplayName(
+      "[MOM-393] recover-create 시 매 build 마다 새 server-sig 가 발급되어도 동일 intent reuse + stored signedAt surface")
+  void recoverCreate_payloadHashStableAcrossServerSigRefresh() throws Exception {
+    AtomicLong signedAtCounter = new AtomicLong(STUB_SIGNED_AT);
+    // Reset the default @BeforeEach stub so the override below is the only Answer registered for
+    // build(any()). Using willAnswer(...).given(mock).method(any()) form (instead of
+    // given(mock.method(any()))) so that registering the new stub does not trigger the previously
+    // registered Answer with a null argument and dereference it inside the closure.
+    org.mockito.Mockito.reset(buildQnaExecutionDraftPort);
+    BDDMockito.doNothing().when(precheckQuestionFundingPort).precheck(any());
+    BDDMockito.willAnswer(
+            inv -> {
+              momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest req =
+                  inv.getArgument(0);
+              long currentSignedAt = signedAtCounter.getAndAdd(60L);
+              String rotatedCallData = FAKE_CALLDATA + Long.toHexString(currentSignedAt);
+              String rootIdempotencyKey =
+                  req.actionType() == QnaExecutionActionType.QNA_QUESTION_UPDATE
+                      ? QnaEscrowIdempotencyKeyFactory.createQuestionUpdate(
+                          req.requesterUserId(),
+                          req.postId(),
+                          req.questionUpdateVersion(),
+                          req.questionUpdateToken())
+                      : QnaEscrowIdempotencyKeyFactory.create(
+                          req.actionType(), req.requesterUserId(), req.postId(), req.answerId());
+              QnaEscrowExecutionPayload payloadSnapshot =
+                  new QnaEscrowExecutionPayload(
+                      req.actionType(),
+                      req.postId(),
+                      req.answerId(),
+                      FAKE_AUTHORITY_ADDRESS,
+                      req.tokenAddress(),
+                      amountForAction(req.actionType(), req.rewardAmountWei()),
+                      req.questionHash(),
+                      req.contentHash(),
+                      FAKE_CALL_TARGET,
+                      rotatedCallData,
+                      req.questionUpdateVersion(),
+                      req.questionUpdateToken(),
+                      req.answerUpdateVersion(),
+                      req.answerUpdateToken(),
+                      currentSignedAt,
+                      FAKE_SIGNATURE_HEX);
+              String payloadJson = objectMapper.writeValueAsString(payloadSnapshot);
+              String viewJson = objectMapper.writeValueAsString(payloadSnapshot.idempotencyView());
+              String payloadHashHex =
+                  Numeric.toHexString(
+                      MessageDigest.getInstance("SHA-256")
+                          .digest(viewJson.getBytes(StandardCharsets.UTF_8)));
+              return new QnaExecutionDraft(
+                  req.resourceType(),
+                  req.resourceId(),
+                  QnaExecutionResourceStatus.PENDING_EXECUTION,
+                  req.actionType(),
+                  req.requesterUserId(),
+                  req.counterpartyUserId(),
+                  rootIdempotencyKey,
+                  payloadHashHex,
+                  payloadJson,
+                  List.of(
+                      new QnaExecutionDraftCall(
+                          FAKE_CALL_TARGET, BigInteger.ZERO, rotatedCallData)),
+                  true,
+                  FAKE_AUTHORITY_ADDRESS,
+                  0L,
+                  FAKE_DELEGATE_TARGET,
+                  "0x" + "b".repeat(64),
+                  null,
+                  "0x" + "c".repeat(64),
+                  currentSignedAt,
+                  LocalDateTime.now().plusMinutes(30));
+            })
+        .given(buildQnaExecutionDraftPort)
+        .build(any());
+
+    Long postId = createQuestionPostId("재시도 안정성 질문", "재시도 안정성 본문", 35L);
+    String originalIntentId = getPostCurrentCreateExecutionIntentId(postId);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId + "/web3/recover-create",
+            HttpMethod.POST,
+            new HttpEntity<>(Map.of(), bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(response.getBody()).path("data");
+    assertThat(data.path("web3").path("executionIntent").path("id").asText())
+        .as("reuse 가 성공해야 함 (cancel + 새 attempt 발생 안 함)")
+        .isEqualTo(originalIntentId);
+    assertThat(data.path("web3").path("executionIntent").path("status").asText())
+        .isEqualTo("AWAITING_SIGNATURE");
+    assertThat(data.path("web3").path("signatureMeta").path("signedAt").asLong())
+        .as("응답의 signedAt 은 stored 값과 일치해야 함")
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(data.path("web3").path("signatureMeta").path("signatureExpiresAt").asLong())
+        .as("응답의 signatureExpiresAt 은 stored signedAt + validity 와 일치해야 함")
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+    assertThat(countQuestionCreateIntents(postId))
+        .as("같은 logical request 에 대해 intent 가 늘어나면 안 됨")
+        .isEqualTo(1);
   }
 }

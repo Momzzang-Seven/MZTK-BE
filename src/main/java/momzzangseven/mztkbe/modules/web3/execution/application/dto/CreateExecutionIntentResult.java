@@ -8,7 +8,14 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 
-/** Result contract returned after execution intent create/reuse. */
+/**
+ * Result contract returned after execution intent create/reuse.
+ *
+ * <p>{@code payloadSnapshotJson} mirrors the persisted intent's snapshot so that module-specific
+ * adapters can recover stored fields (e.g. QnA's server-sig {@code signedAt}) when {@code existing}
+ * is true and a new in-memory draft would otherwise overwrite them in the API response. Nullable to
+ * preserve compatibility with callers that don't yet need it.
+ */
 public record CreateExecutionIntentResult(
     ExecutionResourceType resourceType,
     String resourceId,
@@ -19,7 +26,8 @@ public record CreateExecutionIntentResult(
     ExecutionMode mode,
     int signCount,
     SignRequestBundle signRequest,
-    boolean existing) {
+    boolean existing,
+    String payloadSnapshotJson) {
 
   /** Validates required create result fields before exposing API contract. */
   public CreateExecutionIntentResult {
@@ -50,5 +58,34 @@ public record CreateExecutionIntentResult(
     if (executionIntentStatus == ExecutionIntentStatus.AWAITING_SIGNATURE && signRequest == null) {
       throw new Web3InvalidInputException("signRequest is required");
     }
+  }
+
+  /**
+   * Backward-compatible 10-arg constructor that leaves {@code payloadSnapshotJson} null. Used by
+   * existing test fixtures and callers that do not consume the stored snapshot.
+   */
+  public CreateExecutionIntentResult(
+      ExecutionResourceType resourceType,
+      String resourceId,
+      ExecutionResourceStatus resourceStatus,
+      String executionIntentId,
+      ExecutionIntentStatus executionIntentStatus,
+      LocalDateTime expiresAt,
+      ExecutionMode mode,
+      int signCount,
+      SignRequestBundle signRequest,
+      boolean existing) {
+    this(
+        resourceType,
+        resourceId,
+        resourceStatus,
+        executionIntentId,
+        executionIntentStatus,
+        expiresAt,
+        mode,
+        signCount,
+        signRequest,
+        existing,
+        null);
   }
 }

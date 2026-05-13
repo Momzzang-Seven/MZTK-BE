@@ -41,13 +41,31 @@ public class SubmitQnaExecutionIntentAdapter implements SubmitQnaExecutionDraftP
     CreateExecutionIntentResult result =
         createExecutionIntentUseCase.execute(
             new CreateExecutionIntentCommand(toExecutionDraft(draft)));
+    Long surfaceSignedAt = resolveSurfaceSignedAt(draft, result);
     Integer sigValidityDuration =
-        draft.signedAt() == null ? null : qnaEscrowProperties.getSigValidityDuration();
+        surfaceSignedAt == null ? null : qnaEscrowProperties.getSigValidityDuration();
     QnaExecutionIntentResult qnaResult =
         QnaExecutionIntentResult.from(
-            draft.actionType().name(), result, draft.signedAt(), sigValidityDuration);
+            draft.actionType().name(), result, surfaceSignedAt, sigValidityDuration);
     upsertAnswerExecutionRef(draft, qnaResult);
     return qnaResult;
+  }
+
+  /**
+   * Resolves the {@code signedAt} that should be surfaced to the client.
+   *
+   * <p>When the underlying use case returns an existing intent ({@code result.existing() == true}),
+   * the in-memory {@code draft} carries a freshly signed (signedAt, sig) pair that was discarded by
+   * reuse; surfacing {@code draft.signedAt()} would advertise a later expiry than the stored
+   * calldata's on-chain deadline, risking {@code SignatureExpired} reverts during the t2−t1 window.
+   * For reuse, surface the stored payload's {@code signedAt} so the response matches the server-sig
+   * that will actually be broadcast.
+   */
+  private Long resolveSurfaceSignedAt(QnaExecutionDraft draft, CreateExecutionIntentResult result) {
+    if (!result.existing() || result.payloadSnapshotJson() == null) {
+      return draft.signedAt();
+    }
+    return readPayload(result.payloadSnapshotJson()).signedAt();
   }
 
   private void upsertAnswerExecutionRef(QnaExecutionDraft draft, QnaExecutionIntentResult result) {

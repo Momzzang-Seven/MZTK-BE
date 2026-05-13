@@ -378,13 +378,19 @@ class QuestionLifecycleExecutionAdapterTest {
         .willReturn(new LoadQnaRewardTokenConfigPort.RewardTokenConfig(TOKEN_ADDRESS, 0));
   }
 
+  // §MOM-393 — stored payloadHash 는 server-sig-independent IdempotencyView 의 SHA-256.
+  // production 의 QnaExecutionDraftBuilderAdapter#build() 가 hashHex(payload.idempotencyView()) 로
+  // 산출하므로 fixture 도 동일한 산출 방식을 따라야 matchesPayloadHash 검증이 통과한다.
   private String payloadHash(String payloadSnapshotJson) {
     try {
+      ObjectMapper mapper = new ObjectMapper();
+      QnaEscrowExecutionPayload payload =
+          mapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
+      String viewJson = mapper.writeValueAsString(payload.idempotencyView());
       byte[] digest =
-          MessageDigest.getInstance("SHA-256")
-              .digest(payloadSnapshotJson.getBytes(StandardCharsets.UTF_8));
+          MessageDigest.getInstance("SHA-256").digest(viewJson.getBytes(StandardCharsets.UTF_8));
       return Numeric.toHexString(digest);
-    } catch (NoSuchAlgorithmException e) {
+    } catch (NoSuchAlgorithmException | com.fasterxml.jackson.core.JsonProcessingException e) {
       throw new IllegalStateException(e);
     }
   }

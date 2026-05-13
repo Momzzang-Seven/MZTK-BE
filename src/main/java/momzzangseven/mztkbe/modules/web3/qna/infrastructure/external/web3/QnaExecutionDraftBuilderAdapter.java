@@ -120,7 +120,10 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         request.requesterUserId(),
         request.counterpartyUserId(),
         rootIdempotencyKey(request),
-        qnaPayloadSerializer.hashHex(payload),
+        // §MOM-393 — hash the server-sig-independent projection so that retrying the same logical
+        // request does not produce a new payloadHash on every KMS sign. The full payload
+        // (server-sig fields included) is still persisted as the snapshot for broadcast replay.
+        qnaPayloadSerializer.hashHex(payload.idempotencyView()),
         qnaPayloadSerializer.serialize(payload),
         List.of(call),
         draftContext.fallbackAllowed(),

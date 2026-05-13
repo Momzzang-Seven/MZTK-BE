@@ -278,7 +278,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
         intent.getMode(),
         intent.getMode().requiredSignCount(),
         buildSignRequest(intent),
-        existing);
+        existing,
+        intent.getPayloadSnapshotJson());
   }
 
   private ExecutionResourceType toModelResourceType(ExecutionResourceTypeCode resourceType) {

@@ -271,8 +271,10 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
       // §MOM-393 — broadcast callData (9-arg, server-sig 봉입) 와 comparison baseline (7-arg,
       // server-sig-free) 의 책임 분리. stored payload 의 사용자-입력 필드로 7-arg baseline 을
       // 재인코딩하여 expected 7-arg baseline 과 byte-equal 비교하면, server-managed 필드
-      // (signedAt/signatureBytes) 도입 여부에 둔감한 의미 검증이 성립한다. payload 자체의
-      // 무결성은 matchesPayloadHash 가 SHA-256 으로 cover.
+      // (signedAt/signatureBytes) 도입 여부에 둔감한 의미 검증이 성립한다. payload 의 logical
+      // identity 무결성은 matchesPayloadHash 가 idempotencyView SHA-256 으로 cover 하며, server-sig
+      // 봉입된 callData/signedAt 무결성은 executionDigest (EIP-7702) / unsignedTxFingerprint
+      // (EIP-1559) 가 별도로 cover.
       String storedBaselineCallData =
           qnaEscrowAbiEncoder.encode(
               QnaExecutionActionType.QNA_QUESTION_CREATE,
@@ -304,6 +306,15 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
     }
   }
 
+  /**
+   * §MOM-393 — stored {@code payloadHash} is the SHA-256 of {@link
+   * QnaEscrowExecutionPayload#idempotencyView()} (server-sig-independent projection), not of the
+   * full snapshot JSON, so that idempotency reuse survives a refreshed server signature. This check
+   * therefore re-hashes the projection extracted from the stored snapshot. Tampering of the
+   * server-sig fields ({@code signedAt}, {@code signatureHex}, embedded {@code callData}) is caught
+   * separately by {@code executionDigest} (EIP-7702) and {@code unsignedTxFingerprint} (EIP-1559);
+   * this method covers the logical-identity portion of the snapshot only.
+   */
   private boolean matchesPayloadHash(String payloadHash, String payloadSnapshotJson) {
     if (payloadHash == null
         || payloadHash.isBlank()
@@ -312,12 +323,17 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
       return false;
     }
     try {
+      QnaEscrowExecutionPayload payload =
+          objectMapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
+      String idempotencyViewJson = objectMapper.writeValueAsString(payload.idempotencyView());
       byte[] digest =
           MessageDigest.getInstance("SHA-256")
-              .digest(payloadSnapshotJson.getBytes(StandardCharsets.UTF_8));
+              .digest(idempotencyViewJson.getBytes(StandardCharsets.UTF_8));
       return payloadHash.equals(Numeric.toHexString(digest));
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException("SHA-256 digest is unavailable", e);
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
     }
   }
 
