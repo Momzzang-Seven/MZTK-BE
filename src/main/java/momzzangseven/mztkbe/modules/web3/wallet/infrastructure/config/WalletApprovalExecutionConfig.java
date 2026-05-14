@@ -6,12 +6,14 @@ import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableExcepti
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalCapability;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSponsorPolicy;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalTtlPolicy;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.BuildWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.CancelWalletApprovalExecutionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionSupportPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalSponsorPolicyPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalTtlPolicyPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SubmitWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SyncWalletApprovalExecutionSuccessPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -50,6 +52,12 @@ public class WalletApprovalExecutionConfig {
   LoadWalletApprovalSponsorPolicyPort fallbackLoadWalletApprovalSponsorPolicyPort() {
     return () ->
         new WalletApprovalSponsorPolicy(false, 21_000L, 1L, BigDecimal.ZERO, BigDecimal.ZERO);
+  }
+
+  @Bean
+  @ConditionalOnMissingBean(LoadWalletApprovalTtlPolicyPort.class)
+  LoadWalletApprovalTtlPolicyPort fallbackLoadWalletApprovalTtlPolicyPort() {
+    return () -> new WalletApprovalTtlPolicy(30L);
   }
 
   @Bean

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.DuplicateWalletRegistrationSessionException;
@@ -18,6 +19,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.repos
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -106,14 +108,20 @@ class WalletRegistrationSessionPersistenceAdapterTest {
   }
 
   @Test
-  void loadRecoveryCandidates_usesNonTerminalStatusesAndLimit() {
+  void loadRecoveryCandidates_usesRecoveryCandidateStatusesAndExcludesLocalConflict() {
     when(repository.findByStatusInOrderByUpdatedAtAscIdAsc(any(), any(Pageable.class)))
         .thenReturn(List.of(entity()));
 
     List<WalletRegistrationSession> loaded = adapter.loadRecoveryCandidates(50);
 
     assertThat(loaded).hasSize(1);
-    verify(repository).findByStatusInOrderByUpdatedAtAscIdAsc(any(), any(Pageable.class));
+    ArgumentCaptor<Collection<WalletRegistrationStatus>> statusesCaptor =
+        ArgumentCaptor.forClass(Collection.class);
+    verify(repository)
+        .findByStatusInOrderByUpdatedAtAscIdAsc(statusesCaptor.capture(), any(Pageable.class));
+    assertThat(statusesCaptor.getValue())
+        .contains(WalletRegistrationStatus.FINALIZATION_FAILED)
+        .doesNotContain(WalletRegistrationStatus.LOCAL_CONFLICT);
   }
 
   private static WalletRegistrationSession newSession() {

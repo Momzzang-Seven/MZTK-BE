@@ -43,7 +43,7 @@ public class RegisterWalletApprovalAttemptService implements RegisterWalletAppro
     WalletApprovalExecutionDraft draft =
         buildWalletApprovalExecutionDraftPort.build(
             new WalletApprovalExecutionRequest(
-                registrationId, command.userId(), command.walletAddress()));
+                registrationId, command.userId(), command.walletAddress(), sessionExpiresAt));
     WalletApprovalExecutionIntentResult approvalIntent =
         submitWalletApprovalExecutionDraftPort.submit(draft);
 
@@ -55,10 +55,8 @@ public class RegisterWalletApprovalAttemptService implements RegisterWalletAppro
                 command.nonce(),
                 sessionExpiresAt,
                 now)
-            .attachApprovalIntent(
-                approvalIntent.executionIntent().id(),
-                sessionExpiresAt,
-                LocalDateTime.now(appClock));
+            .attachApprovalIntentPreservingDeadline(
+                approvalIntent.executionIntent().id(), LocalDateTime.now(appClock));
 
     WalletRegistrationSession savedSession =
         createWalletRegistrationSessionPort.createAndFlush(session);

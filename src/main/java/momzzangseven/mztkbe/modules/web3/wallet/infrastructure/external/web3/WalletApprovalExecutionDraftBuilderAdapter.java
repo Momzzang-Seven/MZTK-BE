@@ -61,6 +61,13 @@ public class WalletApprovalExecutionDraftBuilderAdapter
                 toPayloadCall(qnaEscrow, qnaCall),
                 toPayloadCall(marketplaceEscrow, marketplaceCall)));
 
+    LocalDateTime defaultExpiresAt =
+        LocalDateTime.now(appClock).plusSeconds(executionSupport.ttlSeconds());
+    LocalDateTime expiresAt =
+        request.expiresAt() == null || request.expiresAt().isAfter(defaultExpiresAt)
+            ? defaultExpiresAt
+            : request.expiresAt();
+
     return new WalletApprovalExecutionDraft(
         WalletApprovalExecutionResourceType.WALLET_REGISTRATION,
         request.registrationId(),
@@ -79,7 +86,7 @@ public class WalletApprovalExecutionDraftBuilderAdapter
         executionSupport.authorizationPayloadHash(),
         null,
         null,
-        LocalDateTime.now(appClock).plusSeconds(executionSupport.ttlSeconds()));
+        expiresAt);
   }
 
   private WalletApprovalExecutionDraftCall approveCall(String tokenAddress, String spenderAddress) {

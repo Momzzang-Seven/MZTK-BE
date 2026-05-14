@@ -1,9 +1,15 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.dto;
 
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 
 public record WalletApprovalExecutionRequest(
-    String registrationId, Long requesterUserId, String walletAddress) {
+    String registrationId, Long requesterUserId, String walletAddress, LocalDateTime expiresAt) {
+
+  public WalletApprovalExecutionRequest(
+      String registrationId, Long requesterUserId, String walletAddress) {
+    this(registrationId, requesterUserId, walletAddress, null);
+  }
 
   public WalletApprovalExecutionRequest {
     if (registrationId == null || registrationId.isBlank()) {

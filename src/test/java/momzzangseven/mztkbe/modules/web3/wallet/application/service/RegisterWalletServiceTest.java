@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.challenge.ChallengeAlreadyUsedException;
 import momzzangseven.mztkbe.global.error.challenge.ChallengeMismatchWalletAddressException;
 import momzzangseven.mztkbe.global.error.challenge.ChallengeNotFoundException;
@@ -22,6 +23,7 @@ import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyLinkedException;
 import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.global.error.wallet.WalletBlackListException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ExpireWalletRegistrationSessionCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
@@ -137,6 +139,26 @@ class RegisterWalletServiceTest {
     verify(markChallengeUsedPort, never()).markUsed(any());
     verify(markChallengeExpiredPort, never()).markExpired(any());
     verifyNoInteractions(approvalAttemptService);
+  }
+
+  @Test
+  @DisplayName("sponsor cap race during approval attempt is mapped to wallet approval unavailable")
+  void execute_ApprovalAttemptSponsorCapExceeded_ThrowsWalletApprovalUnavailable() {
+    RegisterWalletCommand command = validCommand();
+    givenValidOwnership(command);
+    when(loadWalletPort.countWalletsByUserIdAndStatus(VALID_USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(0);
+    when(loadWalletPort.findByWalletAddress(VALID_WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(duplicateResolver.resolveCurrent(VALID_USER_ID, VALID_WALLET_ADDRESS))
+        .thenReturn(WalletRegistrationDuplicateResolution.createNew());
+    when(approvalAttemptService.createPendingApproval(command))
+        .thenThrow(new Web3TransferException(ErrorCode.SPONSOR_DAILY_LIMIT_EXCEEDED, true));
+
+    assertThatThrownBy(() -> registerWalletService.execute(command))
+        .isInstanceOf(WalletApprovalUnavailableException.class)
+        .hasMessageContaining("Sponsor daily limit exceeded");
+
+    verify(markChallengeUsedPort, never()).markUsed(any());
   }
 
   @Test

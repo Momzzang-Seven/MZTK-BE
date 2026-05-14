@@ -67,6 +67,9 @@ public class MarkWalletRegistrationApprovalTerminatedService
         && session.getStatus().isPreSubmissionExpirable()) {
       return session.expire(SESSION_EXPIRED_REASON, failureReason(failureReason), now);
     }
+    if (!session.getStatus().isPreSubmissionExpirable()) {
+      return session;
+    }
     return session.markApprovalRetryable("EXPIRED", failureReason(failureReason), now);
   }
 

@@ -3,7 +3,10 @@ package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ValidateWalletRegistrationApprovalExecutionCommand;
@@ -19,6 +22,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ValidateWalletRegistrationApprovalExecutionServiceTest {
 
   private static final LocalDateTime NOW = LocalDateTime.parse("2026-05-13T10:00:00");
+  private static final Clock CLOCK =
+      Clock.fixed(Instant.parse("2026-05-13T01:00:00Z"), ZoneId.of("Asia/Seoul"));
   private static final String REGISTRATION_ID = "registration-1";
   private static final String INTENT_ID = "intent-1";
 
@@ -28,7 +33,7 @@ class ValidateWalletRegistrationApprovalExecutionServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new ValidateWalletRegistrationApprovalExecutionService(loadSessionPort);
+    service = new ValidateWalletRegistrationApprovalExecutionService(loadSessionPort, CLOCK);
   }
 
   @Test
@@ -59,6 +64,15 @@ class ValidateWalletRegistrationApprovalExecutionServiceTest {
         .hasMessageContaining("not latest");
   }
 
+  @Test
+  void execute_whenSessionDeadlinePassed_throwsInvalidInput() {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(expiredSession()));
+
+    assertThatThrownBy(() -> service.execute(command(1L, INTENT_ID)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("expired");
+  }
+
   private static ValidateWalletRegistrationApprovalExecutionCommand command(
       Long userId, String intentId) {
     return new ValidateWalletRegistrationApprovalExecutionCommand(
@@ -69,5 +83,12 @@ class ValidateWalletRegistrationApprovalExecutionServiceTest {
     return WalletRegistrationSession.create(
             REGISTRATION_ID, 1L, "0x" + "a".repeat(40), "nonce-1", NOW.plusMinutes(30), NOW)
         .attachApprovalIntent(INTENT_ID, NOW.plusMinutes(30), NOW.plusSeconds(1));
+  }
+
+  private static WalletRegistrationSession expiredSession() {
+    LocalDateTime createdAt = NOW.minusMinutes(31);
+    return WalletRegistrationSession.create(
+            REGISTRATION_ID, 1L, "0x" + "a".repeat(40), "nonce-1", NOW.minusSeconds(1), createdAt)
+        .attachApprovalIntent(INTENT_ID, NOW.minusSeconds(1), createdAt.plusSeconds(1));
   }
 }

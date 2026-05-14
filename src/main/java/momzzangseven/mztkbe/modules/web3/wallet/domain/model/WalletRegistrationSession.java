@@ -96,6 +96,37 @@ public class WalletRegistrationSession {
         .build();
   }
 
+  /** Attaches or replaces the approval execution intent while preserving the session deadline. */
+  public WalletRegistrationSession attachApprovalIntentPreservingDeadline(
+      String executionIntentId, LocalDateTime now) {
+    requireExecutableStatus();
+    requireExecutionIntentId(executionIntentId);
+    requireNow(now);
+    if (approvalExpiresAt == null || !approvalExpiresAt.isAfter(now)) {
+      throw new Web3InvalidInputException("approvalExpiresAt must be after now");
+    }
+    if (status == WalletRegistrationStatus.APPROVAL_REQUIRED && latestExecutionIntentId != null) {
+      throw new IllegalStateException("approval intent is already attached");
+    }
+
+    int nextRetryCount =
+        status == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            ? safeRetryCount() + 1
+            : safeRetryCount();
+
+    return toBuilder()
+        .status(WalletRegistrationStatus.APPROVAL_REQUIRED)
+        .latestExecutionIntentId(executionIntentId)
+        .latestTransactionId(null)
+        .latestTransactionHash(null)
+        .lastExecutionStatus(null)
+        .lastErrorCode(null)
+        .lastErrorReason(null)
+        .retryCount(nextRetryCount)
+        .updatedAt(now)
+        .build();
+  }
+
   /** Marks that the approval signature was accepted and transaction submission began. */
   public WalletRegistrationSession markApprovalSigned(
       String executionIntentId,

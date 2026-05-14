@@ -81,6 +81,18 @@ class WalletApprovalExecutionDraftBuilderAdapterTest {
   }
 
   @Test
+  void build_whenRequestDeadlineIsSooner_capsExpiresAtToRequestDeadline() {
+    givenExecutionSupport("0x" + "f".repeat(64), 12L);
+
+    WalletApprovalExecutionDraft draft =
+        adapter.build(
+            new WalletApprovalExecutionRequest(
+                "registration-1", 7L, WALLET, LocalDateTime.parse("2026-05-13T09:03:00")));
+
+    assertThat(draft.expiresAt()).isEqualTo(LocalDateTime.parse("2026-05-13T09:03:00"));
+  }
+
+  @Test
   void build_storesApprovalCallsInPayloadSnapshot() throws Exception {
     givenExecutionSupport("0x" + "a".repeat(64), 1L);
 

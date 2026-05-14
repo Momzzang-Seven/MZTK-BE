@@ -90,6 +90,29 @@ class MarkWalletRegistrationApprovalTerminatedServiceTest {
   }
 
   @Test
+  void execute_whenExpiredEventArrivesAfterSignature_doesNotMoveBackToRetryable() {
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(signedSession()));
+
+    service.execute(command("EXPIRED", "execution expired"));
+
+    verify(saveSessionPort, never()).save(any());
+  }
+
+  @Test
+  void execute_whenExpiredEventArrivesAfterPendingOnchain_doesNotMoveBackToRetryable() {
+    WalletRegistrationSession pending =
+        signedSession()
+            .markApprovalPendingOnchain(
+                INTENT_ID, 10L, "0x" + "b".repeat(64), "PENDING_ONCHAIN", NOW.plusSeconds(3));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(pending));
+
+    service.execute(command("EXPIRED", "execution expired"));
+
+    verify(saveSessionPort, never()).save(any());
+  }
+
+  @Test
   void execute_whenSessionAlreadyExpired_doesNotOverwriteWithCanceled() {
     WalletRegistrationSession expired =
         approvalRequiredSession()

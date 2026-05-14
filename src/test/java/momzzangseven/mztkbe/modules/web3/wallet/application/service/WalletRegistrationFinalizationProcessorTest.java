@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.WalletRegistrationLocalConflictException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletAndFlushPort;
@@ -183,6 +184,62 @@ class WalletRegistrationFinalizationProcessorTest {
   }
 
   @Test
+  void finalizeConfirmed_whenMultipleActiveWalletsIncludeMatchingWallet_throwsLocalConflict() {
+    WalletRegistrationSession session = pendingSession();
+    UserWallet otherActive =
+        UserWallet.builder()
+            .id(78L)
+            .userId(USER_ID)
+            .walletAddress("0x" + "b".repeat(40))
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    UserWallet matchingActive =
+        UserWallet.builder()
+            .id(77L)
+            .userId(USER_ID)
+            .walletAddress(WALLET_ADDRESS)
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(List.of(otherActive, matchingActive));
+
+    assertThatThrownBy(() -> processor.finalizeConfirmed(command()))
+        .isInstanceOf(WalletRegistrationLocalConflictException.class)
+        .hasMessageContaining("active wallet");
+  }
+
+  @Test
+  void finalizeConfirmed_whenMatchingWalletPrecedesOtherActiveWallet_throwsLocalConflict() {
+    WalletRegistrationSession session = pendingSession();
+    UserWallet matchingActive =
+        UserWallet.builder()
+            .id(77L)
+            .userId(USER_ID)
+            .walletAddress(WALLET_ADDRESS)
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    UserWallet otherActive =
+        UserWallet.builder()
+            .id(78L)
+            .userId(USER_ID)
+            .walletAddress("0x" + "b".repeat(40))
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(List.of(matchingActive, otherActive));
+
+    assertThatThrownBy(() -> processor.finalizeConfirmed(command()))
+        .isInstanceOf(WalletRegistrationLocalConflictException.class)
+        .hasMessageContaining("active wallet");
+  }
+
+  @Test
   void finalizeConfirmed_whenUserHasDifferentActiveWallet_throwsLocalConflict() {
     WalletRegistrationSession session = pendingSession();
     UserWallet active =
@@ -229,6 +286,41 @@ class WalletRegistrationFinalizationProcessorTest {
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
 
     processor.finalizeConfirmed(new FinalizeWalletRegistrationCommand(REGISTRATION_ID, "old"));
+
+    verify(saveSessionPort, never()).save(any());
+    verify(saveWalletAndFlushPort, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void finalizeConfirmed_whenSessionMissing_throwsInvalidInput() {
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> processor.finalizeConfirmed(command()))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("registrationId not found");
+
+    verify(saveSessionPort, never()).save(any());
+    verify(saveWalletAndFlushPort, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void finalizeConfirmed_whenAlreadyRegistered_noopsIdempotently() {
+    WalletRegistrationSession session = pendingSession().markRegistered(77L, NOW.plusSeconds(4));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+
+    processor.finalizeConfirmed(command());
+
+    verify(saveSessionPort, never()).save(any());
+    verify(saveWalletAndFlushPort, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void finalizeConfirmed_whenStatusIsNotFinalizable_noops() {
+    WalletRegistrationSession session =
+        approvalRequiredSession().markApprovalRetryable("EXPIRED", "expired", NOW.plusSeconds(2));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+
+    processor.finalizeConfirmed(command());
 
     verify(saveSessionPort, never()).save(any());
     verify(saveWalletAndFlushPort, never()).saveAndFlush(any());

@@ -8,7 +8,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetEip7702AuthorizationPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetSponsorPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
@@ -35,8 +37,10 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTr
 import momzzangseven.mztkbe.modules.web3.execution.application.service.CreateExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecutionModeSelector;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.GetEip7702AuthorizationPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetLatestExecutionIntentSummaryService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.GetSponsorPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentFailedOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
@@ -163,6 +167,17 @@ public class ExecutionIntentServiceConfig {
     return (delegateTarget, calls) -> {
       throw new IllegalStateException("EIP-7702 execution draft policy is unavailable");
     };
+  }
+
+  @Bean
+  GetSponsorPolicyUseCase getSponsorPolicyUseCase(LoadSponsorPolicyPort loadSponsorPolicyPort) {
+    return new GetSponsorPolicyService(loadSponsorPolicyPort);
+  }
+
+  @Bean
+  GetEip7702AuthorizationPolicyUseCase getEip7702AuthorizationPolicyUseCase(
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort) {
+    return new GetEip7702AuthorizationPolicyService(loadEip7702AuthorizationTtlPort);
   }
 
   @Bean

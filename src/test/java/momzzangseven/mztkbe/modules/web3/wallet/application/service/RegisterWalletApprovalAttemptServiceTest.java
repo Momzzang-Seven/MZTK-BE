@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletRe
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.DuplicateWalletRegistrationSessionException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.BuildWalletApprovalExecutionDraftPort;
@@ -32,6 +33,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.vo.WalletApprovalExecutio
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -75,6 +77,10 @@ class RegisterWalletApprovalAttemptServiceTest {
 
     RegisterWalletResult result = service.createPendingApproval(command());
 
+    ArgumentCaptor<WalletApprovalExecutionRequest> requestCaptor =
+        ArgumentCaptor.forClass(WalletApprovalExecutionRequest.class);
+    verify(buildDraftPort).build(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().expiresAt()).isEqualTo(NOW.plusMinutes(30));
     assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_REQUIRED);
     assertThat(result.walletId()).isNull();
     assertThat(result.registrationId()).isNotBlank();

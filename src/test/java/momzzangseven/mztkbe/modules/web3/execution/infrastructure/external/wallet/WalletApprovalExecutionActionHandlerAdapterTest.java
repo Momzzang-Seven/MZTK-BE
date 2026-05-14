@@ -68,6 +68,77 @@ class WalletApprovalExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  void supportsActionType_onlySupportsWalletEscrowApprove() {
+    assertThat(adapter.supports(ExecutionActionType.WALLET_ESCROW_APPROVE)).isTrue();
+    assertThat(adapter.supports(ExecutionActionType.TRANSFER_SEND)).isFalse();
+  }
+
+  @Test
+  void supportsIntent_whenWalletRegistrationPayloadMatches_returnsTrue() {
+    assertThat(adapter.supports(intent())).isTrue();
+  }
+
+  @Test
+  void supportsIntent_whenActionTypeDiffers_returnsFalse() {
+    assertThat(
+            adapter.supports(
+                intent(
+                    ExecutionActionType.TRANSFER_SEND,
+                    ExecutionResourceType.WALLET_REGISTRATION,
+                    REGISTRATION_ID,
+                    payloadJson())))
+        .isFalse();
+  }
+
+  @Test
+  void supportsIntent_whenResourceTypeDiffers_returnsFalse() {
+    assertThat(
+            adapter.supports(
+                intent(
+                    ExecutionActionType.WALLET_ESCROW_APPROVE,
+                    ExecutionResourceType.TRANSFER,
+                    REGISTRATION_ID,
+                    payloadJson())))
+        .isFalse();
+  }
+
+  @Test
+  void supportsIntent_whenPayloadRegistrationIdDiffers_returnsFalse() {
+    assertThat(
+            adapter.supports(
+                intent(
+                    ExecutionActionType.WALLET_ESCROW_APPROVE,
+                    ExecutionResourceType.WALLET_REGISTRATION,
+                    REGISTRATION_ID,
+                    payloadJson("other-registration"))))
+        .isFalse();
+  }
+
+  @Test
+  void supportsIntent_whenPayloadRegistrationIdIsNull_returnsFalse() {
+    assertThat(
+            adapter.supports(
+                intent(
+                    ExecutionActionType.WALLET_ESCROW_APPROVE,
+                    ExecutionResourceType.WALLET_REGISTRATION,
+                    REGISTRATION_ID,
+                    payloadJson(null))))
+        .isFalse();
+  }
+
+  @Test
+  void supportsIntent_whenPayloadIsInvalid_returnsFalse() {
+    assertThat(
+            adapter.supports(
+                intent(
+                    ExecutionActionType.WALLET_ESCROW_APPROVE,
+                    ExecutionResourceType.WALLET_REGISTRATION,
+                    REGISTRATION_ID,
+                    "{")))
+        .isFalse();
+  }
+
+  @Test
   void beforeExecute_validatesRegistrationOwnershipAndLatestIntent() {
     adapter.beforeExecute(intent(), adapter.buildActionPlan(intent()));
 
@@ -126,23 +197,39 @@ class WalletApprovalExecutionActionHandlerAdapterTest {
   }
 
   private static ExecutionIntent intent() {
+    return intent(
+        ExecutionActionType.WALLET_ESCROW_APPROVE,
+        ExecutionResourceType.WALLET_REGISTRATION,
+        REGISTRATION_ID,
+        payloadJson());
+  }
+
+  private static ExecutionIntent intent(
+      ExecutionActionType actionType,
+      ExecutionResourceType resourceType,
+      String resourceId,
+      String payloadJson) {
     return ExecutionIntent.builder()
         .publicId(INTENT_ID)
-        .resourceType(ExecutionResourceType.WALLET_REGISTRATION)
-        .resourceId(REGISTRATION_ID)
-        .actionType(ExecutionActionType.WALLET_ESCROW_APPROVE)
+        .resourceType(resourceType)
+        .resourceId(resourceId)
+        .actionType(actionType)
         .requesterUserId(USER_ID)
-        .payloadSnapshotJson(payloadJson())
+        .payloadSnapshotJson(payloadJson)
         .build();
   }
 
   private static String payloadJson() {
+    return payloadJson(REGISTRATION_ID);
+  }
+
+  private static String payloadJson(String registrationId) {
     try {
       return new ObjectMapper()
           .writeValueAsString(
               new WalletApprovalExecutionPayload(
                   WalletApprovalExecutionActionType.WALLET_ESCROW_APPROVE,
-                  REGISTRATION_ID,
+                  registrationId,
                   USER_ID,
                   "0x" + "a".repeat(40),
                   "0x" + "1".repeat(40),

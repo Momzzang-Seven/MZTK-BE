@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ValidateWalletRegistrationApprovalExecutionCommand;
@@ -17,6 +19,7 @@ public class ValidateWalletRegistrationApprovalExecutionService
     implements ValidateWalletRegistrationApprovalExecutionUseCase {
 
   private final LoadWalletRegistrationSessionPort loadSessionPort;
+  private final Clock appClock;
 
   @Override
   @Transactional(readOnly = true)
@@ -34,6 +37,10 @@ public class ValidateWalletRegistrationApprovalExecutionService
     if (session.getLatestExecutionIntentId() == null
         || !session.getLatestExecutionIntentId().equals(command.executionIntentId())) {
       throw new Web3InvalidInputException("approval execution is not latest for registration");
+    }
+    LocalDateTime now = LocalDateTime.now(appClock);
+    if (session.getApprovalExpiresAt() != null && !session.getApprovalExpiresAt().isAfter(now)) {
+      throw new Web3InvalidInputException("wallet registration session is expired");
     }
     if (session.getStatus() != WalletRegistrationStatus.APPROVAL_REQUIRED
         && session.getStatus() != WalletRegistrationStatus.APPROVAL_SIGNED

@@ -37,6 +37,13 @@ public class WalletRegistrationSessionPersistenceAdapter
           WalletRegistrationStatus.APPROVAL_RETRYABLE,
           WalletRegistrationStatus.FINALIZATION_FAILED,
           WalletRegistrationStatus.LOCAL_CONFLICT);
+  private static final EnumSet<WalletRegistrationStatus> RECOVERY_CANDIDATE_STATUSES =
+      EnumSet.of(
+          WalletRegistrationStatus.APPROVAL_REQUIRED,
+          WalletRegistrationStatus.APPROVAL_SIGNED,
+          WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
+          WalletRegistrationStatus.APPROVAL_RETRYABLE,
+          WalletRegistrationStatus.FINALIZATION_FAILED);
   private static final PageRequest ONE_LATEST = PageRequest.of(0, 1);
 
   private final WalletRegistrationSessionJpaRepository repository;
@@ -107,7 +114,8 @@ public class WalletRegistrationSessionPersistenceAdapter
   @Override
   public List<WalletRegistrationSession> loadRecoveryCandidates(int limit) {
     return repository
-        .findByStatusInOrderByUpdatedAtAscIdAsc(NON_TERMINAL_STATUSES, PageRequest.of(0, limit))
+        .findByStatusInOrderByUpdatedAtAscIdAsc(
+            RECOVERY_CANDIDATE_STATUSES, PageRequest.of(0, limit))
         .stream()
         .map(this::mapToDomain)
         .toList();

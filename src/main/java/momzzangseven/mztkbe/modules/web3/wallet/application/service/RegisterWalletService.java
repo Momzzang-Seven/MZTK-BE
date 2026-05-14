@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyLinkedException;
 import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.global.error.wallet.WalletBlackListException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ExpireWalletRegistrationSessionCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
@@ -89,6 +90,8 @@ public class RegisterWalletService implements RegisterWalletUseCase {
 
     try {
       return approvalAttemptUseCase.createPendingApproval(command);
+    } catch (Web3TransferException exception) {
+      throw WalletApprovalSponsorLimitMapper.map(exception);
     } catch (DuplicateWalletRegistrationSessionException exception) {
       WalletRegistrationDuplicateResolution raceResolution =
           resolveAfterCreateRaceAfterExpiringElapsed(command.userId(), command.walletAddress());

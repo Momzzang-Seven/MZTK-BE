@@ -94,10 +94,13 @@ class WalletRegistrationFinalizationProcessor {
   private UserWallet finalizeWallet(WalletRegistrationSession session, String executionIntentId) {
     List<UserWallet> activeUserWallets =
         loadWalletPort.findWalletsByUserIdAndStatus(session.getUserId(), WalletStatus.ACTIVE);
-    for (UserWallet activeWallet : activeUserWallets) {
+    if (activeUserWallets.size() == 1) {
+      UserWallet activeWallet = activeUserWallets.get(0);
       if (activeWallet.getWalletAddress().equals(session.getWalletAddress())) {
         return activeWallet;
       }
+    }
+    if (!activeUserWallets.isEmpty()) {
       throw localConflict("user already has an active wallet");
     }
 

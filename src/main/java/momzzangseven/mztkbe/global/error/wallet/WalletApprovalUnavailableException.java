@@ -12,4 +12,8 @@ public class WalletApprovalUnavailableException extends BusinessException {
   public WalletApprovalUnavailableException(String reason) {
     super(ErrorCode.WALLET_APPROVAL_UNAVAILABLE, reason);
   }
+
+  public WalletApprovalUnavailableException(String reason, Throwable cause) {
+    super(ErrorCode.WALLET_APPROVAL_UNAVAILABLE, reason, cause);
+  }
 }
