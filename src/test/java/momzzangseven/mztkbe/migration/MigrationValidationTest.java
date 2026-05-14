@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.migration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.Map;
 import momzzangseven.mztkbe.MztkBeApplication;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -178,6 +179,25 @@ class MigrationValidationTest {
 
     // pairing-invariant trigger backstops treasury_address <-> kms_key_id 1:1
     assertThat(triggerExists("trg_web3_treasury_wallets_pairing")).isTrue();
+  }
+
+  @Test
+  @DisplayName("V074 adds a nullable wallet_alias column to web3_treasury_provision_audits")
+  void treasuryProvisionAuditsHasNullableWalletAliasColumn() {
+    assertThat(columnExists("web3_treasury_provision_audits", "wallet_alias")).isTrue();
+
+    Map<String, Object> column =
+        jdbcTemplate.queryForMap(
+            """
+            SELECT data_type, is_nullable, character_maximum_length
+            FROM information_schema.columns
+            WHERE table_name = 'web3_treasury_provision_audits'
+              AND column_name = 'wallet_alias'
+            """);
+
+    assertThat(column.get("data_type")).isEqualTo("character varying");
+    assertThat(column.get("is_nullable")).isEqualTo("YES");
+    assertThat(((Number) column.get("character_maximum_length")).intValue()).isEqualTo(64);
   }
 
   private boolean triggerExists(String triggerName) {

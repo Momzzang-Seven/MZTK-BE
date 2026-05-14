@@ -158,6 +158,22 @@ class ArchiveTreasuryWalletServiceTest {
   }
 
   @Test
+  void execute_rejectsEmptyCohort_withInconsistentAudit() {
+    when(loadTreasuryWalletPort.loadByAlias(ALIAS))
+        .thenReturn(Optional.of(disabledWallet(ALIAS, TreasuryRole.REWARD)));
+    when(loadTreasuryWalletPort.loadAllByTreasuryAddressForUpdate(ADDRESS)).thenReturn(List.of());
+
+    assertThatThrownBy(() -> service.execute(new ArchiveTreasuryWalletCommand(ALIAS, OPERATOR_ID)))
+        .isInstanceOf(TreasuryWalletStateException.class);
+
+    verify(treasuryAuditRecorder)
+        .record(
+            eq(OPERATOR_ID), eq(ALIAS), eq(ADDRESS), eq(false), eq("COHORT_STATE_INCONSISTENT"));
+    verify(saveTreasuryWalletPort, never()).saveAll(any());
+    verify(applicationEventPublisher, never()).publishEvent(any());
+  }
+
+  @Test
   void execute_recordsFailureAudit_whenSaveAllThrows() {
     when(loadTreasuryWalletPort.loadByAlias(ALIAS))
         .thenReturn(Optional.of(disabledWallet(ALIAS, TreasuryRole.REWARD)));

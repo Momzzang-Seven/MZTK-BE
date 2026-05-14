@@ -49,4 +49,20 @@ class TreasuryProvisionAuditPersistenceAdapterTest {
     assertThat(captor.getValue().getWalletAlias()).isEqualTo("reward-treasury");
     assertThat(captor.getValue().isSuccess()).isTrue();
   }
+
+  @Test
+  void record_persistsNullWalletAlias_unchanged() {
+    RecordTreasuryProvisionAuditPort.AuditCommand command =
+        new RecordTreasuryProvisionAuditPort.AuditCommand(
+            7L, null, null, false, "ADDRESS_MISMATCH");
+
+    adapter.record(command);
+
+    ArgumentCaptor<Web3TreasuryProvisionAuditEntity> captor =
+        ArgumentCaptor.forClass(Web3TreasuryProvisionAuditEntity.class);
+    verify(repository).save(captor.capture());
+    assertThat(captor.getValue().getWalletAlias()).isNull();
+    assertThat(captor.getValue().isSuccess()).isFalse();
+    assertThat(captor.getValue().getFailureReason()).isEqualTo("ADDRESS_MISMATCH");
+  }
 }

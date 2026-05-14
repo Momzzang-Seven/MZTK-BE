@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -246,6 +247,17 @@ class TreasuryWalletPersistenceAdapterTest {
     verify(repository).findAllByTreasuryAddressForUpdate(ADDRESS);
   }
 
+  @Test
+  void loadAllByTreasuryAddressForUpdate_throwsInvalidInput_whenAddressBlank() {
+    assertThatThrownBy(() -> adapter.loadAllByTreasuryAddressForUpdate(""))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("walletAddress");
+    assertThatThrownBy(() -> adapter.loadAllByTreasuryAddressForUpdate(null))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("walletAddress");
+    verify(repository, never()).findAllByTreasuryAddressForUpdate(any());
+  }
+
   // ----- saveAll -----
 
   @Test
@@ -271,6 +283,42 @@ class TreasuryWalletPersistenceAdapterTest {
 
     assertThat(result).hasSize(2);
     verify(repository).saveAll(any());
+  }
+
+  @Test
+  void saveAll_throwsInvalidInput_whenListContainsNullElement() {
+    when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> adapter.saveAll(Arrays.asList(validWalletBuilder().build(), null)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("wallet must not be null");
+    verify(repository, never()).saveAll(any());
+  }
+
+  @Test
+  void saveAll_updatesExistingRowByAlias_preservingId() {
+    Web3TreasuryWalletEntity existing =
+        Web3TreasuryWalletEntity.builder()
+            .id(42L)
+            .walletAlias(ALIAS)
+            .treasuryAddress("0x" + "a".repeat(40))
+            .kmsKeyId("legacy-kms-id")
+            .status(TreasuryWalletStatus.ACTIVE.name())
+            .keyOrigin(TreasuryKeyOrigin.IMPORTED.name())
+            .build();
+    when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(existing));
+    when(repository.saveAll(any()))
+        .thenAnswer(invocation -> invocation.<List<Web3TreasuryWalletEntity>>getArgument(0));
+
+    adapter.saveAll(List.of(validWalletBuilder().build()));
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<Web3TreasuryWalletEntity>> captor = ArgumentCaptor.forClass(List.class);
+    verify(repository).saveAll(captor.capture());
+    Web3TreasuryWalletEntity persisted = captor.getValue().get(0);
+    assertThat(persisted.getId()).isEqualTo(42L);
+    assertThat(persisted.getKmsKeyId()).isEqualTo(KMS_KEY_ID);
+    assertThat(persisted.getTreasuryAddress()).isEqualTo(ADDRESS);
   }
 
   // ----- helpers -----

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 import java.lang.reflect.Method;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.RecordTreasuryAuditUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.RecordTreasuryProvisionAuditPort.AuditCommand;
 import org.junit.jupiter.api.DisplayName;
@@ -114,6 +115,18 @@ class TreasuryAuditRecorderTest {
       Transactional tx = m.getAnnotation(Transactional.class);
       assertThat(tx).isNotNull();
       assertThat(tx.propagation()).isEqualTo(Propagation.REQUIRES_NEW);
+    }
+  }
+
+  @Nested
+  @DisplayName("D. 입력 포트 구현")
+  class InputPortImplementation {
+
+    @Test
+    @DisplayName("[M-55] TreasuryAuditRecorder 는 RecordTreasuryAuditUseCase 를 구현")
+    void implementsRecordTreasuryAuditUseCase() {
+      assertThat(RecordTreasuryAuditUseCase.class.isAssignableFrom(TreasuryAuditRecorder.class))
+          .isTrue();
     }
   }
 }

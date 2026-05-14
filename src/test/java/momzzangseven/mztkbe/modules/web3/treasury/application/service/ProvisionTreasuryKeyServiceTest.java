@@ -674,6 +674,97 @@ class ProvisionTreasuryKeyServiceTest {
     }
   }
 
+  @Test
+  void execute_rejectsMixedCohort_whenByAliasRowKeyDisagreesWithSiblings() {
+    TreasuryWallet byAlias = legacyRow(DERIVED_ADDRESS).toBuilder().kmsKeyId("kms-a").build();
+    TreasuryWallet sibling =
+        TreasuryWallet.provision(
+                TreasuryRole.SPONSOR.toAlias(),
+                "kms-b",
+                DERIVED_ADDRESS,
+                TreasuryRole.SPONSOR,
+                fixedClock())
+            .toBuilder()
+            .id(99L)
+            .build();
+    when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.of(byAlias));
+    when(loadTreasuryWalletPort.loadAllByTreasuryAddressForUpdate(DERIVED_ADDRESS))
+        .thenReturn(List.of(byAlias, sibling));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(TreasuryWalletStateException.class);
+
+    verify(treasuryAuditRecorder)
+        .record(
+            eq(1L),
+            eq("reward-treasury"),
+            eq(DERIVED_ADDRESS),
+            eq(false),
+            eq("COHORT_STATE_INCONSISTENT"));
+    verify(kmsKeyLifecyclePort, never()).createKey();
+    verify(saveTreasuryWalletPort, never()).save(any());
+  }
+
+  @Test
+  void execute_coBindsLegacyNullKeyRow_usingBackfillWithSharedKey() {
+    TreasuryWallet legacy = legacyRow(DERIVED_ADDRESS);
+    TreasuryWallet sibling =
+        TreasuryWallet.provision(
+                TreasuryRole.SPONSOR.toAlias(),
+                "shared-kms-id",
+                DERIVED_ADDRESS,
+                TreasuryRole.SPONSOR,
+                fixedClock())
+            .toBuilder()
+            .id(99L)
+            .build();
+    when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.of(legacy));
+    when(loadTreasuryWalletPort.loadAllByTreasuryAddressForUpdate(DERIVED_ADDRESS))
+        .thenReturn(List.of(legacy, sibling));
+    when(saveTreasuryWalletPort.save(any(TreasuryWallet.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    ProvisionTreasuryKeyResult result = service.execute(command);
+
+    assertThat(result.kmsKeyId()).isEqualTo("shared-kms-id");
+    verify(kmsKeyLifecyclePort, never()).createKey();
+    ArgumentCaptor<TreasuryWallet> savedCaptor = ArgumentCaptor.forClass(TreasuryWallet.class);
+    verify(saveTreasuryWalletPort).save(savedCaptor.capture());
+    TreasuryWallet saved = savedCaptor.getValue();
+    assertThat(saved.getId()).isEqualTo(legacy.getId());
+    assertThat(saved.getKmsKeyId()).isEqualTo("shared-kms-id");
+    assertThat(saved.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+
+    List<Object> events = capturePublishedEvents(2);
+    assertThat(firstOf(events, AliasProvisionedAuditEvent.class).coBind()).isTrue();
+  }
+
+  @Test
+  void execute_entersAliasRepairMode_whenAliasPointsToDisabledKey() {
+    TreasuryWallet existing =
+        legacyRow(DERIVED_ADDRESS).toBuilder().kmsKeyId("existing-kms-id").build();
+    when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.of(existing));
+    when(loadTreasuryWalletPort.loadAllByTreasuryAddressForUpdate(DERIVED_ADDRESS))
+        .thenReturn(List.of());
+    when(kmsKeyLifecyclePort.describeAliasTarget("reward-treasury"))
+        .thenReturn(KmsKeyState.DISABLED);
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    service.execute(command);
+
+    List<Object> events = capturePublishedEvents(2);
+    assertThat(firstOf(events, AliasProvisionedAuditEvent.class).aliasRepairMode()).isTrue();
+    verify(kmsKeyLifecyclePort, never()).createKey();
+  }
+
   private static Clock fixedClock() {
     return Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
   }

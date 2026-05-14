@@ -10,6 +10,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -38,20 +39,45 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
   private static final String CHECK_REJECT_ALIAS_KMS_NULL = "check-reject-kms-null";
   private static final String CHECK_REJECT_ALIAS_KMS_BLANK = "check-reject-kms-blank";
   private static final String CHECK_REJECT_ALIAS_ADDR_FORMAT = "check-reject-addr-format";
+  private static final String PAIR_ALIAS_A = "pairing-a";
+  private static final String PAIR_ALIAS_B = "pairing-b";
+  private static final String SIBLING_ALIAS_A = "sibling-a";
+  private static final String SIBLING_ALIAS_B = "sibling-b";
+  private static final String DUP_ALIAS = "dup-alias";
 
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @AfterEach
   void cleanInsertedRows() {
     jdbcTemplate.update(
-        "DELETE FROM web3_treasury_wallets WHERE wallet_alias IN (?, ?, ?, ?, ?, ?, ?)",
+        "DELETE FROM web3_treasury_wallets WHERE wallet_alias IN"
+            + " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         LEGACY_ALIAS,
         KMS_ONLY_ALIAS,
         CHECK_REJECT_ALIAS_STATUS,
         CHECK_REJECT_ALIAS_KEY_ORIGIN,
         CHECK_REJECT_ALIAS_KMS_NULL,
         CHECK_REJECT_ALIAS_KMS_BLANK,
-        CHECK_REJECT_ALIAS_ADDR_FORMAT);
+        CHECK_REJECT_ALIAS_ADDR_FORMAT,
+        PAIR_ALIAS_A,
+        PAIR_ALIAS_B,
+        SIBLING_ALIAS_A,
+        SIBLING_ALIAS_B,
+        DUP_ALIAS);
+  }
+
+  /**
+   * Inserts an ACTIVE / IMPORTED wallet row directly via JDBC (bypassing the application layer).
+   */
+  private void insertWalletRow(String alias, String address, String kmsKeyId) {
+    jdbcTemplate.update(
+        "INSERT INTO web3_treasury_wallets"
+            + " (wallet_alias, treasury_address, kms_key_id, status, key_origin,"
+            + " created_at, updated_at)"
+            + " VALUES (?, ?, ?, 'ACTIVE', 'IMPORTED', NOW(), NOW())",
+        alias,
+        address,
+        kmsKeyId);
   }
 
   @Test
@@ -133,6 +159,89 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
                 + " AND tgname = 'trg_web3_treasury_wallets_pairing'",
             Integer.class);
     assertThat(pairingTriggerCount).isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("[E-2] pairing 트리거 — 이미 바인딩된 treasury_address 에 다른 kms_key_id INSERT 거부")
+  void pairingTrigger_rejectsSecondKeyForBoundAddress() {
+    String addr = "0x" + "a".repeat(40);
+    insertWalletRow(PAIR_ALIAS_A, addr, "kms-pair-key-1");
+
+    // the pairing trigger uses RAISE EXCEPTION (SQLSTATE P0001) — surfaces as a DataAccessException
+    assertThatThrownBy(() -> insertWalletRow(PAIR_ALIAS_B, addr, "kms-pair-key-2"))
+        .isInstanceOf(DataAccessException.class)
+        .hasMessageContaining("already bound to a different kms_key_id");
+
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_treasury_wallets WHERE treasury_address = ?",
+            Integer.class,
+            addr);
+    assertThat(count).isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("[E-3] pairing 트리거 — 이미 바인딩된 kms_key_id 에 다른 treasury_address INSERT 거부")
+  void pairingTrigger_rejectsSecondAddressForBoundKey() {
+    String sharedKey = "kms-pair-shared-key";
+    insertWalletRow(PAIR_ALIAS_A, "0x" + "a".repeat(40), sharedKey);
+
+    assertThatThrownBy(() -> insertWalletRow(PAIR_ALIAS_B, "0x" + "b".repeat(40), sharedKey))
+        .isInstanceOf(DataAccessException.class)
+        .hasMessageContaining("already bound to a different treasury_address");
+
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_treasury_wallets WHERE kms_key_id = ?",
+            Integer.class,
+            sharedKey);
+    assertThat(count).isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("[E-4] pairing 트리거 — 동일 (treasury_address, kms_key_id) 쌍을 공유하는 sibling row 는 허용")
+  void pairingTrigger_allowsSiblingSharingExactPair() {
+    String addr = "0x" + "c".repeat(40);
+    String sharedKey = "kms-cohort-shared-key";
+    insertWalletRow(SIBLING_ALIAS_A, addr, sharedKey);
+
+    assertThatCode(() -> insertWalletRow(SIBLING_ALIAS_B, addr, sharedKey))
+        .doesNotThrowAnyException();
+
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_treasury_wallets WHERE treasury_address = ?",
+            Integer.class,
+            addr);
+    assertThat(count).isEqualTo(2);
+  }
+
+  @Test
+  @DisplayName("[E-5] pairing 트리거 — treasury_address/kms_key_id 를 바꾸지 않는 UPDATE 는 허용")
+  void pairingTrigger_allowsUpdateThatDoesNotChangeAddressOrKey() {
+    String addr = "0x" + "d".repeat(40);
+    String sharedKey = "kms-update-shared-key";
+    insertWalletRow(SIBLING_ALIAS_A, addr, sharedKey);
+    insertWalletRow(SIBLING_ALIAS_B, addr, sharedKey);
+
+    assertThatCode(
+            () ->
+                jdbcTemplate.update(
+                    "UPDATE web3_treasury_wallets SET status = 'DISABLED', disabled_at = NOW()"
+                        + " WHERE wallet_alias IN (?, ?)",
+                    SIBLING_ALIAS_A,
+                    SIBLING_ALIAS_B))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  @DisplayName("[E-8] V073 이후에도 wallet_alias UNIQUE 는 유지 — 동일 alias 두 번째 INSERT 거부")
+  void v073_keepsWalletAliasUnique() {
+    String sharedKey = "kms-dup-alias-key";
+    insertWalletRow(DUP_ALIAS, "0x" + "e".repeat(40), sharedKey);
+
+    assertThatThrownBy(() -> insertWalletRow(DUP_ALIAS, "0x" + "e".repeat(40), sharedKey))
+        .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
