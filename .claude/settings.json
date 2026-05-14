@@ -6,12 +6,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/agents/hooks/check-architecture-rules.py",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && python3 scripts/agents/hooks/check-architecture-rules.py",
             "statusMessage": "ARCHITECTURE.md rule 검사 중..."
           },
           {
             "type": "command",
-            "command": "python3 scripts/agents/hooks/check-agent-link.py",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && python3 scripts/agents/hooks/check-agent-link.py",
             "statusMessage": "agents skills link 검사 중..."
           }
         ]
