@@ -39,9 +39,13 @@ public class TreasuryWallet {
   private final LocalDateTime updatedAt;
 
   /**
-   * Factory used by the provisioning service immediately after a successful KMS import + sanity
-   * round-trip. Persists status={@link TreasuryWalletStatus#ACTIVE} and keyOrigin={@link
-   * TreasuryKeyOrigin#IMPORTED}.
+   * Factory used by the provisioning service either immediately after a successful KMS import +
+   * sanity round-trip, or when co-binding a new alias to an existing cohort's shared key (no new
+   * KMS key is created in that case — the caller passes the sibling's {@code kmsKeyId}). Persists
+   * status={@link TreasuryWalletStatus#ACTIVE} and keyOrigin={@link TreasuryKeyOrigin#IMPORTED};
+   * this factory builds the object only and never touches KMS. Co-bind is policy-gated to run only
+   * when every sibling is ACTIVE, so the hardcoded ACTIVE status keeps the new row consistent with
+   * the cohort.
    *
    * @param walletAlias canonical alias, typically derived from {@link TreasuryRole#toAlias()}
    * @param kmsKeyId AWS KMS key id (CMK ARN or key id) bound to this wallet

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.port.out;
 
+import java.util.List;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 
 /**
@@ -18,4 +19,14 @@ public interface SaveTreasuryWalletPort {
    * @return the persisted aggregate, possibly with a new identifier
    */
   TreasuryWallet save(TreasuryWallet wallet);
+
+  /**
+   * Persist a cohort of wallets in a single batch. Used by cohort-wide lifecycle transitions
+   * (disable / archive) so every row in a {@code (treasury_address, kms_key_id)} cohort moves to
+   * the same status within one transaction. Upsert semantics match {@link #save(TreasuryWallet)}.
+   *
+   * @param wallets cohort rows to persist; must not be {@code null}
+   * @return the persisted aggregates, each possibly refreshed with a database-assigned identifier
+   */
+  List<TreasuryWallet> saveAll(List<TreasuryWallet> wallets);
 }
