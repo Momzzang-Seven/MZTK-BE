@@ -31,6 +31,13 @@ public class Web3TreasuryProvisionAuditEntity {
   @Column(name = "operator_id")
   private Long operatorId;
 
+  /**
+   * Canonical wallet alias this audit row belongs to. Nullable: historical rows written before
+   * MOM-444 cohort provisioning carry NULL because they predate alias-level auditing.
+   */
+  @Column(name = "wallet_alias", length = 64)
+  private String walletAlias;
+
   @Column(name = "treasury_address", length = 42)
   private String treasuryAddress;
 
