@@ -26,6 +26,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrow
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaServerSigPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateConfirmationSyncPort;
@@ -51,6 +52,7 @@ public class QnaExecutionServiceConfig {
   QuestionEscrowExecutionService questionEscrowExecutionService(
       PrecheckQuestionFundingPort precheckQuestionFundingPort,
       LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort,
+      LoadQnaServerSigPolicyPort loadQnaServerSigPolicyPort,
       QnaProjectionPersistencePort qnaProjectionPersistencePort,
       QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort,
       LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort,
@@ -60,6 +62,7 @@ public class QnaExecutionServiceConfig {
     return new QuestionEscrowExecutionService(
         precheckQuestionFundingPort,
         loadQnaRewardTokenConfigPort,
+        loadQnaServerSigPolicyPort,
         qnaProjectionPersistencePort,
         qnaQuestionUpdateStatePersistencePort,
         loadQnaExecutionIntentStatePort,
@@ -150,6 +153,11 @@ public class QnaExecutionServiceConfig {
     @Override
     public boolean matchesQuestionCreatePayload(MatchQuestionCreatePayloadCommand command) {
       return transactionTemplate.execute(status -> delegate.matchesQuestionCreatePayload(command));
+    }
+
+    @Override
+    public QnaExecutionIntentResult.SignatureMeta signatureMetaForSignedAt(Long signedAt) {
+      return transactionTemplate.execute(status -> delegate.signatureMetaForSignedAt(signedAt));
     }
 
     @Override

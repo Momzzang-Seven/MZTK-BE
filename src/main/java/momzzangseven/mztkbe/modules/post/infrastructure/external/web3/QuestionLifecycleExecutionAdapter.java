@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCrea
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
@@ -81,7 +82,20 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             postId, questionContent, rewardMztk, result.payloadSnapshotJson())) {
       return Optional.empty();
     }
-    return Optional.of(toView(result));
+    return Optional.of(toView(result, extractSignedAt(result.payloadSnapshotJson())));
+  }
+
+  private Long extractSignedAt(String payloadSnapshotJson) {
+    if (payloadSnapshotJson == null || payloadSnapshotJson.isBlank()) {
+      return null;
+    }
+    try {
+      return objectMapper
+          .readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class)
+          .signedAt();
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
+    }
   }
 
   @Override
@@ -202,10 +216,21 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
         null,
-        result.existing());
+        result.existing(),
+        toSignatureMeta(result.signatureMeta()));
   }
 
-  private QuestionExecutionWriteView toView(GetExecutionIntentResult result) {
+  private QuestionExecutionWriteView.SignatureMeta toSignatureMeta(
+      QnaExecutionIntentResult.SignatureMeta meta) {
+    if (meta == null) {
+      return null;
+    }
+    return new QuestionExecutionWriteView.SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
+  }
+
+  private QuestionExecutionWriteView toView(GetExecutionIntentResult result, Long signedAt) {
+    QuestionExecutionWriteView.SignatureMeta signatureMeta =
+        toSignatureMeta(questionEscrowExecutionUseCase.signatureMetaForSignedAt(signedAt));
     return new QuestionExecutionWriteView(
         new QuestionExecutionWriteView.Resource(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
@@ -220,7 +245,8 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
         result.signRequestUnavailableReason() == null
             ? null
             : result.signRequestUnavailableReason().name(),
-        true);
+        true,
+        signatureMeta);
   }
 
   private boolean matchesQuestionCreatePayload(
@@ -238,6 +264,15 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
     }
   }
 
+  /**
+   * §MOM-393 — stored {@code payloadHash} is the SHA-256 of {@link
+   * QnaEscrowExecutionPayload#idempotencyView()} (server-sig-independent projection), not of the
+   * full snapshot JSON, so that idempotency reuse survives a refreshed server signature. This check
+   * therefore re-hashes the projection extracted from the stored snapshot. Tampering of the
+   * server-sig fields ({@code signedAt}, {@code signatureHex}, embedded {@code callData}) is caught
+   * separately by {@code executionDigest} (EIP-7702) and {@code unsignedTxFingerprint} (EIP-1559);
+   * this method covers the logical-identity portion of the snapshot only.
+   */
   private boolean matchesPayloadHash(String payloadHash, String payloadSnapshotJson) {
     if (payloadHash == null
         || payloadHash.isBlank()
@@ -246,12 +281,17 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
       return false;
     }
     try {
+      QnaEscrowExecutionPayload payload =
+          objectMapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
+      String idempotencyViewJson = objectMapper.writeValueAsString(payload.idempotencyView());
       byte[] digest =
           MessageDigest.getInstance("SHA-256")
-              .digest(payloadSnapshotJson.getBytes(StandardCharsets.UTF_8));
+              .digest(idempotencyViewJson.getBytes(StandardCharsets.UTF_8));
       return payloadHash.equals(Numeric.toHexString(digest));
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException("SHA-256 digest is unavailable", e);
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
     }
   }
 

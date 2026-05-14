@@ -16,6 +16,8 @@ public interface QuestionEscrowExecutionUseCase {
 
   boolean matchesQuestionCreatePayload(MatchQuestionCreatePayloadCommand command);
 
+  QnaExecutionIntentResult.SignatureMeta signatureMetaForSignedAt(Long signedAt);
+
   QnaExecutionIntentResult prepareQuestionCreate(PrepareQuestionCreateCommand command);
 
   QnaExecutionIntentResult recoverQuestionCreate(PrepareQuestionCreateCommand command);

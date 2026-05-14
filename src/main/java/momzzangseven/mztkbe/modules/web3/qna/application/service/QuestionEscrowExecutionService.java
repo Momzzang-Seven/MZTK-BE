@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrow
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaServerSigPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
@@ -42,6 +43,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
 
   private final PrecheckQuestionFundingPort precheckQuestionFundingPort;
   private final LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
+  private final LoadQnaServerSigPolicyPort loadQnaServerSigPolicyPort;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
@@ -74,6 +76,15 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
     BigInteger expectedAmountWei = rewardContext.amountWei();
     String expectedTokenAddress = EvmAddress.of(rewardContext.tokenAddress()).value();
     String payloadTokenAddress = EvmAddress.of(payload.tokenAddress()).value();
+    String storedBaselineCallData =
+        buildQnaEscrowCallDataPort.encode(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            QnaEscrowIdCodec.questionId(payload.postId()),
+            null,
+            payloadTokenAddress,
+            payload.amountWei(),
+            payload.questionHash(),
+            null);
     String expectedCallData =
         buildQnaEscrowCallDataPort.encode(
             QnaExecutionActionType.QNA_QUESTION_CREATE,
@@ -91,7 +102,16 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
         && payload.contentHash() == null
         && expectedAmountWei.equals(payload.amountWei())
         && expectedTokenAddress.equals(payloadTokenAddress)
-        && expectedCallData.equals(payload.callData());
+        && expectedCallData.equals(storedBaselineCallData);
+  }
+
+  @Override
+  public QnaExecutionIntentResult.SignatureMeta signatureMetaForSignedAt(Long signedAt) {
+    if (signedAt == null) {
+      return null;
+    }
+    return new QnaExecutionIntentResult.SignatureMeta(
+        signedAt, signedAt + loadQnaServerSigPolicyPort.loadSigValidityDuration());
   }
 
   @Override

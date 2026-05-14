@@ -387,6 +387,95 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         .sign(any());
   }
 
+  @Test
+  @DisplayName(
+      "[E-301] POST /admin/web3/qna/questions/{postId}/answers/{answerId}/settle — 응답에 signatureMeta 키가 없다")
+  void adminSettleResponse_omitsSignatureMetaKey() throws Exception {
+    AdminUser admin = createAdminAndLogin();
+    TestUser asker = signupAndLogin("e-301-asker");
+    TestUser responder = signupAndLogin("e-301-responder");
+    SeededSettlementScenario scenario =
+        seedSettlementScenario(
+            asker.userId(), responder.userId(), "E-301 settle question", "E-301 settle answer");
+
+    ResponseEntity<String> settleResponse =
+        restTemplate.exchange(
+            baseUrl()
+                + "/admin/web3/qna/questions/"
+                + scenario.postId()
+                + "/answers/"
+                + scenario.answerId()
+                + "/settle",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(admin.accessToken())),
+            String.class);
+
+    assertThat(settleResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode settleData = objectMapper.readTree(settleResponse.getBody()).path("data");
+    assertThat(settleData.path("actionType").asText()).isEqualTo("QNA_ADMIN_SETTLE");
+    assertThat(settleData.has("signatureMeta")).isFalse();
+    assertThat(settleData.path("signatureMeta").isMissingNode()).isTrue();
+  }
+
+  @Test
+  @DisplayName("[E-302] POST /admin/web3/qna/questions/{postId}/refund — 응답에 signatureMeta 키가 없다")
+  void adminRefundResponse_omitsSignatureMetaKey() throws Exception {
+    AdminUser admin = createAdminAndLogin();
+    TestUser asker = signupAndLogin("e-302-asker");
+    Long postId = seedRefundScenario(asker.userId(), "E-302 refund question");
+
+    ResponseEntity<String> refundResponse =
+        restTemplate.exchange(
+            baseUrl() + "/admin/web3/qna/questions/" + postId + "/refund",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(admin.accessToken())),
+            String.class);
+
+    assertThat(refundResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode refundData = objectMapper.readTree(refundResponse.getBody()).path("data");
+    assertThat(refundData.path("actionType").asText()).isEqualTo("QNA_ADMIN_REFUND");
+    assertThat(refundData.has("signatureMeta")).isFalse();
+    assertThat(refundData.path("signatureMeta").isMissingNode()).isTrue();
+  }
+
+  @Test
+  @DisplayName("[E-303] admin SETTLE / REFUND 두 응답 모두 signatureMeta 키 부재 일관성 (cross-check)")
+  void adminSettleAndRefundResponses_bothOmitSignatureMetaKey() throws Exception {
+    AdminUser admin = createAdminAndLogin();
+    TestUser asker = signupAndLogin("e-303-asker");
+    TestUser responder = signupAndLogin("e-303-responder");
+    SeededSettlementScenario settleScenario =
+        seedSettlementScenario(
+            asker.userId(), responder.userId(), "E-303 settle question", "E-303 settle answer");
+    Long refundPostId = seedRefundScenario(asker.userId(), "E-303 refund question");
+
+    ResponseEntity<String> settleResponse =
+        restTemplate.exchange(
+            baseUrl()
+                + "/admin/web3/qna/questions/"
+                + settleScenario.postId()
+                + "/answers/"
+                + settleScenario.answerId()
+                + "/settle",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(admin.accessToken())),
+            String.class);
+    assertThat(settleResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode settleData = objectMapper.readTree(settleResponse.getBody()).path("data");
+
+    ResponseEntity<String> refundResponse =
+        restTemplate.exchange(
+            baseUrl() + "/admin/web3/qna/questions/" + refundPostId + "/refund",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(admin.accessToken())),
+            String.class);
+    assertThat(refundResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode refundData = objectMapper.readTree(refundResponse.getBody()).path("data");
+
+    assertThat(settleData.has("signatureMeta")).isFalse();
+    assertThat(refundData.has("signatureMeta")).isFalse();
+  }
+
   private AdminUser createAdminAndLogin() {
     String email = randomEmail();
     Long userId = signupUser(email, DEFAULT_TEST_PASSWORD, "QnaAdminE2E");

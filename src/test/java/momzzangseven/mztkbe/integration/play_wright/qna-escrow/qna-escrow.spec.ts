@@ -88,6 +88,11 @@ interface AuthResult {
   userId: number;
 }
 
+interface SignatureMeta {
+  signedAt: number;
+  signatureExpiresAt: number;
+}
+
 interface QuestionWritePayload {
   resource: {
     type: string;
@@ -106,6 +111,7 @@ interface QuestionWritePayload {
   };
   signRequest?: SignRequestBundle;
   existing: boolean;
+  signatureMeta?: SignatureMeta | null;
 }
 
 interface AnswerWritePayload extends QuestionWritePayload {}
@@ -1498,6 +1504,200 @@ test.describe("Suite G — answer submit/update/delete/accept on-chain lifecycle
       const row = answers.data.find(answer => answer.answerId === confirmedAnswer.answerId);
       expect(row?.isAccepted).toBe(true);
       expect(row?.content).toBe("answer-for-accept");
+    }
+  );
+});
+
+const QNA_CREATE_QUESTION_INTERFACE = new ethers.Interface([
+  "function createQuestion(bytes32 questionId, address tokenAddress, uint256 rewardAmountWei, bytes32 questionHash, uint256 signedAt, bytes signature)",
+]);
+
+interface DecodedCreateQuestionCalldata {
+  selector: string;
+  questionId: string;
+  tokenAddress: string;
+  rewardAmountWei: bigint;
+  questionHash: string;
+  signedAt: bigint;
+  signature: string;
+}
+
+function decodeQnaCreateQuestionCalldata(data: string): DecodedCreateQuestionCalldata {
+  const selector = data.slice(0, 10).toLowerCase();
+  const fragment = QNA_CREATE_QUESTION_INTERFACE.getFunction("createQuestion")!;
+  const expectedSelector = fragment.selector.toLowerCase();
+  expect(
+    selector,
+    `calldata selector ${selector} does not match createQuestion ${expectedSelector}`
+  ).toBe(expectedSelector);
+
+  const args = QNA_CREATE_QUESTION_INTERFACE.decodeFunctionData("createQuestion", data);
+  return {
+    selector,
+    questionId: args[0] as string,
+    tokenAddress: args[1] as string,
+    rewardAmountWei: args[2] as bigint,
+    questionHash: args[3] as string,
+    signedAt: args[4] as bigint,
+    signature: args[5] as string,
+  };
+}
+
+test.describe("Suite H — server-sig calldata wiring (실 ABI)", () => {
+  test(
+    "[PW-4] EIP-1559 fallback 모드에서 signRequest.transaction.data 끝에 signedAt 과 65-byte 서명이 ABI-encoded 되어 있다",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(
+        !hasQuestionInfra(),
+        "RPC / QnA contract / reward token / funded asker wallet env is required"
+      );
+
+      const reward = 10;
+      const { accessToken } = await signUpAndLogin(request, "pw04");
+      await registerWallet(request, accessToken, ENV.QNA_TEST_ASKER_PRIVATE_KEY);
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const created = await createQuestion(
+        request,
+        accessToken,
+        "[PW-4] calldata server-sig embedding 검증",
+        "EIP-1559 calldata 끝에 signedAt + 서명이 ABI-encoded 봉입되는지 확인",
+        reward
+      );
+
+      test.skip(
+        created.web3.execution.mode !== "EIP1559",
+        "calldata embed check only meaningful in EIP1559 mode"
+      );
+
+      expect(created.web3.signatureMeta, "signatureMeta must be present on user action").not
+        .toBeNull();
+      const signatureMeta = created.web3.signatureMeta!;
+      expect(typeof signatureMeta.signedAt).toBe("number");
+
+      const txData = created.web3.signRequest?.transaction?.data;
+      expect(txData, "transaction.data must be present in EIP1559 mode").toBeTruthy();
+
+      const decoded = decodeQnaCreateQuestionCalldata(txData!);
+
+      expect(decoded.signedAt).toBe(BigInt(signatureMeta.signedAt));
+
+      const sigHex = decoded.signature.startsWith("0x")
+        ? decoded.signature.slice(2)
+        : decoded.signature;
+      expect(
+        sigHex.length,
+        `signature byte length expected 65 but was ${sigHex.length / 2}`
+      ).toBe(130);
+    }
+  );
+});
+
+test.describe("Suite I — server-sig 만료 / 재 prepare (실 clock)", () => {
+  test(
+    "[PW-8] 만료된 intent 의 recover-create 응답은 새로운 signedAt 으로 갱신된다 (strictly increasing)",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(
+        !hasQuestionInfra(),
+        "RPC / QnA contract / reward token / funded asker wallet env is required"
+      );
+
+      const reward = 10;
+      const { accessToken } = await signUpAndLogin(request, "pw08");
+      await registerWallet(request, accessToken, ENV.QNA_TEST_ASKER_PRIVATE_KEY);
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const created = await createQuestion(
+        request,
+        accessToken,
+        "[PW-8] recover-create strictly increasing signedAt",
+        "expire 후 recover-create 시 새 server-sig 가 발급되는지 확인",
+        reward
+      );
+
+      const originalSig = created.web3.signatureMeta;
+      expect(originalSig, "signatureMeta must be present on user action").not.toBeNull();
+
+      await expireExecutionIntentForTest(created.web3.executionIntent.id);
+      // expireExecutionIntentForTest 는 expires_at 만 과거로 옮기지 status 를 EXPIRED 로 전이시키지
+      // 않는다. recover-create 는 기존 intent 가 terminal 이어야 통과하므로 (POST_010 방지), 더미
+      // execute 로 백엔드의 만료 체크 (→ EXPIRED 전이) 를 먼저 트리거한다. (TC-QNA-D-02 와 동일 패턴)
+      await request.post(
+        `${ENV.BACKEND_URL}/users/me/web3/execution-intents/${created.web3.executionIntent.id}/execute`,
+        {
+          headers: authHeaders(accessToken),
+          data: { signedRawTransaction: "0xexpired-trigger" },
+        }
+      );
+      // Real-clock granularity guard — KMS clock 이 같은 second 에 머무르면 strict > 가 깨진다.
+      await new Promise(resolve => setTimeout(resolve, 1100));
+
+      const recovered = await recoverQuestionCreate(request, accessToken, created.postId);
+      const recoverSig = recovered.web3.signatureMeta;
+      expect(recoverSig, "signatureMeta must be present on recover-create response").not.toBeNull();
+
+      expect(recovered.web3.executionIntent.id).not.toBe(created.web3.executionIntent.id);
+      expect(recovered.web3.actionType).toBe("QNA_QUESTION_CREATE");
+
+      expect(recoverSig!.signedAt).toBeGreaterThan(originalSig!.signedAt);
+      expect(recoverSig!.signatureExpiresAt).toBeGreaterThan(originalSig!.signatureExpiresAt);
+      expect(recoverSig!.signatureExpiresAt - recoverSig!.signedAt).toBe(900);
+    }
+  );
+
+  test(
+    "[PW-9] 만료된 server-sig intent 에 대해 execute 시 백엔드는 409 WEB3_013 으로 거부한다",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(
+        !hasQuestionInfra(),
+        "RPC / QnA contract / reward token / funded asker wallet env is required"
+      );
+
+      const reward = 10;
+      const { accessToken } = await signUpAndLogin(request, "pw09");
+      await registerWallet(request, accessToken, ENV.QNA_TEST_ASKER_PRIVATE_KEY);
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const created = await createQuestion(
+        request,
+        accessToken,
+        "[PW-9] expired server-sig on-chain rejection",
+        "만료된 intent 에 대해 execute 가 contract 검증 전 백엔드에서 차단되는지 확인",
+        reward
+      );
+
+      const originalIntentId = created.web3.executionIntent.id;
+
+      await expireExecutionIntentForTest(originalIntentId);
+
+      // 핵심 가드: 만료된 intent 에 대해 execute 시 백엔드가 만료를 감지하고 409 WEB3_013 으로
+      // 거부 + intent status 를 EXPIRED 로 전이시킨다. (PW-9 의 1차 검증 포인트)
+      const expiredExecuteRes = await request.post(
+        `${ENV.BACKEND_URL}/users/me/web3/execution-intents/${originalIntentId}/execute`,
+        {
+          headers: authHeaders(accessToken),
+          data: { signedRawTransaction: "0xexpired-stale-intent" },
+        }
+      );
+      const expiredExecuteBody = await expiredExecuteRes.json();
+
+      expect(
+        expiredExecuteRes.status(),
+        `expired execute response: ${JSON.stringify(expiredExecuteBody)}`
+      ).toBe(409);
+      expect(expiredExecuteBody.status).toBe("FAIL");
+      expect(expiredExecuteBody.code).toBe("WEB3_013");
+      expect(expiredExecuteBody.retryable).toBe(false);
+      expect(await loadExecutionIntentStatus(originalIntentId)).toBe("EXPIRED");
+
+      // 보강 검증: EXPIRED 전이 이후 recover-create 가 새 intent 를 발급해
+      // 동일 의도가 재진입 가능함을 확인 (만료가 dead-end 가 아님).
+      const recovered = await recoverQuestionCreate(request, accessToken, created.postId);
+      expect(recovered.web3.executionIntent.id).not.toBe(originalIntentId);
+      expect(recovered.web3.executionIntent.status).toBe("AWAITING_SIGNATURE");
     }
   );
 });

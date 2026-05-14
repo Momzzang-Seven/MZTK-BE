@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -28,6 +29,7 @@ import momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.trans
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswerExecutionIntentRefPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
@@ -41,9 +43,11 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpd
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.QuestionRewardExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.GetQuestionRewardIntentSnapshotUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.MarkQuestionRewardIntentSubmittedUseCase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,23 +74,34 @@ class SubmitQnaExecutionIntentAdapterTest {
 
   private final ObjectMapper objectMapper = new ObjectMapper();
 
+  private QnaEscrowProperties qnaEscrowProperties;
+  private SubmitQnaExecutionIntentAdapter adapter;
+
+  @BeforeEach
+  void setUp() {
+    qnaEscrowProperties = new QnaEscrowProperties();
+    qnaEscrowProperties.setQnaContractAddress(ESCROW);
+    qnaEscrowProperties.setSigValidityDuration(900);
+
+    adapter =
+        new SubmitQnaExecutionIntentAdapter(
+            createExecutionIntentUseCase, objectMapper, refPersistencePort, qnaEscrowProperties);
+  }
+
   @ParameterizedTest
   @MethodSource("escrowActions")
   @DisplayName("QnA escrow draft calls and runtime actionPlan calls are identical")
   void submitQnaDraft_matchesQnaEscrowActionPlanCalls(
       QnaExecutionResourceType resourceType, QnaExecutionActionType actionType) throws Exception {
-    SubmitQnaExecutionIntentAdapter submitAdapter =
-        new SubmitQnaExecutionIntentAdapter(
-            createExecutionIntentUseCase, objectMapper, refPersistencePort);
     QnaEscrowExecutionActionHandlerAdapter actionHandler = qnaEscrowHandler();
     ArgumentCaptor<CreateExecutionIntentCommand> commandCaptor =
         ArgumentCaptor.forClass(CreateExecutionIntentCommand.class);
     when(createExecutionIntentUseCase.execute(any()))
         .thenReturn(result(ExecutionResourceType.valueOf(resourceType.name())));
 
-    submitAdapter.submit(qnaDraft(resourceType, actionType));
+    adapter.submit(qnaDraft(resourceType, actionType));
 
-    org.mockito.Mockito.verify(createExecutionIntentUseCase).execute(commandCaptor.capture());
+    verify(createExecutionIntentUseCase).execute(commandCaptor.capture());
     ExecutionDraft createdDraft = commandCaptor.getValue().draft();
     ExecutionActionPlan actionPlan = actionHandler.buildActionPlan(intentFromDraft(createdDraft));
 
@@ -126,6 +141,38 @@ class SubmitQnaExecutionIntentAdapterTest {
     assertThat(actionPlan.calls()).containsExactlyElementsOf(draftCalls);
   }
 
+  @Test
+  @DisplayName("server-sig draft propagates signedAt + signatureExpiresAt into signatureMeta")
+  void submit_serverSigDraft_returnsSignatureMetaWithExpectedExpiry() throws Exception {
+    when(createExecutionIntentUseCase.execute(any(CreateExecutionIntentCommand.class)))
+        .thenReturn(result(ExecutionResourceType.QUESTION));
+
+    QnaExecutionIntentResult intentResult =
+        adapter.submit(
+            qnaDraft(
+                QnaExecutionResourceType.QUESTION,
+                QnaExecutionActionType.QNA_QUESTION_CREATE,
+                1_768_224_000L));
+
+    assertThat(intentResult.signatureMeta()).isNotNull();
+    assertThat(intentResult.signatureMeta().signedAt()).isEqualTo(1_768_224_000L);
+    assertThat(intentResult.signatureMeta().signatureExpiresAt()).isEqualTo(1_768_224_900L);
+  }
+
+  @Test
+  @DisplayName("admin draft (no signedAt) yields null signatureMeta")
+  void submit_adminDraft_yieldsNullSignatureMeta() throws Exception {
+    when(createExecutionIntentUseCase.execute(any(CreateExecutionIntentCommand.class)))
+        .thenReturn(result(ExecutionResourceType.QUESTION));
+
+    QnaExecutionIntentResult intentResult =
+        adapter.submit(
+            qnaDraft(
+                QnaExecutionResourceType.QUESTION, QnaExecutionActionType.QNA_ADMIN_SETTLE, null));
+
+    assertThat(intentResult.signatureMeta()).isNull();
+  }
+
   private static Stream<Arguments> escrowActions() {
     return Stream.of(
         Arguments.of(QnaExecutionResourceType.QUESTION, QnaExecutionActionType.QNA_QUESTION_CREATE),
@@ -135,6 +182,12 @@ class SubmitQnaExecutionIntentAdapterTest {
 
   private QnaExecutionDraft qnaDraft(
       QnaExecutionResourceType resourceType, QnaExecutionActionType actionType)
+      throws JsonProcessingException {
+    return qnaDraft(resourceType, actionType, null);
+  }
+
+  private QnaExecutionDraft qnaDraft(
+      QnaExecutionResourceType resourceType, QnaExecutionActionType actionType, Long signedAt)
       throws JsonProcessingException {
     QnaEscrowExecutionPayload payload =
         new QnaEscrowExecutionPayload(
@@ -166,6 +219,7 @@ class SubmitQnaExecutionIntentAdapterTest {
         "0x" + "d".repeat(64),
         null,
         null,
+        signedAt,
         EXPIRES_AT);
   }
 

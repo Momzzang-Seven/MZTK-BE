@@ -10,7 +10,42 @@ public record QuestionWeb3WriteResponse(
     Execution execution,
     SignRequest signRequest,
     String signRequestUnavailableReason,
-    boolean existing) {
+    boolean existing,
+    SignatureMeta signatureMeta) {
+
+  /**
+   * Backward-compatible constructor for tests that carry sign-request availability but not
+   * server-sig metadata.
+   */
+  public QuestionWeb3WriteResponse(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequest signRequest,
+      String signRequestUnavailableReason,
+      boolean existing) {
+    this(
+        resource,
+        actionType,
+        executionIntent,
+        execution,
+        signRequest,
+        signRequestUnavailableReason,
+        existing,
+        null);
+  }
+
+  /** Backward-compatible 6-arg constructor for tests that don't carry server-sig metadata. */
+  public QuestionWeb3WriteResponse(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequest signRequest,
+      boolean existing) {
+    this(resource, actionType, executionIntent, execution, signRequest, null, existing, null);
+  }
 
   /** Returns {@code null} when no new question execution intent was prepared. */
   public static QuestionWeb3WriteResponse from(QuestionExecutionWriteView view) {
@@ -28,7 +63,8 @@ public record QuestionWeb3WriteResponse(
         new Execution(view.execution().mode(), view.execution().signCount()),
         SignRequest.from(view.signRequest()),
         view.signRequestUnavailableReason(),
-        view.existing());
+        view.existing(),
+        SignatureMeta.from(view.signatureMeta()));
   }
 
   public record Resource(String type, String id, String status) {}
@@ -103,6 +139,16 @@ public record QuestionWeb3WriteResponse(
           request.maxPriorityFeePerGasHex(),
           request.maxFeePerGasHex(),
           request.expectedNonce());
+    }
+  }
+
+  public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {
+
+    static SignatureMeta from(QuestionExecutionWriteView.SignatureMeta meta) {
+      if (meta == null) {
+        return null;
+      }
+      return new SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
     }
   }
 }

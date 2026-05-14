@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
+import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,8 @@ public class PostPublicationReconciliationService
     int needsReview = 0;
     int staleSkipped = 0;
     Long lastScannedPostId = null;
+    List<Long> needsReviewPostIds = new ArrayList<>();
+    List<Long> staleSkippedPostIds = new ArrayList<>();
 
     for (Post post : posts) {
       lastScannedPostId = post.getId();
@@ -46,12 +49,19 @@ public class PostPublicationReconciliationService
       } catch (RuntimeException e) {
         log.warn("failed to reconcile post publication row: postId={}", post.getId(), e);
         needsReview++;
+        addPostId(needsReviewPostIds, post.getId());
         continue;
       }
       switch (rowResult.outcome()) {
         case UNCHANGED -> unchanged++;
-        case NEEDS_REVIEW -> needsReview++;
-        case STALE_SKIPPED -> staleSkipped++;
+        case NEEDS_REVIEW -> {
+          needsReview++;
+          addPostId(needsReviewPostIds, rowResult.postId());
+        }
+        case STALE_SKIPPED -> {
+          staleSkipped++;
+          addPostId(staleSkippedPostIds, rowResult.postId());
+        }
         case CHANGED -> {
           PostPublicationStatus target = rowResult.targetStatus();
           switch (target) {
@@ -72,6 +82,14 @@ public class PostPublicationReconciliationService
         needsReview,
         staleSkipped,
         lastScannedPostId,
-        command.dryRun());
+        command.dryRun(),
+        needsReviewPostIds,
+        staleSkippedPostIds);
+  }
+
+  private static void addPostId(List<Long> postIds, Long postId) {
+    if (postId != null) {
+      postIds.add(postId);
+    }
   }
 }

@@ -21,8 +21,10 @@ public class DefaultGasFeeCalculator {
         BigInteger.valueOf(rewardTokenProperties.getGas().getDefaultMaxPriorityFeePerGasWei());
     BigInteger multiplier =
         BigInteger.valueOf(rewardTokenProperties.getGas().getMaxFeeMultiplier());
+    BigInteger bufferPercent =
+        BigInteger.valueOf(rewardTokenProperties.getGas().getEstimatedGasBufferPercent());
 
-    BigInteger gasLimit = positiveOrDefault(inputs.estimatedGas(), defaultGasLimit);
+    BigInteger gasLimit = applyGasBuffer(inputs.estimatedGas(), defaultGasLimit, bufferPercent);
     BigInteger priorityFee = positiveOrDefault(inputs.maxPriorityFeePerGas(), defaultPriorityFee);
 
     BigInteger maxFee;
@@ -45,6 +47,15 @@ public class DefaultGasFeeCalculator {
       return defaultValue;
     }
     return value;
+  }
+
+  private BigInteger applyGasBuffer(
+      BigInteger estimatedGas, BigInteger defaultGasLimit, BigInteger bufferPercent) {
+    if (!isPositive(estimatedGas)) {
+      return defaultGasLimit;
+    }
+    BigInteger buffered = estimatedGas.multiply(bufferPercent).divide(BigInteger.valueOf(100L));
+    return buffered.max(defaultGasLimit);
   }
 
   private boolean isPositive(BigInteger value) {

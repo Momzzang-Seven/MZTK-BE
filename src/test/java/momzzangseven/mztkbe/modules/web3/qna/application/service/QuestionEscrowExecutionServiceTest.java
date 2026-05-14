@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigInteger;
@@ -30,6 +31,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrow
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaServerSigPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
@@ -62,6 +64,7 @@ class QuestionEscrowExecutionServiceTest {
 
   @Mock private PrecheckQuestionFundingPort precheckQuestionFundingPort;
   @Mock private LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
+  @Mock private LoadQnaServerSigPolicyPort loadQnaServerSigPolicyPort;
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
@@ -117,7 +120,8 @@ class QuestionEscrowExecutionServiceTest {
   }
 
   @Test
-  @DisplayName("matchesQuestionCreatePayload accepts exact reward token amount and calldata")
+  @DisplayName(
+      "matchesQuestionCreatePayload accepts exact reward token amount and baseline calldata")
   void matchesQuestionCreatePayload_acceptsExactPayload() {
     String tokenAddress = "0x1111111111111111111111111111111111111111";
     String expectedCallData = "0xexpected";
@@ -137,7 +141,7 @@ class QuestionEscrowExecutionServiceTest {
                     tokenAddress, BigInteger.valueOf(50), questionHash, expectedCallData)));
 
     assertThat(result).isTrue();
-    verify(buildQnaEscrowCallDataPort)
+    verify(buildQnaEscrowCallDataPort, times(2))
         .encode(
             QnaExecutionActionType.QNA_QUESTION_CREATE,
             QnaEscrowIdCodec.questionId(101L),
@@ -149,7 +153,7 @@ class QuestionEscrowExecutionServiceTest {
   }
 
   @Test
-  @DisplayName("matchesQuestionCreatePayload rejects mismatched reward token amount or calldata")
+  @DisplayName("matchesQuestionCreatePayload rejects mismatched reward token amount or content")
   void matchesQuestionCreatePayload_rejectsMismatchedPayload() {
     String tokenAddress = "0x1111111111111111111111111111111111111111";
     String questionHash = QnaContentHashFactory.hash("질문 본문");
@@ -186,8 +190,23 @@ class QuestionEscrowExecutionServiceTest {
                     "질문 본문",
                     50L,
                     questionCreatePayload(
-                        tokenAddress, BigInteger.valueOf(50), questionHash, "0xother"))))
+                        tokenAddress,
+                        BigInteger.valueOf(50),
+                        QnaContentHashFactory.hash("다른 질문"),
+                        "0xexpected"))))
         .isFalse();
+  }
+
+  @Test
+  @DisplayName("signatureMetaForSignedAt computes server signature expiry from policy")
+  void signatureMetaForSignedAt_usesPolicy() {
+    given(loadQnaServerSigPolicyPort.loadSigValidityDuration()).willReturn(900);
+
+    QnaExecutionIntentResult.SignatureMeta result =
+        service.signatureMetaForSignedAt(1_700_000_000L);
+
+    assertThat(result.signedAt()).isEqualTo(1_700_000_000L);
+    assertThat(result.signatureExpiresAt()).isEqualTo(1_700_000_900L);
   }
 
   @Test
@@ -636,7 +655,141 @@ class QuestionEscrowExecutionServiceTest {
         .hasMessageContaining("question content differs");
   }
 
+  // --- Phase B4 server-sig recover regression tests ---
+
+  @Test
+  @DisplayName("[R-1201] recoverQuestionCreate re-invokes prepare and freshly signs server-sig")
+  void recoverQuestionCreate_reInvokesPrepareAndFreshlySignsServerSig() {
+    // given: prepare returned a draft with signedAt=FIRST; intent later expires + projection absent
+    long firstSignedAt = 1_768_224_000L;
+    long secondSignedAt = 1_768_224_900L;
+    QnaExecutionDraft firstDraft =
+        draft(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            firstSignedAt,
+            "0x" + "c".repeat(64),
+            "0x" + "a".repeat(64));
+    QnaExecutionDraft secondDraft =
+        draft(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            secondSignedAt,
+            "0x" + "d".repeat(64),
+            "0x" + "e".repeat(64));
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.empty());
+    given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
+        .willReturn(
+            Optional.of(
+                new QnaExecutionIntentStateView(
+                    "intent-terminal",
+                    QnaExecutionActionType.QNA_QUESTION_CREATE,
+                    QnaExecutionIntentStatus.EXPIRED)));
+    given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
+        .willReturn(
+            new LoadQnaRewardTokenConfigPort.RewardTokenConfig(
+                "0x1111111111111111111111111111111111111111", 18));
+    given(buildQnaExecutionDraftPort.build(any())).willReturn(firstDraft, secondDraft);
+    given(submitQnaExecutionDraftPort.submit(firstDraft))
+        .willReturn(questionIntent("101", "intent-first", "QNA_QUESTION_CREATE", firstSignedAt));
+    given(submitQnaExecutionDraftPort.submit(secondDraft))
+        .willReturn(
+            questionIntent("101", "intent-recovered", "QNA_QUESTION_CREATE", secondSignedAt));
+
+    // when: prepare, then recover
+    QnaExecutionIntentResult firstResult =
+        service.prepareQuestionCreate(new PrepareQuestionCreateCommand(101L, 7L, "질문 본문", 50L));
+    QnaExecutionIntentResult secondResult =
+        service.recoverQuestionCreate(new PrepareQuestionCreateCommand(101L, 7L, "질문 본문", 50L));
+
+    // then: build invoked twice → fresh signer pass per recover
+    verify(buildQnaExecutionDraftPort, times(2)).build(any());
+    // returned signatureMeta reflects the SECOND signedAt
+    assertThat(firstResult.signatureMeta().signedAt()).isEqualTo(firstSignedAt);
+    assertThat(secondResult.signatureMeta().signedAt()).isEqualTo(secondSignedAt);
+    // payload signedAt refreshed at the draft layer (encoder consumed the fresh signedAt)
+    assertThat(firstDraft.signedAt()).isEqualTo(firstSignedAt);
+    assertThat(secondDraft.signedAt()).isEqualTo(secondSignedAt);
+    // unsignedTxFingerprint differs because calldata embeds (signedAt, signatureBytes)
+    assertThat(secondDraft.unsignedTxFingerprint())
+        .isNotEqualTo(firstDraft.unsignedTxFingerprint());
+    // §5-4 invariant: rootIdempotencyKey is signedAt-independent (recover stays on the same key)
+    assertThat(secondDraft.rootIdempotencyKey()).isEqualTo(firstDraft.rootIdempotencyKey());
+  }
+
+  @Test
+  @DisplayName("[R-1202] recoverQuestionUpdate re-invokes prepare and freshly signs server-sig")
+  void recoverQuestionUpdate_reInvokesPrepareAndFreshlySignsServerSig() {
+    // given: prepare-update succeeds with a sig at FIRST; then the update state moves to
+    // PREPARATION_FAILED (retryable) so recoverQuestionUpdate re-runs prepare with a fresh sign.
+    long firstSignedAt = 1_768_224_000L;
+    long secondSignedAt = 1_768_224_900L;
+    QnaExecutionDraft firstDraft =
+        draft(
+            QnaExecutionActionType.QNA_QUESTION_UPDATE,
+            firstSignedAt,
+            "0x" + "c".repeat(64),
+            "0x" + "a".repeat(64));
+    QnaExecutionDraft secondDraft =
+        draft(
+            QnaExecutionActionType.QNA_QUESTION_UPDATE,
+            secondSignedAt,
+            "0x" + "d".repeat(64),
+            "0x" + "e".repeat(64));
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.of(questionProjection("온체인 질문", 0)));
+    given(qnaQuestionUpdateStatePersistencePort.findLatestByPostId(101L))
+        .willReturn(
+            Optional.of(updateState("수정된 질문", QnaQuestionUpdateStateStatus.PREPARATION_FAILED)));
+    given(buildQnaExecutionDraftPort.build(any())).willReturn(firstDraft, secondDraft);
+    given(submitQnaExecutionDraftPort.submit(firstDraft))
+        .willReturn(questionIntent("101", "intent-first", "QNA_QUESTION_UPDATE", firstSignedAt));
+    given(submitQnaExecutionDraftPort.submit(secondDraft))
+        .willReturn(
+            questionIntent(
+                "101", "intent-recovered-update", "QNA_QUESTION_UPDATE", secondSignedAt));
+    given(
+            qnaQuestionUpdateStatePersistencePort.bindExecutionIntent(
+                101L, 1L, "update-token", "intent-first"))
+        .willReturn(Optional.of(updateState("수정된 질문", QnaQuestionUpdateStateStatus.INTENT_BOUND)));
+    given(
+            qnaQuestionUpdateStatePersistencePort.bindExecutionIntent(
+                101L, 1L, "update-token", "intent-recovered-update"))
+        .willReturn(Optional.of(updateState("수정된 질문", QnaQuestionUpdateStateStatus.INTENT_BOUND)));
+
+    // when: prepare, then recover
+    QnaExecutionIntentResult firstResult =
+        service.prepareQuestionUpdate(
+            new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L, 1L, "update-token"));
+    Optional<QnaExecutionIntentResult> secondResult =
+        service.recoverQuestionUpdate(new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L));
+
+    // then: build invoked twice across prepare→recover
+    verify(buildQnaExecutionDraftPort, times(2)).build(any());
+    assertThat(secondResult).isPresent();
+    assertThat(firstResult.signatureMeta().signedAt()).isEqualTo(firstSignedAt);
+    assertThat(secondResult.orElseThrow().signatureMeta().signedAt()).isEqualTo(secondSignedAt);
+    // payload signedAt refreshed
+    assertThat(firstDraft.signedAt()).isEqualTo(firstSignedAt);
+    assertThat(secondDraft.signedAt()).isEqualTo(secondSignedAt);
+    // unsignedTxFingerprint differs between the two prepares
+    assertThat(secondDraft.unsignedTxFingerprint())
+        .isNotEqualTo(firstDraft.unsignedTxFingerprint());
+  }
+
   private QnaExecutionDraft draft(QnaExecutionActionType actionType) {
+    return draft(actionType, 1_768_224_000L, "0x" + "c".repeat(64), "0x" + "a".repeat(64));
+  }
+
+  /**
+   * Builds a draft with explicit server-sig fields so recover-tests can assert that a fresh sign
+   * happens (distinct {@code signedAt} + {@code unsignedTxFingerprint}). The {@code
+   * rootIdempotencyKey} is intentionally fixed ("root-key") to mirror §5-4: signedAt-invariant.
+   */
+  private QnaExecutionDraft draft(
+      QnaExecutionActionType actionType,
+      long signedAt,
+      String unsignedTxFingerprint,
+      String payloadHash) {
     return new QnaExecutionDraft(
         QnaExecutionResourceType.QUESTION,
         "101",
@@ -645,7 +798,7 @@ class QuestionEscrowExecutionServiceTest {
         7L,
         22L,
         "root-key",
-        "0x" + "a".repeat(64),
+        payloadHash,
         "{}",
         List.of(
             new QnaExecutionDraftCall(
@@ -656,7 +809,8 @@ class QuestionEscrowExecutionServiceTest {
         "0x3333333333333333333333333333333333333333",
         "0x" + "b".repeat(64),
         null,
-        "0x" + "c".repeat(64),
+        unsignedTxFingerprint,
+        signedAt,
         LocalDateTime.now().plusMinutes(5));
   }
 
@@ -670,6 +824,19 @@ class QuestionEscrowExecutionServiceTest {
         new QnaExecutionIntentResult.Execution("EIP7702", 2),
         null,
         false);
+  }
+
+  private QnaExecutionIntentResult questionIntent(
+      String resourceId, String intentId, String actionType, long signedAt) {
+    return new QnaExecutionIntentResult(
+        new QnaExecutionIntentResult.Resource("QUESTION", resourceId, "PENDING_EXECUTION"),
+        actionType,
+        new QnaExecutionIntentResult.ExecutionIntent(
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+        new QnaExecutionIntentResult.Execution("EIP7702", 2),
+        null,
+        false,
+        new QnaExecutionIntentResult.SignatureMeta(signedAt, signedAt + 300));
   }
 
   private QnaQuestionProjection questionProjection(String questionContent, int answerCount) {
