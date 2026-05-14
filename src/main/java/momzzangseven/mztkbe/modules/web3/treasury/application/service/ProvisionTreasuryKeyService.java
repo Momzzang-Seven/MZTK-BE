@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.RecordTreasuryAuditUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
@@ -74,9 +75,9 @@ import org.web3j.crypto.Credentials;
  * registered right after {@code createKey()} covers the proxy-commit boundary. An {@link
  * AtomicBoolean} interlock guarantees the cleanup body runs at most once.
  *
- * <p>Failure audits are recorded inline via {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so
- * they survive an outer rollback. The success audit is moved to an AFTER_COMMIT handler ({@code
- * TreasuryAuditEventHandler}) driven by {@link AliasProvisionedAuditEvent}.
+ * <p>Failure audits are recorded inline via {@link RecordTreasuryAuditUseCase} ({@code
+ * REQUIRES_NEW}) so they survive an outer rollback. The success audit is moved to an AFTER_COMMIT
+ * handler ({@code TreasuryAuditEventHandler}) driven by {@link AliasProvisionedAuditEvent}.
  */
 @Service
 @Slf4j
@@ -92,7 +93,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
   private final KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   private final SignDigestPort signDigestPort;
-  private final TreasuryAuditRecorder treasuryAuditRecorder;
+  private final RecordTreasuryAuditUseCase treasuryAuditRecorder;
   private final TreasuryAdvisoryLockPort treasuryAdvisoryLockPort;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;

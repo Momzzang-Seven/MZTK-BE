@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableTreasuryWalletCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.RecordTreasuryAuditUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.TreasuryAdvisoryLockPort;
@@ -40,9 +41,9 @@ import org.springframework.transaction.annotation.Transactional;
  * failure mode is "DB DISABLED, KMS still ACTIVE", recorded in {@code web3_treasury_kms_audits} for
  * operator follow-up.
  *
- * <p>Failure audits happen inline via {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so a
- * caught exception leaves a record even when the outer transaction rolls back. The success audit is
- * the AFTER_COMMIT {@link AliasDisabledAuditEvent} handler.
+ * <p>Failure audits happen inline via {@link RecordTreasuryAuditUseCase} ({@code REQUIRES_NEW}) so
+ * a caught exception leaves a record even when the outer transaction rolls back. The success audit
+ * is the AFTER_COMMIT {@link AliasDisabledAuditEvent} handler.
  */
 @Service
 @Slf4j
@@ -51,7 +52,7 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
 
   private final LoadTreasuryWalletPort loadTreasuryWalletPort;
   private final SaveTreasuryWalletPort saveTreasuryWalletPort;
-  private final TreasuryAuditRecorder treasuryAuditRecorder;
+  private final RecordTreasuryAuditUseCase treasuryAuditRecorder;
   private final TreasuryAdvisoryLockPort treasuryAdvisoryLockPort;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;

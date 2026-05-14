@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ArchiveTreasuryWalletCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.RecordTreasuryAuditUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.TreasuryAdvisoryLockPort;
@@ -42,8 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>The default 30-day pending window matches the KMS minimum and gives operators a recovery
  * buffer before key material is destroyed.
  *
- * <p>Failure audits happen inline via {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}); the
- * success audit is the AFTER_COMMIT {@link AliasArchivedAuditEvent} handler.
+ * <p>Failure audits happen inline via {@link RecordTreasuryAuditUseCase} ({@code REQUIRES_NEW});
+ * the success audit is the AFTER_COMMIT {@link AliasArchivedAuditEvent} handler.
  */
 @Service
 @Slf4j
@@ -55,7 +56,7 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
 
   private final LoadTreasuryWalletPort loadTreasuryWalletPort;
   private final SaveTreasuryWalletPort saveTreasuryWalletPort;
-  private final TreasuryAuditRecorder treasuryAuditRecorder;
+  private final RecordTreasuryAuditUseCase treasuryAuditRecorder;
   private final TreasuryAdvisoryLockPort treasuryAdvisoryLockPort;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;
