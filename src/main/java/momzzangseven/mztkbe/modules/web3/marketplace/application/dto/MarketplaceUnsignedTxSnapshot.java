@@ -37,8 +37,8 @@ public record MarketplaceUnsignedTxSnapshot(
     if (gasLimit == null || gasLimit.signum() <= 0) {
       throw new Web3InvalidInputException("gasLimit must be positive");
     }
-    if (maxPriorityFeePerGas == null || maxPriorityFeePerGas.signum() < 0) {
-      throw new Web3InvalidInputException("maxPriorityFeePerGas must be >= 0");
+    if (maxPriorityFeePerGas == null || maxPriorityFeePerGas.signum() <= 0) {
+      throw new Web3InvalidInputException("maxPriorityFeePerGas must be positive");
     }
     if (maxFeePerGas == null || maxFeePerGas.signum() <= 0) {
       throw new Web3InvalidInputException("maxFeePerGas must be positive");

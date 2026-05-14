@@ -49,6 +49,27 @@ class MarketplaceExecutionDraftTest {
   }
 
   @Test
+  void requestRejectsOrderKeyThatDoesNotMatchReservationId() {
+    assertThatThrownBy(
+            () ->
+                new MarketplaceEscrowExecutionRequest(
+                    MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
+                    123L,
+                    "123",
+                    "0x000000000000000000000000000000000000000000000000000000000000007c",
+                    7L,
+                    7L,
+                    9L,
+                    3L,
+                    "0xbuyer",
+                    "0xtrainer",
+                    50000,
+                    expiresAt()))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("orderKey");
+  }
+
+  @Test
   void draftPreservesResourceIdAndOrderKeySeparately() {
     MarketplaceExecutionDraft draft = eip7702Draft();
 
@@ -141,6 +162,24 @@ class MarketplaceExecutionDraftTest {
                     BigInteger.TWO))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("chainId");
+  }
+
+  @Test
+  void unsignedTxSnapshotRejectsZeroMaxPriorityFeePerGas() {
+    assertThatThrownBy(
+            () ->
+                new MarketplaceUnsignedTxSnapshot(
+                    10L,
+                    "0xfrom",
+                    "0xto",
+                    BigInteger.ZERO,
+                    "0xdata",
+                    1L,
+                    BigInteger.valueOf(21_000),
+                    BigInteger.ZERO,
+                    BigInteger.TWO))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("maxPriorityFeePerGas");
   }
 
   @Test

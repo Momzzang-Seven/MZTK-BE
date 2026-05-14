@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.marketplace.application.dto;
 
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 
 /** Marketplace-owned request for preparing a user Web3 execution from a reservation snapshot. */
@@ -34,6 +35,9 @@ public record MarketplaceEscrowExecutionRequest(
     }
     if (orderKey == null || orderKey.isBlank()) {
       throw new Web3InvalidInputException("orderKey is required");
+    }
+    if (!MarketplaceEscrowIdCodec.orderKey(reservationId).equals(orderKey)) {
+      throw new Web3InvalidInputException("orderKey must match reservationId");
     }
     requirePositive(requesterUserId, "requesterUserId");
     requirePositive(buyerUserId, "buyerUserId");

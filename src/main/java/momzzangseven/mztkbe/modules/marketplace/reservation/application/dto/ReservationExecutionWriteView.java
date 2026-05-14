@@ -35,6 +35,7 @@ public record ReservationExecutionWriteView(
     }
   }
 
+  /** Resource identity surfaced in the marketplace Web3 write response. */
   public record Resource(String type, String id, String status) {
 
     public Resource {
@@ -50,6 +51,7 @@ public record ReservationExecutionWriteView(
     }
   }
 
+  /** Execution intent metadata needed by clients to submit user signatures. */
   public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
 
     public ExecutionIntent {
@@ -65,6 +67,7 @@ public record ReservationExecutionWriteView(
     }
   }
 
+  /** Execution mode and required signature count. */
   public record Execution(String mode, int signCount) {
 
     public Execution {
@@ -77,13 +80,17 @@ public record ReservationExecutionWriteView(
     }
   }
 
+  /** Sign request bundle for either EIP-7702 or EIP-1559 execution. */
   public record SignRequest(Authorization authorization, Submit submit, Transaction transaction) {}
 
+  /** EIP-7702 authorization signature request. */
   public record Authorization(
       Long chainId, String delegateTarget, Long authorityNonce, String payloadHashToSign) {}
 
+  /** EIP-7702 submit signature request. */
   public record Submit(String executionDigest, Long deadlineEpochSeconds) {}
 
+  /** EIP-1559 transaction signature request. */
   public record Transaction(
       Long chainId,
       String fromAddress,
