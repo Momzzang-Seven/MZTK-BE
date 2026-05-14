@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
@@ -211,29 +212,78 @@ class TreasuryWalletPersistenceAdapterTest {
     assertThat(wallet.getKeyOrigin()).isEqualTo(TreasuryKeyOrigin.IMPORTED);
   }
 
-  // ----- existsAddressOwnedByOther -----
+  // ----- cohort loads -----
 
   @Test
-  void existsAddressOwnedByOther_throwsInvalidInput_whenAliasOrAddressBlank() {
-    assertThatThrownBy(() -> adapter.existsAddressOwnedByOther("", ADDRESS))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("walletAlias");
-    assertThatThrownBy(() -> adapter.existsAddressOwnedByOther(ALIAS, ""))
+  void loadAllByTreasuryAddress_throwsInvalidInput_whenAddressBlank() {
+    assertThatThrownBy(() -> adapter.loadAllByTreasuryAddress(""))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("walletAddress");
   }
 
   @Test
-  void existsAddressOwnedByOther_delegatesToRepositoryAndReturnsResult() {
-    when(repository.existsByTreasuryAddressAndWalletAliasNot(ADDRESS, ALIAS)).thenReturn(true);
+  void loadAllByTreasuryAddress_mapsEveryCohortRowToDomain() {
+    when(repository.findAllByTreasuryAddress(ADDRESS))
+        .thenReturn(List.of(cohortEntity(ALIAS), cohortEntity("qna-signer-treasury")));
 
-    boolean exists = adapter.existsAddressOwnedByOther(ALIAS, ADDRESS);
+    List<TreasuryWallet> cohort = adapter.loadAllByTreasuryAddress(ADDRESS);
 
-    assertThat(exists).isTrue();
-    verify(repository).existsByTreasuryAddressAndWalletAliasNot(ADDRESS, ALIAS);
+    assertThat(cohort).hasSize(2);
+    assertThat(cohort)
+        .extracting(TreasuryWallet::getWalletAlias)
+        .containsExactlyInAnyOrder(ALIAS, "qna-signer-treasury");
+    assertThat(cohort).allMatch(w -> w.getKmsKeyId().equals(KMS_KEY_ID));
+  }
+
+  @Test
+  void loadAllByTreasuryAddressForUpdate_delegatesToLockingQuery() {
+    when(repository.findAllByTreasuryAddressForUpdate(ADDRESS))
+        .thenReturn(List.of(cohortEntity(ALIAS)));
+
+    List<TreasuryWallet> cohort = adapter.loadAllByTreasuryAddressForUpdate(ADDRESS);
+
+    assertThat(cohort).hasSize(1);
+    verify(repository).findAllByTreasuryAddressForUpdate(ADDRESS);
+  }
+
+  // ----- saveAll -----
+
+  @Test
+  void saveAll_throwsInvalidInput_whenListNull() {
+    assertThatThrownBy(() -> adapter.saveAll(null))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("wallets");
+    verify(repository, never()).saveAll(any());
+  }
+
+  @Test
+  void saveAll_upsertsEveryWalletByAlias_andReturnsDomain() {
+    when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.empty());
+    when(repository.findByWalletAlias("qna-signer-treasury")).thenReturn(Optional.empty());
+    when(repository.saveAll(any()))
+        .thenAnswer(invocation -> invocation.<List<Web3TreasuryWalletEntity>>getArgument(0));
+
+    List<TreasuryWallet> result =
+        adapter.saveAll(
+            List.of(
+                validWalletBuilder().build(),
+                validWalletBuilder().walletAlias("qna-signer-treasury").build()));
+
+    assertThat(result).hasSize(2);
+    verify(repository).saveAll(any());
   }
 
   // ----- helpers -----
+
+  private static Web3TreasuryWalletEntity cohortEntity(String alias) {
+    return Web3TreasuryWalletEntity.builder()
+        .walletAlias(alias)
+        .treasuryAddress(ADDRESS)
+        .kmsKeyId(KMS_KEY_ID)
+        .status(TreasuryWalletStatus.ACTIVE.name())
+        .keyOrigin(TreasuryKeyOrigin.IMPORTED.name())
+        .build();
+  }
 
   private static TreasuryWallet.TreasuryWalletBuilder validWalletBuilder() {
     return TreasuryWallet.builder()

@@ -18,9 +18,14 @@ import lombok.Setter;
 
 /**
  * JPA mapping for {@code web3_treasury_wallets}. Mirrors the {@code TreasuryWallet} aggregate.
- * After the KMS-finalize cleanup migration every row is KMS-backed: {@code wallet_alias}, {@code
- * treasury_address}, {@code kms_key_id}, {@code status}, {@code key_origin} are all NOT NULL and
- * {@code kms_key_id} is UNIQUE.
+ * Every row is KMS-backed: {@code wallet_alias}, {@code treasury_address}, {@code kms_key_id},
+ * {@code status}, {@code key_origin} are all NOT NULL.
+ *
+ * <p>Since MOM-444 (cohort provisioning, V073) {@code treasury_address} and {@code kms_key_id} are
+ * no longer UNIQUE — a cohort of aliases may share one {@code (treasury_address, kms_key_id)} pair.
+ * {@code wallet_alias} stays UNIQUE and is the row identity. The {@code treasury_address <->
+ * kms_key_id} 1:1 invariant is enforced by the V073 DB trigger plus an application-side guard, not
+ * by column constraints.
  *
  * <p>The {@code status} and {@code keyOrigin} columns are persisted as plain strings rather than
  * {@code @Enumerated} domain enums; ARCHITECTURE.md requires the entity to stay free of domain
@@ -46,7 +51,7 @@ public class Web3TreasuryWalletEntity {
   @Column(name = "treasury_address", nullable = false, length = 42)
   private String treasuryAddress;
 
-  @Column(name = "kms_key_id", nullable = false, unique = true, length = 255)
+  @Column(name = "kms_key_id", nullable = false, length = 255)
   private String kmsKeyId;
 
   @Column(name = "status", nullable = false, length = 32)

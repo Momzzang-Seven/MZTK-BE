@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.adapter;
 
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,10 +42,19 @@ public class TreasuryWalletPersistenceAdapter
   }
 
   @Override
-  public boolean existsAddressOwnedByOther(String walletAlias, String walletAddress) {
-    requireNonBlank(walletAlias, "walletAlias");
+  public List<TreasuryWallet> loadAllByTreasuryAddress(String walletAddress) {
     requireNonBlank(walletAddress, "walletAddress");
-    return repository.existsByTreasuryAddressAndWalletAliasNot(walletAddress, walletAlias);
+    return repository.findAllByTreasuryAddress(walletAddress).stream()
+        .map(TreasuryWalletPersistenceAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<TreasuryWallet> loadAllByTreasuryAddressForUpdate(String walletAddress) {
+    requireNonBlank(walletAddress, "walletAddress");
+    return repository.findAllByTreasuryAddressForUpdate(walletAddress).stream()
+        .map(TreasuryWalletPersistenceAdapter::toDomain)
+        .toList();
   }
 
   @Override
@@ -59,6 +69,31 @@ public class TreasuryWalletPersistenceAdapter
     applyDomain(entity, wallet);
     Web3TreasuryWalletEntity saved = repository.save(entity);
     return toDomain(saved);
+  }
+
+  @Override
+  public List<TreasuryWallet> saveAll(List<TreasuryWallet> wallets) {
+    if (wallets == null) {
+      throw new Web3InvalidInputException("wallets must not be null");
+    }
+    List<Web3TreasuryWalletEntity> entities =
+        wallets.stream()
+            .map(
+                wallet -> {
+                  if (wallet == null) {
+                    throw new Web3InvalidInputException("wallet must not be null");
+                  }
+                  Web3TreasuryWalletEntity entity =
+                      repository
+                          .findByWalletAlias(wallet.getWalletAlias())
+                          .orElseGet(() -> Web3TreasuryWalletEntity.builder().build());
+                  applyDomain(entity, wallet);
+                  return entity;
+                })
+            .toList();
+    return repository.saveAll(entities).stream()
+        .map(TreasuryWalletPersistenceAdapter::toDomain)
+        .toList();
   }
 
   // ----- helpers -----
