@@ -43,7 +43,8 @@ public class WalletRegistrationSessionPersistenceAdapter
           WalletRegistrationStatus.APPROVAL_SIGNED,
           WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
           WalletRegistrationStatus.APPROVAL_RETRYABLE,
-          WalletRegistrationStatus.FINALIZATION_FAILED);
+          WalletRegistrationStatus.FINALIZATION_FAILED,
+          WalletRegistrationStatus.LOCAL_CONFLICT);
   private static final PageRequest ONE_LATEST = PageRequest.of(0, 1);
 
   private final WalletRegistrationSessionJpaRepository repository;

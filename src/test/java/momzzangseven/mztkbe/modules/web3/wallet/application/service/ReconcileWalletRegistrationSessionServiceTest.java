@@ -176,9 +176,27 @@ class ReconcileWalletRegistrationSessionServiceTest {
   }
 
   @Test
-  void execute_whenLocalConflict_skipsOperatorOwnedRecovery() {
+  void execute_whenLocalConflictAfterBackoff_retriesFinalization() {
     WalletRegistrationSession session =
-        pendingOnchainSession().markLocalConflict("LOCAL_CONFLICT", "active wallet", NOW);
+        pendingOnchainSession()
+            .markLocalConflict("LOCAL_CONFLICT", "active wallet", NOW.minusMinutes(2));
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.recovered()).isTrue();
+    verify(retryFinalizationUseCase)
+        .execute(new RetryWalletRegistrationFinalizationCommand(REGISTRATION_ID));
+    verify(loadExecutionStatePort, never())
+        .loadByExecutionIntentId(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void execute_whenLocalConflictBeforeBackoff_skipsFinalizationRetry() {
+    WalletRegistrationSession session =
+        pendingOnchainSession()
+            .markLocalConflict("LOCAL_CONFLICT", "active wallet", NOW.minusSeconds(30));
     when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
 
     ReconcileWalletRegistrationSessionResult result = service.execute(command());

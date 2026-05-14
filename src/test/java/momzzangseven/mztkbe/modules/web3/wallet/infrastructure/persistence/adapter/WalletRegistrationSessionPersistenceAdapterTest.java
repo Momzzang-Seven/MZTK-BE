@@ -108,7 +108,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
   }
 
   @Test
-  void loadRecoveryCandidates_usesRecoveryCandidateStatusesAndExcludesLocalConflict() {
+  void loadRecoveryCandidates_usesRecoveryCandidateStatusesIncludingLocalConflict() {
     when(repository.findByStatusInOrderByUpdatedAtAscIdAsc(any(), any(Pageable.class)))
         .thenReturn(List.of(entity()));
 
@@ -120,8 +120,13 @@ class WalletRegistrationSessionPersistenceAdapterTest {
     verify(repository)
         .findByStatusInOrderByUpdatedAtAscIdAsc(statusesCaptor.capture(), any(Pageable.class));
     assertThat(statusesCaptor.getValue())
-        .contains(WalletRegistrationStatus.FINALIZATION_FAILED)
-        .doesNotContain(WalletRegistrationStatus.LOCAL_CONFLICT);
+        .containsExactlyInAnyOrder(
+            WalletRegistrationStatus.APPROVAL_REQUIRED,
+            WalletRegistrationStatus.APPROVAL_SIGNED,
+            WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
+            WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.FINALIZATION_FAILED,
+            WalletRegistrationStatus.LOCAL_CONFLICT);
   }
 
   private static WalletRegistrationSession newSession() {

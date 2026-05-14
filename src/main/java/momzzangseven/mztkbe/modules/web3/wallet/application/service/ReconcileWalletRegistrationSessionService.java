@@ -23,7 +23,6 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletR
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SyncWalletApprovalExecutionSuccessPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
-import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import org.springframework.stereotype.Service;
 
 /** Reconciles one wallet registration session from execution and transaction state. */
@@ -63,10 +62,7 @@ public class ReconcileWalletRegistrationSessionService
           ? ReconcileWalletRegistrationSessionResult.recoveredResult()
           : ReconcileWalletRegistrationSessionResult.skippedResult();
     }
-    if (session.getStatus() == WalletRegistrationStatus.LOCAL_CONFLICT) {
-      return ReconcileWalletRegistrationSessionResult.skippedResult();
-    }
-    if (session.getStatus() == WalletRegistrationStatus.FINALIZATION_FAILED) {
+    if (session.getStatus().isConfirmedButNotFinalized()) {
       return retryFinalizationIfBackoffElapsed(session);
     }
 

@@ -82,6 +82,17 @@ class RetryWalletRegistrationFinalizationServiceTest {
         .isEqualTo(INTENT_ID);
   }
 
+  @Test
+  void execute_whenLocalConflict_delegatesToFinalization() {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID))
+        .thenReturn(Optional.of(localConflictSession()));
+
+    service.execute(command());
+
+    verify(finalizeUseCase)
+        .execute(new FinalizeWalletRegistrationCommand(REGISTRATION_ID, INTENT_ID));
+  }
+
   private static RetryWalletRegistrationFinalizationCommand command() {
     return new RetryWalletRegistrationFinalizationCommand(REGISTRATION_ID);
   }
@@ -93,12 +104,21 @@ class RetryWalletRegistrationFinalizationServiceTest {
   }
 
   private static WalletRegistrationSession finalizationFailedSession() {
+    return pendingOnchainSession()
+        .markFinalizationFailed(
+            "FINALIZATION_FAILED", "local finalization failed", NOW.plusSeconds(4));
+  }
+
+  private static WalletRegistrationSession localConflictSession() {
+    return pendingOnchainSession()
+        .markLocalConflict("LOCAL_CONFLICT", "active wallet", NOW.plusSeconds(4));
+  }
+
+  private static WalletRegistrationSession pendingOnchainSession() {
     return approvalRequiredSession()
         .markApprovalSigned(INTENT_ID, 10L, "0x" + "c".repeat(64), "SIGNED", NOW.plusSeconds(2))
         .markApprovalPendingOnchain(
-            INTENT_ID, 10L, "0x" + "c".repeat(64), "PENDING_ONCHAIN", NOW.plusSeconds(3))
-        .markFinalizationFailed(
-            "FINALIZATION_FAILED", "local finalization failed", NOW.plusSeconds(4));
+            INTENT_ID, 10L, "0x" + "c".repeat(64), "PENDING_ONCHAIN", NOW.plusSeconds(3));
   }
 
   private static WalletRegistrationSession finalizationFailedSessionWithoutIntent() {
