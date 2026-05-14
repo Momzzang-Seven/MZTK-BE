@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.event;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -7,7 +8,7 @@ import static org.mockito.Mockito.verify;
 
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableKmsKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableKmsKeyUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletDisabledEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.KeyLifecycleEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,27 +29,27 @@ class TreasuryWalletDisabledKmsHandlerTest {
   }
 
   @Test
-  void onDisabled_invokesUseCase_withMappedCommand() {
-    TreasuryWalletDisabledEvent event =
-        new TreasuryWalletDisabledEvent("reward-treasury", "kms-key-1", "0x" + "a".repeat(40), 7L);
+  void onKeyDisabled_invokesUseCase_withMappedCommand() {
+    KeyLifecycleEvent.Disabled event =
+        new KeyLifecycleEvent.Disabled("kms-key-1", "reward-treasury", "0x" + "a".repeat(40), 7L);
 
-    handler.onDisabled(event);
+    handler.onKeyDisabled(event);
 
     ArgumentCaptor<DisableKmsKeyCommand> captor =
         ArgumentCaptor.forClass(DisableKmsKeyCommand.class);
     verify(disableKmsKeyUseCase).execute(captor.capture());
     DisableKmsKeyCommand cmd = captor.getValue();
-    org.assertj.core.api.Assertions.assertThat(cmd.walletAlias()).isEqualTo("reward-treasury");
-    org.assertj.core.api.Assertions.assertThat(cmd.kmsKeyId()).isEqualTo("kms-key-1");
-    org.assertj.core.api.Assertions.assertThat(cmd.operatorUserId()).isEqualTo(7L);
+    assertThat(cmd.walletAlias()).isEqualTo("reward-treasury");
+    assertThat(cmd.kmsKeyId()).isEqualTo("kms-key-1");
+    assertThat(cmd.operatorUserId()).isEqualTo(7L);
   }
 
   @Test
-  void onDisabled_swallowsUseCaseExceptions() {
+  void onKeyDisabled_swallowsUseCaseExceptions() {
     doThrow(new RuntimeException("KMS down")).when(disableKmsKeyUseCase).execute(any());
-    TreasuryWalletDisabledEvent event =
-        new TreasuryWalletDisabledEvent("reward-treasury", "kms-key-1", null, 7L);
+    KeyLifecycleEvent.Disabled event =
+        new KeyLifecycleEvent.Disabled("kms-key-1", "reward-treasury", null, 7L);
 
-    assertThatCode(() -> handler.onDisabled(event)).doesNotThrowAnyException();
+    assertThatCode(() -> handler.onKeyDisabled(event)).doesNotThrowAnyException();
   }
 }

@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verify;
 
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ScheduleKmsKeyDeletionCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ScheduleKmsKeyDeletionUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletArchivedEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.KeyLifecycleEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,12 +29,12 @@ class TreasuryWalletArchivedKmsHandlerTest {
   }
 
   @Test
-  void onArchived_invokesUseCase_withMappedCommand() {
-    TreasuryWalletArchivedEvent event =
-        new TreasuryWalletArchivedEvent(
-            "reward-treasury", "kms-key-1", "0x" + "a".repeat(40), 7L, 30);
+  void onKeyScheduledDeletion_invokesUseCase_withMappedCommand() {
+    KeyLifecycleEvent.ScheduledDeletion event =
+        new KeyLifecycleEvent.ScheduledDeletion(
+            "kms-key-1", "reward-treasury", "0x" + "a".repeat(40), 7L, 30);
 
-    handler.onArchived(event);
+    handler.onKeyScheduledDeletion(event);
 
     ArgumentCaptor<ScheduleKmsKeyDeletionCommand> captor =
         ArgumentCaptor.forClass(ScheduleKmsKeyDeletionCommand.class);
@@ -46,11 +46,11 @@ class TreasuryWalletArchivedKmsHandlerTest {
   }
 
   @Test
-  void onArchived_swallowsUseCaseExceptions() {
+  void onKeyScheduledDeletion_swallowsUseCaseExceptions() {
     doThrow(new RuntimeException("KMS down")).when(scheduleKmsKeyDeletionUseCase).execute(any());
-    TreasuryWalletArchivedEvent event =
-        new TreasuryWalletArchivedEvent("reward-treasury", "kms-key-1", null, 7L, 30);
+    KeyLifecycleEvent.ScheduledDeletion event =
+        new KeyLifecycleEvent.ScheduledDeletion("kms-key-1", "reward-treasury", null, 7L, 30);
 
-    assertThatCode(() -> handler.onArchived(event)).doesNotThrowAnyException();
+    assertThatCode(() -> handler.onKeyScheduledDeletion(event)).doesNotThrowAnyException();
   }
 }

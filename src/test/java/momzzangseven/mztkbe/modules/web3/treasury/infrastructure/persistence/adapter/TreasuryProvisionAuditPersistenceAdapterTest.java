@@ -37,7 +37,8 @@ class TreasuryProvisionAuditPersistenceAdapterTest {
   @Test
   void record_savesEntity_whenValid() {
     RecordTreasuryProvisionAuditPort.AuditCommand command =
-        new RecordTreasuryProvisionAuditPort.AuditCommand(1L, "0x" + "a".repeat(40), true, null);
+        new RecordTreasuryProvisionAuditPort.AuditCommand(
+            1L, "reward-treasury", "0x" + "a".repeat(40), true, null);
 
     adapter.record(command);
 
@@ -45,6 +46,7 @@ class TreasuryProvisionAuditPersistenceAdapterTest {
         ArgumentCaptor.forClass(Web3TreasuryProvisionAuditEntity.class);
     verify(repository).save(captor.capture());
     assertThat(captor.getValue().getOperatorId()).isEqualTo(1L);
+    assertThat(captor.getValue().getWalletAlias()).isEqualTo("reward-treasury");
     assertThat(captor.getValue().isSuccess()).isTrue();
   }
 }

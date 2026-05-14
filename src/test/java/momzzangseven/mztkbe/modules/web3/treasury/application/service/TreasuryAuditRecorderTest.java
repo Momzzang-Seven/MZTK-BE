@@ -23,14 +23,17 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Unit tests for {@link TreasuryAuditRecorder} — covers [M-95].
  *
- * <p>Verifies (a) port delegation with the supplied fields, (b) port-thrown exceptions are
- * swallowed so the original business error is not masked, and (c) the {@code record} method carries
- * {@code @Transactional(propagation = REQUIRES_NEW)} (covered by reflection — Spring AOP behaviour
- * is exercised in the persistence integration test).
+ * <p>Verifies (a) port delegation with the supplied fields (including the alias-level {@code
+ * walletAlias}), (b) port-thrown exceptions are swallowed so the original business error is not
+ * masked, and (c) the {@code record} method carries {@code @Transactional(propagation =
+ * REQUIRES_NEW)} (covered by reflection — Spring AOP behaviour is exercised in the persistence
+ * integration test).
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("TreasuryAuditRecorder 단위 테스트")
 class TreasuryAuditRecorderTest {
+
+  private static final String ALIAS = "reward-treasury";
 
   @Mock private RecordTreasuryProvisionAuditPort port;
 
@@ -43,13 +46,14 @@ class TreasuryAuditRecorderTest {
     @Test
     @DisplayName("[M-95a] record — AuditCommand 필드를 그대로 포트에 전달")
     void record_delegatesToPort_withMappedFields() {
-      recorder.record(7L, "0x" + "a".repeat(40), true, null);
+      recorder.record(7L, ALIAS, "0x" + "a".repeat(40), true, null);
 
       ArgumentCaptor<AuditCommand> captor = ArgumentCaptor.forClass(AuditCommand.class);
       verify(port).record(captor.capture());
 
       AuditCommand cmd = captor.getValue();
       assertThat(cmd.operatorId()).isEqualTo(7L);
+      assertThat(cmd.walletAlias()).isEqualTo(ALIAS);
       assertThat(cmd.treasuryAddress()).isEqualTo("0x" + "a".repeat(40));
       assertThat(cmd.success()).isTrue();
       assertThat(cmd.failureReason()).isNull();
@@ -58,7 +62,7 @@ class TreasuryAuditRecorderTest {
     @Test
     @DisplayName("[M-95b] record — failure 분기는 failureReason과 함께 전달")
     void record_failureBranch_propagatesFailureReason() {
-      recorder.record(7L, null, false, "RuntimeException");
+      recorder.record(7L, ALIAS, null, false, "RuntimeException");
 
       ArgumentCaptor<AuditCommand> captor = ArgumentCaptor.forClass(AuditCommand.class);
       verify(port).record(captor.capture());
@@ -66,7 +70,19 @@ class TreasuryAuditRecorderTest {
       AuditCommand cmd = captor.getValue();
       assertThat(cmd.success()).isFalse();
       assertThat(cmd.failureReason()).isEqualTo("RuntimeException");
+      assertThat(cmd.walletAlias()).isEqualTo(ALIAS);
       assertThat(cmd.treasuryAddress()).isNull();
+    }
+
+    @Test
+    @DisplayName("[M-95e] record — walletAlias 가 null 이어도 그대로 포트에 전달")
+    void record_allowsNullWalletAlias() {
+      recorder.record(7L, null, null, false, "ADDRESS_MISMATCH");
+
+      ArgumentCaptor<AuditCommand> captor = ArgumentCaptor.forClass(AuditCommand.class);
+      verify(port).record(captor.capture());
+
+      assertThat(captor.getValue().walletAlias()).isNull();
     }
   }
 
@@ -79,7 +95,7 @@ class TreasuryAuditRecorderTest {
     void record_swallowsPortException() {
       doThrow(new RuntimeException("DB down")).when(port).record(any());
 
-      assertThatCode(() -> recorder.record(7L, null, false, "AwsServiceException"))
+      assertThatCode(() -> recorder.record(7L, ALIAS, null, false, "AwsServiceException"))
           .doesNotThrowAnyException();
     }
   }
@@ -93,7 +109,7 @@ class TreasuryAuditRecorderTest {
     void record_methodIsAnnotatedRequiresNew() throws NoSuchMethodException {
       Method m =
           TreasuryAuditRecorder.class.getMethod(
-              "record", Long.class, String.class, boolean.class, String.class);
+              "record", Long.class, String.class, String.class, boolean.class, String.class);
 
       Transactional tx = m.getAnnotation(Transactional.class);
       assertThat(tx).isNotNull();

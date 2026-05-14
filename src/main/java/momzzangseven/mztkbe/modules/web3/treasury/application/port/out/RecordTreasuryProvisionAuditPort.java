@@ -7,8 +7,16 @@ public interface RecordTreasuryProvisionAuditPort {
 
   void record(AuditCommand command);
 
+  /**
+   * @param walletAlias canonical wallet alias this audit row belongs to; nullable for legacy /
+   *     pre-alias-derivation failure rows
+   */
   record AuditCommand(
-      Long operatorId, String treasuryAddress, boolean success, String failureReason) {
+      Long operatorId,
+      String walletAlias,
+      String treasuryAddress,
+      boolean success,
+      String failureReason) {
 
     public AuditCommand {
       validate(operatorId, treasuryAddress, success, failureReason);

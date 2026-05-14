@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.RecordTreasuryAuditUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.RecordTreasuryProvisionAuditPort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -18,34 +19,38 @@ import org.springframework.transaction.annotation.Transactional;
  * writes through this dedicated bean restores the {@code REQUIRES_NEW} guarantee so audit rows
  * survive even when KMS-side calls throw and cause the outer transaction to roll back.
  *
+ * <p>Implements {@link RecordTreasuryAuditUseCase} so {@code infrastructure/event} handlers depend
+ * on the input port rather than this concrete class (ARCHITECTURE.md layering rule).
+ *
  * <p>Audit failures are intentionally swallowed so a logging or DB hiccup on the audit path can
  * never propagate up and mask the original (already failing) business error.
  */
 @Component
 @Slf4j
 @RequiredArgsConstructor
-public class TreasuryAuditRecorder {
+public class TreasuryAuditRecorder implements RecordTreasuryAuditUseCase {
 
   private final RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
 
-  /**
-   * Persist a single audit row in its own committed transaction.
-   *
-   * @param operatorId admin user id invoking the operation
-   * @param walletAddress {@code 0x}-prefixed wallet address, or {@code null} when the failure
-   *     happened before the address could be derived
-   * @param success {@code true} for successful flows, {@code false} for caught exceptions
-   * @param failureReason simple class name of the thrown exception, or {@code null} on success
-   */
+  @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void record(Long operatorId, String walletAddress, boolean success, String failureReason) {
+  public void record(
+      Long operatorUserId,
+      String walletAlias,
+      String walletAddress,
+      boolean success,
+      String reason) {
     try {
       recordTreasuryProvisionAuditPort.record(
           new RecordTreasuryProvisionAuditPort.AuditCommand(
-              operatorId, walletAddress, success, failureReason));
+              operatorUserId, walletAlias, walletAddress, success, reason));
     } catch (Exception e) {
       log.warn(
-          "Failed to record treasury audit: operatorId={}, success={}", operatorId, success, e);
+          "Failed to record treasury audit: operatorId={}, alias={}, success={}",
+          operatorUserId,
+          walletAlias,
+          success,
+          e);
     }
   }
 }

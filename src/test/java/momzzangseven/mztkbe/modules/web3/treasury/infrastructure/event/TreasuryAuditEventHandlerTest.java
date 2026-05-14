@@ -8,10 +8,10 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import momzzangseven.mztkbe.modules.web3.treasury.application.service.TreasuryAuditRecorder;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletArchivedEvent;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletDisabledEvent;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletProvisionedEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.RecordTreasuryAuditUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.AliasArchivedAuditEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.AliasDisabledAuditEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.AliasProvisionedAuditEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,91 +22,91 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class TreasuryAuditEventHandlerTest {
 
   private static final String ALIAS = "reward-treasury";
-  private static final String KMS_KEY_ID = "kms-key-1";
   private static final String ADDRESS = "0x" + "a".repeat(40);
   private static final Long OPERATOR_ID = 7L;
 
-  @Mock private TreasuryAuditRecorder treasuryAuditRecorder;
+  @Mock private RecordTreasuryAuditUseCase recordTreasuryAuditUseCase;
 
   private TreasuryAuditEventHandler handler;
 
   @BeforeEach
   void setUp() {
-    handler = new TreasuryAuditEventHandler(treasuryAuditRecorder);
+    handler = new TreasuryAuditEventHandler(recordTreasuryAuditUseCase);
   }
 
   @Test
   void onProvisioned_recordsSuccessAudit() {
     handler.onProvisioned(
-        new TreasuryWalletProvisionedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID, false));
+        new AliasProvisionedAuditEvent(ALIAS, ADDRESS, OPERATOR_ID, false, false));
 
-    verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
-    verifyNoMoreInteractions(treasuryAuditRecorder);
+    verify(recordTreasuryAuditUseCase).record(OPERATOR_ID, ALIAS, ADDRESS, true, null);
+    verifyNoMoreInteractions(recordTreasuryAuditUseCase);
+  }
+
+  @Test
+  void onProvisioned_recordsSuccessAudit_inCoBindMode() {
+    handler.onProvisioned(new AliasProvisionedAuditEvent(ALIAS, ADDRESS, OPERATOR_ID, true, false));
+
+    verify(recordTreasuryAuditUseCase).record(OPERATOR_ID, ALIAS, ADDRESS, true, null);
+    verifyNoMoreInteractions(recordTreasuryAuditUseCase);
   }
 
   @Test
   void onProvisioned_recordsSuccessAudit_inAliasRepairMode() {
-    handler.onProvisioned(
-        new TreasuryWalletProvisionedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID, true));
+    handler.onProvisioned(new AliasProvisionedAuditEvent(ALIAS, ADDRESS, OPERATOR_ID, false, true));
 
-    verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
-    verifyNoMoreInteractions(treasuryAuditRecorder);
+    verify(recordTreasuryAuditUseCase).record(OPERATOR_ID, ALIAS, ADDRESS, true, null);
+    verifyNoMoreInteractions(recordTreasuryAuditUseCase);
   }
 
   @Test
   void onDisabled_recordsSuccessAudit() {
-    handler.onDisabled(new TreasuryWalletDisabledEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID));
+    handler.onDisabled(new AliasDisabledAuditEvent(ALIAS, ADDRESS, OPERATOR_ID));
 
-    verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
-    verifyNoMoreInteractions(treasuryAuditRecorder);
+    verify(recordTreasuryAuditUseCase).record(OPERATOR_ID, ALIAS, ADDRESS, true, null);
+    verifyNoMoreInteractions(recordTreasuryAuditUseCase);
   }
 
   @Test
   void onArchived_recordsSuccessAudit() {
-    handler.onArchived(
-        new TreasuryWalletArchivedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID, 30));
+    handler.onArchived(new AliasArchivedAuditEvent(ALIAS, ADDRESS, OPERATOR_ID));
 
-    verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
-    verifyNoMoreInteractions(treasuryAuditRecorder);
+    verify(recordTreasuryAuditUseCase).record(OPERATOR_ID, ALIAS, ADDRESS, true, null);
+    verifyNoMoreInteractions(recordTreasuryAuditUseCase);
   }
 
   @Test
   void onProvisioned_swallowsRecorderException() {
     doThrow(new RuntimeException("audit insert failed"))
-        .when(treasuryAuditRecorder)
-        .record(anyLong(), any(), anyBoolean(), any());
+        .when(recordTreasuryAuditUseCase)
+        .record(anyLong(), any(), any(), anyBoolean(), any());
 
     assertThatCode(
             () ->
                 handler.onProvisioned(
-                    new TreasuryWalletProvisionedEvent(
-                        ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID, false)))
+                    new AliasProvisionedAuditEvent(ALIAS, ADDRESS, OPERATOR_ID, false, false)))
         .doesNotThrowAnyException();
   }
 
   @Test
   void onDisabled_swallowsRecorderException() {
     doThrow(new RuntimeException("audit insert failed"))
-        .when(treasuryAuditRecorder)
-        .record(anyLong(), any(), anyBoolean(), any());
+        .when(recordTreasuryAuditUseCase)
+        .record(anyLong(), any(), any(), anyBoolean(), any());
 
     assertThatCode(
-            () ->
-                handler.onDisabled(
-                    new TreasuryWalletDisabledEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID)))
+            () -> handler.onDisabled(new AliasDisabledAuditEvent(ALIAS, ADDRESS, OPERATOR_ID)))
         .doesNotThrowAnyException();
   }
 
   @Test
   void onArchived_swallowsRecorderException() {
     doThrow(new RuntimeException("audit insert failed"))
-        .when(treasuryAuditRecorder)
-        .record(anyLong(), any(), anyBoolean(), any());
+        .when(recordTreasuryAuditUseCase)
+        .record(anyLong(), any(), any(), anyBoolean(), any());
 
     assertThatCode(
-            () ->
-                handler.onArchived(
-                    new TreasuryWalletArchivedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID, 30)))
+            () -> handler.onArchived(new AliasArchivedAuditEvent(ALIAS, ADDRESS, OPERATOR_ID)))
         .doesNotThrowAnyException();
   }
 }

@@ -23,6 +23,7 @@ public class TreasuryProvisionAuditPersistenceAdapter implements RecordTreasuryP
     repository.save(
         Web3TreasuryProvisionAuditEntity.builder()
             .operatorId(command.operatorId())
+            .walletAlias(command.walletAlias())
             .treasuryAddress(command.treasuryAddress())
             .success(command.success())
             .failureReason(command.failureReason())

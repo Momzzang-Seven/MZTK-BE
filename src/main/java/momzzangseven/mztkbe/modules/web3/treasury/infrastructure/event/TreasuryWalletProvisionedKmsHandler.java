@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.BindKmsAliasCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.BindKmsAliasUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletProvisionedEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.KeyLifecycleEvent;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -13,6 +13,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * AFTER_COMMIT handler that drives KMS {@code CreateAlias} (or {@code UpdateAlias} for ghost
  * recovery) once the {@code kms_key_id} has been persisted. Lives in {@code infrastructure/event}
  * so the application layer remains unaware of Spring's event-listener wiring.
+ *
+ * <p>Listens for {@link KeyLifecycleEvent.BoundAlias}, which is alias-level: a cohort of N sibling
+ * aliases publishes N events, so this handler fires {@code CreateAlias} N times — once per alias —
+ * against the (possibly shared) key.
  *
  * <p>Exceptions are swallowed; operator visibility comes from {@code web3_treasury_kms_audits}.
  */
@@ -24,7 +28,7 @@ public class TreasuryWalletProvisionedKmsHandler {
   private final BindKmsAliasUseCase bindKmsAliasUseCase;
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-  public void onProvisioned(TreasuryWalletProvisionedEvent event) {
+  public void onAliasBound(KeyLifecycleEvent.BoundAlias event) {
     try {
       bindKmsAliasUseCase.execute(
           new BindKmsAliasCommand(
@@ -34,9 +38,8 @@ public class TreasuryWalletProvisionedKmsHandler {
               event.operatorUserId()));
     } catch (RuntimeException ex) {
       log.warn(
-          "KMS alias bind failed post-commit for alias={} (repairMode={}); audit row recorded for operator follow-up",
+          "KMS alias bind failed post-commit for alias={}; audit row recorded for operator follow-up",
           event.walletAlias(),
-          event.aliasRepairMode(),
           ex);
     }
   }

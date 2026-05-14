@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verify;
 
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.BindKmsAliasCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.BindKmsAliasUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletProvisionedEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.KeyLifecycleEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,12 +29,11 @@ class TreasuryWalletProvisionedKmsHandlerTest {
   }
 
   @Test
-  void onProvisioned_invokesUseCase_withMappedCommand() {
-    TreasuryWalletProvisionedEvent event =
-        new TreasuryWalletProvisionedEvent(
-            "reward-treasury", "kms-key-1", "0x" + "a".repeat(40), 7L, false);
+  void onAliasBound_invokesUseCase_withMappedCommand() {
+    KeyLifecycleEvent.BoundAlias event =
+        new KeyLifecycleEvent.BoundAlias("kms-key-1", "reward-treasury", "0x" + "a".repeat(40), 7L);
 
-    handler.onProvisioned(event);
+    handler.onAliasBound(event);
 
     ArgumentCaptor<BindKmsAliasCommand> captor = ArgumentCaptor.forClass(BindKmsAliasCommand.class);
     verify(bindKmsAliasUseCase).execute(captor.capture());
@@ -45,11 +44,11 @@ class TreasuryWalletProvisionedKmsHandlerTest {
   }
 
   @Test
-  void onProvisioned_swallowsUseCaseExceptions() {
+  void onAliasBound_swallowsUseCaseExceptions() {
     doThrow(new RuntimeException("KMS down")).when(bindKmsAliasUseCase).execute(any());
-    TreasuryWalletProvisionedEvent event =
-        new TreasuryWalletProvisionedEvent("reward-treasury", "kms-key-1", null, 7L, true);
+    KeyLifecycleEvent.BoundAlias event =
+        new KeyLifecycleEvent.BoundAlias("kms-key-1", "reward-treasury", null, 7L);
 
-    assertThatCode(() -> handler.onProvisioned(event)).doesNotThrowAnyException();
+    assertThatCode(() -> handler.onAliasBound(event)).doesNotThrowAnyException();
   }
 }
