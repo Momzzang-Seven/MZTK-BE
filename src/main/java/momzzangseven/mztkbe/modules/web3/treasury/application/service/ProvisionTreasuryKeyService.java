@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -11,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
@@ -23,9 +25,12 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMat
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletProvisionedEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.TreasuryAdvisoryLockPort;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.AliasProvisionedAuditEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.KeyLifecycleEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,40 +39,44 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.web3j.crypto.Credentials;
 
 /**
- * KMS-backed treasury wallet provisioning. Replaces the legacy AES-GCM-encrypted private key flow.
+ * KMS-backed treasury wallet provisioning with cohort support (MOM-444). A cohort is the set of
+ * wallet rows sharing one {@code (treasury_address, kms_key_id)} pair; the first alias for an
+ * address creates a fresh KMS key, later aliases <em>co-bind</em> to the cohort's existing key.
  *
- * <p>The service owns the {@code CreateKey} → {@code ImportKeyMaterial} → sanity sign → DB save
- * chain inside a single {@link Transactional}. {@code CreateAlias} no longer runs inside this
- * method — once the row commits, a {@link TreasuryWalletProvisionedEvent} is published and an
- * AFTER_COMMIT handler invokes {@code BindKmsAliasUseCase}. This closes the previous "createAlias
- * succeeded → outer commit failed" race that left an ENABLED key bound to an alias with no DB row,
- * where R-2's ghost-alias recovery could not fire because the body-level catch block does not run
- * when the failure happens at the proxy commit boundary.
+ * <p><b>Fresh provision.</b> When no sibling row exists for the derived address, the service owns
+ * the {@code CreateKey} → {@code ImportKeyMaterial} → sanity sign → DB save chain inside a single
+ * {@link Transactional}. {@code CreateAlias} runs post-commit: once the row commits, a {@link
+ * KeyLifecycleEvent.BoundAlias} is published and an AFTER_COMMIT handler invokes {@code
+ * BindKmsAliasUseCase}.
+ *
+ * <p><b>Co-bind.</b> When sibling rows already exist for the address, the new alias reuses their
+ * shared {@code kms_key_id} — no new KMS key is created, and {@code registerCleanupOnRollback} is
+ * deliberately NOT registered so a rollback of the new row never tears down the shared key
+ * (invariant #3). Co-bind is policy-gated: it is rejected unless every sibling is ACTIVE.
+ *
+ * <p><b>Mixed-cohort guard.</b> The {@code treasury_address <-> kms_key_id} 1:1 invariant is
+ * strict-rejected at this endpoint (no reconcile use case): if sibling rows disagree on {@code
+ * kms_key_id}, provisioning aborts with {@code COHORT_STATE_INCONSISTENT}. The V073 DB trigger is
+ * the backstop for raw-SQL mistakes.
+ *
+ * <p><b>Advisory lock.</b> After deriving the address, the service acquires a transaction-scoped
+ * advisory lock on it so concurrent provision/disable/archive calls on the same address serialize —
+ * this is what guarantees "KMS CreateKey once per cohort" even under a provision-provision race.
  *
  * <p><b>Operator retry / alias repair.</b> When an existing row already carries a {@code
- * kms_key_id} but the KMS alias is missing or stale (the post-commit handler failed or the alias
- * was reaped externally), re-running {@code POST /provision} with the same input enters
+ * kms_key_id} but the KMS alias is missing or stale, re-running {@code POST /provision} enters
  * <em>alias-repair mode</em>: the service skips {@code CreateKey}/{@code ImportKeyMaterial} and
- * just re-publishes the event so the handler can rebind the alias idempotently.
+ * just re-publishes the events so the handler can rebind the alias idempotently.
  *
- * <p>On any failure inside the transactional body the {@link Transactional} rollback together with
- * {@code cleanupKmsKey} (disable + 7-day scheduled deletion) ensures a half-provisioned KMS key
- * cannot accumulate. As a safety net for the proxy-commit boundary — where a body-level catch
- * cannot run — a {@link TransactionSynchronization} is registered immediately after {@code
- * createKey()} succeeds. Its {@code afterCompletion} hook only runs cleanup on confirmed {@code
- * STATUS_ROLLED_BACK}; on {@code STATUS_UNKNOWN} (or any unrecognised status) it skips cleanup and
- * records an alert audit row instead, because the DB commit may actually have succeeded and tearing
- * down the KMS key would orphan an ACTIVE wallet row pointing at a disabled/pending-deletion key.
- * An {@link AtomicBoolean} interlock guarantees the cleanup body executes at most once even when
- * both the catch path and the synchronization fire (in-method exception → tx rollback).
+ * <p>On any failure inside the transactional body of a <em>fresh provision</em>, the {@link
+ * Transactional} rollback together with {@code cleanupKmsKey} (disable + 7-day scheduled deletion)
+ * ensures a half-provisioned KMS key cannot accumulate; a {@link TransactionSynchronization}
+ * registered right after {@code createKey()} covers the proxy-commit boundary. An {@link
+ * AtomicBoolean} interlock guarantees the cleanup body runs at most once.
  *
- * <p>Failure audits (caught exceptions, address-mismatch, already-provisioned) are recorded inline
- * via {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback. The
- * success audit is moved to an AFTER_COMMIT handler ({@code TreasuryAuditEventHandler}) so it only
- * lands once the wallet row has actually committed; recording it inline let the audit row survive a
- * proxy-boundary commit failure that silently rolled the wallet row back. Bean-validation /
- * null-command failures short-circuit before audit and are not recorded; the controller's
- * {@code @Valid} chain is the source of truth for those cases.
+ * <p>Failure audits are recorded inline via {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so
+ * they survive an outer rollback. The success audit is moved to an AFTER_COMMIT handler ({@code
+ * TreasuryAuditEventHandler}) driven by {@link AliasProvisionedAuditEvent}.
  */
 @Service
 @Slf4j
@@ -84,6 +93,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   private final KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   private final SignDigestPort signDigestPort;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
+  private final TreasuryAdvisoryLockPort treasuryAdvisoryLockPort;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;
   private final SecureRandom secureRandom = new SecureRandom();
@@ -105,39 +115,141 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     String walletAlias = role.toAlias();
     String derivedAddress = deriveAddress(command.rawPrivateKey());
     if (!derivedAddress.equalsIgnoreCase(command.expectedAddress())) {
-      treasuryAuditRecorder.record(command.operatorUserId(), null, false, "ADDRESS_MISMATCH");
+      treasuryAuditRecorder.record(
+          command.operatorUserId(), walletAlias, null, false, "ADDRESS_MISMATCH");
       throw new TreasuryWalletAddressMismatchException(
           "derived address does not match expectedAddress");
     }
 
-    Optional<TreasuryWallet> existing = loadTreasuryWalletPort.loadByAlias(walletAlias);
-    if (existing.isPresent()
-        && !derivedAddress.equalsIgnoreCase(existing.get().getWalletAddress())) {
+    // Serialize lifecycle operations on this address so KMS CreateKey fires once per cohort even
+    // under a provision-provision race. Released on transaction completion.
+    treasuryAdvisoryLockPort.lockForAddress(derivedAddress);
+
+    Optional<TreasuryWallet> byAlias = loadTreasuryWalletPort.loadByAlias(walletAlias);
+    if (byAlias.isPresent() && !derivedAddress.equalsIgnoreCase(byAlias.get().getWalletAddress())) {
       treasuryAuditRecorder.record(
-          command.operatorUserId(), derivedAddress, false, "ADDRESS_MISMATCH");
+          command.operatorUserId(), walletAlias, derivedAddress, false, "ADDRESS_MISMATCH");
       throw new TreasuryWalletAddressMismatchException(
           "derived address does not match the existing legacy row's walletAddress for alias '"
               + walletAlias
               + "'");
     }
-    if (existing.isPresent() && existing.get().getKmsKeyId() != null) {
-      return handleExistingProvisionedRow(command, existing.get(), derivedAddress, role);
-    }
-    if (existing.isEmpty()
-        && loadTreasuryWalletPort.existsAddressOwnedByOther(walletAlias, derivedAddress)) {
-      treasuryAuditRecorder.record(
-          command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
-      throw new TreasuryWalletAlreadyProvisionedException(
-          "wallet address '" + derivedAddress + "' is already bound to a different alias");
+
+    // Single cohort query reused by the mixed-cohort guard, the alias-repair branch and the
+    // co-bind branch. Loaded FOR UPDATE and before alias-repair so a mixed cohort cannot be
+    // bypassed. The byAlias row (if any) is excluded — byAlias passed the address-mismatch guard
+    // above so it shares derivedAddress and would otherwise appear here.
+    List<TreasuryWallet> siblings =
+        loadTreasuryWalletPort.loadAllByTreasuryAddressForUpdate(derivedAddress).stream()
+            .filter(s -> byAlias.isEmpty() || !s.getId().equals(byAlias.get().getId()))
+            .toList();
+
+    assertCohortConsistent(command, walletAlias, derivedAddress, byAlias.orElse(null), siblings);
+
+    if (byAlias.isPresent() && byAlias.get().getKmsKeyId() != null) {
+      return handleExistingProvisionedRow(command, byAlias.get(), derivedAddress, role);
     }
 
+    if (!siblings.isEmpty()) {
+      return coBindToCohort(
+          command, walletAlias, derivedAddress, role, byAlias.orElse(null), siblings);
+    }
+
+    return freshProvision(command, walletAlias, derivedAddress, role, byAlias.orElse(null));
+  }
+
+  /**
+   * Strict-reject a mixed cohort: the {@code treasury_address <-> kms_key_id} 1:1 invariant must
+   * hold before any provisioning branch runs. The V073 trigger is the DB-level backstop; this is
+   * the application-level guard so a normal endpoint never silently provisions onto an inconsistent
+   * cohort.
+   */
+  private void assertCohortConsistent(
+      ProvisionTreasuryKeyCommand command,
+      String walletAlias,
+      String derivedAddress,
+      TreasuryWallet byAlias,
+      List<TreasuryWallet> siblings) {
+    long distinctSiblingKeys =
+        siblings.stream().map(TreasuryWallet::getKmsKeyId).distinct().count();
+    boolean siblingsDisagree = distinctSiblingKeys > 1;
+    boolean aliasDisagrees =
+        byAlias != null
+            && byAlias.getKmsKeyId() != null
+            && !siblings.isEmpty()
+            && !byAlias.getKmsKeyId().equals(siblings.get(0).getKmsKeyId());
+    if (siblingsDisagree || aliasDisagrees) {
+      treasuryAuditRecorder.record(
+          command.operatorUserId(),
+          walletAlias,
+          derivedAddress,
+          false,
+          "COHORT_STATE_INCONSISTENT");
+      throw new TreasuryWalletStateException(
+          "treasury address '"
+              + derivedAddress
+              + "' has a mixed cohort (rows disagree on kms_key_id) — resolve via the runbook"
+              + " before provisioning");
+    }
+  }
+
+  /**
+   * Co-bind a new (or legacy null-key) alias to an existing cohort's shared KMS key. No new KMS key
+   * is created and {@code registerCleanupOnRollback} is intentionally NOT registered — a rollback
+   * of this row must never tear down the shared key (invariant #3). Gated on every sibling being
+   * ACTIVE so the new ACTIVE row stays consistent with the cohort (invariant #2).
+   */
+  private ProvisionTreasuryKeyResult coBindToCohort(
+      ProvisionTreasuryKeyCommand command,
+      String walletAlias,
+      String derivedAddress,
+      TreasuryRole role,
+      TreasuryWallet byAlias,
+      List<TreasuryWallet> siblings) {
+    boolean allActive =
+        siblings.stream().allMatch(s -> s.getStatus() == TreasuryWalletStatus.ACTIVE);
+    if (!allActive) {
+      treasuryAuditRecorder.record(
+          command.operatorUserId(), walletAlias, derivedAddress, false, "COHORT_NOT_ALL_ACTIVE");
+      throw new TreasuryWalletAlreadyProvisionedException(
+          "treasury address '"
+              + derivedAddress
+              + "' has a cohort that is not fully ACTIVE — cannot co-bind alias '"
+              + walletAlias
+              + "'");
+    }
+
+    String sharedKmsKeyId = siblings.get(0).getKmsKeyId();
+    TreasuryWallet wallet =
+        byAlias != null
+            ? TreasuryWallet.backfill(byAlias, sharedKmsKeyId, clock)
+            : TreasuryWallet.provision(walletAlias, sharedKmsKeyId, derivedAddress, role, clock);
+    TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
+
+    publishAliasProvisioned(command, walletAlias, derivedAddress, true, false);
+    publishBoundAlias(command, walletAlias, sharedKmsKeyId, derivedAddress);
+
+    return ProvisionTreasuryKeyResult.from(saved, role);
+  }
+
+  /**
+   * First alias for an address: create a fresh KMS key, import the operator-supplied material,
+   * sanity-sign, persist the row, and register rollback cleanup for the new key.
+   */
+  private ProvisionTreasuryKeyResult freshProvision(
+      ProvisionTreasuryKeyCommand command,
+      String walletAlias,
+      String derivedAddress,
+      TreasuryRole role,
+      TreasuryWallet byAlias) {
     String kmsKeyId = null;
     byte[] rawPrivateKey = decodePrivateKey(command.rawPrivateKey());
     byte[] wrappedKey = null;
     AtomicBoolean cleanupInvoked = new AtomicBoolean(false);
     try {
       kmsKeyId = kmsKeyLifecyclePort.createKey();
-      registerCleanupOnRollback(kmsKeyId, cleanupInvoked, command.operatorUserId(), derivedAddress);
+      registerCleanupOnRollback(
+          kmsKeyId, cleanupInvoked, command.operatorUserId(), walletAlias, derivedAddress);
       KmsKeyLifecyclePort.ImportParams params =
           kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
       wrappedKey = kmsKeyMaterialWrapperPort.wrap(rawPrivateKey, params.wrappingPublicKey());
@@ -148,12 +260,13 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       signDigestPort.signDigest(kmsKeyId, digest, derivedAddress);
 
       TreasuryWallet wallet =
-          existing.isPresent()
-              ? TreasuryWallet.backfill(existing.get(), kmsKeyId, clock)
+          byAlias != null
+              ? TreasuryWallet.backfill(byAlias, kmsKeyId, clock)
               : TreasuryWallet.provision(walletAlias, kmsKeyId, derivedAddress, role, clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
 
-      publishTreasuryWalletProvisionedEvent(command, walletAlias, kmsKeyId, derivedAddress);
+      publishAliasProvisioned(command, walletAlias, derivedAddress, false, false);
+      publishBoundAlias(command, walletAlias, kmsKeyId, derivedAddress);
 
       return ProvisionTreasuryKeyResult.from(saved, role);
     } catch (RuntimeException e) {
@@ -161,7 +274,11 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
         cleanupKmsKey(kmsKeyId);
       }
       treasuryAuditRecorder.record(
-          command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
+          command.operatorUserId(),
+          walletAlias,
+          derivedAddress,
+          false,
+          e.getClass().getSimpleName());
       throw e;
     } finally {
       zeroize(rawPrivateKey);
@@ -169,14 +286,25 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     }
   }
 
-  private void publishTreasuryWalletProvisionedEvent(
+  private void publishAliasProvisioned(
+      ProvisionTreasuryKeyCommand command,
+      String walletAlias,
+      String derivedAddress,
+      boolean coBind,
+      boolean aliasRepairMode) {
+    applicationEventPublisher.publishEvent(
+        new AliasProvisionedAuditEvent(
+            walletAlias, derivedAddress, command.operatorUserId(), coBind, aliasRepairMode));
+  }
+
+  private void publishBoundAlias(
       ProvisionTreasuryKeyCommand command,
       String walletAlias,
       String kmsKeyId,
       String derivedAddress) {
     applicationEventPublisher.publishEvent(
-        new TreasuryWalletProvisionedEvent(
-            walletAlias, kmsKeyId, derivedAddress, command.operatorUserId(), false));
+        new KeyLifecycleEvent.BoundAlias(
+            kmsKeyId, walletAlias, derivedAddress, command.operatorUserId()));
   }
 
   /**
@@ -184,6 +312,9 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
    * cleanupKmsKey} runs even when the failure happens at the proxy-commit boundary (where the
    * body-level catch cannot fire). The {@code cleanupInvoked} interlock is shared with the catch
    * block, guaranteeing single execution even when both paths fire on an in-method exception.
+   *
+   * <p>Only registered on the fresh-provision path — the co-bind path must never tear down a shared
+   * cohort key on rollback (invariant #3).
    *
    * <p>Only {@code STATUS_ROLLED_BACK} triggers cleanup. {@code STATUS_UNKNOWN} (and any
    * unrecognised future status) is treated conservatively: the DB commit may actually have
@@ -198,6 +329,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       String createdKmsKeyId,
       AtomicBoolean cleanupInvoked,
       Long operatorUserId,
+      String walletAlias,
       String derivedAddress) {
     if (!TransactionSynchronizationManager.isSynchronizationActive()) {
       return;
@@ -225,7 +357,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
                     status,
                     createdKmsKeyId);
                 treasuryAuditRecorder.record(
-                    operatorUserId, derivedAddress, false, "TX_STATUS_UNKNOWN");
+                    operatorUserId, walletAlias, derivedAddress, false, "TX_STATUS_UNKNOWN");
             }
           }
         });
@@ -234,7 +366,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   /**
    * Handle an operator retry where the row already carries a {@code kms_key_id}. If the KMS alias
    * is missing or pointing at a {@code PENDING_DELETION} / {@code DISABLED} key, treat this as
-   * <em>alias-repair</em>: re-publish the event so the AFTER_COMMIT handler can rebind the alias
+   * <em>alias-repair</em>: re-publish the events so the AFTER_COMMIT handler can rebind the alias
    * idempotently, without re-running {@code CreateKey} / {@code ImportKeyMaterial}. Otherwise this
    * is a true duplicate provisioning attempt.
    */
@@ -250,21 +382,22 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
             || aliasState == KmsKeyState.DISABLED;
     if (!needsAliasRepair) {
       treasuryAuditRecorder.record(
-          command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
+          command.operatorUserId(),
+          existing.getWalletAlias(),
+          derivedAddress,
+          false,
+          "ALREADY_PROVISIONED");
       throw new TreasuryWalletAlreadyProvisionedException(
           "treasury wallet already provisioned for alias '" + existing.getWalletAlias() + "'");
     }
     log.warn(
-        "Re-publishing provisioned event in alias-repair mode (alias={}, aliasState={})",
+        "Re-publishing provisioned events in alias-repair mode (alias={}, aliasState={})",
         existing.getWalletAlias(),
         aliasState);
-    applicationEventPublisher.publishEvent(
-        new TreasuryWalletProvisionedEvent(
-            existing.getWalletAlias(),
-            existing.getKmsKeyId(),
-            existing.getWalletAddress(),
-            command.operatorUserId(),
-            true));
+    publishAliasProvisioned(
+        command, existing.getWalletAlias(), existing.getWalletAddress(), false, true);
+    publishBoundAlias(
+        command, existing.getWalletAlias(), existing.getKmsKeyId(), existing.getWalletAddress());
     return ProvisionTreasuryKeyResult.from(existing, role);
   }
 
