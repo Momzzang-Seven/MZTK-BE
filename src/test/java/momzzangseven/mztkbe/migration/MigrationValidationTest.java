@@ -152,6 +152,41 @@ class MigrationValidationTest {
         .contains("STALE");
   }
 
+  @Test
+  @DisplayName("V073 relaxes treasury wallet uniqueness and installs the pairing trigger")
+  void treasuryWalletCohortSchemaRelaxesUniquenessWithPairingTrigger() {
+    // per-column UNIQUE constraints dropped, replaced by plain indexes for cohort lookups
+    assertThat(indexExists("idx_web3_treasury_wallets_treasury_address")).isTrue();
+    assertThat(isIndexUnique("idx_web3_treasury_wallets_treasury_address")).isFalse();
+    assertThat(indexExists("idx_web3_treasury_wallets_kms_key_id")).isTrue();
+    assertThat(isIndexUnique("idx_web3_treasury_wallets_kms_key_id")).isFalse();
+
+    Integer droppedUniqueConstraints =
+        jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.table_constraints
+            WHERE table_name = 'web3_treasury_wallets'
+              AND constraint_type = 'UNIQUE'
+              AND constraint_name IN (
+                'uk_web3_treasury_wallets_treasury_address',
+                'uk_web3_treasury_wallets_kms_key_id'
+              )
+            """,
+            Integer.class);
+    assertThat(droppedUniqueConstraints).isZero();
+
+    // pairing-invariant trigger backstops treasury_address <-> kms_key_id 1:1
+    assertThat(triggerExists("trg_web3_treasury_wallets_pairing")).isTrue();
+  }
+
+  private boolean triggerExists(String triggerName) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM pg_trigger WHERE tgname = ?", Integer.class, triggerName);
+    return count != null && count > 0;
+  }
+
   private void insertWeb3Transaction(
       String idempotencyKey, String referenceType, String referenceId) {
     jdbcTemplate.update(

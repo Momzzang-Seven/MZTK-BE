@@ -90,17 +90,20 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[E-104] V061 — uk_web3_treasury_wallets_treasury_address 명명된 unique 제약이 존재")
-  void v061_namedUniqueConstraintOnTreasuryAddress_exists() {
-    Integer namedCount =
+  @DisplayName("[E-104] V073 — cohort 공유를 위해 per-column UNIQUE 제약 DROP, 비유니크 인덱스 + pairing 트리거로 대체")
+  void v073_relaxesPerColumnUniqueness_replacedByIndexesAndPairingTrigger() {
+    // V061/V069 가 명명한 per-column UNIQUE 제약 2개는 V073 가 cohort 공유를 위해 drop 했다.
+    Integer uniqueConstraintCount =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM pg_constraint"
                 + " WHERE conrelid = 'web3_treasury_wallets'::regclass"
                 + " AND contype = 'u'"
-                + " AND conname = 'uk_web3_treasury_wallets_treasury_address'",
+                + " AND conname IN ('uk_web3_treasury_wallets_treasury_address',"
+                + " 'uk_web3_treasury_wallets_kms_key_id')",
             Integer.class);
-    assertThat(namedCount).isEqualTo(1);
+    assertThat(uniqueConstraintCount).isZero();
 
+    // V007 자동 생성 이름은 V061 에서 이미 정리됐고 그대로 남아 있어선 안 된다.
     Integer legacyCount =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM pg_constraint"
@@ -108,6 +111,28 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
                 + " AND conname = 'web3_treasury_keys_treasury_address_key'",
             Integer.class);
     assertThat(legacyCount).isZero();
+
+    // 대체물 [1] — cohort 조회/스캔용 비유니크 인덱스 2개.
+    List<String> indexNames =
+        jdbcTemplate.queryForList(
+            "SELECT indexname FROM pg_indexes"
+                + " WHERE tablename = 'web3_treasury_wallets'"
+                + " AND indexname IN ('idx_web3_treasury_wallets_treasury_address',"
+                + " 'idx_web3_treasury_wallets_kms_key_id')"
+                + " ORDER BY indexname",
+            String.class);
+    assertThat(indexNames)
+        .containsExactly(
+            "idx_web3_treasury_wallets_kms_key_id", "idx_web3_treasury_wallets_treasury_address");
+
+    // 대체물 [2] — treasury_address <-> kms_key_id 1:1 invariant 를 지키는 pairing 트리거.
+    Integer pairingTriggerCount =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM pg_trigger"
+                + " WHERE tgrelid = 'web3_treasury_wallets'::regclass"
+                + " AND tgname = 'trg_web3_treasury_wallets_pairing'",
+            Integer.class);
+    assertThat(pairingTriggerCount).isEqualTo(1);
   }
 
   @Test
