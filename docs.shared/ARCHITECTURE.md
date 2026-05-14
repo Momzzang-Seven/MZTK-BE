@@ -170,9 +170,6 @@ annotations out of `application/` and `domain/`.
 - `@ConfigurationProperties` beans bound from `application.yml` prefixes.
 - When a config class directly supplies a policy value the service needs, implement the
   corresponding output port interface on the config class itself.
-- `@Configuration` classes may import same-module `application/service` classes only to construct
-  Spring beans or lightweight transactional/decorating wrappers. They must not execute business
-  methods directly, and must not import service classes from other modules.
 
 ```java
 // ImagePendingCleanupProperties implements LoadPendingImageCleanupPolicyPort
@@ -304,7 +301,10 @@ The exception is justified because:
 
 **Still forbidden from `web3/shared/`:**
 - `web3/shared/infrastructure/` — never import directly; use the standard port/adapter
-  pattern or the equivalent Spring Boot conditional annotation in the local module.
+  pattern. Spring conditional annotations under `infrastructure/config/` (e.g.
+  `@ConditionalOnUserExecutionEnabled`, `@ConditionalOnQnaAdminEnabled`,
+  `@ConditionalOnQnaAdminOrAutoAcceptEnabled`, …) are Spring meta-annotations, not class
+  dependencies, and may be referenced from siblings.
 - `web3/shared/application/port/out/` — these are `web3/shared`'s own out-ports; siblings
   must declare their own ports if they need the same capability.
 
@@ -325,8 +325,7 @@ infrastructure  ───── implements ──────►  application/po
 ```
 
 - `api` → `application` (port/in only)
-- `infrastructure` → `application` (port/out only; same-module service classes only from
-  `infrastructure/config` for bean construction) + `domain`
+- `infrastructure` → `application` (port/out only) + `domain`
 - `application/service` → `domain` + `application/port/out` + `global`
 - `domain` → nothing
 
