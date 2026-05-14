@@ -1,6 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 
 import java.time.Clock;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
@@ -11,32 +14,36 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWallet
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletArchivedEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.TreasuryAdvisoryLockPort;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.AliasArchivedAuditEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.KeyLifecycleEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Transitions DISABLED → ARCHIVED and persists the row. KMS {@code ScheduleKeyDeletion} is no
- * longer invoked inside this method — instead a {@link TreasuryWalletArchivedEvent} is published
- * and an AFTER_COMMIT handler invokes {@code ScheduleKmsKeyDeletionUseCase} so the KMS call only
- * runs once the DB transaction has committed.
+ * Transitions a whole cohort DISABLED → ARCHIVED in one transaction (MOM-444). A cohort is the set
+ * of wallet rows sharing one {@code (treasury_address, kms_key_id)} pair; invariant #2 requires
+ * every row in a cohort to share the same status, so archive is cohort-wide rather than single-row.
+ *
+ * <p><b>Flow.</b> Load the trigger row by alias, acquire the address advisory lock, load the full
+ * cohort {@code FOR UPDATE}, strict-reject if the cohort is not uniformly DISABLED, transition
+ * every row, and {@code saveAll}. Then publish one {@link AliasArchivedAuditEvent} per alias (audit
+ * is alias-level) and exactly one {@link KeyLifecycleEvent.ScheduledDeletion} (KMS {@code
+ * ScheduleKeyDeletion} is key-level — once per cohort).
  *
  * <p><b>Why split the transaction.</b> Same rationale as {@link DisableTreasuryWalletService}: a
- * single {@code @Transactional} would expose a "KMS scheduled-for-deletion → DB commit failed" race
- * that left KMS irreversibly mutated while the DB silently rolled back to {@code DISABLED}. With
- * the DB committing first, the residual failure mode is "DB ARCHIVED, KMS not scheduled" which is
- * recorded in {@code web3_treasury_kms_audits} for operator follow-up; re-archiving the same row is
- * idempotent for the DB and a no-op for KMS once the key is already pending deletion.
+ * single {@code @Transactional} would expose a "KMS scheduled-for-deletion → DB commit failed"
+ * race. With the DB committing first, the residual failure mode is "DB ARCHIVED, KMS not
+ * scheduled", recorded in {@code web3_treasury_kms_audits} for operator follow-up.
  *
  * <p>The default 30-day pending window matches the KMS minimum and gives operators a recovery
  * buffer before key material is destroyed.
  *
- * <p>Failure audit writes still happen inline via {@link TreasuryAuditRecorder} ({@code
- * REQUIRES_NEW}) so a caught exception leaves a record even when the outer transaction rolls back.
- * The success audit is moved to an AFTER_COMMIT handler ({@code TreasuryAuditEventHandler}) so it
- * only lands once the wallet state transition has actually committed.
+ * <p>Failure audits happen inline via {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}); the
+ * success audit is the AFTER_COMMIT {@link AliasArchivedAuditEvent} handler.
  */
 @Service
 @Slf4j
@@ -49,6 +56,7 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
   private final LoadTreasuryWalletPort loadTreasuryWalletPort;
   private final SaveTreasuryWalletPort saveTreasuryWalletPort;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
+  private final TreasuryAdvisoryLockPort treasuryAdvisoryLockPort;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;
 
@@ -60,7 +68,7 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
       operatorId = "#command.operatorUserId()",
       targetId = "#result != null ? #result.walletAddress() : null")
   public TreasuryWalletView execute(ArchiveTreasuryWalletCommand command) {
-    TreasuryWallet wallet =
+    TreasuryWallet trigger =
         loadTreasuryWalletPort
             .loadByAlias(command.walletAlias())
             .orElseThrow(
@@ -68,27 +76,81 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
                     new TreasuryWalletStateException(
                         "Treasury wallet '" + command.walletAlias() + "' not found"));
 
-    String walletAddress = wallet.getWalletAddress();
+    String walletAddress = trigger.getWalletAddress();
+    treasuryAdvisoryLockPort.lockForAddress(walletAddress);
+
+    List<TreasuryWallet> cohort =
+        loadTreasuryWalletPort.loadAllByTreasuryAddressForUpdate(walletAddress);
+    assertCohortUniformlyDisabled(command, cohort, walletAddress);
+
     try {
-      TreasuryWallet archived = wallet.archive(clock);
-      TreasuryWallet saved = saveTreasuryWalletPort.save(archived);
-      publishTreasuryWalletArchivedEvent(command, saved, walletAddress);
-      return TreasuryWalletView.from(saved);
+      List<TreasuryWallet> archivedCohort =
+          cohort.stream().map(wallet -> wallet.archive(clock)).toList();
+      List<TreasuryWallet> saved = saveTreasuryWalletPort.saveAll(archivedCohort);
+
+      saved.forEach(
+          wallet ->
+              applicationEventPublisher.publishEvent(
+                  new AliasArchivedAuditEvent(
+                      wallet.getWalletAlias(), walletAddress, command.operatorUserId())));
+      applicationEventPublisher.publishEvent(
+          new KeyLifecycleEvent.ScheduledDeletion(
+              trigger.getKmsKeyId(),
+              trigger.getWalletAlias(),
+              walletAddress,
+              command.operatorUserId(),
+              DEFAULT_KMS_PENDING_WINDOW_DAYS));
+
+      return saved.stream()
+          .filter(wallet -> wallet.getWalletAlias().equals(command.walletAlias()))
+          .findFirst()
+          .map(TreasuryWalletView::from)
+          .orElseThrow(
+              () ->
+                  new TreasuryWalletStateException(
+                      "archived cohort no longer contains trigger alias '"
+                          + command.walletAlias()
+                          + "'"));
     } catch (RuntimeException e) {
       treasuryAuditRecorder.record(
-          command.operatorUserId(), walletAddress, false, e.getClass().getSimpleName());
+          command.operatorUserId(),
+          command.walletAlias(),
+          walletAddress,
+          false,
+          e.getClass().getSimpleName());
       throw e;
     }
   }
 
-  private void publishTreasuryWalletArchivedEvent(
-      ArchiveTreasuryWalletCommand command, TreasuryWallet saved, String walletAddress) {
-    applicationEventPublisher.publishEvent(
-        new TreasuryWalletArchivedEvent(
-            saved.getWalletAlias(),
-            saved.getKmsKeyId(),
-            walletAddress,
-            command.operatorUserId(),
-            DEFAULT_KMS_PENDING_WINDOW_DAYS));
+  /**
+   * Strict-reject a cohort that is not uniformly DISABLED — invariant #2. Records a {@code
+   * COHORT_STATE_INCONSISTENT} failure audit before throwing; the exception message carries the
+   * status breakdown for diagnosis.
+   */
+  private void assertCohortUniformlyDisabled(
+      ArchiveTreasuryWalletCommand command, List<TreasuryWallet> cohort, String walletAddress) {
+    boolean uniformlyDisabled =
+        !cohort.isEmpty()
+            && cohort.stream().allMatch(w -> w.getStatus() == TreasuryWalletStatus.DISABLED);
+    if (!uniformlyDisabled) {
+      treasuryAuditRecorder.record(
+          command.operatorUserId(),
+          command.walletAlias(),
+          walletAddress,
+          false,
+          "COHORT_STATE_INCONSISTENT");
+      throw new TreasuryWalletStateException(
+          "Treasury cohort for address '"
+              + walletAddress
+              + "' cannot be archived — not uniformly DISABLED: "
+              + statusBreakdown(cohort));
+    }
+  }
+
+  private static String statusBreakdown(List<TreasuryWallet> cohort) {
+    Map<TreasuryWalletStatus, Long> counts =
+        cohort.stream()
+            .collect(Collectors.groupingBy(TreasuryWallet::getStatus, Collectors.counting()));
+    return counts.toString();
   }
 }
