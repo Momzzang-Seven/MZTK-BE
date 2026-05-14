@@ -24,13 +24,12 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletA
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalTtlPolicyPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RunWalletRegistrationRetryTransactionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SubmitWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /** User-facing retry service for creating a new approval intent without redoing ownership proof. */
 @Service
@@ -52,7 +51,7 @@ public class RetryWalletRegistrationApprovalService
   private final BuildWalletApprovalExecutionDraftPort buildDraftPort;
   private final SubmitWalletApprovalExecutionDraftPort submitDraftPort;
   private final CancelWalletApprovalExecutionPort cancelExecutionPort;
-  private final PlatformTransactionManager transactionManager;
+  private final RunWalletRegistrationRetryTransactionPort transactionPort;
   private final Clock appClock;
 
   @Override
@@ -246,7 +245,7 @@ public class RetryWalletRegistrationApprovalService
   }
 
   private <T> T inTransaction(java.util.function.Supplier<T> callback) {
-    return new TransactionTemplate(transactionManager).execute(status -> callback.get());
+    return transactionPort.execute(callback);
   }
 
   private LocalDateTime now() {

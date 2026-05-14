@@ -37,6 +37,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletA
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalTtlPolicyPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RunWalletRegistrationRetryTransactionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SubmitWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -50,10 +51,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.SimpleTransactionStatus;
 
 @ExtendWith(MockitoExtension.class)
 class RetryWalletRegistrationApprovalServiceTest {
@@ -77,12 +74,12 @@ class RetryWalletRegistrationApprovalServiceTest {
   @Mock private SubmitWalletApprovalExecutionDraftPort submitDraftPort;
   @Mock private CancelWalletApprovalExecutionPort cancelExecutionPort;
 
-  private RecordingTransactionManager transactionManager;
+  private RecordingRetryTransactionPort transactionPort;
   private RetryWalletRegistrationApprovalService service;
 
   @BeforeEach
   void setUp() {
-    transactionManager = new RecordingTransactionManager();
+    transactionPort = new RecordingRetryTransactionPort();
     service =
         new RetryWalletRegistrationApprovalService(
             lockSessionPort,
@@ -93,7 +90,7 @@ class RetryWalletRegistrationApprovalServiceTest {
             buildDraftPort,
             submitDraftPort,
             cancelExecutionPort,
-            transactionManager,
+            transactionPort,
             CLOCK);
   }
 
@@ -111,7 +108,7 @@ class RetryWalletRegistrationApprovalServiceTest {
     when(submitDraftPort.submit(any()))
         .thenAnswer(
             invocation -> {
-              assertThat(transactionManager.active()).isFalse();
+              assertThat(transactionPort.active()).isFalse();
               return intentResult(RETRY_INTENT_ID);
             });
     when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -445,24 +442,19 @@ class RetryWalletRegistrationApprovalServiceTest {
     when(loadWalletApprovalTtlPolicyPort.load()).thenReturn(new WalletApprovalTtlPolicy(seconds));
   }
 
-  private static final class RecordingTransactionManager implements PlatformTransactionManager {
+  private static final class RecordingRetryTransactionPort
+      implements RunWalletRegistrationRetryTransactionPort {
 
     private final AtomicBoolean active = new AtomicBoolean(false);
 
     @Override
-    public TransactionStatus getTransaction(TransactionDefinition definition) {
+    public <T> T execute(java.util.function.Supplier<T> callback) {
       active.set(true);
-      return new SimpleTransactionStatus();
-    }
-
-    @Override
-    public void commit(TransactionStatus status) {
-      active.set(false);
-    }
-
-    @Override
-    public void rollback(TransactionStatus status) {
-      active.set(false);
+      try {
+        return callback.get();
+      } finally {
+        active.set(false);
+      }
     }
 
     boolean active() {
