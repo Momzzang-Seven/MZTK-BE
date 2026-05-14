@@ -17,6 +17,7 @@ class DefaultGasFeeCalculatorTest {
     properties.getGas().setDefaultGasLimit(120_000L);
     properties.getGas().setDefaultMaxPriorityFeePerGasWei(1_000_000_000L);
     properties.getGas().setMaxFeeMultiplier(2);
+    properties.getGas().setEstimatedGasBufferPercent(130);
     strategy = new DefaultGasFeeCalculator(properties);
   }
 
@@ -31,9 +32,25 @@ class DefaultGasFeeCalculatorTest {
 
     DefaultGasFeeCalculator.FeePlan plan = strategy.calculate(inputs);
 
-    assertThat(plan.gasLimit()).isEqualTo(BigInteger.valueOf(21000));
+    // estimate(21000) * 130% = 27300, falls below defaultGasLimit floor (120000)
+    assertThat(plan.gasLimit()).isEqualTo(BigInteger.valueOf(120_000L));
     assertThat(plan.maxPriorityFeePerGas()).isEqualTo(BigInteger.valueOf(3));
     assertThat(plan.maxFeePerGas()).isEqualTo(BigInteger.valueOf(203)); // baseFee*2 + priority
+  }
+
+  @Test
+  void calculate_appliesBufferAboveFloor_whenEstimateLarge() {
+    DefaultGasFeeCalculator.FeeInputs inputs =
+        new DefaultGasFeeCalculator.FeeInputs(
+            BigInteger.valueOf(200_000),
+            BigInteger.valueOf(3),
+            BigInteger.valueOf(100),
+            BigInteger.valueOf(150));
+
+    DefaultGasFeeCalculator.FeePlan plan = strategy.calculate(inputs);
+
+    // estimate(200000) * 130% = 260000, above floor (120000) → buffered value wins
+    assertThat(plan.gasLimit()).isEqualTo(BigInteger.valueOf(260_000L));
   }
 
   @Test
@@ -76,6 +93,7 @@ class DefaultGasFeeCalculatorTest {
     properties.getGas().setDefaultGasLimit(120_000L);
     properties.getGas().setDefaultMaxPriorityFeePerGasWei(10L);
     properties.getGas().setMaxFeeMultiplier(-1);
+    properties.getGas().setEstimatedGasBufferPercent(130);
     DefaultGasFeeCalculator strategyWithNegativeMultiplier =
         new DefaultGasFeeCalculator(properties);
     DefaultGasFeeCalculator.FeeInputs inputs =

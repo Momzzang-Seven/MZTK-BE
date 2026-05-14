@@ -207,9 +207,10 @@ web3:
       eth-critical-threshold: ${TREASURY_ETH_CRITICAL_THRESHOLD}
 
     gas:
-      default-gas-limit: 120000
+      default-gas-limit: 300000
       default-max-priority-fee-per-gas-wei: 1000000000
       max-fee-multiplier: 2
+      estimated-gas-buffer-percent: 200
 
     worker:
       claim-ttl-seconds: 120
@@ -296,6 +297,10 @@ web3:
   escrow:
     marketplace-contract-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
     qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+    eip712-domain-name: "QnAEscrow"
+    eip712-domain-version: "1"
+    signed-at-skew-seconds: 0
+    sig-validity-duration: 900
   transfer:
     legacy-question-reward-handler-enabled: false
 

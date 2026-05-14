@@ -23,12 +23,14 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCrea
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaEscrowAbiEncoder;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -46,6 +48,7 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   private final GetExecutionIntentUseCase getExecutionIntentUseCase;
   private final LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
   private final QnaEscrowAbiEncoder qnaEscrowAbiEncoder;
+  private final QnaEscrowProperties qnaEscrowProperties;
   private final ObjectMapper objectMapper;
 
   @Override
@@ -88,7 +91,20 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             postId, questionContent, rewardMztk, result.payloadSnapshotJson())) {
       return Optional.empty();
     }
-    return Optional.of(toView(result));
+    return Optional.of(toView(result, extractSignedAt(result.payloadSnapshotJson())));
+  }
+
+  private Long extractSignedAt(String payloadSnapshotJson) {
+    if (payloadSnapshotJson == null || payloadSnapshotJson.isBlank()) {
+      return null;
+    }
+    try {
+      return objectMapper
+          .readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class)
+          .signedAt();
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
+    }
   }
 
   @Override
@@ -207,10 +223,24 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
         new QuestionExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
-        result.existing());
+        result.existing(),
+        toSignatureMeta(result.signatureMeta()));
   }
 
-  private QuestionExecutionWriteView toView(GetExecutionIntentResult result) {
+  private QuestionExecutionWriteView.SignatureMeta toSignatureMeta(
+      QnaExecutionIntentResult.SignatureMeta meta) {
+    if (meta == null) {
+      return null;
+    }
+    return new QuestionExecutionWriteView.SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
+  }
+
+  private QuestionExecutionWriteView toView(GetExecutionIntentResult result, Long signedAt) {
+    QuestionExecutionWriteView.SignatureMeta signatureMeta =
+        signedAt == null
+            ? null
+            : new QuestionExecutionWriteView.SignatureMeta(
+                signedAt, signedAt + qnaEscrowProperties.getSigValidityDuration());
     return new QuestionExecutionWriteView(
         new QuestionExecutionWriteView.Resource(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
@@ -219,7 +249,8 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
         new QuestionExecutionWriteView.Execution(result.mode().name(), result.signCount()),
         toSignRequest(result.signRequest()),
-        true);
+        true,
+        signatureMeta);
   }
 
   private boolean matchesQuestionCreatePayload(
@@ -237,7 +268,23 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
           QnaEscrowIdCodec.toAmountWei(rewardMztk, rewardTokenConfig.decimals());
       String expectedTokenAddress = EvmAddress.of(rewardTokenConfig.tokenContractAddress()).value();
       String payloadTokenAddress = EvmAddress.of(payload.tokenAddress()).value();
-      String expectedCallData =
+      // §MOM-393 — broadcast callData (9-arg, server-sig 봉입) 와 comparison baseline (7-arg,
+      // server-sig-free) 의 책임 분리. stored payload 의 사용자-입력 필드로 7-arg baseline 을
+      // 재인코딩하여 expected 7-arg baseline 과 byte-equal 비교하면, server-managed 필드
+      // (signedAt/signatureBytes) 도입 여부에 둔감한 의미 검증이 성립한다. payload 의 logical
+      // identity 무결성은 matchesPayloadHash 가 idempotencyView SHA-256 으로 cover 하며, server-sig
+      // 봉입된 callData/signedAt 무결성은 executionDigest (EIP-7702) / unsignedTxFingerprint
+      // (EIP-1559) 가 별도로 cover.
+      String storedBaselineCallData =
+          qnaEscrowAbiEncoder.encode(
+              QnaExecutionActionType.QNA_QUESTION_CREATE,
+              QnaEscrowIdCodec.questionId(payload.postId()),
+              null,
+              payloadTokenAddress,
+              payload.amountWei(),
+              payload.questionHash(),
+              null);
+      String expectedBaselineCallData =
           qnaEscrowAbiEncoder.encode(
               QnaExecutionActionType.QNA_QUESTION_CREATE,
               QnaEscrowIdCodec.questionId(postId),
@@ -253,12 +300,21 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
           && payload.contentHash() == null
           && expectedAmountWei.equals(payload.amountWei())
           && expectedTokenAddress.equals(payloadTokenAddress)
-          && expectedCallData.equals(payload.callData());
+          && expectedBaselineCallData.equals(storedBaselineCallData);
     } catch (JsonProcessingException e) {
       throw new Web3InvalidInputException("invalid qna question create payload snapshot");
     }
   }
 
+  /**
+   * §MOM-393 — stored {@code payloadHash} is the SHA-256 of {@link
+   * QnaEscrowExecutionPayload#idempotencyView()} (server-sig-independent projection), not of the
+   * full snapshot JSON, so that idempotency reuse survives a refreshed server signature. This check
+   * therefore re-hashes the projection extracted from the stored snapshot. Tampering of the
+   * server-sig fields ({@code signedAt}, {@code signatureHex}, embedded {@code callData}) is caught
+   * separately by {@code executionDigest} (EIP-7702) and {@code unsignedTxFingerprint} (EIP-1559);
+   * this method covers the logical-identity portion of the snapshot only.
+   */
   private boolean matchesPayloadHash(String payloadHash, String payloadSnapshotJson) {
     if (payloadHash == null
         || payloadHash.isBlank()
@@ -267,12 +323,17 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
       return false;
     }
     try {
+      QnaEscrowExecutionPayload payload =
+          objectMapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
+      String idempotencyViewJson = objectMapper.writeValueAsString(payload.idempotencyView());
       byte[] digest =
           MessageDigest.getInstance("SHA-256")
-              .digest(payloadSnapshotJson.getBytes(StandardCharsets.UTF_8));
+              .digest(idempotencyViewJson.getBytes(StandardCharsets.UTF_8));
       return payloadHash.equals(Numeric.toHexString(digest));
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException("SHA-256 digest is unavailable", e);
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
     }
   }
 

@@ -48,9 +48,10 @@ class QnaContractCallSupportTest {
     rewardTokenProperties.setEnabled(true);
     rewardTokenProperties.setTokenContractAddress("0x" + "3".repeat(40));
     TransactionRewardTokenProperties.Gas gas = new TransactionRewardTokenProperties.Gas();
-    gas.setDefaultGasLimit(210_000L);
+    gas.setDefaultGasLimit(21_000L);
     gas.setDefaultMaxPriorityFeePerGasWei(1_000_000_000L);
     gas.setMaxFeeMultiplier(2);
+    gas.setEstimatedGasBufferPercent(100);
     rewardTokenProperties.setGas(gas);
 
     support =

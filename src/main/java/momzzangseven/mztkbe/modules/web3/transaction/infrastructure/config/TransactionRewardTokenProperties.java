@@ -72,5 +72,8 @@ public class TransactionRewardTokenProperties {
 
     @Min(1)
     private int maxFeeMultiplier;
+
+    @Min(100)
+    private int estimatedGasBufferPercent = 130;
   }
 }

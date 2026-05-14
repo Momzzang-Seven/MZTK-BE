@@ -167,6 +167,7 @@ class QuestionEscrowAdminExecutionServiceTest {
             BigInteger.valueOf(2_000_000_000L),
             BigInteger.valueOf(30_000_000_000L)),
         "0x" + "b".repeat(64),
+        null,
         LocalDateTime.of(2026, 4, 20, 12, 0));
   }
 
