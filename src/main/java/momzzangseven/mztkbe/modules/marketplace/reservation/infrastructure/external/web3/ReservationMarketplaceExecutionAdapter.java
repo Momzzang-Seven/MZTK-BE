@@ -9,7 +9,6 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.Marketplace
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceSignRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.PrepareMarketplaceUserExecutionUseCase;
-import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -52,12 +51,11 @@ public class ReservationMarketplaceExecutionAdapter
   private MarketplaceEscrowExecutionRequest toRequest(
       PrepareReservationEscrowCommand command, MarketplaceExecutionActionType actionType) {
     String resourceId = String.valueOf(command.reservationId());
-    String orderKey = MarketplaceEscrowIdCodec.orderKey(command.reservationId());
     return new MarketplaceEscrowExecutionRequest(
         actionType,
         command.reservationId(),
         resourceId,
-        orderKey,
+        command.orderId(),
         command.requesterUserId(),
         command.buyerUserId(),
         command.trainerUserId(),

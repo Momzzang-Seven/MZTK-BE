@@ -1,10 +1,14 @@
 package momzzangseven.mztkbe.modules.web3.marketplace.application.dto;
 
+import java.math.BigInteger;
+import java.util.regex.Pattern;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 
 /** Marketplace-owned sign request bundle exposed to reservation/API response mappers. */
 public record MarketplaceSignRequest(
     Authorization authorization, Submit submit, Transaction transaction) {
+
+  private static final Pattern HEX_QUANTITY_PATTERN = Pattern.compile("^0x[0-9a-fA-F]+$");
 
   public MarketplaceSignRequest {
     boolean hasAuthorizationPath = authorization != null || submit != null;
@@ -82,27 +86,52 @@ public record MarketplaceSignRequest(
       if (toAddress == null || toAddress.isBlank()) {
         throw new Web3InvalidInputException("transaction.toAddress is required");
       }
-      if (valueHex == null || valueHex.isBlank()) {
-        throw new Web3InvalidInputException("transaction.valueHex is required");
-      }
+      requireNonNegativeHexQuantity(valueHex, "transaction.valueHex");
       if (data == null || data.isBlank()) {
         throw new Web3InvalidInputException("transaction.data is required");
       }
       if (nonce == null || nonce < 0) {
         throw new Web3InvalidInputException("transaction.nonce must be >= 0");
       }
-      if (gasLimitHex == null || gasLimitHex.isBlank()) {
-        throw new Web3InvalidInputException("transaction.gasLimitHex is required");
-      }
-      if (maxPriorityFeePerGasHex == null || maxPriorityFeePerGasHex.isBlank()) {
-        throw new Web3InvalidInputException("transaction.maxPriorityFeePerGasHex is required");
-      }
-      if (maxFeePerGasHex == null || maxFeePerGasHex.isBlank()) {
-        throw new Web3InvalidInputException("transaction.maxFeePerGasHex is required");
+      requirePositiveHexQuantity(gasLimitHex, "transaction.gasLimitHex");
+      BigInteger maxPriorityFeePerGas =
+          requirePositiveHexQuantity(
+              maxPriorityFeePerGasHex, "transaction.maxPriorityFeePerGasHex");
+      BigInteger maxFeePerGas =
+          requirePositiveHexQuantity(maxFeePerGasHex, "transaction.maxFeePerGasHex");
+      if (maxFeePerGas.compareTo(maxPriorityFeePerGas) < 0) {
+        throw new Web3InvalidInputException(
+            "transaction.maxFeePerGasHex must be >= transaction.maxPriorityFeePerGasHex");
       }
       if (expectedNonce == null || expectedNonce < 0) {
         throw new Web3InvalidInputException("transaction.expectedNonce must be >= 0");
       }
+    }
+
+    private static BigInteger requireNonNegativeHexQuantity(String value, String fieldName) {
+      BigInteger parsed = parseHexQuantity(value, fieldName);
+      if (parsed.signum() < 0) {
+        throw new Web3InvalidInputException(fieldName + " must be >= 0");
+      }
+      return parsed;
+    }
+
+    private static BigInteger requirePositiveHexQuantity(String value, String fieldName) {
+      BigInteger parsed = parseHexQuantity(value, fieldName);
+      if (parsed.signum() <= 0) {
+        throw new Web3InvalidInputException(fieldName + " must be positive");
+      }
+      return parsed;
+    }
+
+    private static BigInteger parseHexQuantity(String value, String fieldName) {
+      if (value == null || value.isBlank()) {
+        throw new Web3InvalidInputException(fieldName + " is required");
+      }
+      if (!HEX_QUANTITY_PATTERN.matcher(value).matches()) {
+        throw new Web3InvalidInputException(fieldName + " must be 0x-prefixed hex");
+      }
+      return new BigInteger(value.substring(2), 16);
     }
   }
 }

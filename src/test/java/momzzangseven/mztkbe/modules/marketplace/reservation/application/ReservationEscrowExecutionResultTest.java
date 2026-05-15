@@ -11,15 +11,18 @@ import org.junit.jupiter.api.Test;
 
 class ReservationEscrowExecutionResultTest {
 
+  private static final String ORDER_ID = "123e4567-e89b-12d3-a456-426614174000";
+
   @Test
   void command_preservesReservationOwnedSnapshots() {
     LocalDateTime sessionEndAt = LocalDateTime.parse("2026-05-20T11:00:00");
 
     PrepareReservationEscrowCommand command =
         new PrepareReservationEscrowCommand(
-            123L, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 50000, sessionEndAt);
+            123L, ORDER_ID, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 50000, sessionEndAt);
 
     assertThat(command.reservationId()).isEqualTo(123L);
+    assertThat(command.orderId()).isEqualTo(ORDER_ID);
     assertThat(command.requesterUserId()).isEqualTo(7L);
     assertThat(command.buyerUserId()).isEqualTo(7L);
     assertThat(command.trainerUserId()).isEqualTo(9L);
@@ -35,7 +38,7 @@ class ReservationEscrowExecutionResultTest {
     assertThat(PrepareReservationEscrowCommand.class.getRecordComponents())
         .extracting(component -> component.getName())
         .doesNotContain("orderKey", "tokenAddress", "priceAmountWei")
-        .contains("bookedPriceAmountKrw");
+        .contains("orderId", "bookedPriceAmountKrw");
   }
 
   @Test
@@ -45,25 +48,25 @@ class ReservationEscrowExecutionResultTest {
     assertThatThrownBy(
             () ->
                 new PrepareReservationEscrowCommand(
-                    0L, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 50000, sessionEndAt))
+                    0L, ORDER_ID, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 50000, sessionEndAt))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("reservationId");
     assertThatThrownBy(
             () ->
                 new PrepareReservationEscrowCommand(
-                    123L, 7L, 7L, 9L, -1L, "0xbuyer", "0xtrainer", 50000, sessionEndAt))
+                    123L, ORDER_ID, 7L, 7L, 9L, -1L, "0xbuyer", "0xtrainer", 50000, sessionEndAt))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("reservationVersion");
     assertThatThrownBy(
             () ->
                 new PrepareReservationEscrowCommand(
-                    123L, 7L, 7L, 9L, 3L, " ", "0xtrainer", 50000, sessionEndAt))
+                    123L, ORDER_ID, 7L, 7L, 9L, 3L, " ", "0xtrainer", 50000, sessionEndAt))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("buyerWalletAddress");
     assertThatThrownBy(
             () ->
                 new PrepareReservationEscrowCommand(
-                    123L, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 0, sessionEndAt))
+                    123L, ORDER_ID, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 0, sessionEndAt))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("bookedPriceAmountKrw");
   }

@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.marketplace.application.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionResourceStatus;
@@ -15,7 +16,7 @@ public record MarketplaceExecutionDraft(
     MarketplaceExecutionActionType actionType,
     Long requesterUserId,
     Long counterpartyUserId,
-    String orderKey,
+    String orderId,
     String rootIdempotencyKey,
     String payloadHash,
     String payloadSnapshotJson,
@@ -41,7 +42,7 @@ public record MarketplaceExecutionDraft(
       throw new Web3InvalidInputException("actionType is required");
     }
     requirePositive(requesterUserId, "requesterUserId");
-    requireText(orderKey, "orderKey");
+    requireUuid(orderId, "orderId");
     requireText(rootIdempotencyKey, "rootIdempotencyKey");
     requireText(payloadHash, "payloadHash");
     requireText(payloadSnapshotJson, "payloadSnapshotJson");
@@ -115,6 +116,15 @@ public record MarketplaceExecutionDraft(
   private static void requireText(String value, String fieldName) {
     if (!hasText(value)) {
       throw new Web3InvalidInputException(fieldName + " is required");
+    }
+  }
+
+  private static void requireUuid(String value, String fieldName) {
+    requireText(value, fieldName);
+    try {
+      UUID.fromString(value);
+    } catch (IllegalArgumentException ex) {
+      throw new Web3InvalidInputException(fieldName + " must be a UUID");
     }
   }
 

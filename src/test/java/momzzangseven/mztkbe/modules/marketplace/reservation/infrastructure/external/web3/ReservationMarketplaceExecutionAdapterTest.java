@@ -13,7 +13,6 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.Marketplace
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceSignRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.PrepareMarketplaceUserExecutionUseCase;
-import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +23,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class ReservationMarketplaceExecutionAdapterTest {
+
+  private static final String ORDER_ID = "123e4567-e89b-12d3-a456-426614174000";
 
   @Mock private PrepareMarketplaceUserExecutionUseCase useCase;
 
@@ -48,7 +49,7 @@ class ReservationMarketplaceExecutionAdapterTest {
         .isEqualTo(MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE);
     assertThat(request.reservationId()).isEqualTo(123L);
     assertThat(request.resourceId()).isEqualTo("123");
-    assertThat(request.orderKey()).isEqualTo(MarketplaceEscrowIdCodec.orderKey(123L));
+    assertThat(request.orderId()).isEqualTo(ORDER_ID);
     assertThat(request.requesterUserId()).isEqualTo(7L);
     assertThat(request.buyerUserId()).isEqualTo(7L);
     assertThat(request.trainerUserId()).isEqualTo(9L);
@@ -109,12 +110,12 @@ class ReservationMarketplaceExecutionAdapterTest {
     assertThat(PrepareReservationEscrowCommand.class.getRecordComponents())
         .extracting(component -> component.getName())
         .doesNotContain("orderKey", "tokenAddress", "priceAmountWei")
-        .contains("bookedPriceAmountKrw");
+        .contains("orderId", "bookedPriceAmountKrw");
   }
 
   private static PrepareReservationEscrowCommand command() {
     return new PrepareReservationEscrowCommand(
-        123L, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 50000, sessionEndAt());
+        123L, ORDER_ID, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 50000, sessionEndAt());
   }
 
   private static MarketplaceExecutionIntentResult result(String actionType) {

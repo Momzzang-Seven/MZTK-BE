@@ -43,5 +43,8 @@ public record MarketplaceUnsignedTxSnapshot(
     if (maxFeePerGas == null || maxFeePerGas.signum() <= 0) {
       throw new Web3InvalidInputException("maxFeePerGas must be positive");
     }
+    if (maxFeePerGas.compareTo(maxPriorityFeePerGas) < 0) {
+      throw new Web3InvalidInputException("maxFeePerGas must be >= maxPriorityFeePerGas");
+    }
   }
 }

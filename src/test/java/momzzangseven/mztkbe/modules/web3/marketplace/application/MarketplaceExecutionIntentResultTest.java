@@ -56,13 +56,28 @@ class MarketplaceExecutionIntentResultTest {
   @Test
   void signRequestSupportsEip1559TransactionOnly() {
     MarketplaceSignRequest request =
-        MarketplaceSignRequest.forEip1559(
-            new MarketplaceSignRequest.Transaction(
-                10L, "0xfrom", "0xto", "0x0", "0xdata", 1L, "0x5208", "0x1", "0x2", 1L));
+        MarketplaceSignRequest.forEip1559(transaction("0x0", "0x5208", "0x1", "0x2"));
 
     assertThat(request.authorization()).isNull();
     assertThat(request.submit()).isNull();
     assertThat(request.transaction()).isNotNull();
+  }
+
+  @Test
+  void signRequestRejectsMalformedTransactionHexQuantity() {
+    assertThatThrownBy(
+            () ->
+                MarketplaceSignRequest.forEip1559(transaction("0x0", "0x5208", "0xnot-hex", "0x2")))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("maxPriorityFeePerGasHex");
+  }
+
+  @Test
+  void signRequestRejectsMaxFeeBelowPriorityFee() {
+    assertThatThrownBy(
+            () -> MarketplaceSignRequest.forEip1559(transaction("0x0", "0x5208", "0x2", "0x1")))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("maxFeePerGasHex");
   }
 
   @Test
@@ -169,6 +184,21 @@ class MarketplaceExecutionIntentResultTest {
     return MarketplaceSignRequest.forEip7702(
         new MarketplaceSignRequest.Authorization(10L, "0xdelegate", 12L, "0xpayload"),
         new MarketplaceSignRequest.Submit("0xdigest", 1_768_224_000L));
+  }
+
+  private static MarketplaceSignRequest.Transaction transaction(
+      String valueHex, String gasLimitHex, String maxPriorityFeePerGasHex, String maxFeePerGasHex) {
+    return new MarketplaceSignRequest.Transaction(
+        10L,
+        "0xfrom",
+        "0xto",
+        valueHex,
+        "0xdata",
+        1L,
+        gasLimitHex,
+        maxPriorityFeePerGasHex,
+        maxFeePerGasHex,
+        1L);
   }
 
   private static LocalDateTime expiresAt() {

@@ -11,42 +11,42 @@ import org.junit.jupiter.api.Test;
 class MarketplaceEscrowIdempotencyKeyFactoryTest {
 
   @Test
-  void create_includesActionReservationIdAndVersion() {
+  void create_includesActionRequesterAndReservationId() {
     String key =
         MarketplaceEscrowIdempotencyKeyFactory.create(
-            MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, 123L, 7L);
+            MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, 7L, 123L);
 
-    assertThat(key).isEqualTo("marketplace:marketplace_class_purchase:123:v7");
+    assertThat(key).isEqualTo("marketplace:marketplace_class_purchase:7:123");
   }
 
   @Test
   void create_isDeterministicForCancelAndConfirm() {
     assertThat(
             MarketplaceEscrowIdempotencyKeyFactory.create(
-                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL, 123L, 7L))
-        .isEqualTo("marketplace:marketplace_class_cancel:123:v7");
+                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL, 7L, 123L))
+        .isEqualTo("marketplace:marketplace_class_cancel:7:123");
     assertThat(
             MarketplaceEscrowIdempotencyKeyFactory.create(
-                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CONFIRM, 123L, 7L))
-        .isEqualTo("marketplace:marketplace_class_confirm:123:v7");
+                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CONFIRM, 9L, 123L))
+        .isEqualTo("marketplace:marketplace_class_confirm:9:123");
   }
 
   @Test
   void create_rejectsInvalidInputs() {
-    assertThatThrownBy(() -> MarketplaceEscrowIdempotencyKeyFactory.create(null, 123L, 1L))
+    assertThatThrownBy(() -> MarketplaceEscrowIdempotencyKeyFactory.create(null, 7L, 123L))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("actionType");
     assertThatThrownBy(
             () ->
                 MarketplaceEscrowIdempotencyKeyFactory.create(
-                    MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, 0L, 1L))
+                    MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, 0L, 123L))
         .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("reservationId");
+        .hasMessageContaining("requesterUserId");
     assertThatThrownBy(
             () ->
                 MarketplaceEscrowIdempotencyKeyFactory.create(
-                    MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, 123L, -1L))
+                    MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, 7L, 0L))
         .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("reservationVersion");
+        .hasMessageContaining("reservationId");
   }
 }

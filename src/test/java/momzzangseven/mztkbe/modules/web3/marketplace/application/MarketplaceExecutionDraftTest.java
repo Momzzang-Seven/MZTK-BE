@@ -18,12 +18,14 @@ import org.junit.jupiter.api.Test;
 
 class MarketplaceExecutionDraftTest {
 
+  private static final String ORDER_ID = "123e4567-e89b-12d3-a456-426614174000";
+
   @Test
   void requestValidatesResourceIdAsReservationIdString() {
     MarketplaceEscrowExecutionRequest request = request();
 
     assertThat(request.resourceId()).isEqualTo("123");
-    assertThat(request.orderKey()).startsWith("0x");
+    assertThat(request.orderId()).isEqualTo(ORDER_ID);
     assertThat(request.bookedPriceAmountKrw()).isEqualTo(50000);
   }
 
@@ -35,7 +37,7 @@ class MarketplaceExecutionDraftTest {
                     MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
                     123L,
                     "0xabc",
-                    orderKey(),
+                    ORDER_ID,
                     7L,
                     7L,
                     9L,
@@ -49,14 +51,14 @@ class MarketplaceExecutionDraftTest {
   }
 
   @Test
-  void requestRejectsOrderKeyThatDoesNotMatchReservationId() {
+  void requestRejectsInvalidOrderId() {
     assertThatThrownBy(
             () ->
                 new MarketplaceEscrowExecutionRequest(
                     MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
                     123L,
                     "123",
-                    "0x000000000000000000000000000000000000000000000000000000000000007c",
+                    "not-a-uuid",
                     7L,
                     7L,
                     9L,
@@ -66,15 +68,15 @@ class MarketplaceExecutionDraftTest {
                     50000,
                     expiresAt()))
         .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("orderKey");
+        .hasMessageContaining("orderId");
   }
 
   @Test
-  void draftPreservesResourceIdAndOrderKeySeparately() {
+  void draftPreservesResourceIdAndOrderIdSeparately() {
     MarketplaceExecutionDraft draft = eip7702Draft();
 
     assertThat(draft.resourceId()).isEqualTo("123");
-    assertThat(draft.orderKey()).isEqualTo(orderKey());
+    assertThat(draft.orderId()).isEqualTo(ORDER_ID);
   }
 
   @Test
@@ -183,6 +185,24 @@ class MarketplaceExecutionDraftTest {
   }
 
   @Test
+  void unsignedTxSnapshotRejectsMaxFeeBelowPriorityFee() {
+    assertThatThrownBy(
+            () ->
+                new MarketplaceUnsignedTxSnapshot(
+                    10L,
+                    "0xfrom",
+                    "0xto",
+                    BigInteger.ZERO,
+                    "0xdata",
+                    1L,
+                    BigInteger.valueOf(21_000),
+                    BigInteger.TWO,
+                    BigInteger.ONE))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("maxFeePerGas");
+  }
+
+  @Test
   void draftRejectsMissingRequiredFields() {
     assertThatThrownBy(
             () ->
@@ -193,7 +213,7 @@ class MarketplaceExecutionDraftTest {
                     MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
                     7L,
                     9L,
-                    orderKey(),
+                    ORDER_ID,
                     "root",
                     "0xpayload",
                     "{}",
@@ -215,7 +235,7 @@ class MarketplaceExecutionDraftTest {
         MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
         123L,
         "123",
-        orderKey(),
+        ORDER_ID,
         7L,
         7L,
         9L,
@@ -262,8 +282,8 @@ class MarketplaceExecutionDraftTest {
         MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
         7L,
         9L,
-        orderKey(),
-        "marketplace:marketplace_class_purchase:123:v3",
+        ORDER_ID,
+        "marketplace:marketplace_class_purchase:7:123",
         "0xpayload",
         "{\"reservationId\":123}",
         calls(),
@@ -292,10 +312,6 @@ class MarketplaceExecutionDraftTest {
         BigInteger.valueOf(21_000),
         BigInteger.ONE,
         BigInteger.TWO);
-  }
-
-  private static String orderKey() {
-    return "0x000000000000000000000000000000000000000000000000000000000000007b";
   }
 
   private static LocalDateTime expiresAt() {
