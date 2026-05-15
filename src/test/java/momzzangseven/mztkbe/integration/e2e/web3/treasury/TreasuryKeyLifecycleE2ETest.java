@@ -64,6 +64,17 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
   private static final String REWARD_ALIAS = "reward-treasury";
   private static final String MOCK_KMS_KEY_ID = "e2e-mock-kms-key-id";
 
+  // Second/third raw keys for rotation tests
+  private static final String PRIVATE_KEY_HEX_2 =
+      "1111111111111111111111111111111111111111111111111111111111111111";
+  private static final String DERIVED_ADDRESS_2 =
+      Credentials.create(PRIVATE_KEY_HEX_2).getAddress().toLowerCase();
+  private static final String PRIVATE_KEY_HEX_3 =
+      "2222222222222222222222222222222222222222222222222222222222222222";
+  private static final String DERIVED_ADDRESS_3 =
+      Credentials.create(PRIVATE_KEY_HEX_3).getAddress().toLowerCase();
+  private static final String SPONSOR_ALIAS = "sponsor-treasury";
+
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
 
@@ -112,10 +123,13 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
     assertThat(adminToken).isNotBlank();
   }
 
-  /** web3_treasury_wallets is excluded from DatabaseCleaner — delete the test row explicitly. */
+  /** web3_treasury_wallets is excluded from DatabaseCleaner — delete the test rows explicitly. */
   @AfterEach
   void cleanTreasuryWalletRow() {
-    jdbcTemplate.update("DELETE FROM web3_treasury_wallets WHERE wallet_alias = ?", REWARD_ALIAS);
+    jdbcTemplate.update(
+        "DELETE FROM web3_treasury_wallets WHERE wallet_alias IN (?, ?)",
+        REWARD_ALIAS,
+        SPONSOR_ALIAS);
   }
 
   // ---------------------------------------------------------------------------
@@ -164,6 +178,23 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
         .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
   }
 
+  /**
+   * Stub the KMS mint chain to hand out a fresh kms-key-id per call. Use this when a test needs
+   * multiple provision invocations (rotation, shared-wallet).
+   */
+  private void stubProvisionWithDynamicKeys() {
+    java.util.concurrent.atomic.AtomicInteger counter =
+        new java.util.concurrent.atomic.AtomicInteger();
+    when(kmsKeyLifecyclePort.createKey())
+        .thenAnswer(inv -> "e2e-kms-key-" + counter.incrementAndGet());
+    when(kmsKeyLifecyclePort.getParametersForImport(anyString()))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[] {3});
+    when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+        .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
+  }
+
   // ---------------------------------------------------------------------------
   // HTTP helpers
   // ---------------------------------------------------------------------------
@@ -174,6 +205,17 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
             "rawPrivateKey", PRIVATE_KEY_HEX,
             "role", "REWARD",
             "expectedAddress", DERIVED_ADDRESS);
+    return restTemplate.exchange(
+        baseUrl() + "/admin/web3/treasury-keys/provision",
+        HttpMethod.POST,
+        new HttpEntity<>(body, bearerJsonHeaders(adminToken)),
+        String.class);
+  }
+
+  private ResponseEntity<String> provision(
+      String role, String rawPrivateKey, String expectedAddress) {
+    Map<String, Object> body =
+        Map.of("rawPrivateKey", rawPrivateKey, "role", role, "expectedAddress", expectedAddress);
     return restTemplate.exchange(
         baseUrl() + "/admin/web3/treasury-keys/provision",
         HttpMethod.POST,
@@ -203,6 +245,13 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
         HttpMethod.POST,
         new HttpEntity<>(bearerJsonHeaders(adminToken)),
         String.class);
+  }
+
+  private Map<String, Object> walletRow(String alias) {
+    return jdbcTemplate.queryForMap(
+        "SELECT wallet_alias, kms_key_id, treasury_address, status, disabled_at"
+            + " FROM web3_treasury_wallets WHERE wallet_alias = ?",
+        alias);
   }
 
   // ---------------------------------------------------------------------------
@@ -654,6 +703,189 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
       // kms_audits에 실패 기록 (action_type=KMS_CREATE_ALIAS, success=false)
       assertThat(countKmsAuditRows("KMS_CREATE_ALIAS", false)).isEqualTo(1);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // [MOM-444] action scenarios
+  // ---------------------------------------------------------------------------
+
+  @Nested
+  @DisplayName("[MOM-444] action scenarios")
+  class Mom444ActionScenarios {
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-1] 공유 운영 지갑 — REWARD provision 후 동일 raw key 로 SPONSOR provision (C0+C0)")
+    void sharedWalletAcrossRoles() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // REWARD provision
+      ResponseEntity<String> rewardRes = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(rewardRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      // SPONSOR provision with SAME raw key — previously 409, now 200
+      ResponseEntity<String> sponsorRes = provision("SPONSOR", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(sponsorRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> rewardRow = walletRow(REWARD_ALIAS);
+      Map<String, Object> sponsorRow = walletRow(SPONSOR_ALIAS);
+
+      assertThat((String) rewardRow.get("treasury_address")).isEqualToIgnoringCase(DERIVED_ADDRESS);
+      assertThat((String) sponsorRow.get("treasury_address"))
+          .isEqualToIgnoringCase(DERIVED_ADDRESS);
+      assertThat(rewardRow.get("kms_key_id")).isNotEqualTo(sponsorRow.get("kms_key_id"));
+      assertThat((String) rewardRow.get("status")).isEqualTo("ACTIVE");
+      assertThat((String) sponsorRow.get("status")).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-2] Key rotation — REWARD provision 후 다른 raw key 로 REWARD 재 provision (C7)")
+    void rotation_disposesOldKey() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      ResponseEntity<String> firstRes = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(firstRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+      String firstKmsKeyId = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      ResponseEntity<String> rotatedRes = provision("REWARD", PRIVATE_KEY_HEX_2, DERIVED_ADDRESS_2);
+      assertThat(rotatedRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> row = walletRow(REWARD_ALIAS);
+      assertThat((String) row.get("kms_key_id")).isNotEqualTo(firstKmsKeyId);
+      assertThat((String) row.get("treasury_address")).isEqualToIgnoringCase(DERIVED_ADDRESS_2);
+
+      // Old key DISABLE + SCHEDULE_DELETION should have been called via AFTER_COMMIT handler
+      verify(kmsKeyLifecyclePort).disableKey(firstKmsKeyId);
+      verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq(firstKmsKeyId), eq(7));
+    }
+
+    @Test
+    @DisplayName("[E-MOM444-3] DISABLED 에서 reactivate (C5) — KMS_ENABLE audit + status ACTIVE")
+    void disabledReactivate_enablesKmsAndPromotesToActive() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String firstKmsKeyId = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      assertThat(disableWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      // Re-provision same key + same address → C5
+      ResponseEntity<String> reactivated = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(reactivated.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> row = walletRow(REWARD_ALIAS);
+      assertThat((String) row.get("kms_key_id")).isEqualTo(firstKmsKeyId);
+      assertThat((String) row.get("status")).isEqualTo("ACTIVE");
+      assertThat(row.get("disabled_at")).isNull();
+
+      verify(kmsKeyLifecyclePort).enableKey(firstKmsKeyId);
+      assertThat(countKmsAuditRows("KMS_ENABLE", true)).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("[E-MOM444-4] ARCHIVED 에서 재 provision (C6) — 새 key, 기존 key 는 손대지 않음")
+    void archivedReprovision_skipsOldKeyDispose() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String firstKmsKeyId = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      assertThat(disableWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(archiveWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      // Same address re-provision after ARCHIVE → C6 ReplaceKey, disposeOldKey=false
+      int kmsDisableBefore = countKmsAuditRows("KMS_DISABLE", true);
+      int kmsScheduleBefore = countKmsAuditRows("KMS_SCHEDULE_DELETION", true);
+
+      ResponseEntity<String> reprovisioned = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(reprovisioned.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> row = walletRow(REWARD_ALIAS);
+      assertThat((String) row.get("kms_key_id")).isNotEqualTo(firstKmsKeyId);
+      assertThat((String) row.get("status")).isEqualTo("ACTIVE");
+
+      // No additional KMS_DISABLE / KMS_SCHEDULE_DELETION on old key from this re-provision
+      assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(kmsDisableBefore);
+      assertThat(countKmsAuditRows("KMS_SCHEDULE_DELETION", true)).isEqualTo(kmsScheduleBefore);
+    }
+
+    @Test
+    @DisplayName("[E-MOM444-5] address mismatch + 다른 key 로 ROTATION (C7) 자동 라우팅")
+    void diffAddressActive_routedToRotation() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+
+      // ACTIVE 상태에서 다른 key 로 provision → previously AddressMismatch, now C7 rotation
+      ResponseEntity<String> rotated = provision("REWARD", PRIVATE_KEY_HEX_2, DERIVED_ADDRESS_2);
+      assertThat(rotated.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> row = walletRow(REWARD_ALIAS);
+      assertThat((String) row.get("treasury_address")).isEqualToIgnoringCase(DERIVED_ADDRESS_2);
+    }
+
+    @Test
+    @DisplayName("[E-MOM444-6] 동일 alias 두 동시 provision — row lock 으로 직렬화")
+    void concurrentProvisionSameAlias_serializesViaRowLock() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // Seed initial REWARD row so the concurrent calls follow the ReplaceKey path
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+
+      java.util.concurrent.ExecutorService pool =
+          java.util.concurrent.Executors.newFixedThreadPool(2);
+      try {
+        java.util.concurrent.Future<ResponseEntity<String>> t1 =
+            pool.submit(() -> provision("REWARD", PRIVATE_KEY_HEX_2, DERIVED_ADDRESS_2));
+        java.util.concurrent.Future<ResponseEntity<String>> t2 =
+            pool.submit(() -> provision("REWARD", PRIVATE_KEY_HEX_3, DERIVED_ADDRESS_3));
+
+        ResponseEntity<String> r1 = t1.get(15, java.util.concurrent.TimeUnit.SECONDS);
+        ResponseEntity<String> r2 = t2.get(15, java.util.concurrent.TimeUnit.SECONDS);
+
+        // Both should succeed (serialized via row lock); final row reflects one of the two
+        assertThat(r1.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(r2.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        Map<String, Object> finalRow = walletRow(REWARD_ALIAS);
+        String finalAddr = (String) finalRow.get("treasury_address");
+        assertThat(finalAddr)
+            .isIn(DERIVED_ADDRESS_2.toLowerCase(), DERIVED_ADDRESS_3.toLowerCase());
+      } finally {
+        pool.shutdown();
+      }
+    }
+
+    @Test
+    @DisplayName("[E-MOM444-7] 신규 alias 두 동시 provision — UNIQUE 위반으로 한쪽만 commit")
+    void concurrentFreshProvision_resolvedByUniqueConstraint() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      java.util.concurrent.ExecutorService pool =
+          java.util.concurrent.Executors.newFixedThreadPool(2);
+      try {
+        java.util.concurrent.Future<ResponseEntity<String>> t1 =
+            pool.submit(() -> provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS));
+        java.util.concurrent.Future<ResponseEntity<String>> t2 =
+            pool.submit(() -> provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS));
+
+        ResponseEntity<String> r1 = t1.get(15, java.util.concurrent.TimeUnit.SECONDS);
+        ResponseEntity<String> r2 = t2.get(15, java.util.concurrent.TimeUnit.SECONDS);
+
+        // 0..1 success + 0..1 failure or 1+1 success (one was the loser's race resolution).
+        // The wallet row should exist exactly once.
+        assertThat(countWalletRows()).isEqualTo(1);
+        Map<String, Object> row = walletRow(REWARD_ALIAS);
+        assertThat((String) row.get("status")).isEqualTo("ACTIVE");
+      } finally {
+        pool.shutdown();
+      }
     }
   }
 }
