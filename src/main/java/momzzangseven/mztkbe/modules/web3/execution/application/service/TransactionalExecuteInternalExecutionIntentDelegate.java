@@ -22,6 +22,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -65,6 +66,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
+  private final RunAfterCommitPort runAfterCommitPort;
   private final Clock appClock;
 
   @Override
@@ -98,7 +100,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
     }
 
     LocalDateTime now = LocalDateTime.now(appClock);
-    if (intent.getExpiresAt().isBefore(now)) {
+    if (!intent.getExpiresAt().isAfter(now)) {
       ExecutionIntent expired =
           executionIntentPersistencePort.update(
               intent.expire(
@@ -255,10 +257,16 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
               ? signedTransaction.txHash()
               : broadcast.txHash();
       executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
-      executionIntentPersistencePort.update(
-          signableIntent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
-      actionHandler.afterTransactionSubmitted(
-          signableIntent, actionPlan, ExecutionTransactionStatus.PENDING);
+      ExecutionIntent pendingIntent =
+          executionIntentPersistencePort.update(
+              signableIntent.markPendingOnchain(
+                  created.transactionId(), LocalDateTime.now(appClock)));
+      ExecutionActionHookRunner.afterTransactionSubmitted(
+          runAfterCommitPort,
+          actionHandler,
+          pendingIntent,
+          actionPlan,
+          ExecutionTransactionStatus.PENDING);
       return new ExecuteInternalExecutionIntentResult(
           true,
           false,
@@ -278,10 +286,15 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         failureReason,
         LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
-    executionIntentPersistencePort.update(
-        signableIntent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(
-        signableIntent, actionPlan, ExecutionTransactionStatus.SIGNED);
+    ExecutionIntent signedIntent =
+        executionIntentPersistencePort.update(
+            signableIntent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    ExecutionActionHookRunner.afterTransactionSubmitted(
+        runAfterCommitPort,
+        actionHandler,
+        signedIntent,
+        actionPlan,
+        ExecutionTransactionStatus.SIGNED);
     return new ExecuteInternalExecutionIntentResult(
         true,
         false,

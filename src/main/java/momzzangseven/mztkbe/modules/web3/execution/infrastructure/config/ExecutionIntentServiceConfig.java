@@ -8,7 +8,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetEip7702AuthorizationPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetSponsorPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
@@ -21,20 +23,24 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.CreateExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecutionModeSelector;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.GetEip7702AuthorizationPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetLatestExecutionIntentSummaryService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.GetSponsorPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentFailedOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
@@ -140,6 +146,17 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
+  @ConditionalOnMissingBean(LoadEip7702AuthorizationTtlPort.class)
+  @ConditionalOnProperty(
+      prefix = "web3.eip7702",
+      name = "enabled",
+      havingValue = "false",
+      matchIfMissing = true)
+  LoadEip7702AuthorizationTtlPort fallbackLoadEip7702AuthorizationTtlPort() {
+    return () -> 30L;
+  }
+
+  @Bean
   @ConditionalOnMissingBean(ValidateExecutionDraftPolicyPort.class)
   @ConditionalOnProperty(
       prefix = "web3.eip7702",
@@ -150,6 +167,17 @@ public class ExecutionIntentServiceConfig {
     return (delegateTarget, calls) -> {
       throw new IllegalStateException("EIP-7702 execution draft policy is unavailable");
     };
+  }
+
+  @Bean
+  GetSponsorPolicyUseCase getSponsorPolicyUseCase(LoadSponsorPolicyPort loadSponsorPolicyPort) {
+    return new GetSponsorPolicyService(loadSponsorPolicyPort);
+  }
+
+  @Bean
+  GetEip7702AuthorizationPolicyUseCase getEip7702AuthorizationPolicyUseCase(
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort) {
+    return new GetEip7702AuthorizationPolicyService(loadEip7702AuthorizationTtlPort);
   }
 
   @Bean
@@ -167,6 +195,7 @@ public class ExecutionIntentServiceConfig {
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
       LoadExecutionChainIdPort loadExecutionChainIdPort,
       LoadSponsorPolicyPort loadSponsorPolicyPort,
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort,
       LoadEip1559TtlPort loadEip1559TtlPort,
       BuildExecutionDigestPort buildExecutionDigestPort,
       BuildExecutionCallHashPort buildExecutionCallHashPort,
@@ -179,6 +208,7 @@ public class ExecutionIntentServiceConfig {
         sponsorDailyUsagePersistencePort,
         loadExecutionChainIdPort,
         loadSponsorPolicyPort,
+        loadEip7702AuthorizationTtlPort,
         loadEip1559TtlPort,
         buildExecutionDigestPort,
         buildExecutionCallHashPort,
@@ -201,11 +231,13 @@ public class ExecutionIntentServiceConfig {
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       LoadExecutionTransactionPort loadExecutionTransactionPort,
       LoadExecutionChainIdPort loadExecutionChainIdPort,
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort,
       Clock appClock) {
     return new GetExecutionIntentService(
         executionIntentPersistencePort,
         loadExecutionTransactionPort,
         loadExecutionChainIdPort,
+        loadEip7702AuthorizationTtlPort,
         appClock);
   }
 
@@ -221,6 +253,7 @@ public class ExecutionIntentServiceConfig {
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
+      RunAfterCommitPort runAfterCommitPort,
       Clock appClock) {
     return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -232,6 +265,7 @@ public class ExecutionIntentServiceConfig {
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
+        runAfterCommitPort,
         appClock);
   }
 
@@ -262,9 +296,10 @@ public class ExecutionIntentServiceConfig {
   @ConditionalOnBean(LoadExecutionTransactionPort.class)
   GetLatestExecutionIntentSummaryUseCase getLatestExecutionIntentSummaryUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      LoadExecutionTransactionPort loadExecutionTransactionPort) {
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      Clock appClock) {
     return new GetLatestExecutionIntentSummaryService(
-        executionIntentPersistencePort, loadExecutionTransactionPort);
+        executionIntentPersistencePort, loadExecutionTransactionPort, appClock);
   }
 
   @Bean
@@ -280,9 +315,10 @@ public class ExecutionIntentServiceConfig {
   MarkExecutionIntentSucceededUseCase markExecutionIntentSucceededUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunAfterCommitPort runAfterCommitPort,
       Clock appClock) {
     return new MarkExecutionIntentSucceededService(
-        executionIntentPersistencePort, executionActionHandlerPorts, appClock);
+        executionIntentPersistencePort, executionActionHandlerPorts, runAfterCommitPort, appClock);
   }
 
   @Bean

@@ -529,7 +529,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               String.class);
 
       assertThat(ownerRes.getStatusCode()).isEqualTo(HttpStatus.OK);
-      JsonNode ownerData = parse(ownerRes).at("/data");
+      JsonNode ownerData = parse(ownerRes).at("/data/reservations");
       assertThat(ownerData.isArray()).isTrue();
       assertThat(ownerData.size()).isGreaterThanOrEqualTo(1);
       boolean found = false;
@@ -550,7 +550,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               String.class);
 
       assertThat(otherRes.getStatusCode()).isEqualTo(HttpStatus.OK);
-      JsonNode otherData = parse(otherRes).at("/data");
+      JsonNode otherData = parse(otherRes).at("/data/reservations");
       for (JsonNode node : otherData) {
         assertThat(node.at("/reservationId").asLong())
             .as("other user must not see owner's reservation")
@@ -581,7 +581,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               String.class);
 
       assertThat(pendingRes.getStatusCode()).isEqualTo(HttpStatus.OK);
-      JsonNode data = parse(pendingRes).at("/data");
+      JsonNode data = parse(pendingRes).at("/data/reservations");
       boolean found = false;
       for (JsonNode node : data) {
         if (node.at("/reservationId").asLong() == reservationId) {
@@ -600,7 +600,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               String.class);
 
       assertThat(approvedRes.getStatusCode()).isEqualTo(HttpStatus.OK);
-      for (JsonNode node : parse(approvedRes).at("/data")) {
+      for (JsonNode node : parse(approvedRes).at("/data/reservations")) {
         assertThat(node.at("/reservationId").asLong())
             .as("PENDING reservation must not appear in APPROVED filter")
             .isNotEqualTo(reservationId);
@@ -709,7 +709,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               String.class);
 
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
-      JsonNode data = parse(res).at("/data");
+      JsonNode data = parse(res).at("/data/reservations");
       assertThat(data.isArray()).isTrue();
       boolean found = false;
       for (JsonNode node : data) {

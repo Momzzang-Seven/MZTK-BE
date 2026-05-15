@@ -1,7 +1,5 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
-
 /**
  * Shared mutation result for post update/delete endpoints.
  *

@@ -10,9 +10,11 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUp
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaQuestionUpdateReconciliationUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaServerSigPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateConfirmationSyncPort;
@@ -36,6 +38,7 @@ class QnaExecutionServiceConfigTest {
               PrecheckQuestionFundingPort.class, () -> mock(PrecheckQuestionFundingPort.class))
           .withBean(
               LoadQnaRewardTokenConfigPort.class, () -> mock(LoadQnaRewardTokenConfigPort.class))
+          .withBean(LoadQnaServerSigPolicyPort.class, () -> mock(LoadQnaServerSigPolicyPort.class))
           .withBean(
               QnaProjectionPersistencePort.class, () -> mock(QnaProjectionPersistencePort.class))
           .withBean(
@@ -47,6 +50,7 @@ class QnaExecutionServiceConfigTest {
           .withBean(
               LoadQnaExecutionIntentStatePort.class,
               () -> mock(LoadQnaExecutionIntentStatePort.class))
+          .withBean(BuildQnaEscrowCallDataPort.class, () -> mock(BuildQnaEscrowCallDataPort.class))
           .withBean(BuildQnaExecutionDraftPort.class, () -> mock(BuildQnaExecutionDraftPort.class))
           .withBean(
               SubmitQnaExecutionDraftPort.class, () -> mock(SubmitQnaExecutionDraftPort.class))

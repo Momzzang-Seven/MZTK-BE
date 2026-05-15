@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.answer.infrastructure.external.web3;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerLifecycleAction;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
@@ -12,12 +12,12 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerDelete
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.AnswerEscrowExecutionUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecutionPort {
 
   private final AnswerEscrowExecutionUseCase answerEscrowExecutionUseCase;
@@ -202,7 +202,8 @@ public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecution
         new AnswerExecutionWriteView.ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new AnswerExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),

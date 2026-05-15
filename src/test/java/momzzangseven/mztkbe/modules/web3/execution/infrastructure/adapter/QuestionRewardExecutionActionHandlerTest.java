@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -76,6 +77,20 @@ class QuestionRewardExecutionActionHandlerTest {
     assertThat(plan.referenceType()).isEqualTo(ExecutionReferenceType.USER_TO_USER);
     assertThat(plan.calls()).hasSize(1);
     assertThat(plan.calls().getFirst().data()).isEqualTo("0x1234");
+    verify(markQuestionRewardIntentSubmittedUseCase)
+        .execute(new MarkQuestionRewardIntentSubmittedCommand(101L));
+  }
+
+  @Test
+  void afterTransactionSubmitted_swallowsLegacySyncFailure() throws Exception {
+    ExecutionIntent intent = executionIntent();
+    ExecutionActionPlan plan = handler.buildActionPlan(intent);
+    doThrow(new RuntimeException("legacy sync failed"))
+        .when(markQuestionRewardIntentSubmittedUseCase)
+        .execute(new MarkQuestionRewardIntentSubmittedCommand(101L));
+
+    handler.afterTransactionSubmitted(intent, plan, ExecutionTransactionStatus.PENDING);
+
     verify(markQuestionRewardIntentSubmittedUseCase)
         .execute(new MarkQuestionRewardIntentSubmittedCommand(101L));
   }

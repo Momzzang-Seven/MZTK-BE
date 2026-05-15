@@ -16,9 +16,9 @@ import momzzangseven.mztkbe.global.error.answer.AnswerPublicationStateException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerMutationResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.RecoverAnswerEscrowCommand;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
@@ -193,7 +193,8 @@ class RecoverAnswerEscrowServiceTest {
     return new AnswerExecutionWriteView(
         new AnswerExecutionWriteView.Resource("ANSWER", "99", "PENDING_EXECUTION"),
         "QNA_ANSWER_SUBMIT",
-        new AnswerExecutionWriteView.ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null),
+        new AnswerExecutionWriteView.ExecutionIntent(
+            executionIntentId, "AWAITING_SIGNATURE", null, 1L),
         new AnswerExecutionWriteView.Execution("EIP7702", 2),
         null,
         false);

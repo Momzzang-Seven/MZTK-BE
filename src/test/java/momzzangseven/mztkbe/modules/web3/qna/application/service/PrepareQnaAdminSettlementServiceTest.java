@@ -41,7 +41,7 @@ class PrepareQnaAdminSettlementServiceTest {
         new QnaExecutionIntentResult.Resource("QUESTION", "101", "PENDING_EXECUTION"),
         actionType,
         new QnaExecutionIntentResult.ExecutionIntent(
-            "intent-1", "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 20, 12, 0)),
+            "intent-1", "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 20, 12, 0), 1_776_653_200L),
         new QnaExecutionIntentResult.Execution("EIP1559", 1),
         null,
         false);

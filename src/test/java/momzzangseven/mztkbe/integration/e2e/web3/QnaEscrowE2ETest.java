@@ -140,7 +140,7 @@ class QnaEscrowE2ETest extends E2ETestBase {
                       : QnaEscrowIdempotencyKeyFactory.create(
                           req.actionType(), req.requesterUserId(), req.postId(), req.answerId());
               // Production-realistic payload snapshot — required so that
-              // QuestionLifecycleExecutionAdapter#matchesQuestionCreatePayload can re-encode the
+              // QuestionEscrowExecutionService#matchesQuestionCreatePayload can re-encode the
               // 7-arg baseline from the stored payload and pass the AWAITING_SIGNATURE recover
               // happy-path check (Order=29). The fields here mirror QnaExecutionDraftBuilderAdapter
               // production output for the request inputs.

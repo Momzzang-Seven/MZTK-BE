@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 

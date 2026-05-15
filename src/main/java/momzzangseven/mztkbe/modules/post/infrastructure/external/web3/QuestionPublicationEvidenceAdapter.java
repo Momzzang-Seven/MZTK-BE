@@ -6,12 +6,12 @@ import momzzangseven.mztkbe.modules.post.application.port.out.QuestionPublicatio
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaQuestionPublicationEvidenceQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaQuestionPublicationEvidenceResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaQuestionPublicationEvidenceUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class QuestionPublicationEvidenceAdapter implements LoadQuestionPublicationEvidencePort {
 
   private final GetQnaQuestionPublicationEvidenceUseCase getQnaQuestionPublicationEvidenceUseCase;

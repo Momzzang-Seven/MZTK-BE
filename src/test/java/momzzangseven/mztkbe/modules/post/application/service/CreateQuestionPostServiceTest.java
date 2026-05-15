@@ -309,18 +309,19 @@ class CreateQuestionPostServiceTest {
         publishPostDeletedEventPort);
   }
 
-  private momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView web3(
+  private momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView web3(
       String executionIntentId) {
     return web3(executionIntentId, false);
   }
 
-  private momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView web3(
+  private momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView web3(
       String executionIntentId, boolean existing) {
-    return new momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView(
+    return new momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView(
         null,
         "QNA_QUESTION_CREATE",
-        new momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView
-            .ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null),
+        new momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView
+            .ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null, 1L),
+        null,
         null,
         null,
         existing);

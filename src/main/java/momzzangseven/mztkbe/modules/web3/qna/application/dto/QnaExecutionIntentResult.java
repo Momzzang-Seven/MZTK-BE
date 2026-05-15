@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.dto;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
@@ -13,6 +14,8 @@ public record QnaExecutionIntentResult(
     SignRequestBundle signRequest,
     boolean existing,
     SignatureMeta signatureMeta) {
+
+  private static final ZoneId LEGACY_APP_ZONE = ZoneId.of("Asia/Seoul");
 
   public QnaExecutionIntentResult {
     if (resource == null) {
@@ -74,7 +77,10 @@ public record QnaExecutionIntentResult(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         actionType,
         new ExecutionIntent(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
         new Execution(result.mode().name(), result.signCount()),
         result.signRequest(),
         result.existing(),
@@ -108,7 +114,17 @@ public record QnaExecutionIntentResult(
    * (on-chain mining) and uses a different time domain (epoch seconds on the contract clock). FE
    * surfaces this value as the user-facing countdown for signature submission.
    */
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {
+
+    /** Backward-compatible constructor for legacy fixtures that do not carry epoch seconds. */
+    public ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
+      this(
+          id,
+          status,
+          expiresAt,
+          expiresAt == null ? 0 : expiresAt.atZone(LEGACY_APP_ZONE).toEpochSecond());
+    }
 
     public ExecutionIntent {
       if (id == null || id.isBlank()) {
@@ -119,6 +135,9 @@ public record QnaExecutionIntentResult(
       }
       if (expiresAt == null) {
         throw new Web3InvalidInputException("executionIntent.expiresAt is required");
+      }
+      if (expiresAtEpochSeconds <= 0) {
+        throw new Web3InvalidInputException("executionIntent.expiresAtEpochSeconds is required");
       }
     }
   }

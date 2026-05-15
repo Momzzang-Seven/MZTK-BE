@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaServerSigPolicyPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -16,7 +17,7 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties(prefix = "web3.escrow")
 @ConditionalOnAnyExecutionEnabled
-public class QnaEscrowProperties {
+public class QnaEscrowProperties implements LoadQnaServerSigPolicyPort {
 
   @NotBlank private String qnaContractAddress;
 
@@ -30,4 +31,9 @@ public class QnaEscrowProperties {
   @Min(60)
   @Max(3600)
   private int sigValidityDuration = 900;
+
+  @Override
+  public int loadSigValidityDuration() {
+    return sigValidityDuration;
+  }
 }

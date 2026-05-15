@@ -10,6 +10,7 @@ public record CreateTransferResponseDTO(
     ExecutionIntentDTO executionIntent,
     ExecutionDTO execution,
     TransferSignRequestBundle signRequest,
+    String signRequestUnavailableReason,
     boolean existing) {
 
   /** Maps transfer execution create result into transfer API response contract. */
@@ -18,9 +19,13 @@ public record CreateTransferResponseDTO(
         new ResourceDTO(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         new ExecutionIntentDTO(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
         new ExecutionDTO(result.mode().name(), result.signCount()),
         result.signRequest(),
+        result.signRequestUnavailableReason(),
         result.existing());
   }
 
@@ -28,7 +33,8 @@ public record CreateTransferResponseDTO(
   public record ResourceDTO(String type, String id, String status) {}
 
   /** Execution intent section for transfer create response. */
-  public record ExecutionIntentDTO(String id, String status, LocalDateTime expiresAt) {}
+  public record ExecutionIntentDTO(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   /** Execution metadata section with selected mode and sign count. */
   public record ExecutionDTO(String mode, int signCount) {}

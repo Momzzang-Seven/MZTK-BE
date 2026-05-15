@@ -24,6 +24,8 @@ import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotDeleteAnswerOnSolvedPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotUpdateAnswerOnSolvedPostException;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionResumeView;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.AnswerImageSlot;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
@@ -32,8 +34,6 @@ import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerUpdateImagePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerUpdateStatePort;
@@ -285,7 +285,7 @@ class AnswerServiceTest {
                       new AnswerExecutionResumeView.Resource("ANSWER", "1", "PENDING_EXECUTION"),
                       "QNA_ANSWER_SUBMIT",
                       new AnswerExecutionResumeView.ExecutionIntent(
-                          "intent-1", "AWAITING_SIGNATURE", LocalDateTime.now()),
+                          "intent-1", "AWAITING_SIGNATURE", LocalDateTime.now(), 1L),
                       new AnswerExecutionResumeView.Execution("EIP7702", 2),
                       null)));
 
@@ -544,11 +544,7 @@ class AnswerServiceTest {
       given(
               answerLifecycleExecutionPort.prepareAnswerDelete(
                   10L, 100L, 20L, 30L, "question content", 50L, 0))
-          .willReturn(
-              Optional.of(
-                  org.mockito.Mockito.mock(
-                      momzzangseven.mztkbe.modules.answer.application.port.out
-                          .AnswerExecutionWriteView.class)));
+          .willReturn(Optional.of(org.mockito.Mockito.mock(AnswerExecutionWriteView.class)));
 
       answerService.execute(command);
 
@@ -1040,7 +1036,7 @@ class AnswerServiceTest {
         new AnswerExecutionWriteView.Resource("ANSWER", "100", "PENDING_EXECUTION"),
         "QNA_ANSWER_UPDATE",
         new AnswerExecutionWriteView.ExecutionIntent(
-            executionIntentId, "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(10)),
+            executionIntentId, "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(10), 1L),
         new AnswerExecutionWriteView.Execution("EIP7702", 2),
         null,
         false);
@@ -1051,7 +1047,7 @@ class AnswerServiceTest {
         new AnswerExecutionWriteView.Resource("ANSWER", "99", "PENDING_EXECUTION"),
         "QNA_ANSWER_SUBMIT",
         new AnswerExecutionWriteView.ExecutionIntent(
-            executionIntentId, "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(10)),
+            executionIntentId, "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(10), 1L),
         new AnswerExecutionWriteView.Execution("EIP7702", 2),
         null,
         false);

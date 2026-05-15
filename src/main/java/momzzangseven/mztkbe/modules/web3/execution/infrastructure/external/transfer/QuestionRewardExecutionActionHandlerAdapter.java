@@ -91,9 +91,17 @@ public class QuestionRewardExecutionActionHandlerAdapter implements ExecutionAct
         && txStatus != ExecutionTransactionStatus.PENDING) {
       return;
     }
-    QuestionRewardExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
-    markQuestionRewardIntentSubmittedUseCase.execute(
-        new MarkQuestionRewardIntentSubmittedCommand(payload.postId()));
+    try {
+      QuestionRewardExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
+      markQuestionRewardIntentSubmittedUseCase.execute(
+          new MarkQuestionRewardIntentSubmittedCommand(payload.postId()));
+    } catch (RuntimeException exception) {
+      log.error(
+          "failed to sync legacy question reward after execution tx submission:"
+              + " executionIntentId={}",
+          intent.getPublicId(),
+          exception);
+    }
   }
 
   private QuestionRewardExecutionPayload readPayload(String payloadSnapshotJson) {

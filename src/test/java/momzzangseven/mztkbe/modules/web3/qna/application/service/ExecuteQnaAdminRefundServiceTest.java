@@ -66,7 +66,10 @@ class ExecuteQnaAdminRefundServiceTest {
             new QnaExecutionIntentResult.Resource("QUESTION", "101", "PENDING_EXECUTION"),
             "QNA_ADMIN_REFUND",
             new QnaExecutionIntentResult.ExecutionIntent(
-                "intent-1", "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 21, 10, 0)),
+                "intent-1",
+                "AWAITING_SIGNATURE",
+                LocalDateTime.of(2026, 4, 21, 10, 0),
+                1_776_732_000L),
             new QnaExecutionIntentResult.Execution("EIP1559", 1),
             null,
             false);

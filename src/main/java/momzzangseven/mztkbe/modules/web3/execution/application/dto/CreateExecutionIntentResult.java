@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.dto;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -23,11 +24,14 @@ public record CreateExecutionIntentResult(
     String executionIntentId,
     ExecutionIntentStatus executionIntentStatus,
     LocalDateTime expiresAt,
+    long expiresAtEpochSeconds,
     ExecutionMode mode,
     int signCount,
     SignRequestBundle signRequest,
     boolean existing,
     String payloadSnapshotJson) {
+
+  private static final ZoneId LEGACY_APP_ZONE = ZoneId.of("Asia/Seoul");
 
   /** Validates required create result fields before exposing API contract. */
   public CreateExecutionIntentResult {
@@ -49,6 +53,9 @@ public record CreateExecutionIntentResult(
     if (expiresAt == null) {
       throw new Web3InvalidInputException("expiresAt is required");
     }
+    if (expiresAtEpochSeconds <= 0) {
+      throw new Web3InvalidInputException("expiresAtEpochSeconds must be positive");
+    }
     if (mode == null) {
       throw new Web3InvalidInputException("mode is required");
     }
@@ -61,8 +68,40 @@ public record CreateExecutionIntentResult(
   }
 
   /**
-   * Backward-compatible 10-arg constructor that leaves {@code payloadSnapshotJson} null. Used by
-   * existing test fixtures and callers that do not consume the stored snapshot.
+   * Backward-compatible constructor that carries epoch seconds but leaves {@code
+   * payloadSnapshotJson} null.
+   */
+  public CreateExecutionIntentResult(
+      ExecutionResourceType resourceType,
+      String resourceId,
+      ExecutionResourceStatus resourceStatus,
+      String executionIntentId,
+      ExecutionIntentStatus executionIntentStatus,
+      LocalDateTime expiresAt,
+      long expiresAtEpochSeconds,
+      ExecutionMode mode,
+      int signCount,
+      SignRequestBundle signRequest,
+      boolean existing) {
+    this(
+        resourceType,
+        resourceId,
+        resourceStatus,
+        executionIntentId,
+        executionIntentStatus,
+        expiresAt,
+        expiresAtEpochSeconds,
+        mode,
+        signCount,
+        signRequest,
+        existing,
+        null);
+  }
+
+  /**
+   * Backward-compatible constructor that derives epoch seconds and leaves {@code
+   * payloadSnapshotJson} null. Used by existing test fixtures and callers that do not consume the
+   * stored snapshot.
    */
   public CreateExecutionIntentResult(
       ExecutionResourceType resourceType,
@@ -82,6 +121,7 @@ public record CreateExecutionIntentResult(
         executionIntentId,
         executionIntentStatus,
         expiresAt,
+        expiresAt == null ? 0 : expiresAt.atZone(LEGACY_APP_ZONE).toEpochSecond(),
         mode,
         signCount,
         signRequest,

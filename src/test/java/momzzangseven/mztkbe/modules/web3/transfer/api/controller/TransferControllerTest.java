@@ -24,20 +24,24 @@ import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionRes
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
 @TestPropertySource(properties = {"web3.reward-token.enabled=true", "web3.eip7702.enabled=true"})
 @DisplayName("TransferController 컨트롤러 계약 테스트 (MockMvc + H2)")
-@org.springframework.boot.test.context.SpringBootTest
-@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
 class TransferControllerTest {
 
-  @org.springframework.beans.factory.annotation.Autowired
-  protected org.springframework.test.web.servlet.MockMvc mockMvc;
+  @Autowired protected MockMvc mockMvc;
 
-  @org.springframework.beans.factory.annotation.Autowired
-  protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+  @Autowired protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
   @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -74,6 +78,7 @@ class TransferControllerTest {
                 "intent-1",
                 TransferExecutionIntentStatus.AWAITING_SIGNATURE,
                 LocalDateTime.now().plusMinutes(5),
+                1L,
                 TransferExecutionMode.EIP7702,
                 2,
                 TransferSignRequestBundle.forEip7702(
@@ -84,6 +89,7 @@ class TransferControllerTest {
                         LocalDateTime.now()
                             .plusMinutes(5)
                             .toEpochSecond(java.time.ZoneOffset.UTC))),
+                null,
                 false,
                 null,
                 null,
@@ -121,8 +127,10 @@ class TransferControllerTest {
                 "intent-1",
                 TransferExecutionIntentStatus.PENDING_ONCHAIN,
                 LocalDateTime.now().plusMinutes(5),
+                1L,
                 TransferExecutionMode.EIP7702,
                 2,
+                null,
                 null,
                 false,
                 10L,

@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.answer.api.dto;
 
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 
 /** Public API projection of answer lifecycle write payload. */
 public record AnswerWeb3WriteResponse(
@@ -34,7 +34,8 @@ public record AnswerWeb3WriteResponse(
         new ExecutionIntent(
             view.executionIntent().id(),
             view.executionIntent().status(),
-            view.executionIntent().expiresAt()),
+            view.executionIntent().expiresAt(),
+            view.executionIntent().expiresAtEpochSeconds()),
         new Execution(view.execution().mode(), view.execution().signCount()),
         SignRequest.from(view.signRequest()),
         view.existing(),
@@ -43,7 +44,8 @@ public record AnswerWeb3WriteResponse(
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, java.time.LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, java.time.LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 

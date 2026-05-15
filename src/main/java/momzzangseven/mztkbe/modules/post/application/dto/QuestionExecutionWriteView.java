@@ -1,36 +1,61 @@
-package momzzangseven.mztkbe.modules.answer.application.port.out;
+package momzzangseven.mztkbe.modules.post.application.dto;
 
 import java.time.LocalDateTime;
 
 /**
- * Answer-module owned projection of answer lifecycle write payload.
+ * Post-module owned projection of question lifecycle write payload.
  *
- * <p>This isolates answer APIs from the shared Web3 internal contract while preserving all fields
- * needed to drive client signing.
+ * <p>This view keeps the post module decoupled from shared Web3 DTOs while still exposing the
+ * signing contract needed by API responses.
  */
-public record AnswerExecutionWriteView(
+public record QuestionExecutionWriteView(
     Resource resource,
     String actionType,
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequest signRequest,
+    String signRequestUnavailableReason,
     boolean existing,
     SignatureMeta signatureMeta) {
 
+  /**
+   * Backward-compatible constructor for callers that carry sign-request availability but not
+   * server-sig metadata.
+   */
+  public QuestionExecutionWriteView(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequest signRequest,
+      String signRequestUnavailableReason,
+      boolean existing) {
+    this(
+        resource,
+        actionType,
+        executionIntent,
+        execution,
+        signRequest,
+        signRequestUnavailableReason,
+        existing,
+        null);
+  }
+
   /** Backward-compatible 6-arg constructor for callers that don't carry server-sig metadata. */
-  public AnswerExecutionWriteView(
+  public QuestionExecutionWriteView(
       Resource resource,
       String actionType,
       ExecutionIntent executionIntent,
       Execution execution,
       SignRequest signRequest,
       boolean existing) {
-    this(resource, actionType, executionIntent, execution, signRequest, existing, null);
+    this(resource, actionType, executionIntent, execution, signRequest, null, existing, null);
   }
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 

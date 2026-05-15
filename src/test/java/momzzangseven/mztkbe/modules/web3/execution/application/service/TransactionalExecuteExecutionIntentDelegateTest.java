@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -38,6 +40,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
@@ -88,6 +91,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
+  private final RunAfterCommitPort runAfterCommitPort = Runnable::run;
   private TransactionalExecuteExecutionIntentDelegate delegate;
 
   @BeforeEach
@@ -103,6 +107,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
             publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
@@ -276,6 +281,62 @@ class TransactionalExecuteExecutionIntentDelegateTest {
 
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
     assertThat(result.transactionId()).isEqualTo(201L);
+  }
+
+  @Test
+  void executeEip1559_keepsSubmittedState_whenAfterSubmittedHookFails() throws Exception {
+    ExecutionIntent intent = existingEip1559Intent();
+    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
+        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
+            "0xsigned",
+            "0xhash",
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot(),
+            intent.getUnsignedTxFingerprint());
+    ExecutionTransactionGatewayPort.TransactionRecord created =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            202L, ExecutionTransactionStatus.CREATED, null);
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(eip1559TransactionCodecPort.decodeAndVerify(
+            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
+        .thenReturn(decoded);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.createAndFlush(any())).thenReturn(created);
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", "rpc-1", null));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    doThrow(new RuntimeException("hook failed"))
+        .when(executionActionHandlerPort)
+        .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
+            /* gate */ null);
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.transactionId()).isEqualTo(202L);
+    verify(executionTransactionGatewayPort).markPending(202L, "0xhash");
+    verify(executionIntentPersistencePort)
+        .update(
+            argThat(
+                updated ->
+                    updated.getStatus() == ExecutionIntentStatus.PENDING_ONCHAIN
+                        && Long.valueOf(202L).equals(updated.getSubmittedTxId())));
+    verify(executionActionHandlerPort)
+        .afterTransactionSubmitted(
+            argThat(
+                hookIntent ->
+                    hookIntent.getStatus() == ExecutionIntentStatus.PENDING_ONCHAIN
+                        && Long.valueOf(202L).equals(hookIntent.getSubmittedTxId())),
+            any(),
+            eq(ExecutionTransactionStatus.PENDING));
   }
 
   @Test
@@ -726,6 +787,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             loadExecutionRetryPolicyPort,
             List.of(firstHandler, secondHandler),
             publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
             FIXED_CLOCK);
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder()
@@ -772,6 +834,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             loadExecutionRetryPolicyPort,
             List.of(handler),
             publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
             FIXED_CLOCK);
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder()

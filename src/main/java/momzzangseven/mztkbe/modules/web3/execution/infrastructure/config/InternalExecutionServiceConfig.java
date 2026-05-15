@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
@@ -55,6 +56,7 @@ public class InternalExecutionServiceConfig {
           LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
           List<ExecutionActionHandlerPort> executionActionHandlerPorts,
           PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
+          RunAfterCommitPort runAfterCommitPort,
           Clock appClock) {
     return new TransactionalExecuteInternalExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -64,6 +66,7 @@ public class InternalExecutionServiceConfig {
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
+        runAfterCommitPort,
         appClock);
   }
 

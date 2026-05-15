@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.Collections;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
@@ -16,7 +17,7 @@ import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.utils.Numeric;
 
 @Component
-public class QnaEscrowAbiEncoder {
+public class QnaEscrowAbiEncoder implements BuildQnaEscrowCallDataPort {
 
   /**
    * Legacy 7-arg encoder.
@@ -26,7 +27,7 @@ public class QnaEscrowAbiEncoder {
    * <ul>
    *   <li>{@code QnaAdminExecutionDraftBuilderAdapter} — for {@code adminSettle} / {@code
    *       adminRefund} (no server signature required on-chain).
-   *   <li>{@code QuestionLifecycleExecutionAdapter.matchesQuestionCreatePayload} — produces a
+   *   <li>{@code QuestionEscrowExecutionService.matchesQuestionCreatePayload} — produces a
    *       server-sig-free baseline calldata for idempotency comparison of stored snapshots. The
    *       baseline must be reproducible from inputs alone (no {@code signedAt} / {@code
    *       signatureBytes}, since those change every prepare).
@@ -37,6 +38,7 @@ public class QnaEscrowAbiEncoder {
    * production broadcast goes through the 9-arg overload, while this overload exists to regenerate
    * the pre-signature byte sequence for comparison logic.
    */
+  @Override
   public String encode(
       QnaExecutionActionType actionType,
       String questionId,

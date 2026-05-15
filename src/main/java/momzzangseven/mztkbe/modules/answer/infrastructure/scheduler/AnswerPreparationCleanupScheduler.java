@@ -14,7 +14,9 @@ public class AnswerPreparationCleanupScheduler {
 
   private final CleanupAnswerPreparationUseCase cleanupAnswerPreparationUseCase;
 
-  @Scheduled(fixedDelayString = "${answer.lifecycle.cleanup.fixed-delay-ms:300000}")
+  @Scheduled(
+      initialDelayString = "${answer.lifecycle.cleanup.initial-delay-ms:0}",
+      fixedDelayString = "${answer.lifecycle.cleanup.fixed-delay-ms:300000}")
   public void cleanupExpiredPreparations() {
     try {
       var result =

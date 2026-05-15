@@ -1,0 +1,92 @@
+package momzzangseven.mztkbe.modules.web3.wallet.application.service;
+
+import java.time.Clock;
+import java.time.LocalDateTime;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+/** Persists post-confirm finalization failure states in an independent transaction. */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+class WalletRegistrationFinalizationFailureRecorder {
+
+  static final String FINALIZATION_FAILED = "FINALIZATION_FAILED";
+
+  private final LockWalletRegistrationSessionPort lockSessionPort;
+  private final SaveWalletRegistrationSessionPort saveSessionPort;
+  private final Clock appClock;
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void recordLocalConflict(
+      FinalizeWalletRegistrationCommand command, String errorCode, String errorReason) {
+    record(command, errorCode, errorReason, true);
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void recordUnexpectedFailure(
+      FinalizeWalletRegistrationCommand command, String errorCode, String errorReason) {
+    record(command, errorCode, errorReason, false);
+  }
+
+  private void record(
+      FinalizeWalletRegistrationCommand command,
+      String errorCode,
+      String errorReason,
+      boolean localConflict) {
+    try {
+      lockSessionPort
+          .lockByPublicIdForUpdate(command.registrationId())
+          .ifPresent(
+              session -> saveFailure(command, session, errorCode, errorReason, localConflict));
+    } catch (RuntimeException exception) {
+      log.error(
+          "Failed to persist wallet registration finalization failure: registrationId={}, executionIntentId={}",
+          command.registrationId(),
+          command.executionIntentId(),
+          exception);
+    }
+  }
+
+  private void saveFailure(
+      FinalizeWalletRegistrationCommand command,
+      WalletRegistrationSession session,
+      String errorCode,
+      String errorReason,
+      boolean localConflict) {
+    if (session.getLatestExecutionIntentId() == null
+        || !session.getLatestExecutionIntentId().equals(command.executionIntentId())) {
+      return;
+    }
+    if (session.getStatus() == WalletRegistrationStatus.REGISTERED || session.isTerminal()) {
+      return;
+    }
+    if (!isFinalizationFailureStatus(session)) {
+      return;
+    }
+
+    LocalDateTime now = LocalDateTime.now(appClock);
+    WalletRegistrationSession confirmed =
+        session.markApprovalConfirmed(command.executionIntentId(), null, null, "CONFIRMED", now);
+    WalletRegistrationSession failed =
+        localConflict
+            ? confirmed.markLocalConflict(errorCode, errorReason, now)
+            : confirmed.markFinalizationFailed(errorCode, errorReason, now);
+    saveSessionPort.save(failed);
+  }
+
+  private boolean isFinalizationFailureStatus(WalletRegistrationSession session) {
+    return session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
+        || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
+        || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        || session.getStatus().isConfirmedButNotFinalized();
+  }
+}

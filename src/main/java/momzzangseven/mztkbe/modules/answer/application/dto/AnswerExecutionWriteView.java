@@ -1,14 +1,14 @@
-package momzzangseven.mztkbe.modules.post.application.port.out;
+package momzzangseven.mztkbe.modules.answer.application.dto;
 
 import java.time.LocalDateTime;
 
 /**
- * Post-module owned projection of question lifecycle write payload.
+ * Answer-module owned projection of answer lifecycle write payload.
  *
- * <p>This view keeps the post module decoupled from shared Web3 DTOs while still exposing the
- * signing contract needed by API responses.
+ * <p>This isolates answer APIs from the shared Web3 internal contract while preserving all fields
+ * needed to drive client signing.
  */
-public record QuestionExecutionWriteView(
+public record AnswerExecutionWriteView(
     Resource resource,
     String actionType,
     ExecutionIntent executionIntent,
@@ -18,7 +18,7 @@ public record QuestionExecutionWriteView(
     SignatureMeta signatureMeta) {
 
   /** Backward-compatible 6-arg constructor for callers that don't carry server-sig metadata. */
-  public QuestionExecutionWriteView(
+  public AnswerExecutionWriteView(
       Resource resource,
       String actionType,
       ExecutionIntent executionIntent,
@@ -30,7 +30,8 @@ public record QuestionExecutionWriteView(
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 

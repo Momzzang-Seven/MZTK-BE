@@ -1,8 +1,11 @@
 package momzzangseven.mztkbe.integration.e2e.web3;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,15 +13,19 @@ import java.util.UUID;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.web3j.crypto.Credentials;
 import org.web3j.crypto.Sign;
@@ -32,14 +39,22 @@ import org.web3j.utils.Numeric;
  *
  * <ul>
  *   <li>챌린지 발급 (EIP-4361 메시지 생성)
- *   <li>EIP-712 서명 생성 후 지갑 등록 전체 흐름
- *   <li>지갑 연결 해제
+ *   <li>EIP-712 소유권 서명 생성 후 wallet registration session + EIP-7702 approval intent 생성
+ *   <li>지갑 등록 상태 조회
  *   <li>잘못된 서명/nonce 로 지갑 등록 시 에러
  *   <li>인증 없이 접근 시 401 반환
  * </ul>
  *
  * <p>테스트용 개인키는 Hardhat 기본 계정 키를 사용합니다 (실제 자산 없음).
  */
+@TestPropertySource(
+    properties = {
+      "web3.eip7702.enabled=true",
+      "web3.eip7702.sponsor.enabled=true",
+      "web3.eip7702.sponsor.per-tx-cap-eth=0.1",
+      "web3.eip7702.sponsor.per-day-user-cap-eth=1.0",
+      "web3.wallet.registration.approval.enabled=true"
+    })
 @DisplayName("[E2E] Web3 Challenge & Wallet 전체 흐름 테스트")
 class Web3E2ETest extends E2ETestBase {
 
@@ -49,15 +64,19 @@ class Web3E2ETest extends E2ETestBase {
 
   private static final String TEST_WALLET_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
+  @Autowired private JdbcTemplate jdbcTemplate;
+
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private Eip7702ChainPort eip7702ChainPort;
 
   private String accessToken;
 
   @BeforeEach
   void setUp() {
     accessToken = signupAndLogin("Web3E2E유저").accessToken();
+    given(eip7702ChainPort.loadPendingAccountNonce(anyString())).willReturn(BigInteger.ZERO);
   }
 
   // ============================================================
@@ -139,6 +158,19 @@ class Web3E2ETest extends E2ETestBase {
     return "0x" + Numeric.toHexStringNoPrefix(signatureBytes);
   }
 
+  private ResponseEntity<String> registerWallet(String walletAddress) throws Exception {
+    String[] challengeData = createChallenge(walletAddress);
+    String signature = signEip712(challengeData[1], challengeData[0], TEST_PRIVATE_KEY);
+    Map<String, Object> registerBody =
+        Map.of("walletAddress", walletAddress, "signature", signature, "nonce", challengeData[0]);
+
+    return restTemplate.exchange(
+        baseUrl() + "/web3/wallets",
+        HttpMethod.POST,
+        new HttpEntity<>(registerBody, bearerJsonHeaders(accessToken)),
+        String.class);
+  }
+
   // ============================================================
   // E2E Tests — Challenge
   // ============================================================
@@ -201,46 +233,58 @@ class Web3E2ETest extends E2ETestBase {
   // ============================================================
 
   @Test
-  @DisplayName("EIP-712 서명 생성 후 지갑 등록 전체 흐름 → 201 및 walletAddress 반환")
-  void registerWallet_withValidSignature_returns201() throws Exception {
-    String[] challengeData = createChallenge(TEST_WALLET_ADDRESS);
-    String nonce = challengeData[0];
-    String message = challengeData[1];
+  @DisplayName("EIP-712 서명 검증 후 지갑 등록 세션과 EIP-7702 approval signRequest 를 반환한다")
+  void registerWallet_withValidSignature_returnsApprovalIntent() throws Exception {
+    ResponseEntity<String> response = registerWallet(TEST_WALLET_ADDRESS);
 
-    String signature = signEip712(message, nonce, TEST_PRIVATE_KEY);
-
-    Map<String, Object> registerBody =
-        Map.of("walletAddress", TEST_WALLET_ADDRESS, "signature", signature, "nonce", nonce);
-
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl() + "/web3/wallets",
-            HttpMethod.POST,
-            new HttpEntity<>(registerBody, bearerJsonHeaders(accessToken)),
-            String.class);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
     JsonNode root = objectMapper.readTree(response.getBody());
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
-    assertThat(root.at("/data/id").asLong()).isPositive();
+    JsonNode data = root.path("data");
+    String registrationId = data.path("registrationId").asText();
+    String executionIntentId = data.path("web3").path("executionIntent").path("id").asText();
+
+    assertThat(registrationId).isNotBlank();
+    assertThat(data.path("status").asText()).isEqualTo("APPROVAL_REQUIRED");
     assertThat(root.at("/data/walletAddress").asText()).isEqualToIgnoringCase(TEST_WALLET_ADDRESS);
+    assertThat(data.path("walletId").isNull()).isTrue();
+    assertThat(data.path("registeredAt").isNull()).isTrue();
+    assertThat(data.path("nextAction").asText()).isEqualTo("SIGN_APPROVAL");
+    assertThat(data.path("web3").path("resource").path("type").asText())
+        .isEqualTo("WALLET_REGISTRATION");
+    assertThat(data.path("web3").path("resource").path("id").asText()).isEqualTo(registrationId);
+    assertThat(data.path("web3").path("actionType").asText()).isEqualTo("WALLET_ESCROW_APPROVE");
+    assertThat(data.path("web3").path("executionIntent").path("status").asText())
+        .isEqualTo("AWAITING_SIGNATURE");
+    assertThat(data.path("web3").path("executionIntent").path("expiresAtEpochSeconds").asLong())
+        .isPositive();
+    assertThat(data.path("web3").path("execution").path("mode").asText()).isEqualTo("EIP7702");
+    assertThat(data.path("web3").path("execution").path("signCount").asInt()).isEqualTo(2);
+    assertThat(data.path("web3").path("signRequest").path("authorization").isMissingNode())
+        .isFalse();
+    assertThat(data.path("web3").path("signRequest").path("submit").isMissingNode()).isFalse();
+    assertThat(data.path("web3").path("existing").asBoolean()).isFalse();
+
+    String sessionStatus =
+        jdbcTemplate.queryForObject(
+            "SELECT status FROM web3_wallet_registration_sessions WHERE public_id = ?",
+            String.class,
+            registrationId);
+    assertThat(sessionStatus).isEqualTo("APPROVAL_REQUIRED");
+
+    String intentStatus =
+        jdbcTemplate.queryForObject(
+            "SELECT status FROM web3_execution_intents WHERE public_id = ?",
+            String.class,
+            executionIntentId);
+    assertThat(intentStatus).isEqualTo("AWAITING_SIGNATURE");
   }
 
   @Test
-  @DisplayName("지갑 등록 후 연결 해제 → 200 응답")
-  void unlinkWallet_afterRegister_returns200() throws Exception {
-    String[] challengeData = createChallenge(TEST_WALLET_ADDRESS);
-    String nonce = challengeData[0];
-    String message = challengeData[1];
-    String signature = signEip712(message, nonce, TEST_PRIVATE_KEY);
-
-    Map<String, Object> registerBody =
-        Map.of("walletAddress", TEST_WALLET_ADDRESS, "signature", signature, "nonce", nonce);
-    restTemplate.exchange(
-        baseUrl() + "/web3/wallets",
-        HttpMethod.POST,
-        new HttpEntity<>(registerBody, bearerJsonHeaders(accessToken)),
-        String.class);
+  @DisplayName("approval 확정 전 pending registration 은 ACTIVE wallet 으로 연결 해제할 수 없다")
+  void unlinkWallet_beforeApprovalFinalization_returnsWalletNotFound() throws Exception {
+    ResponseEntity<String> registerResponse = registerWallet(TEST_WALLET_ADDRESS);
+    assertThat(registerResponse.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
 
     ResponseEntity<String> unlinkResponse =
         restTemplate.exchange(
@@ -249,9 +293,10 @@ class Web3E2ETest extends E2ETestBase {
             new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
-    assertThat(unlinkResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(unlinkResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     JsonNode root = objectMapper.readTree(unlinkResponse.getBody());
-    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/status").asText()).isEqualTo("FAIL");
+    assertThat(root.at("/code").asText()).isEqualTo("WALLET_004");
   }
 
   @Test
@@ -326,41 +371,78 @@ class Web3E2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("이미 등록된 지갑 주소로 재등록 시도 → 4xx 에러 반환")
-  void registerWallet_alreadyLinked_returnsError() throws Exception {
-    String[] challengeData1 = createChallenge(TEST_WALLET_ADDRESS);
-    String signature1 = signEip712(challengeData1[1], challengeData1[0], TEST_PRIVATE_KEY);
+  @DisplayName("동일 유저와 동일 지갑의 pending registration 재등록은 기존 approval intent 를 재사용한다")
+  void registerWallet_samePendingRegistration_reusesExistingSession() throws Exception {
+    ResponseEntity<String> firstResponse = registerWallet(TEST_WALLET_ADDRESS);
+    assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+    JsonNode firstData = objectMapper.readTree(firstResponse.getBody()).path("data");
+    String registrationId = firstData.path("registrationId").asText();
+    String executionIntentId = firstData.path("web3").path("executionIntent").path("id").asText();
 
-    Map<String, Object> firstRegister =
-        Map.of(
-            "walletAddress", TEST_WALLET_ADDRESS,
-            "signature", signature1,
-            "nonce", challengeData1[0]);
-    ResponseEntity<String> firstResponse =
+    ResponseEntity<String> secondResponse = registerWallet(TEST_WALLET_ADDRESS);
+
+    assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+    JsonNode secondData = objectMapper.readTree(secondResponse.getBody()).path("data");
+    assertThat(secondData.path("registrationId").asText()).isEqualTo(registrationId);
+    assertThat(secondData.path("status").asText()).isEqualTo("APPROVAL_REQUIRED");
+    assertThat(secondData.path("nextAction").asText()).isEqualTo("SIGN_APPROVAL");
+    assertThat(secondData.path("web3").path("executionIntent").path("id").asText())
+        .isEqualTo(executionIntentId);
+    assertThat(secondData.path("web3").path("existing").asBoolean()).isTrue();
+  }
+
+  @Test
+  @DisplayName("지갑 등록 상태 조회는 소유자에게 approval 진행 상태와 signRequest 를 반환한다")
+  void getWalletRegistrationStatus_withOwner_returnsApprovalStatus() throws Exception {
+    ResponseEntity<String> registerResponse = registerWallet(TEST_WALLET_ADDRESS);
+    assertThat(registerResponse.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+    String registrationId =
+        objectMapper
+            .readTree(registerResponse.getBody())
+            .path("data")
+            .path("registrationId")
+            .asText();
+
+    ResponseEntity<String> statusResponse =
         restTemplate.exchange(
-            baseUrl() + "/web3/wallets",
-            HttpMethod.POST,
-            new HttpEntity<>(firstRegister, bearerJsonHeaders(accessToken)),
+            baseUrl() + "/web3/wallet-registrations/" + registrationId,
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
-    assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
-    String[] challengeData2 = createChallenge(TEST_WALLET_ADDRESS);
-    String signature2 = signEip712(challengeData2[1], challengeData2[0], TEST_PRIVATE_KEY);
+    assertThat(statusResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(statusResponse.getBody()).path("data");
+    assertThat(data.path("registrationId").asText()).isEqualTo(registrationId);
+    assertThat(data.path("status").asText()).isEqualTo("APPROVAL_REQUIRED");
+    assertThat(data.path("latestExecutionStatus").asText()).isEqualTo("AWAITING_SIGNATURE");
+    assertThat(data.path("nextAction").asText()).isEqualTo("SIGN_APPROVAL");
+    assertThat(data.path("web3").path("signRequest").path("authorization").isMissingNode())
+        .isFalse();
+  }
 
-    Map<String, Object> secondRegister =
-        Map.of(
-            "walletAddress", TEST_WALLET_ADDRESS,
-            "signature", signature2,
-            "nonce", challengeData2[0]);
-    ResponseEntity<String> secondResponse =
+  @Test
+  @DisplayName("다른 유저가 지갑 등록 상태를 조회하면 404 를 반환한다")
+  void getWalletRegistrationStatus_withOtherUser_returns404() throws Exception {
+    ResponseEntity<String> registerResponse = registerWallet(TEST_WALLET_ADDRESS);
+    assertThat(registerResponse.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+    String registrationId =
+        objectMapper
+            .readTree(registerResponse.getBody())
+            .path("data")
+            .path("registrationId")
+            .asText();
+    String otherAccessToken = signupAndLogin("Web3E2EOther유저").accessToken();
+
+    ResponseEntity<String> statusResponse =
         restTemplate.exchange(
-            baseUrl() + "/web3/wallets",
-            HttpMethod.POST,
-            new HttpEntity<>(secondRegister, bearerJsonHeaders(accessToken)),
+            baseUrl() + "/web3/wallet-registrations/" + registrationId,
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(otherAccessToken)),
             String.class);
 
-    assertThat(secondResponse.getStatusCode().is4xxClientError())
-        .as("이미 지갑이 연결된 유저의 재등록 시도 시 4xx 에러여야 함")
-        .isTrue();
+    assertThat(statusResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    JsonNode root = objectMapper.readTree(statusResponse.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("FAIL");
+    assertThat(root.at("/code").asText()).isEqualTo("WALLET_004");
   }
 }

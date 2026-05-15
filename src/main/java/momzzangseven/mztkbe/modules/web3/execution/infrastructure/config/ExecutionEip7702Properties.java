@@ -34,6 +34,9 @@ public class ExecutionEip7702Properties {
     private int ttlSeconds;
 
     @Min(1)
+    private int minRemainingTtlSeconds;
+
+    @Min(1)
     private int eip1559TtlSeconds;
   }
 

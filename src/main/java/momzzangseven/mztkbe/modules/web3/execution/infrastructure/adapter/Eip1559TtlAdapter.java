@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.ExecutionEip7702Properties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 /** Infrastructure adapter that exposes configured EIP-1559 TTL as execution output port. */
-public class Eip1559TtlAdapter implements LoadEip1559TtlPort {
+public class Eip1559TtlAdapter implements LoadEip1559TtlPort, LoadEip7702AuthorizationTtlPort {
 
   private final ExecutionEip7702Properties executionEip7702Properties;
 
@@ -18,5 +19,10 @@ public class Eip1559TtlAdapter implements LoadEip1559TtlPort {
   @Override
   public long loadTtlSeconds() {
     return executionEip7702Properties.getAuthorization().getEip1559TtlSeconds();
+  }
+
+  @Override
+  public long loadMinimumRemainingSeconds() {
+    return executionEip7702Properties.getAuthorization().getMinRemainingTtlSeconds();
   }
 }

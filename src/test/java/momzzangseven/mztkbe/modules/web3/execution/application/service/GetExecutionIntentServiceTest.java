@@ -13,7 +13,9 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -39,6 +41,7 @@ class GetExecutionIntentServiceTest {
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private LoadExecutionTransactionPort loadExecutionTransactionPort;
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
+  @Mock private LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort;
 
   private GetExecutionIntentService service;
 
@@ -49,7 +52,9 @@ class GetExecutionIntentServiceTest {
             executionIntentPersistencePort,
             loadExecutionTransactionPort,
             loadExecutionChainIdPort,
+            loadEip7702AuthorizationTtlPort,
             FIXED_CLOCK);
+    when(loadEip7702AuthorizationTtlPort.loadMinimumRemainingSeconds()).thenReturn(30L);
   }
 
   @Test
@@ -70,7 +75,7 @@ class GetExecutionIntentServiceTest {
             "0x" + "1".repeat(40),
             12L,
             "0x" + "2".repeat(40),
-            LocalDateTime.of(2026, 4, 5, 12, 0),
+            LocalDateTime.of(2026, 4, 5, 12, 5),
             "0x" + "3".repeat(64),
             "0x" + "4".repeat(64),
             null,
@@ -86,11 +91,54 @@ class GetExecutionIntentServiceTest {
 
     assertThat(result.resourceStatus()).isEqualTo(ExecutionResourceStatus.PENDING_EXECUTION);
     assertThat(result.signRequest()).isNotNull();
+    assertThat(result.signRequestUnavailableReason()).isNull();
     assertThat(result.signRequest().authorization()).isNotNull();
     assertThat(result.signRequest().submit()).isNotNull();
+    assertThat(result.expiresAtEpochSeconds())
+        .isEqualTo(LocalDateTime.of(2026, 4, 5, 12, 5).atZone(APP_ZONE).toEpochSecond());
     assertThat(result.signRequest().submit().deadlineEpochSeconds())
-        .isEqualTo(LocalDateTime.of(2026, 4, 5, 12, 0).atZone(APP_ZONE).toEpochSecond());
+        .isEqualTo(LocalDateTime.of(2026, 4, 5, 12, 5).atZone(APP_ZONE).toEpochSecond());
     assertThat(result.transactionId()).isNull();
+  }
+
+  @Test
+  void execute_hidesSignRequestForAwaitingSignatureEip7702_whenDeadlineIsTooClose() {
+    ExecutionIntent intent =
+        ExecutionIntent.create(
+            "intent-too-close",
+            "root-too-close",
+            1,
+            ExecutionResourceType.TRANSFER,
+            "transfer:too-close",
+            ExecutionActionType.TRANSFER_SEND,
+            7L,
+            8L,
+            ExecutionMode.EIP7702,
+            "0x" + "a".repeat(64),
+            "{\"amountWei\":\"100\"}",
+            "0x" + "1".repeat(40),
+            12L,
+            "0x" + "2".repeat(40),
+            LocalDateTime.of(2026, 4, 5, 12, 0, 29),
+            "0x" + "3".repeat(64),
+            "0x" + "4".repeat(64),
+            null,
+            null,
+            BigInteger.TEN,
+            LocalDate.of(2026, 4, 5),
+            LocalDateTime.of(2026, 4, 5, 11, 0));
+
+    when(executionIntentPersistencePort.findByPublicId("intent-too-close"))
+        .thenReturn(Optional.of(intent));
+
+    GetExecutionIntentResult result =
+        service.execute(new GetExecutionIntentQuery(7L, "intent-too-close"));
+
+    assertThat(result.signRequest()).isNull();
+    assertThat(result.signRequestUnavailableReason())
+        .isEqualTo(SignRequestUnavailableReason.EIP7702_DEADLINE_TOO_CLOSE);
+    assertThat(result.expiresAtEpochSeconds())
+        .isEqualTo(LocalDateTime.of(2026, 4, 5, 12, 0, 29).atZone(APP_ZONE).toEpochSecond());
   }
 
   @Test
@@ -140,7 +188,10 @@ class GetExecutionIntentServiceTest {
     GetExecutionIntentResult result = service.execute(new GetExecutionIntentQuery(7L, "intent-2"));
 
     assertThat(result.resourceStatus()).isEqualTo(ExecutionResourceStatus.PENDING_EXECUTION);
+    assertThat(result.expiresAtEpochSeconds())
+        .isEqualTo(LocalDateTime.of(2026, 4, 5, 12, 0).atZone(APP_ZONE).toEpochSecond());
     assertThat(result.signRequest()).isNull();
+    assertThat(result.signRequestUnavailableReason()).isNull();
     assertThat(result.transactionId()).isEqualTo(99L);
     assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.PENDING);
     assertThat(result.txHash()).isEqualTo("0xhash");

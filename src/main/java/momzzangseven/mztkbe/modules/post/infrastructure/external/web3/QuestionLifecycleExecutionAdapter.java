@@ -2,14 +2,13 @@ package momzzangseven.mztkbe.modules.post.infrastructure.external.web3;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
@@ -17,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionI
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.MatchQuestionCreatePayloadCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
@@ -26,13 +26,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionP
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
-import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaEscrowAbiEncoder;
-import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.utils.Numeric;
@@ -46,9 +40,6 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   private final BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
   private final CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
   private final GetExecutionIntentUseCase getExecutionIntentUseCase;
-  private final LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
-  private final QnaEscrowAbiEncoder qnaEscrowAbiEncoder;
-  private final QnaEscrowProperties qnaEscrowProperties;
   private final ObjectMapper objectMapper;
 
   @Override
@@ -219,10 +210,12 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
         new QuestionExecutionWriteView.ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new QuestionExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
+        null,
         result.existing(),
         toSignatureMeta(result.signatureMeta()));
   }
@@ -237,18 +230,21 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
 
   private QuestionExecutionWriteView toView(GetExecutionIntentResult result, Long signedAt) {
     QuestionExecutionWriteView.SignatureMeta signatureMeta =
-        signedAt == null
-            ? null
-            : new QuestionExecutionWriteView.SignatureMeta(
-                signedAt, signedAt + qnaEscrowProperties.getSigValidityDuration());
+        toSignatureMeta(questionEscrowExecutionUseCase.signatureMetaForSignedAt(signedAt));
     return new QuestionExecutionWriteView(
         new QuestionExecutionWriteView.Resource(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         "QNA_QUESTION_CREATE",
         new QuestionExecutionWriteView.ExecutionIntent(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
         new QuestionExecutionWriteView.Execution(result.mode().name(), result.signCount()),
         toSignRequest(result.signRequest()),
+        result.signRequestUnavailableReason() == null
+            ? null
+            : result.signRequestUnavailableReason().name(),
         true,
         signatureMeta);
   }
@@ -261,46 +257,8 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
     try {
       QnaEscrowExecutionPayload payload =
           objectMapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
-      LoadQnaRewardTokenConfigPort.RewardTokenConfig rewardTokenConfig =
-          loadQnaRewardTokenConfigPort.loadRewardTokenConfig();
-      String expectedQuestionHash = QnaContentHashFactory.hash(questionContent);
-      BigInteger expectedAmountWei =
-          QnaEscrowIdCodec.toAmountWei(rewardMztk, rewardTokenConfig.decimals());
-      String expectedTokenAddress = EvmAddress.of(rewardTokenConfig.tokenContractAddress()).value();
-      String payloadTokenAddress = EvmAddress.of(payload.tokenAddress()).value();
-      // §MOM-393 — broadcast callData (9-arg, server-sig 봉입) 와 comparison baseline (7-arg,
-      // server-sig-free) 의 책임 분리. stored payload 의 사용자-입력 필드로 7-arg baseline 을
-      // 재인코딩하여 expected 7-arg baseline 과 byte-equal 비교하면, server-managed 필드
-      // (signedAt/signatureBytes) 도입 여부에 둔감한 의미 검증이 성립한다. payload 의 logical
-      // identity 무결성은 matchesPayloadHash 가 idempotencyView SHA-256 으로 cover 하며, server-sig
-      // 봉입된 callData/signedAt 무결성은 executionDigest (EIP-7702) / unsignedTxFingerprint
-      // (EIP-1559) 가 별도로 cover.
-      String storedBaselineCallData =
-          qnaEscrowAbiEncoder.encode(
-              QnaExecutionActionType.QNA_QUESTION_CREATE,
-              QnaEscrowIdCodec.questionId(payload.postId()),
-              null,
-              payloadTokenAddress,
-              payload.amountWei(),
-              payload.questionHash(),
-              null);
-      String expectedBaselineCallData =
-          qnaEscrowAbiEncoder.encode(
-              QnaExecutionActionType.QNA_QUESTION_CREATE,
-              QnaEscrowIdCodec.questionId(postId),
-              null,
-              expectedTokenAddress,
-              expectedAmountWei,
-              expectedQuestionHash,
-              null);
-      return payload.actionType() == QnaExecutionActionType.QNA_QUESTION_CREATE
-          && postId.equals(payload.postId())
-          && payload.answerId() == null
-          && expectedQuestionHash.equals(payload.questionHash())
-          && payload.contentHash() == null
-          && expectedAmountWei.equals(payload.amountWei())
-          && expectedTokenAddress.equals(payloadTokenAddress)
-          && expectedBaselineCallData.equals(storedBaselineCallData);
+      return questionEscrowExecutionUseCase.matchesQuestionCreatePayload(
+          new MatchQuestionCreatePayloadCommand(postId, questionContent, rewardMztk, payload));
     } catch (JsonProcessingException e) {
       throw new Web3InvalidInputException("invalid qna question create payload snapshot");
     }

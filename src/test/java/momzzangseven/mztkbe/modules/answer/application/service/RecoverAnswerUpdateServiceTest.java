@@ -8,8 +8,8 @@ import static org.mockito.Mockito.verify;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.answer.AnswerPublicationStateException;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.dto.RecoverAnswerUpdateCommand;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerUpdateStatePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
@@ -133,7 +133,8 @@ class RecoverAnswerUpdateServiceTest {
     return new AnswerExecutionWriteView(
         new AnswerExecutionWriteView.Resource("ANSWER", "100", "PENDING_EXECUTION"),
         "QNA_ANSWER_UPDATE",
-        new AnswerExecutionWriteView.ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null),
+        new AnswerExecutionWriteView.ExecutionIntent(
+            executionIntentId, "AWAITING_SIGNATURE", null, 1L),
         new AnswerExecutionWriteView.Execution("EIP7702", 2),
         null,
         false);

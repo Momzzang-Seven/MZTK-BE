@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import java.time.Clock;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummaryResult;
@@ -13,7 +14,7 @@ final class ExecutionIntentViewMapper {
   private ExecutionIntentViewMapper() {}
 
   static GetLatestExecutionIntentSummaryResult toLatestSummary(
-      ExecutionIntent intent, Optional<ExecutionTransactionSummary> transaction) {
+      ExecutionIntent intent, Optional<ExecutionTransactionSummary> transaction, Clock appClock) {
     ExecutionTransactionView transactionView = toTransactionView(transaction);
     return new GetLatestExecutionIntentSummaryResult(
         intent.getResourceType(),
@@ -23,6 +24,7 @@ final class ExecutionIntentViewMapper {
         intent.getPublicId(),
         intent.getStatus(),
         intent.getExpiresAt(),
+        ExecutionDeadlineEpoch.toEpochSecondsLong(intent.getExpiresAt(), appClock),
         intent.getMode(),
         intent.getMode().requiredSignCount(),
         transactionView.transactionId(),

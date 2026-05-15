@@ -4,14 +4,14 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerExecutionResumePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaExecutionResumeBatchViewQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaExecutionResumeViewQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionResumeViewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class AnswerExecutionResumeAdapter implements LoadAnswerExecutionResumePort {
 
   private final GetQnaExecutionResumeViewUseCase getQnaExecutionResumeViewUseCase;
@@ -60,7 +60,8 @@ public class AnswerExecutionResumeAdapter implements LoadAnswerExecutionResumePo
         new AnswerExecutionResumeView.ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new AnswerExecutionResumeView.Execution(
             result.execution().mode(), result.execution().signCount()),
         result.transaction() == null

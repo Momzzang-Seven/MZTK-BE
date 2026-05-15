@@ -3,7 +3,10 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
@@ -30,13 +33,16 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +57,8 @@ import org.springframework.transaction.annotation.AnnotationTransactionAttribute
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Runtime verification of {@link TransactionalExecuteExecutionIntentDelegate}'s
@@ -91,6 +99,7 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
+  private final RunAfterCommitPort runAfterCommitPort = new TestRunAfterCommitPort();
   private TransactionalExecuteExecutionIntentDelegate rawDelegate;
 
   @BeforeEach
@@ -106,6 +115,7 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
             publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
@@ -170,6 +180,56 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
     assertThat(tm.rollbacks)
         .as("Generic Web3InvalidInputException must roll back; only terminal is whitelisted")
         .isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("broadcast 이후 afterSubmitted 훅 실패는 제출 상태 커밋을 롤백하지 않는다")
+  void afterSubmittedHookFailure_doesNotRollBackBroadcastState() {
+    RecordingTransactionManager tm = new RecordingTransactionManager();
+    ExecuteTransactionalExecutionIntentDelegatePort proxied = wrapWithTransactionProxy(tm);
+    ExecutionIntent intent =
+        existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.plusMinutes(5)).build();
+    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
+        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
+            "0xsigned",
+            "0xhash",
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot(),
+            intent.getUnsignedTxFingerprint());
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(eip1559TransactionCodecPort.decodeAndVerify(
+            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
+        .thenReturn(decoded);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.createAndFlush(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.TransactionRecord(
+                202L, ExecutionTransactionStatus.CREATED, null));
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", "rpc-1", null));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    doThrow(new RuntimeException("hook failed"))
+        .when(executionActionHandlerPort)
+        .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
+
+    var result =
+        proxied.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.transactionId()).isEqualTo(202L);
+    assertThat(tm.commits).isEqualTo(1);
+    assertThat(tm.rollbacks).isZero();
+    verify(executionTransactionGatewayPort).markPending(202L, "0xhash");
+    verify(executionActionHandlerPort)
+        .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
   }
 
   private ExecuteTransactionalExecutionIntentDelegatePort wrapWithTransactionProxy(
@@ -247,6 +307,25 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
     @Override
     protected void doRollback(DefaultTransactionStatus status) {
       rollbacks++;
+    }
+  }
+
+  private static class TestRunAfterCommitPort implements RunAfterCommitPort {
+
+    @Override
+    public void runAfterCommit(Runnable action) {
+      if (TransactionSynchronizationManager.isSynchronizationActive()) {
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+              @Override
+              public void afterCommit() {
+                action.run();
+              }
+            });
+        return;
+      }
+
+      action.run();
     }
   }
 }

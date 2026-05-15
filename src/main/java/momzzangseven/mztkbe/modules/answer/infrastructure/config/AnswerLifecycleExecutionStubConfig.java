@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.answer.infrastructure.config;
 
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerLifecycleAction;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
