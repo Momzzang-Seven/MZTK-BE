@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.kms.model.CreateKeyResponse;
 import software.amazon.awssdk.services.kms.model.DescribeKeyRequest;
 import software.amazon.awssdk.services.kms.model.DescribeKeyResponse;
 import software.amazon.awssdk.services.kms.model.DisableKeyRequest;
+import software.amazon.awssdk.services.kms.model.EnableKeyRequest;
 import software.amazon.awssdk.services.kms.model.ExpirationModelType;
 import software.amazon.awssdk.services.kms.model.GetParametersForImportRequest;
 import software.amazon.awssdk.services.kms.model.GetParametersForImportResponse;
@@ -176,6 +177,19 @@ public class KmsKeyLifecycleAdapter implements KmsKeyLifecyclePort {
     } catch (KmsException ex) {
       log.warn(
           "AWS KMS DisableKey failed (kmsKeyId={}, awsErrorCode={})",
+          kmsKeyId,
+          ex.awsErrorDetails() == null ? "n/a" : ex.awsErrorDetails().errorCode());
+      throw ex;
+    }
+  }
+
+  @Override
+  public void enableKey(String kmsKeyId) {
+    try {
+      kmsClient.enableKey(EnableKeyRequest.builder().keyId(kmsKeyId).build());
+    } catch (KmsException ex) {
+      log.warn(
+          "AWS KMS EnableKey failed (kmsKeyId={}, awsErrorCode={})",
           kmsKeyId,
           ex.awsErrorDetails() == null ? "n/a" : ex.awsErrorDetails().errorCode());
       throw ex;

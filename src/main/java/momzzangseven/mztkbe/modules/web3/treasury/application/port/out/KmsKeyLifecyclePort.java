@@ -70,6 +70,14 @@ public interface KmsKeyLifecyclePort {
   void disableKey(String kmsKeyId);
 
   /**
+   * Re-enable a previously {@link #disableKey} 'd key. Used by the ReEnableSameKey action (MOM-444
+   * C5) when an operator re-provisions an alias whose existing KMS key is DISABLED. AWS KMS {@code
+   * EnableKey} is idempotent on already-ENABLED keys, so the post-commit handler does not need to
+   * short-circuit.
+   */
+  void enableKey(String kmsKeyId);
+
+  /**
    * Schedule the supplied key for permanent deletion with the given pending window (in days). Used
    * by {@code archive()} flows.
    */

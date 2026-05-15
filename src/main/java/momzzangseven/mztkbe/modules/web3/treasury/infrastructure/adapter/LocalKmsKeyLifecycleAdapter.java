@@ -53,6 +53,11 @@ public class LocalKmsKeyLifecycleAdapter implements KmsKeyLifecyclePort {
   }
 
   @Override
+  public void enableKey(String kmsKeyId) {
+    throw unsupported("enableKey");
+  }
+
+  @Override
   public void scheduleKeyDeletion(String kmsKeyId, int pendingWindowDays) {
     throw unsupported("scheduleKeyDeletion");
   }
