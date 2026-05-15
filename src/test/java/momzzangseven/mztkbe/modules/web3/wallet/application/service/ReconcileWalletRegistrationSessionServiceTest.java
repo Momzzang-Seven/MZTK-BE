@@ -148,18 +148,64 @@ class ReconcileWalletRegistrationSessionServiceTest {
   }
 
   @Test
-  void execute_whenSessionTtlElapsed_usesExpiryUseCase() {
+  void execute_whenSessionTtlElapsedAndExecutionStillAwaitingSignature_usesExpiryUseCase() {
     when(loadSessionPort.loadByPublicId(REGISTRATION_ID))
         .thenReturn(Optional.of(expiredTtlSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(Optional.of(state("AWAITING_SIGNATURE", null, null, NOW.minusSeconds(1))));
     when(expireUseCase.execute(new ExpireWalletRegistrationSessionCommand(REGISTRATION_ID)))
         .thenReturn(true);
 
     ReconcileWalletRegistrationSessionResult result = service.execute(command());
 
     assertThat(result.recovered()).isTrue();
-    verify(loadExecutionStatePort, never())
-        .loadByExecutionIntentId(
-            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    verify(markTerminatedUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void execute_whenSessionTtlElapsedButExecutionConfirmed_finalizesBeforeExpiring() {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID))
+        .thenReturn(Optional.of(expiredTtlSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(Optional.of(state("CONFIRMED", "SUCCEEDED", 10L, NOW.minusSeconds(1))));
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.recovered()).isTrue();
+    verify(finalizeUseCase)
+        .execute(new FinalizeWalletRegistrationCommand(REGISTRATION_ID, INTENT_ID));
+    verify(expireUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void execute_whenSessionTtlElapsedButTransactionSucceeded_syncsSuccessBeforeExpiring() {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID))
+        .thenReturn(Optional.of(expiredTtlSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(Optional.of(state("PENDING_ONCHAIN", "SUCCEEDED", 10L, NOW.minusSeconds(1))));
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.recovered()).isTrue();
+    verify(syncExecutionSuccessPort).syncSucceededTransaction(10L);
+    verify(expireUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void execute_whenSessionTtlElapsedButSubmissionPending_marksSubmittedBeforeExpiring() {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID))
+        .thenReturn(Optional.of(expiredTtlSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(Optional.of(state("PENDING_ONCHAIN", "PENDING", 10L, NOW.minusSeconds(1))));
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.recovered()).isTrue();
+    verify(markSubmittedUseCase)
+        .execute(
+            new MarkWalletRegistrationApprovalSubmittedCommand(
+                REGISTRATION_ID, INTENT_ID, "PENDING"));
+    verify(expireUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
   }
 
   @Test

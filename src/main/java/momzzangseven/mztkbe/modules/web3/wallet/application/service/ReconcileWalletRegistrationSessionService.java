@@ -55,6 +55,16 @@ public class ReconcileWalletRegistrationSessionService
     if (session.isTerminal()) {
       return ReconcileWalletRegistrationSessionResult.skippedResult();
     }
+    if (session.getStatus().isConfirmedButNotFinalized()) {
+      return retryFinalizationIfBackoffElapsed(session);
+    }
+
+    Optional<WalletApprovalExecutionStateView> maybeExecutionState = loadExecutionState(session);
+    if (maybeExecutionState.isPresent()
+        && shouldRecoverExecutionBeforeSessionExpiry(maybeExecutionState.get())) {
+      return recoverFromExecutionState(session, maybeExecutionState.get());
+    }
+
     if (shouldExpireSession(session)) {
       boolean expired =
           expireUseCase.execute(new ExpireWalletRegistrationSessionCommand(session.getPublicId()));
@@ -62,16 +72,15 @@ public class ReconcileWalletRegistrationSessionService
           ? ReconcileWalletRegistrationSessionResult.recoveredResult()
           : ReconcileWalletRegistrationSessionResult.skippedResult();
     }
-    if (session.getStatus().isConfirmedButNotFinalized()) {
-      return retryFinalizationIfBackoffElapsed(session);
-    }
-
-    Optional<WalletApprovalExecutionStateView> maybeExecutionState = loadExecutionState(session);
     if (maybeExecutionState.isEmpty()) {
       return ReconcileWalletRegistrationSessionResult.skippedResult();
     }
 
-    WalletApprovalExecutionStateView executionState = maybeExecutionState.get();
+    return recoverFromExecutionState(session, maybeExecutionState.get());
+  }
+
+  private ReconcileWalletRegistrationSessionResult recoverFromExecutionState(
+      WalletRegistrationSession session, WalletApprovalExecutionStateView executionState) {
     if (isSucceededTransactionBeforeExecutionConfirmed(executionState)) {
       syncExecutionSuccessPort.syncSucceededTransaction(executionState.transactionId());
       return ReconcileWalletRegistrationSessionResult.recoveredResult();
@@ -135,6 +144,15 @@ public class ReconcileWalletRegistrationSessionService
     return executionState.transactionId() != null
         && "SUCCEEDED".equals(executionState.transactionStatus())
         && !"CONFIRMED".equals(executionState.executionIntentStatus());
+  }
+
+  private boolean shouldRecoverExecutionBeforeSessionExpiry(
+      WalletApprovalExecutionStateView executionState) {
+    return isSucceededTransactionBeforeExecutionConfirmed(executionState)
+        || "CONFIRMED".equals(executionState.executionIntentStatus())
+        || isSubmitted(executionState)
+        || "FAILED_ONCHAIN".equals(executionState.executionIntentStatus())
+        || "FAILED_ONCHAIN".equals(executionState.transactionStatus());
   }
 
   private boolean isSubmitted(WalletApprovalExecutionStateView executionState) {
