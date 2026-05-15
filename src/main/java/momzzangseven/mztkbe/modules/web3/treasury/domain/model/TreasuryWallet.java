@@ -124,6 +124,50 @@ public class TreasuryWallet {
   }
 
   /**
+   * Factory used by the ReplaceKey action (MOM-444). Overwrites the row's KMS key id and wallet
+   * address with freshly-imported values and forces the status back to {@link
+   * TreasuryWalletStatus#ACTIVE}, clearing {@code disabledAt}. Preserves identity columns ({@code
+   * id}, {@code walletAlias}, {@code createdAt}).
+   *
+   * <p>This is the path taken when the operator re-provisions an alias with a *different* raw
+   * private key (rotation, cases C7/C8/C9) or re-provisions an ARCHIVED alias with the same key
+   * (case C6 — old KMS key is already scheduled for deletion, the row gets a fresh key).
+   *
+   * @param existing the row to be replaced; must already carry a {@code kmsKeyId}
+   * @param newKmsKeyId fresh KMS key id produced by the pre-mint phase
+   * @param newWalletAddress {@code 0x}-prefixed address derived from the new raw private key
+   * @param clock clock for {@code updatedAt}
+   * @return a wallet ready to be {@code save()}d as an UPDATE
+   * @throws TreasuryWalletStateException if {@code existing.kmsKeyId} is null (use {@link
+   *     #backfill}) or if {@code newKmsKeyId} equals {@code existing.kmsKeyId}
+   */
+  public static TreasuryWallet replaceKey(
+      TreasuryWallet existing, String newKmsKeyId, String newWalletAddress, Clock clock) {
+    Objects.requireNonNull(existing, "existing must not be null");
+    Objects.requireNonNull(newKmsKeyId, "newKmsKeyId must not be null");
+    Objects.requireNonNull(newWalletAddress, "newWalletAddress must not be null");
+    Objects.requireNonNull(clock, "clock must not be null");
+    if (existing.kmsKeyId == null) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '"
+              + existing.walletAlias
+              + "' has no kmsKeyId — use backfill instead of replaceKey");
+    }
+    if (newKmsKeyId.equals(existing.kmsKeyId)) {
+      throw new TreasuryWalletStateException(
+          "replaceKey rejected — same kmsKeyId for alias '" + existing.walletAlias + "'");
+    }
+    return existing.toBuilder()
+        .kmsKeyId(newKmsKeyId)
+        .walletAddress(newWalletAddress)
+        .status(TreasuryWalletStatus.ACTIVE)
+        .keyOrigin(TreasuryKeyOrigin.IMPORTED)
+        .disabledAt(null)
+        .updatedAt(LocalDateTime.now(clock))
+        .build();
+  }
+
+  /**
    * Transition {@link TreasuryWalletStatus#ACTIVE} → {@link TreasuryWalletStatus#DISABLED} and
    * stamp {@code disabledAt}.
    *
