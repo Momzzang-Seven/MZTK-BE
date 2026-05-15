@@ -389,10 +389,15 @@ test.describe("Treasury Provision API — Group B & C", () => {
     );
   });
 
-  test("[P-10] 다른 alias 가 같은 address 보유 → 409 (B7)", async () => {
+  test("[P-10] 다른 alias 가 같은 address 보유 → 200 (MOM-444 공유 운영지갑 허용)", async () => {
+    // MOM-444 이전엔 cross-row UNIQUE 가 동일 treasury_address 를 다른 alias 가 보유하지 못하게
+    // 막아 409 였다. MOM-444 가 UNIQUE 를 제거해 하나의 운영지갑이 모든 TreasuryRole 을 수행할
+    // 수 있도록 허용한다. 따라서 REWARD provision 은 C0 fresh provision 으로 200 을 반환하고
+    // 두 row 가 동일 treasury_address 를 공유한 채 공존한다.
     await fullCleanup();
 
-    // 다른 alias 로 동일 address row seed (kms_key_id 는 placeholder)
+    // 다른 alias (OTHER_ALIAS) 가 동일 address 를 이미 보유 (kms_key_id 는 placeholder — 본 테스트
+    // 에서는 OTHER_ALIAS row 의 kms 검증은 범위 밖)
     await db.query(
       `INSERT INTO web3_treasury_wallets
          (wallet_alias, treasury_address, kms_key_id, status, key_origin, created_at, updated_at)
@@ -401,23 +406,47 @@ test.describe("Treasury Provision API — Group B & C", () => {
     );
 
     const res = await provision(api);
-    expect(res.status(), "[P-10] HTTP").toBe(409);
+    expect(res.status(), "[P-10] HTTP").toBe(200);
     const body = await res.json();
-    expect(body.status).toBe("FAIL");
+    expect(body.status).toBe("SUCCESS");
+    expect(body.data.walletAlias).toBe(REWARD_ALIAS);
+    expect(body.data.kmsKeyId).toBeTruthy();
+    trackedKmsKeys.add(body.data.kmsKeyId);
 
-    // REWARD wallet row 생성되지 않음
-    expect(await getWalletRow(REWARD_ALIAS), "[P-10] REWARD row 미생성").toBeNull();
+    // REWARD row 가 생성되고 OTHER_ALIAS row 와 동일 address 를 공유함을 검증
+    const rewardRow = await getWalletRow(REWARD_ALIAS);
+    expect(rewardRow, "[P-10] REWARD row 생성됨").not.toBeNull();
+    expect(String(rewardRow.treasury_address).toLowerCase()).toBe(
+      ENV.TREASURY_E2E_EXPECTED_ADDRESS
+    );
+    expect(rewardRow.status).toBe("ACTIVE");
+    const otherRow = await db.query(
+      `SELECT wallet_alias, treasury_address, kms_key_id FROM web3_treasury_wallets WHERE wallet_alias = $1`,
+      [OTHER_ALIAS]
+    );
+    expect(otherRow.rows.length).toBe(1);
+    expect(String(otherRow.rows[0].treasury_address).toLowerCase()).toBe(
+      ENV.TREASURY_E2E_EXPECTED_ADDRESS
+    );
+    // 같은 address 를 공유하지만 kms_key_id 는 서로 다르다 (wallet_alias : kms_key_id = 1:1)
+    expect(rewardRow.kms_key_id).not.toBe(otherRow.rows[0].kms_key_id);
 
-    // provision_audits: ALREADY_PROVISIONED 1건
+    // provision_audits: SUCCESS 1건 (이전엔 ALREADY_PROVISIONED FAILURE 였음)
     const audit = await getLatestProvisionAudit(ENV.TREASURY_E2E_EXPECTED_ADDRESS);
-    expect(audit?.success).toBe(false);
-    expect(audit?.failure_reason).toBe("ALREADY_PROVISIONED");
+    expect(audit?.success).toBe(true);
 
-    // KMS alias / key 신규 생성 없음
-    expect(kmsDescribeAlias(REWARD_ALIAS), "[P-10] KMS alias 생성 안 됨").toBeNull();
+    // KMS alias 가 REWARD_ALIAS 로 새로 바인딩됨
+    const aliasInfo = kmsDescribeAlias(REWARD_ALIAS);
+    expect(aliasInfo, "[P-10] REWARD alias 생성됨").not.toBeNull();
+    expect(aliasInfo!.keyId).toBe(body.data.kmsKeyId);
+    expect(aliasInfo!.state).toBe("Enabled");
   });
 
-  test("[P-11] 기존 legacy row + 다른 wallet_address → 400 (B4)", async () => {
+  test("[P-11] legacy row(kms_key_id=null) + 다른 wallet_address → 200 (MOM-444 C10 backfill — derived address 가 stored 를 덮어쓴다)", async () => {
+    // MOM-444 이전엔 legacy row 의 stored address 와 derived address 가 다르면 ADDRESS_MISMATCH 400
+    // 이었다. MOM-444 에서는 non-cohort-v2 decision table 의 C10 (diff addr, null kms, ACTIVE) 가
+    // backfill 로 라우팅되어 derived address 가 stored 를 덮어쓰고 새 kms_key_id 와 함께 ACTIVE 로
+    // 200 을 반환한다 — operator runbook 으로 빠지지 않는 자동 정정 경로.
     await fullCleanup();
 
     const fakeAddress = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
@@ -429,22 +458,30 @@ test.describe("Treasury Provision API — Group B & C", () => {
     );
 
     const res = await provision(api);
-    expect(res.status(), "[P-11] HTTP").toBe(400);
+    expect(res.status(), "[P-11] HTTP").toBe(200);
     const body = await res.json();
-    expect(body.status).toBe("FAIL");
+    expect(body.status).toBe("SUCCESS");
+    expect(body.data.kmsKeyId).toBeTruthy();
+    trackedKmsKeys.add(body.data.kmsKeyId);
 
-    // wallet row 변동 없음 (여전히 legacy address)
+    // wallet row: kms_key_id 와 treasury_address 가 새 값으로 덮어쓰임 (C10 backfill)
     const wallet = await getWalletRow(REWARD_ALIAS);
-    expect(String(wallet.treasury_address).toLowerCase()).toBe(fakeAddress.toLowerCase());
-    expect(wallet.kms_key_id).toBeNull();
+    expect(String(wallet.treasury_address).toLowerCase()).toBe(
+      ENV.TREASURY_E2E_EXPECTED_ADDRESS
+    );
+    expect(wallet.kms_key_id).toBe(body.data.kmsKeyId);
+    expect(wallet.status).toBe("ACTIVE");
+    expect(wallet.key_origin).toBe("IMPORTED");
 
-    // provision_audits: ADDRESS_MISMATCH (derivedAddress 와 함께 기록됨)
+    // provision_audits: SUCCESS (ADDRESS_MISMATCH 더 이상 기록 안 됨 — MOM-444)
     const audit = await getLatestProvisionAudit(ENV.TREASURY_E2E_EXPECTED_ADDRESS);
-    expect(audit?.success).toBe(false);
-    expect(audit?.failure_reason).toBe("ADDRESS_MISMATCH");
+    expect(audit?.success).toBe(true);
 
-    // KMS 신규 생성 없음
-    expect(kmsDescribeAlias(REWARD_ALIAS)).toBeNull();
+    // KMS alias 가 REWARD_ALIAS 로 새 키에 바인딩됨
+    const aliasInfo = kmsDescribeAlias(REWARD_ALIAS);
+    expect(aliasInfo, "[P-11] alias 생성됨").not.toBeNull();
+    expect(aliasInfo!.keyId).toBe(body.data.kmsKeyId);
+    expect(aliasInfo!.state).toBe("Enabled");
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -584,9 +621,9 @@ test.describe("Treasury Provision API — Group B & C", () => {
   // 의 Mom444ActionScenarios) 에서 PostgreSQL + Mock KMS 로 검증한다. 본 .spec 의
   // 스킵 블록은 운영 KMS 회귀 mirror 의 형태와 의도를 박제해 두는 용도다.
   //
-  // 또한 기존 [P-10] / [P-11] 은 MOM-444 이후 의미가 바뀐 케이스다 — 별도 follow-up
-  // 티켓에서 신규 동작(P-10: 200 + 공유주소 허용 / P-11: 200 + derived address 가
-  // stored 를 덮어쓰는 C10 backfill)으로 업데이트해야 한다.
+  // 기존 [P-10] / [P-11] 은 MOM-444 이후 의미가 바뀐 케이스로, 본 PR 안에서 신규
+  // 동작 (P-10: 200 + 공유주소 허용, P-11: 200 + derived address overwrite C10 backfill)
+  // 으로 업데이트했다.
   // ──────────────────────────────────────────────────────────────────────────
 
   test.skip(

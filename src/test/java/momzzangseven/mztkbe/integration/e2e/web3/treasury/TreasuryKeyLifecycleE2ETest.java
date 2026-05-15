@@ -640,7 +640,8 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
   class AliasRepair {
 
     @Test
-    @DisplayName("[E-17] 기존 row가 있고 alias가 KMS에서 DISABLED → 200, createKey 미호출, kms_key_id 변경 없음")
+    @DisplayName(
+        "[E-17] 기존 row가 있고 alias가 KMS에서 DISABLED → 200, kms_key_id 변경 없음, pre-minted key 는 outer cleanup 으로 회수 (MOM-444 3-phase)")
     void existingRowWithDisabledAlias_repairsViaUpdateAlias() throws Exception {
       // Pre-seed row: 동일 alias + 동일 derived address + 기존 kms_key_id
       String previousKmsId = "prev-kms-id";
@@ -652,9 +653,13 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
           previousKmsId,
           DERIVED_ADDRESS);
 
-      // Stub: alias-target은 DISABLED → 알리어스 복구 분기
+      // MOM-444: Phase 1 pre-mint 은 alias-repair 경로에서도 항상 실행된다 (TX 바깥에서 row state 와
+      // 무관하게 createKey + import + sign sanity 가 선행됨). 따라서 stub 이 필요하다. 이 pre-minted
+      // key 는 C4 alias-repair 분기에서 row 에 attach 되지 않으므로 outer finally 가 회수한다.
+      stubSuccessfulProvision();
+      // alias-target 은 DISABLED → C4 alias-repair 분기
       when(kmsKeyLifecyclePort.describeAliasTarget(REWARD_ALIAS)).thenReturn(KmsKeyState.DISABLED);
-      // BindKmsAlias의 ghost-recovery에서 사용될 createAlias / updateAlias 스텁
+      // BindKmsAlias 의 ghost-recovery 에서 사용될 createAlias / updateAlias 스텁
       org.mockito.Mockito.doThrow(
               new KmsAliasAlreadyExistsException("alias already bound", new RuntimeException()))
           .when(kmsKeyLifecyclePort)
@@ -664,14 +669,19 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode data = objectMapper.readTree(res.getBody());
+      // 응답의 kmsKeyId 는 기존 row 의 값을 그대로 반환 (alias-repair 는 row 를 갱신하지 않음).
       assertThat(data.at("/data/kmsKeyId").asText()).isEqualTo(previousKmsId);
 
-      // 본 사이클에서는 createKey/import가 실행되면 안 됨
-      verify(kmsKeyLifecyclePort, never()).createKey();
-      verify(kmsKeyLifecyclePort, never())
+      // MOM-444: Phase 1 은 row state 무관하게 실행 — createKey/import 가 한 번씩 호출된다.
+      verify(kmsKeyLifecyclePort).createKey();
+      verify(kmsKeyLifecyclePort)
           .importKeyMaterial(anyString(), any(byte[].class), any(byte[].class));
 
-      // AFTER_COMMIT 핸들러가 ghost-alias 복구 → updateAlias 사용
+      // alias-repair 분기는 row 에 pre-minted key 를 attach 하지 않으므로 outer finally 가 회수.
+      verify(kmsKeyLifecyclePort).disableKey(MOCK_KMS_KEY_ID);
+      verify(kmsKeyLifecyclePort).scheduleKeyDeletion(MOCK_KMS_KEY_ID, 7);
+
+      // AFTER_COMMIT 핸들러가 ghost-alias 복구 → updateAlias(REWARD_ALIAS, previousKmsId)
       verify(kmsKeyLifecyclePort).updateAlias(REWARD_ALIAS, previousKmsId);
       assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(1);
     }

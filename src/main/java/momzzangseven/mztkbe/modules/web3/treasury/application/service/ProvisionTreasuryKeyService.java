@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
@@ -86,6 +87,11 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     try {
       return delegate.lockedCommit(
           command, derivedAddress, preMintedKeyId, attachedFlag, cleanupInvoked);
+    } catch (TreasuryWalletAlreadyProvisionedException alreadyProvisioned) {
+      // delegate already wrote a failure audit row with the legacy "ALREADY_PROVISIONED" reason.
+      // Rethrow without re-auditing to keep a single audit row per failed call and to preserve the
+      // human-readable failure_reason that operators rely on for filtering.
+      throw alreadyProvisioned;
     } catch (RuntimeException e) {
       treasuryAuditRecorder.record(
           command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
