@@ -52,9 +52,9 @@ const ENV = {
   DATABASE_URL: process.env.DATABASE_URL,
 };
 
-const REWARD_ALIAS = "reward-treasury";
-const OTHER_ALIAS = "pending-treasury"; // for [P-10]
-const SPONSOR_ALIAS = "sponsor-treasury"; // for [P-MOM444-1] 공유 운영지갑
+const REWARD_ALIAS = "dev-reward-treasury";
+const OTHER_ALIAS = "dev-pending-treasury"; // for [P-10]
+const SPONSOR_ALIAS = "dev-sponsor-treasury"; // for [P-MOM444-1] 공유 운영지갑
 const PROVISION_PENDING_DELETION_DAYS = 7; // AWS 최소값
 
 const db = ENV.DATABASE_URL
@@ -465,11 +465,11 @@ test.describe("Treasury Provision API — Group B & C", () => {
     expect(aliasInfo!.state).toBe("Enabled");
   });
 
-  test("[P-11] legacy row(kms_key_id=null) + 다른 wallet_address → 200 (MOM-444 C10 backfill — derived address 가 stored 를 덮어쓴다)", async () => {
-    // MOM-444 이전엔 legacy row 의 stored address 와 derived address 가 다르면 ADDRESS_MISMATCH 400
-    // 이었다. MOM-444 에서는 non-cohort-v2 decision table 의 C10 (diff addr, null kms, ACTIVE) 가
-    // backfill 로 라우팅되어 derived address 가 stored 를 덮어쓰고 새 kms_key_id 와 함께 ACTIVE 로
-    // 200 을 반환한다 — operator runbook 으로 빠지지 않는 자동 정정 경로.
+  test.skip("[P-11] legacy row(kms_key_id=null) + 다른 wallet_address → 200 (MOM-444 C10 backfill — derived address 가 stored 를 덮어쓴다)", async () => {
+    // V069 (MOM-391) 가 web3_treasury_wallets.kms_key_id 를 NOT NULL 로 잠근 이후 legacy row
+    // (kms_key_id=NULL) 는 DB 레벨에서 더 이상 만들 수 없으므로 E2E fixture 가 성립하지 않는다.
+    // backfill 분기 (C10/C11/C12) 는 ProvisionTreasuryKeyServiceTest 의 단위 테스트
+    // (c10_backfillDiffAddrActive_overwritesAddress / c11_*Disabled / c12_*Archived) 로 cover.
     await fullCleanup();
 
     const fakeAddress = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
