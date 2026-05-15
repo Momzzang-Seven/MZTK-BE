@@ -18,11 +18,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * KMS-finalize cleanup migration) and {@code web3_treasury_kms_audits}.
  *
  * <p>Cases [E-102]..[E-105] from {@code
- * docs/test/refactor-MOM-384-reward-eip-1559-change-to-kms.md}. [E-106]..[E-111] cover the
- * KMS-finalize cleanup migration's CHECK constraints (status / key_origin / kms_key_id_required —
- * NOT NULL, blank, and treasury_address regex) and the migration body's idempotency on replay. Uses
- * PostgreSQL-only constructs ({@code pg_constraint}, {@code NOW()}, {@code repeat()}) so it must
- * run under the {@code integration} profile.
+ * docs/test/refactor-MOM-384-reward-eip-1559-change-to-kms.md}. [E-104] was rewritten under MOM-444
+ * to verify V074 — the cross-row UNIQUE on {@code treasury_address} is dropped to allow multiple
+ * {@code wallet_alias} rows to share one {@code treasury_address} (shared-wallet provisioning),
+ * while V069's per-row {@code uk_web3_treasury_wallets_kms_key_id} UNIQUE survives.
+ * [E-106]..[E-111] cover the KMS-finalize cleanup migration's CHECK constraints (status /
+ * key_origin / kms_key_id_required — NOT NULL, blank, and treasury_address regex) and the migration
+ * body's idempotency on replay. Uses PostgreSQL-only constructs ({@code pg_constraint}, {@code
+ * NOW()}, {@code repeat()}) so it must run under the {@code integration} profile.
  *
  * <p>{@code web3_treasury_wallets} is excluded from {@link
  * momzzangseven.mztkbe.integration.e2e.support.DatabaseCleaner}; this class explicitly deletes the
@@ -90,8 +93,10 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[E-104] V061 — uk_web3_treasury_wallets_treasury_address 명명된 unique 제약이 존재")
-  void v061_namedUniqueConstraintOnTreasuryAddress_exists() {
+  @DisplayName("[E-104] V074 — cross-row UNIQUE on treasury_address 가 제거됨 (shared-wallet)")
+  void v074_crossRowUniqueOnTreasuryAddress_isDropped_butPerRowKmsKeyIdUniqueSurvives() {
+    // V061 이 생성했던 named UNIQUE 는 V074 (MOM-444) 가 DROP 해야 한다 — 동일 treasury_address
+    // 를 여러 wallet_alias 가 공유하는 shared-wallet 시나리오를 허용하기 위함.
     Integer namedCount =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM pg_constraint"
@@ -99,8 +104,10 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
                 + " AND contype = 'u'"
                 + " AND conname = 'uk_web3_treasury_wallets_treasury_address'",
             Integer.class);
-    assertThat(namedCount).isEqualTo(1);
+    assertThat(namedCount).isZero();
 
+    // V007 inline UNIQUE 의 legacy 자동 생성 이름. V061 이 DROP 했고 그 이후 어떤 마이그레이션도
+    // 다시 만들지 않으므로 여전히 0.
     Integer legacyCount =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM pg_constraint"
@@ -108,6 +115,17 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
                 + " AND conname = 'web3_treasury_keys_treasury_address_key'",
             Integer.class);
     assertThat(legacyCount).isZero();
+
+    // V069 의 per-row kms_key_id UNIQUE 는 V074 영향 밖 — 살아있어야 한다.
+    // "어떤 UNIQUE 가 사라졌고 어떤 것이 살아남았는지" 를 한 테스트에서 명시.
+    Integer kmsKeyIdUniqueCount =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM pg_constraint"
+                + " WHERE conrelid = 'web3_treasury_wallets'::regclass"
+                + " AND contype = 'u'"
+                + " AND conname = 'uk_web3_treasury_wallets_kms_key_id'",
+            Integer.class);
+    assertThat(kmsKeyIdUniqueCount).isEqualTo(1);
   }
 
   @Test
