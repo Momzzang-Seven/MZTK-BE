@@ -123,13 +123,6 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     if (existing.isPresent() && existing.get().getKmsKeyId() != null) {
       return handleExistingProvisionedRow(command, existing.get(), derivedAddress, role);
     }
-    if (existing.isEmpty()
-        && loadTreasuryWalletPort.existsAddressOwnedByOther(walletAlias, derivedAddress)) {
-      treasuryAuditRecorder.record(
-          command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
-      throw new TreasuryWalletAlreadyProvisionedException(
-          "wallet address '" + derivedAddress + "' is already bound to a different alias");
-    }
 
     String kmsKeyId = null;
     byte[] rawPrivateKey = decodePrivateKey(command.rawPrivateKey());

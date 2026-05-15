@@ -176,21 +176,6 @@ class ProvisionTreasuryKeyServiceTest {
   }
 
   @Test
-  void execute_throws_whenAddressOwnedByDifferentAlias() {
-    when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
-    when(loadTreasuryWalletPort.existsAddressOwnedByOther("reward-treasury", DERIVED_ADDRESS))
-        .thenReturn(true);
-
-    ProvisionTreasuryKeyCommand command =
-        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
-
-    assertThatThrownBy(() -> service.execute(command))
-        .isInstanceOf(TreasuryWalletAlreadyProvisionedException.class);
-
-    verify(kmsKeyLifecyclePort, never()).createKey();
-  }
-
-  @Test
   void execute_throws_whenPrivateKeyInvalid() {
     ProvisionTreasuryKeyCommand command =
         new ProvisionTreasuryKeyCommand(1L, "z".repeat(64), TreasuryRole.REWARD, DERIVED_ADDRESS);
@@ -242,14 +227,11 @@ class ProvisionTreasuryKeyServiceTest {
     assertThat(saved.getKmsKeyId()).isEqualTo("kms-key-id");
     assertThat(saved.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
     assertThat(saved.getCreatedAt()).isEqualTo(legacy.getCreatedAt());
-    verify(loadTreasuryWalletPort, never()).existsAddressOwnedByOther(anyString(), anyString());
   }
 
   @Test
   void execute_cleansUpKmsKey_whenSignDigestFails() {
     when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
-    when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
-        .thenReturn(false);
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
         .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
@@ -277,8 +259,6 @@ class ProvisionTreasuryKeyServiceTest {
     // wrapper. ProvisionTreasuryKeyService re-throws unchanged; the response must carry that
     // signal so an admin operator does not retry a deterministic configuration error.
     when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
-    when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
-        .thenReturn(false);
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
         .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
@@ -310,8 +290,6 @@ class ProvisionTreasuryKeyServiceTest {
     // tears the half-created key down (ghost-key prevention) and re-throws so the operator can
     // retry against a fresh key on the next call.
     when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
-    when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
-        .thenReturn(false);
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
         .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
@@ -339,8 +317,6 @@ class ProvisionTreasuryKeyServiceTest {
   @Test
   void execute_cleansUpKmsKey_whenImportKeyMaterialFails() {
     when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
-    when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
-        .thenReturn(false);
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
         .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
@@ -512,8 +488,6 @@ class ProvisionTreasuryKeyServiceTest {
     TransactionSynchronizationManager.initSynchronization();
     try {
       when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
-      when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
-          .thenReturn(false);
       when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
       when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
           .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
@@ -542,10 +516,6 @@ class ProvisionTreasuryKeyServiceTest {
 
   private void primeSuccessfulMocks(Optional<TreasuryWallet> existing) {
     when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(existing);
-    if (existing.isEmpty()) {
-      when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
-          .thenReturn(false);
-    }
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
         .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
