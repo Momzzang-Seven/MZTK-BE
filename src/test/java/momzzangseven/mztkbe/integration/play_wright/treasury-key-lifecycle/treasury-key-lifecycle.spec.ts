@@ -41,6 +41,9 @@ const ENV = {
   BACKEND_URL: process.env.BACKEND_URL ?? "http://127.0.0.1:8080",
   TREASURY_E2E_PRIVATE_KEY: process.env.TREASURY_E2E_PRIVATE_KEY ?? "",
   TREASURY_E2E_EXPECTED_ADDRESS: (process.env.TREASURY_E2E_EXPECTED_ADDRESS ?? "").toLowerCase(),
+  // MOM-444 rotation 검증 ([P-MOM444-2]) 전용 두 번째 키 페어. 다른 시나리오는 KEY_1 만 사용.
+  TREASURY_E2E_PRIVATE_KEY_2: process.env.TREASURY_E2E_PRIVATE_KEY_2 ?? "",
+  TREASURY_E2E_EXPECTED_ADDRESS_2: (process.env.TREASURY_E2E_EXPECTED_ADDRESS_2 ?? "").toLowerCase(),
   DB_HOST: process.env.DB_HOST ?? "localhost",
   DB_PORT: Number.parseInt(process.env.DB_PORT ?? "5432", 10),
   DB_NAME: process.env.DB_NAME ?? "mztk_dev",
@@ -51,6 +54,7 @@ const ENV = {
 
 const REWARD_ALIAS = "reward-treasury";
 const OTHER_ALIAS = "pending-treasury"; // for [P-10]
+const SPONSOR_ALIAS = "sponsor-treasury"; // for [P-MOM444-1] 공유 운영지갑
 const PROVISION_PENDING_DELETION_DAYS = 7; // AWS 최소값
 
 const db = ENV.DATABASE_URL
@@ -203,24 +207,29 @@ async function fullCleanup(): Promise<void> {
   for (const row of r.rows) if (row.kms_key_id) trackedKmsKeys.add(row.kms_key_id);
 
   // 2) DB row 일괄 삭제
-  await db.query("DELETE FROM web3_treasury_kms_audits WHERE wallet_alias IN ($1, $2)", [
-    REWARD_ALIAS,
-    OTHER_ALIAS,
-  ]);
-  await db.query("DELETE FROM web3_treasury_wallets WHERE wallet_alias IN ($1, $2)", [
-    REWARD_ALIAS,
-    OTHER_ALIAS,
-  ]);
+  await db.query(
+    "DELETE FROM web3_treasury_kms_audits WHERE wallet_alias IN ($1, $2, $3)",
+    [REWARD_ALIAS, OTHER_ALIAS, SPONSOR_ALIAS]
+  );
+  await db.query(
+    "DELETE FROM web3_treasury_wallets WHERE wallet_alias IN ($1, $2, $3)",
+    [REWARD_ALIAS, OTHER_ALIAS, SPONSOR_ALIAS]
+  );
+  const provisionAddressesToWipe = [ENV.TREASURY_E2E_EXPECTED_ADDRESS];
+  if (ENV.TREASURY_E2E_EXPECTED_ADDRESS_2) {
+    provisionAddressesToWipe.push(ENV.TREASURY_E2E_EXPECTED_ADDRESS_2);
+  }
   await db.query(
     `DELETE FROM web3_treasury_provision_audits
        WHERE treasury_address IS NULL
-          OR lower(treasury_address) = lower($1)`,
-    [ENV.TREASURY_E2E_EXPECTED_ADDRESS]
+          OR lower(treasury_address) = ANY($1::text[])`,
+    [provisionAddressesToWipe]
   );
 
-  // 3) KMS alias 정리 (둘 다)
+  // 3) KMS alias 정리 (셋 다)
   kmsDeleteAliasIfExists(REWARD_ALIAS);
   kmsDeleteAliasIfExists(OTHER_ALIAS);
+  kmsDeleteAliasIfExists(SPONSOR_ALIAS);
 }
 
 /** afterAll: 추적된 모든 KMS 키를 7일 schedule-deletion. 이미 PENDING_DELETION 이면 무시. */
@@ -272,14 +281,28 @@ async function getKmsAudits(alias: string, action: string) {
   return rows;
 }
 
-async function provision(api: APIRequestContext) {
+type ProvisionOverrides = {
+  role?: "REWARD" | "SPONSOR" | "QNA_SIGNER";
+  privateKey?: string;
+  expectedAddress?: string;
+};
+
+async function provision(api: APIRequestContext, opts: ProvisionOverrides = {}) {
   return api.post(`${ENV.BACKEND_URL}/admin/web3/treasury-keys/provision`, {
     data: {
-      rawPrivateKey: ENV.TREASURY_E2E_PRIVATE_KEY,
-      role: "REWARD",
-      expectedAddress: ENV.TREASURY_E2E_EXPECTED_ADDRESS,
+      rawPrivateKey: opts.privateKey ?? ENV.TREASURY_E2E_PRIVATE_KEY,
+      role: opts.role ?? "REWARD",
+      expectedAddress: opts.expectedAddress ?? ENV.TREASURY_E2E_EXPECTED_ADDRESS,
     },
   });
+}
+
+async function disableWallet(api: APIRequestContext, alias: string) {
+  return api.post(`${ENV.BACKEND_URL}/admin/web3/treasury-keys/${alias}/disable`);
+}
+
+async function archiveWallet(api: APIRequestContext, alias: string) {
+  return api.post(`${ENV.BACKEND_URL}/admin/web3/treasury-keys/${alias}/archive`);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -608,56 +631,232 @@ test.describe("Treasury Provision API — Group B & C", () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // [MOM-444] action scenarios — pending Playwright run-config
+  // [MOM-444] action scenarios — 운영 KMS 회귀
   //
-  // 본 그룹은 MOM-444 의 새 비즈니스 동작 (공유 운영지갑 / rotation / archived
-  // re-provision / DISABLED reactivate / diff-addr → rotation 자동 라우팅) 을 운영
-  // KMS 경로에서 검증한다. 자동화하려면 다음 인프라가 필요하다:
-  //   1) 두 번째 raw 키 한 쌍 (TREASURY_E2E_PRIVATE_KEY_2 + EXPECTED_ADDRESS_2)
-  //   2) SPONSOR alias 청소 fixture
-  //   3) DISABLED/ARCHIVED 으로 전이시키는 endpoint 가 ENABLED 인 환경
+  // MOM-444 가 도입한 새 dispatch (C0+C0 공유지갑 / C5 reactivate / C6 archived
+  // re-provision / C7 rotation) 를 운영 KMS 경로에서 검증한다. Java E2E (Mock KMS)
+  // 가 비즈니스 로직 단위 회귀를 잡고, 본 그룹은 real `kms:UpdateAlias` /
+  // `kms:EnableKey` / `kms:DisableKey` / `kms:ScheduleKeyDeletion` 의 단조 동작을
+  // AWS 에 직접 호출해 검증한다.
   //
-  // 위 인프라가 갖춰지기 전까지 본 시나리오는 Java E2E (TreasuryKeyLifecycleE2ETest
-  // 의 Mom444ActionScenarios) 에서 PostgreSQL + Mock KMS 로 검증한다. 본 .spec 의
-  // 스킵 블록은 운영 KMS 회귀 mirror 의 형태와 의도를 박제해 두는 용도다.
+  // 기존 [P-10] / [P-11] 은 MOM-444 이후 의미가 바뀐 케이스로 동일 .spec 안에서
+  // 신규 동작 (P-10: 200 + 공유주소 허용, P-11: 200 + derived address overwrite
+  // C10 backfill) 으로 업데이트되어 있다. 본 그룹은 그 외 4개 dispatch 분기를 본다.
   //
-  // 기존 [P-10] / [P-11] 은 MOM-444 이후 의미가 바뀐 케이스로, 본 PR 안에서 신규
-  // 동작 (P-10: 200 + 공유주소 허용, P-11: 200 + derived address overwrite C10 backfill)
-  // 으로 업데이트했다.
+  // 옛 박제 5개 → 실제 4개로 통합: 옛 [P-MOM444-5] (diff-addr ACTIVE → C7 자동
+  // 라우팅) 는 [P-MOM444-2] 와 동일 dispatch 경로(C7 replaceKey + disposeOldKey=true)
+  // 이므로 [P-MOM444-2] 에 흡수.
   // ──────────────────────────────────────────────────────────────────────────
 
-  test.skip(
-    "[P-MOM444-1] 공유 운영지갑 — REWARD provision 후 동일 raw key 로 SPONSOR provision (C0+C0) — TODO require SPONSOR cleanup fixture",
-    async () => {
-      // 두 alias 모두 ACTIVE 로 동일 treasury_address 를 보유, 서로 다른 kms_key_id 를 가짐
-    }
-  );
+  test("[P-MOM444-1] 공유 운영지갑 — REWARD provision 후 동일 raw key 로 SPONSOR provision (C0+C0)", async () => {
+    await fullCleanup();
 
-  test.skip(
-    "[P-MOM444-2] Key rotation (C7) — 다른 raw key 로 동일 alias 재 provision, old key disable+schedule_deletion — TODO require TREASURY_E2E_PRIVATE_KEY_2",
-    async () => {
-      // 두 번째 prefunded key 가 필요. AFTER_COMMIT KMS_DISABLE / KMS_SCHEDULE_DELETION 발생 검증.
-    }
-  );
+    // Action 1: REWARD provision
+    const res1 = await provision(api);
+    expect(res1.status(), "[P-MOM444-1] REWARD HTTP").toBe(200);
+    const body1 = await res1.json();
+    expect(body1.data.kmsKeyId).toBeTruthy();
+    trackedKmsKeys.add(body1.data.kmsKeyId);
 
-  test.skip(
-    "[P-MOM444-3] ARCHIVED 에서 re-provision (C6) — 새 key, 기존 key 는 손대지 않음 — TODO require disable/archive endpoints in this prod profile",
-    async () => {
-      // disable + archive 후 동일 key 로 재 provision. 기존 kms 는 archive 시 이미 schedule 됨 → 추가 회수 없어야 함.
-    }
-  );
+    // Action 2: 동일 raw key 로 SPONSOR provision (공유 운영지갑)
+    const res2 = await provision(api, { role: "SPONSOR" });
+    expect(res2.status(), "[P-MOM444-1] SPONSOR HTTP").toBe(200);
+    const body2 = await res2.json();
+    expect(body2.data.kmsKeyId).toBeTruthy();
+    trackedKmsKeys.add(body2.data.kmsKeyId);
 
-  test.skip(
-    "[P-MOM444-4] DISABLED → reactivate (C5) — KMS_ENABLE audit + status ACTIVE — TODO require disable endpoint in this prod profile",
-    async () => {
-      // disable 후 동일 key 로 재 provision. AFTER_COMMIT 에서 enableKey + KMS_ENABLE audit success row.
-    }
-  );
+    // 두 row 가 동일 treasury_address 를 공유, 서로 다른 kms_key_id (1:1 invariant)
+    const reward = await getWalletRow(REWARD_ALIAS);
+    const sponsor = await getWalletRow(SPONSOR_ALIAS);
+    expect(reward, "[P-MOM444-1] REWARD row 생성").not.toBeNull();
+    expect(sponsor, "[P-MOM444-1] SPONSOR row 생성").not.toBeNull();
+    expect(String(reward.treasury_address).toLowerCase()).toBe(ENV.TREASURY_E2E_EXPECTED_ADDRESS);
+    expect(String(sponsor.treasury_address).toLowerCase()).toBe(
+      ENV.TREASURY_E2E_EXPECTED_ADDRESS
+    );
+    expect(reward.kms_key_id, "[P-MOM444-1] kms_key_id 는 alias 당 다름").not.toBe(
+      sponsor.kms_key_id
+    );
+    expect(reward.status).toBe("ACTIVE");
+    expect(sponsor.status).toBe("ACTIVE");
 
-  test.skip(
-    "[P-MOM444-5] diff address ACTIVE 에서 다른 key 로 provision 시 C7 자동 라우팅 — TODO require TREASURY_E2E_PRIVATE_KEY_2",
-    async () => {
-      // 이전엔 ADDRESS_MISMATCH 400, 이제는 200 (rotation 으로 라우팅).
-    }
-  );
+    // 두 alias 모두 각자 자기 키에 바인딩되어 ENABLED
+    const rewardAlias = kmsDescribeAlias(REWARD_ALIAS);
+    const sponsorAlias = kmsDescribeAlias(SPONSOR_ALIAS);
+    expect(rewardAlias?.keyId).toBe(reward.kms_key_id);
+    expect(sponsorAlias?.keyId).toBe(sponsor.kms_key_id);
+    expect(rewardAlias?.state).toBe("Enabled");
+    expect(sponsorAlias?.state).toBe("Enabled");
+  });
+
+  test("[P-MOM444-2] Key rotation (C7) — 다른 raw key 로 동일 alias 재 provision, old key disable+schedule_deletion", async () => {
+    test.skip(
+      !ENV.TREASURY_E2E_PRIVATE_KEY_2 || !ENV.TREASURY_E2E_EXPECTED_ADDRESS_2,
+      "TREASURY_E2E_PRIVATE_KEY_2 / EXPECTED_ADDRESS_2 누락 — rotation 검증 불가"
+    );
+    await fullCleanup();
+
+    // Setup: key1 으로 REWARD provision (alias→K_OLD ENABLED)
+    const setup = await provision(api);
+    expect(setup.status(), "[P-MOM444-2] setup HTTP").toBe(200);
+    const before = await getWalletRow(REWARD_ALIAS);
+    const oldKeyId: string = before.kms_key_id;
+    expect(oldKeyId).toBeTruthy();
+    trackedKmsKeys.add(oldKeyId);
+
+    // Action: key2 로 동일 REWARD alias 재 provision → C7 (replaceKey + disposeOldKey=true)
+    const res = await provision(api, {
+      privateKey: ENV.TREASURY_E2E_PRIVATE_KEY_2,
+      expectedAddress: ENV.TREASURY_E2E_EXPECTED_ADDRESS_2,
+    });
+    expect(res.status(), "[P-MOM444-2] rotation HTTP — 이전엔 ADDRESS_MISMATCH 400").toBe(200);
+    const body = await res.json();
+    const newKeyId: string = body.data.kmsKeyId;
+    expect(newKeyId).toBeTruthy();
+    expect(newKeyId).not.toBe(oldKeyId);
+    trackedKmsKeys.add(newKeyId);
+
+    // DB: row 의 kms_key_id 와 treasury_address 가 새 값으로 교체, status ACTIVE 유지
+    const after = await getWalletRow(REWARD_ALIAS);
+    expect(after.kms_key_id).toBe(newKeyId);
+    expect(String(after.treasury_address).toLowerCase()).toBe(
+      ENV.TREASURY_E2E_EXPECTED_ADDRESS_2
+    );
+    expect(after.status).toBe("ACTIVE");
+
+    // KMS: alias 가 새 키로 재바인딩
+    const aliasInfo = kmsDescribeAlias(REWARD_ALIAS);
+    expect(aliasInfo?.keyId).toBe(newKeyId);
+    expect(aliasInfo?.state).toBe("Enabled");
+
+    // KMS audits: 새 키에 대한 UPDATE_ALIAS + 옛 키에 대한 DISABLE + SCHEDULE_DELETION 성공 row
+    const updateAudits = await getKmsAudits(REWARD_ALIAS, "KMS_UPDATE_ALIAS");
+    expect(
+      updateAudits.find((a: any) => a.kms_key_id === newKeyId && a.success === true),
+      "[P-MOM444-2] UPDATE_ALIAS success for new key"
+    ).toBeTruthy();
+
+    const disableAudits = await getKmsAudits(REWARD_ALIAS, "KMS_DISABLE");
+    expect(
+      disableAudits.find((a: any) => a.kms_key_id === oldKeyId && a.success === true),
+      "[P-MOM444-2] DISABLE success for old key"
+    ).toBeTruthy();
+
+    const scheduleAudits = await getKmsAudits(REWARD_ALIAS, "KMS_SCHEDULE_DELETION");
+    expect(
+      scheduleAudits.find((a: any) => a.kms_key_id === oldKeyId && a.success === true),
+      "[P-MOM444-2] SCHEDULE_DELETION success for old key"
+    ).toBeTruthy();
+
+    // 옛 키 KMS 실제 상태 — Disabled 또는 PendingDeletion (handler 가 둘 다 시도)
+    const oldState = kmsDescribeKeyState(oldKeyId);
+    expect(
+      oldState === "Disabled" || oldState === "PendingDeletion",
+      `[P-MOM444-2] old key state=${oldState}`
+    ).toBeTruthy();
+  });
+
+  test("[P-MOM444-3] ARCHIVED → re-provision (C6) — 새 key, 기존 key 는 손대지 않음", async () => {
+    await fullCleanup();
+
+    // Setup: provision → disable → archive (기존 키는 archive 시 schedule_deletion 까지 적용됨)
+    expect((await provision(api)).status(), "[P-MOM444-3] setup provision").toBe(200);
+    const initial = await getWalletRow(REWARD_ALIAS);
+    const oldKeyId: string = initial.kms_key_id;
+    expect(oldKeyId).toBeTruthy();
+    trackedKmsKeys.add(oldKeyId);
+
+    expect((await disableWallet(api, REWARD_ALIAS)).status(), "[P-MOM444-3] disable").toBe(200);
+    expect((await archiveWallet(api, REWARD_ALIAS)).status(), "[P-MOM444-3] archive").toBe(200);
+
+    const archived = await getWalletRow(REWARD_ALIAS);
+    expect(archived.status, "[P-MOM444-3] row ARCHIVED").toBe("ARCHIVED");
+    expect(kmsDescribeKeyState(oldKeyId), "[P-MOM444-3] old key PendingDeletion").toBe(
+      "PendingDeletion"
+    );
+
+    // 옛 키에 대한 disable / schedule audit 개수 스냅샷 (re-provision 후 증가하면 안 됨)
+    const disableBefore = (await getKmsAudits(REWARD_ALIAS, "KMS_DISABLE")).filter(
+      (a: any) => a.kms_key_id === oldKeyId
+    ).length;
+    const scheduleBefore = (await getKmsAudits(REWARD_ALIAS, "KMS_SCHEDULE_DELETION")).filter(
+      (a: any) => a.kms_key_id === oldKeyId
+    ).length;
+
+    // Action: 동일 raw key 로 재 provision → C6 (replaceKey + disposeOldKey=false)
+    const res = await provision(api);
+    expect(res.status(), "[P-MOM444-3] re-provision HTTP").toBe(200);
+    const body = await res.json();
+    const newKeyId: string = body.data.kmsKeyId;
+    expect(newKeyId).toBeTruthy();
+    expect(newKeyId).not.toBe(oldKeyId);
+    trackedKmsKeys.add(newKeyId);
+
+    // DB: row 가 새 키로 부활, status ACTIVE, 주소는 동일
+    const reactivated = await getWalletRow(REWARD_ALIAS);
+    expect(reactivated.status).toBe("ACTIVE");
+    expect(reactivated.kms_key_id).toBe(newKeyId);
+    expect(String(reactivated.treasury_address).toLowerCase()).toBe(
+      ENV.TREASURY_E2E_EXPECTED_ADDRESS
+    );
+
+    // KMS: alias 가 새 키로 재바인딩, 옛 키는 PendingDeletion 그대로
+    const aliasInfo = kmsDescribeAlias(REWARD_ALIAS);
+    expect(aliasInfo?.keyId).toBe(newKeyId);
+    expect(aliasInfo?.state).toBe("Enabled");
+    expect(kmsDescribeKeyState(oldKeyId), "[P-MOM444-3] old key 그대로 PendingDeletion").toBe(
+      "PendingDeletion"
+    );
+
+    // 옛 키에 대한 추가 disable / schedule audit 없음 (disposeOldKey=false 분기)
+    const disableAfter = (await getKmsAudits(REWARD_ALIAS, "KMS_DISABLE")).filter(
+      (a: any) => a.kms_key_id === oldKeyId
+    ).length;
+    const scheduleAfter = (await getKmsAudits(REWARD_ALIAS, "KMS_SCHEDULE_DELETION")).filter(
+      (a: any) => a.kms_key_id === oldKeyId
+    ).length;
+    expect(disableAfter, "[P-MOM444-3] old key DISABLE 추가 없음").toBe(disableBefore);
+    expect(scheduleAfter, "[P-MOM444-3] old key SCHEDULE_DELETION 추가 없음").toBe(scheduleBefore);
+  });
+
+  test("[P-MOM444-4] DISABLED → reactivate (C5) — KMS_ENABLE + status ACTIVE", async () => {
+    await fullCleanup();
+
+    // Setup: provision → disable (같은 키가 alias 에 바인딩된 채 Disabled)
+    expect((await provision(api)).status(), "[P-MOM444-4] setup provision").toBe(200);
+    const initial = await getWalletRow(REWARD_ALIAS);
+    const sameKeyId: string = initial.kms_key_id;
+    expect(sameKeyId).toBeTruthy();
+    trackedKmsKeys.add(sameKeyId);
+
+    expect((await disableWallet(api, REWARD_ALIAS)).status(), "[P-MOM444-4] disable").toBe(200);
+    const disabled = await getWalletRow(REWARD_ALIAS);
+    expect(disabled.status).toBe("DISABLED");
+    expect(kmsDescribeKeyState(sameKeyId)).toBe("Disabled");
+
+    // Action: 동일 raw key 로 재 provision → C5 (reEnableSameKey)
+    const res = await provision(api);
+    expect(res.status(), "[P-MOM444-4] re-provision HTTP").toBe(200);
+
+    // DB: status ACTIVE 복구, kms_key_id 는 동일 (새 키로 교체 안 됨)
+    const reactivated = await getWalletRow(REWARD_ALIAS);
+    expect(reactivated.status).toBe("ACTIVE");
+    expect(reactivated.kms_key_id, "[P-MOM444-4] C5 는 같은 키 재사용").toBe(sameKeyId);
+    expect(String(reactivated.treasury_address).toLowerCase()).toBe(
+      ENV.TREASURY_E2E_EXPECTED_ADDRESS
+    );
+
+    // KMS: 동일 키가 다시 Enabled, alias 도 그대로
+    expect(kmsDescribeKeyState(sameKeyId), "[P-MOM444-4] key Enabled 로 복귀").toBe("Enabled");
+    const aliasInfo = kmsDescribeAlias(REWARD_ALIAS);
+    expect(aliasInfo?.keyId).toBe(sameKeyId);
+    expect(aliasInfo?.state).toBe("Enabled");
+
+    // MOM-444 가 새로 도입한 KMS_ENABLE 액션 — success audit row 가 같은 키에 대해 존재
+    const enableAudits = await getKmsAudits(REWARD_ALIAS, "KMS_ENABLE");
+    expect(
+      enableAudits.find((a: any) => a.kms_key_id === sameKeyId && a.success === true),
+      "[P-MOM444-4] KMS_ENABLE success row for same key"
+    ).toBeTruthy();
+  });
 });
