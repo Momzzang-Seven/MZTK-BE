@@ -569,4 +569,58 @@ test.describe("Treasury Provision API — Group B & C", () => {
     expect(aliasInfo?.keyId).toBe(kOld);
     expect(aliasInfo?.state).toBe("Enabled");
   });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [MOM-444] action scenarios — pending Playwright run-config
+  //
+  // 본 그룹은 MOM-444 의 새 비즈니스 동작 (공유 운영지갑 / rotation / archived
+  // re-provision / DISABLED reactivate / diff-addr → rotation 자동 라우팅) 을 운영
+  // KMS 경로에서 검증한다. 자동화하려면 다음 인프라가 필요하다:
+  //   1) 두 번째 raw 키 한 쌍 (TREASURY_E2E_PRIVATE_KEY_2 + EXPECTED_ADDRESS_2)
+  //   2) SPONSOR alias 청소 fixture
+  //   3) DISABLED/ARCHIVED 으로 전이시키는 endpoint 가 ENABLED 인 환경
+  //
+  // 위 인프라가 갖춰지기 전까지 본 시나리오는 Java E2E (TreasuryKeyLifecycleE2ETest
+  // 의 Mom444ActionScenarios) 에서 PostgreSQL + Mock KMS 로 검증한다. 본 .spec 의
+  // 스킵 블록은 운영 KMS 회귀 mirror 의 형태와 의도를 박제해 두는 용도다.
+  //
+  // 또한 기존 [P-10] / [P-11] 은 MOM-444 이후 의미가 바뀐 케이스다 — 별도 follow-up
+  // 티켓에서 신규 동작(P-10: 200 + 공유주소 허용 / P-11: 200 + derived address 가
+  // stored 를 덮어쓰는 C10 backfill)으로 업데이트해야 한다.
+  // ──────────────────────────────────────────────────────────────────────────
+
+  test.skip(
+    "[P-MOM444-1] 공유 운영지갑 — REWARD provision 후 동일 raw key 로 SPONSOR provision (C0+C0) — TODO require SPONSOR cleanup fixture",
+    async () => {
+      // 두 alias 모두 ACTIVE 로 동일 treasury_address 를 보유, 서로 다른 kms_key_id 를 가짐
+    }
+  );
+
+  test.skip(
+    "[P-MOM444-2] Key rotation (C7) — 다른 raw key 로 동일 alias 재 provision, old key disable+schedule_deletion — TODO require TREASURY_E2E_PRIVATE_KEY_2",
+    async () => {
+      // 두 번째 prefunded key 가 필요. AFTER_COMMIT KMS_DISABLE / KMS_SCHEDULE_DELETION 발생 검증.
+    }
+  );
+
+  test.skip(
+    "[P-MOM444-3] ARCHIVED 에서 re-provision (C6) — 새 key, 기존 key 는 손대지 않음 — TODO require disable/archive endpoints in this prod profile",
+    async () => {
+      // disable + archive 후 동일 key 로 재 provision. 기존 kms 는 archive 시 이미 schedule 됨 → 추가 회수 없어야 함.
+    }
+  );
+
+  test.skip(
+    "[P-MOM444-4] DISABLED → reactivate (C5) — KMS_ENABLE audit + status ACTIVE — TODO require disable endpoint in this prod profile",
+    async () => {
+      // disable 후 동일 key 로 재 provision. AFTER_COMMIT 에서 enableKey + KMS_ENABLE audit success row.
+    }
+  );
+
+  test.skip(
+    "[P-MOM444-5] diff address ACTIVE 에서 다른 key 로 provision 시 C7 자동 라우팅 — TODO require TREASURY_E2E_PRIVATE_KEY_2",
+    async () => {
+      // 이전엔 ADDRESS_MISMATCH 400, 이제는 200 (rotation 으로 라우팅).
+    }
+  );
 });
