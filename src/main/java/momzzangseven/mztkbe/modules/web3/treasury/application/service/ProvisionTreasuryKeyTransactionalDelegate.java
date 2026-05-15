@@ -54,6 +54,12 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
    * Acquire row lock, dispatch to one of five actions, save and publish event. Caller is
    * responsible for cleaning up {@code preMintedKeyId} when {@code attachedFlag} stays false on
    * return.
+   *
+   * <p>{@code failureAuditWritten} is set whenever the delegate (this method, its inner dispatch
+   * targets, or the registered rollback synchronizer) records a failure audit row. The outer
+   * service checks this flag in its catch block to avoid writing a second audit row for the same
+   * failure (e.g. C4 reject's {@code ALREADY_PROVISIONED} or the synchronizer's {@code
+   * TX_STATUS_UNKNOWN}).
    */
   @Transactional
   public ProvisionTreasuryKeyResult lockedCommit(
@@ -61,7 +67,8 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       String derivedAddress,
       String preMintedKeyId,
       AtomicBoolean attachedFlag,
-      AtomicBoolean cleanupInvoked) {
+      AtomicBoolean cleanupInvoked,
+      AtomicBoolean failureAuditWritten) {
 
     TreasuryRole role = command.role();
     String walletAlias = role.toAlias();
@@ -69,7 +76,14 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
 
     if (existingOpt.isEmpty()) {
       return freshProvision(
-          command, walletAlias, role, derivedAddress, preMintedKeyId, attachedFlag, cleanupInvoked);
+          command,
+          walletAlias,
+          role,
+          derivedAddress,
+          preMintedKeyId,
+          attachedFlag,
+          cleanupInvoked,
+          failureAuditWritten);
     }
 
     TreasuryWallet existing = existingOpt.get();
@@ -77,13 +91,21 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
 
     if (existing.getKmsKeyId() == null) {
       return backfill(
-          command, role, existing, derivedAddress, preMintedKeyId, attachedFlag, cleanupInvoked);
+          command,
+          role,
+          existing,
+          derivedAddress,
+          preMintedKeyId,
+          attachedFlag,
+          cleanupInvoked,
+          failureAuditWritten);
     }
 
     if (addressMatches) {
       switch (existing.getStatus()) {
         case ACTIVE:
-          return handleExistingProvisionedRow(command, existing, derivedAddress, role);
+          return handleExistingProvisionedRow(
+              command, existing, derivedAddress, role, failureAuditWritten);
         case DISABLED:
           return reEnableSameKey(command, existing, role);
         case ARCHIVED:
@@ -95,7 +117,8 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
               preMintedKeyId,
               false,
               attachedFlag,
-              cleanupInvoked);
+              cleanupInvoked,
+              failureAuditWritten);
         default:
           throw new IllegalStateException("Unsupported status: " + existing.getStatus());
       }
@@ -110,7 +133,8 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
         preMintedKeyId,
         disposeOldKey,
         attachedFlag,
-        cleanupInvoked);
+        cleanupInvoked,
+        failureAuditWritten);
   }
 
   private ProvisionTreasuryKeyResult freshProvision(
@@ -120,9 +144,14 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       String derivedAddress,
       String preMintedKeyId,
       AtomicBoolean attachedFlag,
-      AtomicBoolean cleanupInvoked) {
+      AtomicBoolean cleanupInvoked,
+      AtomicBoolean failureAuditWritten) {
     registerCleanupOnRollback(
-        preMintedKeyId, cleanupInvoked, command.operatorUserId(), derivedAddress);
+        preMintedKeyId,
+        cleanupInvoked,
+        failureAuditWritten,
+        command.operatorUserId(),
+        derivedAddress);
     TreasuryWallet wallet =
         TreasuryWallet.provision(walletAlias, preMintedKeyId, derivedAddress, role, clock);
     TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
@@ -140,9 +169,14 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       String derivedAddress,
       String preMintedKeyId,
       AtomicBoolean attachedFlag,
-      AtomicBoolean cleanupInvoked) {
+      AtomicBoolean cleanupInvoked,
+      AtomicBoolean failureAuditWritten) {
     registerCleanupOnRollback(
-        preMintedKeyId, cleanupInvoked, command.operatorUserId(), derivedAddress);
+        preMintedKeyId,
+        cleanupInvoked,
+        failureAuditWritten,
+        command.operatorUserId(),
+        derivedAddress);
     TreasuryWallet wallet =
         TreasuryWallet.backfill(existing, preMintedKeyId, derivedAddress, clock);
     TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
@@ -178,9 +212,14 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       String preMintedKeyId,
       boolean disposeOldKey,
       AtomicBoolean attachedFlag,
-      AtomicBoolean cleanupInvoked) {
+      AtomicBoolean cleanupInvoked,
+      AtomicBoolean failureAuditWritten) {
     registerCleanupOnRollback(
-        preMintedKeyId, cleanupInvoked, command.operatorUserId(), derivedAddress);
+        preMintedKeyId,
+        cleanupInvoked,
+        failureAuditWritten,
+        command.operatorUserId(),
+        derivedAddress);
     TreasuryWallet rotated =
         TreasuryWallet.replaceKey(existing, preMintedKeyId, derivedAddress, clock);
     TreasuryWallet saved = saveTreasuryWalletPort.save(rotated);
@@ -205,7 +244,8 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       ProvisionTreasuryKeyCommand command,
       TreasuryWallet existing,
       String derivedAddress,
-      TreasuryRole role) {
+      TreasuryRole role,
+      AtomicBoolean failureAuditWritten) {
     KmsKeyState aliasState = kmsKeyLifecyclePort.describeAliasTarget(existing.getWalletAlias());
     boolean needsAliasRepair =
         aliasState == KmsKeyState.UNAVAILABLE
@@ -214,6 +254,7 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
     if (!needsAliasRepair) {
       treasuryAuditRecorder.record(
           command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
+      failureAuditWritten.set(true);
       throw new TreasuryWalletAlreadyProvisionedException(
           "treasury wallet already provisioned for alias '" + existing.getWalletAlias() + "'");
     }
@@ -234,39 +275,54 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
   private void registerCleanupOnRollback(
       String createdKmsKeyId,
       AtomicBoolean cleanupInvoked,
+      AtomicBoolean failureAuditWritten,
       Long operatorUserId,
       String derivedAddress) {
     if (!TransactionSynchronizationManager.isSynchronizationActive()) {
       return;
     }
     TransactionSynchronizationManager.registerSynchronization(
-        new TransactionSynchronization() {
-          @Override
-          public void afterCompletion(int status) {
-            switch (status) {
-              case STATUS_COMMITTED:
-                return;
-              case STATUS_ROLLED_BACK:
-                if (cleanupInvoked.compareAndSet(false, true)) {
-                  log.warn(
-                      "Outer transaction rolled back; cleaning up KMS key={}", createdKmsKeyId);
-                  cleanupKmsKey(createdKmsKeyId);
-                }
-                return;
-              case STATUS_UNKNOWN:
-              default:
-                log.error(
-                    "Outer transaction status={} is not COMMITTED/ROLLED_BACK; skipping KMS"
-                        + " cleanup to avoid orphaning a possibly-committed wallet row."
-                        + " Operator must verify kmsKeyId={} state.",
-                    status,
-                    createdKmsKeyId);
-                cleanupInvoked.set(true);
-                treasuryAuditRecorder.record(
-                    operatorUserId, derivedAddress, false, "TX_STATUS_UNKNOWN");
+        buildCleanupSync(
+            createdKmsKeyId, cleanupInvoked, failureAuditWritten, operatorUserId, derivedAddress));
+  }
+
+  /**
+   * Factory for the rollback-cleanup synchronization. Extracted to package-private so unit tests
+   * can drive {@code afterCompletion(...)} directly without needing a real transaction context.
+   */
+  TransactionSynchronization buildCleanupSync(
+      String createdKmsKeyId,
+      AtomicBoolean cleanupInvoked,
+      AtomicBoolean failureAuditWritten,
+      Long operatorUserId,
+      String derivedAddress) {
+    return new TransactionSynchronization() {
+      @Override
+      public void afterCompletion(int status) {
+        switch (status) {
+          case STATUS_COMMITTED:
+            return;
+          case STATUS_ROLLED_BACK:
+            if (cleanupInvoked.compareAndSet(false, true)) {
+              log.warn("Outer transaction rolled back; cleaning up KMS key={}", createdKmsKeyId);
+              cleanupKmsKey(createdKmsKeyId);
             }
-          }
-        });
+            return;
+          case STATUS_UNKNOWN:
+          default:
+            log.error(
+                "Outer transaction status={} is not COMMITTED/ROLLED_BACK; skipping KMS"
+                    + " cleanup to avoid orphaning a possibly-committed wallet row."
+                    + " Operator must verify kmsKeyId={} state.",
+                status,
+                createdKmsKeyId);
+            cleanupInvoked.set(true);
+            treasuryAuditRecorder.record(
+                operatorUserId, derivedAddress, false, "TX_STATUS_UNKNOWN");
+            failureAuditWritten.set(true);
+        }
+      }
+    };
   }
 
   void cleanupKmsKey(String kmsKeyId) {

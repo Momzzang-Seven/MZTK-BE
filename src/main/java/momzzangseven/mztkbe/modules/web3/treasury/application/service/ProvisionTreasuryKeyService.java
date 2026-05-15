@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
-import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
@@ -83,18 +82,24 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     String preMintedKeyId = mintAndSanityCheck(command, derivedAddress);
     AtomicBoolean attachedFlag = new AtomicBoolean(false);
     AtomicBoolean cleanupInvoked = new AtomicBoolean(false);
+    AtomicBoolean failureAuditWritten = new AtomicBoolean(false);
 
     try {
       return delegate.lockedCommit(
-          command, derivedAddress, preMintedKeyId, attachedFlag, cleanupInvoked);
-    } catch (TreasuryWalletAlreadyProvisionedException alreadyProvisioned) {
-      // delegate already wrote a failure audit row with the legacy "ALREADY_PROVISIONED" reason.
-      // Rethrow without re-auditing to keep a single audit row per failed call and to preserve the
-      // human-readable failure_reason that operators rely on for filtering.
-      throw alreadyProvisioned;
+          command,
+          derivedAddress,
+          preMintedKeyId,
+          attachedFlag,
+          cleanupInvoked,
+          failureAuditWritten);
     } catch (RuntimeException e) {
-      treasuryAuditRecorder.record(
-          command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
+      // Skip the audit when the delegate (C4 reject path or STATUS_UNKNOWN synchronizer) already
+      // recorded a failure row for this call. Preserves the operator-friendly failure_reason
+      // string and prevents a second row with the bare exception class name.
+      if (failureAuditWritten.compareAndSet(false, true)) {
+        treasuryAuditRecorder.record(
+            command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
+      }
       throw e;
     } finally {
       if (!attachedFlag.get() && cleanupInvoked.compareAndSet(false, true)) {

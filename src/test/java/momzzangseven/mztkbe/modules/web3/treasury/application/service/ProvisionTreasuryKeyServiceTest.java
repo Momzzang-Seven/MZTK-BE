@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
@@ -44,6 +46,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.TransactionSystemException;
 import org.web3j.crypto.Credentials;
 
 @ExtendWith(MockitoExtension.class)
@@ -429,6 +432,50 @@ class ProvisionTreasuryKeyServiceTest {
     service.execute(command);
 
     verify(applicationEventPublisher).publishEvent(any(TreasuryWalletProvisionedEvent.class));
+  }
+
+  // ---------- audit de-dup (I1) ----------
+
+  /**
+   * Regression for the double-audit bug: when the delegate (or its rollback synchronizer) has
+   * already written a failure audit row and signalled that via {@code failureAuditWritten}, the
+   * outer catch block must not write a second row with the exception class name.
+   */
+  @Test
+  void outerCatch_skipsAudit_whenDelegateAlreadyAudited() {
+    stubKmsMintHappyPath();
+    ProvisionTreasuryKeyTransactionalDelegate spyDelegate = Mockito.spy(delegate);
+    Mockito.doAnswer(
+            inv -> {
+              AtomicBoolean failureAuditWritten = inv.getArgument(5);
+              failureAuditWritten.set(true);
+              throw new TransactionSystemException("commit returned STATUS_UNKNOWN");
+            })
+        .when(spyDelegate)
+        .lockedCommit(any(), anyString(), anyString(), any(), any(), any());
+    ProvisionTreasuryKeyService spyService =
+        new ProvisionTreasuryKeyService(
+            spyDelegate,
+            kmsKeyLifecyclePort,
+            kmsKeyMaterialWrapperPort,
+            signDigestPort,
+            treasuryAuditRecorder);
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+    assertThatThrownBy(() -> spyService.execute(command))
+        .isInstanceOf(TransactionSystemException.class);
+
+    // The outer catch must not write a second audit row for this call. The only acceptable
+    // invocation
+    // is the synchronizer's own row, which we simulated by setting the flag — the recorder mock
+    // here
+    // never sees it because we set the flag without delegating to the real recorder.
+    verify(treasuryAuditRecorder, never())
+        .record(eq(1L), anyString(), eq(false), eq("TransactionSystemException"));
+    // The pre-minted key cleanup must still run (outer finally), because attachedFlag stayed false.
+    verify(kmsKeyLifecyclePort, times(1)).disableKey("kms-key-id");
+    verify(kmsKeyLifecyclePort, times(1)).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
   }
 
   // ---------- helpers ----------
