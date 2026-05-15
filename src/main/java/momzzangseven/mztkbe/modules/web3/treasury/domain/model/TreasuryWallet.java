@@ -168,6 +168,37 @@ public class TreasuryWallet {
   }
 
   /**
+   * Factory used by the ReEnableSameKey action (MOM-444 / C5). Promotes a DISABLED row back to
+   * ACTIVE without swapping the KMS key. The KMS-side counterpart is a single {@code enableKey}
+   * call published via {@code TreasuryWalletReactivatedEvent}.
+   *
+   * @param existing must have {@code status == DISABLED} and {@code kmsKeyId != null}
+   * @param clock clock for {@code updatedAt}
+   * @return a wallet ready to be {@code save()}d as an UPDATE
+   * @throws TreasuryWalletStateException if status is not DISABLED or kmsKeyId is null
+   */
+  public static TreasuryWallet reEnable(TreasuryWallet existing, Clock clock) {
+    Objects.requireNonNull(existing, "existing must not be null");
+    Objects.requireNonNull(clock, "clock must not be null");
+    if (existing.kmsKeyId == null) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '" + existing.walletAlias + "' has no kmsKeyId — reEnable rejected");
+    }
+    if (existing.status != TreasuryWalletStatus.DISABLED) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '"
+              + existing.walletAlias
+              + "' cannot be re-enabled from status "
+              + existing.status);
+    }
+    return existing.toBuilder()
+        .status(TreasuryWalletStatus.ACTIVE)
+        .disabledAt(null)
+        .updatedAt(LocalDateTime.now(clock))
+        .build();
+  }
+
+  /**
    * Transition {@link TreasuryWalletStatus#ACTIVE} → {@link TreasuryWalletStatus#DISABLED} and
    * stamp {@code disabledAt}.
    *

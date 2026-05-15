@@ -656,4 +656,58 @@ class TreasuryWalletTest {
           .isInstanceOf(NullPointerException.class);
     }
   }
+
+  // =========================================================================
+  // Section H — reEnable factory (MOM-444)
+  // =========================================================================
+
+  @Nested
+  @DisplayName("H. reEnable factory")
+  class ReEnableFactory {
+
+    @Test
+    @DisplayName("DISABLED → ACTIVE 로 전이, disabledAt null, kmsKeyId/address 불변")
+    void reEnable_fromDisabled_promotesToActiveAndClearsDisabledAt() {
+      TreasuryWallet disabled = activeWallet().disable(LATER_CLOCK);
+
+      TreasuryWallet reactivated = TreasuryWallet.reEnable(disabled, LATER_CLOCK);
+
+      assertThat(reactivated.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+      assertThat(reactivated.getDisabledAt()).isNull();
+      assertThat(reactivated.getKmsKeyId()).isEqualTo(disabled.getKmsKeyId());
+      assertThat(reactivated.getWalletAddress()).isEqualTo(disabled.getWalletAddress());
+      assertThat(reactivated.getUpdatedAt()).isEqualTo(LATER_NOW);
+    }
+
+    @Test
+    @DisplayName("ACTIVE status 는 거부")
+    void reEnable_rejectsActive() {
+      TreasuryWallet active = activeWallet();
+
+      assertThatThrownBy(() -> TreasuryWallet.reEnable(active, LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("ARCHIVED status 는 거부 (replaceKey 사용해야 함)")
+    void reEnable_rejectsArchived() {
+      TreasuryWallet archived = activeWallet().disable(LATER_CLOCK).archive(LATER_CLOCK);
+
+      assertThatThrownBy(() -> TreasuryWallet.reEnable(archived, LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("ARCHIVED");
+    }
+
+    @Test
+    @DisplayName("existing.kmsKeyId == null 은 거부")
+    void reEnable_rejectsNullKmsKeyId() {
+      TreasuryWallet legacy =
+          activeWallet().disable(LATER_CLOCK).toBuilder().kmsKeyId(null).build();
+
+      assertThatThrownBy(() -> TreasuryWallet.reEnable(legacy, LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("no kmsKeyId");
+    }
+  }
 }
