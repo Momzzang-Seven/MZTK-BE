@@ -149,7 +149,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
 
       TreasuryWallet wallet =
           existing.isPresent()
-              ? TreasuryWallet.backfill(existing.get(), kmsKeyId, clock)
+              ? TreasuryWallet.backfill(existing.get(), kmsKeyId, derivedAddress, clock)
               : TreasuryWallet.provision(walletAlias, kmsKeyId, derivedAddress, role, clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
 
