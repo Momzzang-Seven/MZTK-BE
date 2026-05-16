@@ -103,7 +103,7 @@ public record MarketplaceEscrowExecutionPayload(
         pendingAttemptToken,
         targetTerminalStatus,
         callTarget,
-        callData,
+        null,
         tokenMovement,
         null,
         null);

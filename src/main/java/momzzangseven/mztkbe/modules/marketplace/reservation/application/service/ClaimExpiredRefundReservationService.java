@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
-import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -262,7 +261,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
             ? payment.tokenAddress()
             : reservation.getTokenAddress(),
         reservation.getPriceBaseUnits() == null
-            ? BigInteger.valueOf(reservation.getBookedPriceAmount()).toString()
+            ? payment.priceBaseUnits(reservation.getBookedPriceAmount()).toString()
             : reservation.getPriceBaseUnits(),
         reservation.getBookedPriceAmount(),
         reservation.sessionEndAt(),

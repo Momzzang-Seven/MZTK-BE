@@ -348,6 +348,9 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_TRAINER")
                     .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/reservations/*/reject")
                     .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(
+                        HttpMethod.POST, "/marketplace/trainer/reservations/*/web3/recover")
+                    .hasAuthority("ROLE_TRAINER")
 
                     // --- Internal Endpoints ---
 

@@ -177,6 +177,9 @@ class ReservationTest {
     assertThat(purchasePending.getCurrentExecutionIntentPublicId()).isEqualTo("intent-public-id");
     assertThat(locked.getStatus()).isEqualTo(ReservationStatus.PENDING);
     assertThat(locked.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(locked.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(locked.getPendingAction()).isNull();
+    assertThat(locked.getPendingAttemptToken()).isNull();
     assertThat(locked.getContractDeadlineEpochSeconds()).isEqualTo(1_800_000_000L);
     assertThat(locked.getContractDeadlineAt()).isEqualTo(LocalDateTime.of(2027, 1, 15, 8, 0));
     assertThat(locked.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 0, 0))).isFalse();
@@ -203,7 +206,55 @@ class ReservationTest {
     assertThat(refunded.getStatus()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
     assertThat(refunded.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.DEADLINE_REFUNDED);
     assertThat(refunded.getTxHash()).isEqualTo("refund-tx");
+    assertThat(refunded.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(refunded.getPendingAction()).isNull();
+    assertThat(refunded.getPendingAttemptToken()).isNull();
     assertThat(refunded.getStatus().isTerminal()).isTrue();
+  }
+
+  @Test
+  @DisplayName("confirmed cancel/reject/confirm transitions close pending execution state")
+  void confirmedTerminalTransitions_clearPendingExecutionState() {
+    Reservation locked =
+        createDefaultPendingReservation()
+            .beginPurchasePreparing("key", "payload", LocalDateTime.of(2026, 5, 16, 10, 0))
+            .bindPurchaseIntent("purchase-intent")
+            .markPurchaseConfirmedLocked(100L, LocalDateTime.of(2026, 5, 16, 9, 0));
+
+    Reservation cancelled =
+        locked
+            .beginCancelPending("cancel-token")
+            .bindPendingExecutionIntent("cancel-intent")
+            .cancelByUser("cancel-tx");
+    Reservation rejected =
+        locked
+            .beginRejectPending("reject-token", "일정 불가")
+            .bindPendingExecutionIntent("reject-intent")
+            .reject("reject-tx", "일정 불가");
+    Reservation settled =
+        locked
+            .approve()
+            .beginConfirmPending("confirm-token")
+            .bindPendingExecutionIntent("confirm-intent")
+            .complete("confirm-tx");
+
+    assertTerminalEscrowClosed(cancelled, ReservationStatus.USER_CANCELLED);
+    assertThat(cancelled.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertTerminalEscrowClosed(rejected, ReservationStatus.REJECTED);
+    assertThat(rejected.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertThat(rejected.getRejectionReason()).isEqualTo("일정 불가");
+    assertTerminalEscrowClosed(settled, ReservationStatus.SETTLED);
+    assertThat(settled.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.SETTLED);
+  }
+
+  private void assertTerminalEscrowClosed(
+      Reservation reservation, ReservationStatus expectedStatus) {
+    assertThat(reservation.getStatus()).isEqualTo(expectedStatus);
+    assertThat(reservation.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(reservation.getPendingAction()).isNull();
+    assertThat(reservation.getPendingAttemptToken()).isNull();
+    assertThat(reservation.getPriorStatus()).isNull();
+    assertThat(reservation.getPriorEscrowStatus()).isNull();
   }
 
   @Test

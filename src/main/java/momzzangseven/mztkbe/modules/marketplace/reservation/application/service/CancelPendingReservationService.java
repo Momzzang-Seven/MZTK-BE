@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
-import java.math.BigInteger;
 import java.util.Locale;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +19,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
@@ -156,6 +156,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Cannot cancel reservation in status: " + reservation.getStatus());
     }
+    validateUserEscrowLocked(reservation, "cancel");
 
     Reservation pending =
         saveReservationPort.save(reservation.beginCancelPending(UUID.randomUUID().toString()));
@@ -230,6 +231,17 @@ public class CancelPendingReservationService implements CancelPendingReservation
     }
   }
 
+  private void validateUserEscrowLocked(Reservation reservation, String action) {
+    if (!reservation.getEffectiveEscrowFlow().isUserEip7702()
+        || reservation.getEffectiveEscrowStatus() != ReservationEscrowStatus.LOCKED) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Cannot "
+              + action
+              + " reservation before marketplace user escrow is confirmed and locked");
+    }
+  }
+
   private boolean equalsNullable(Object left, Object right) {
     return left == null ? right == null : left.equals(right);
   }
@@ -271,7 +283,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
             ? payment.tokenAddress()
             : reservation.getTokenAddress(),
         reservation.getPriceBaseUnits() == null
-            ? BigInteger.valueOf(reservation.getBookedPriceAmount()).toString()
+            ? payment.priceBaseUnits(reservation.getBookedPriceAmount()).toString()
             : reservation.getPriceBaseUnits(),
         reservation.getBookedPriceAmount(),
         reservation.sessionEndAt(),

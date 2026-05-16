@@ -206,7 +206,12 @@ public class Reservation {
    */
   public Reservation cancelByUser(String cancelTxHash) {
     guardTransition(ReservationStatus.USER_CANCELLED);
-    return toBuilder().status(ReservationStatus.USER_CANCELLED).txHash(cancelTxHash).build();
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.USER_CANCELLED)
+                .escrowStatus(ReservationEscrowStatus.REFUNDED)
+                .txHash(cancelTxHash))
+        .build();
   }
 
   /**
@@ -218,10 +223,12 @@ public class Reservation {
    */
   public Reservation reject(String rejectionTxHash, String rejectionReason) {
     guardTransition(ReservationStatus.REJECTED);
-    return toBuilder()
-        .status(ReservationStatus.REJECTED)
-        .txHash(rejectionTxHash)
-        .rejectionReason(rejectionReason)
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.REJECTED)
+                .escrowStatus(ReservationEscrowStatus.REFUNDED)
+                .txHash(rejectionTxHash)
+                .rejectionReason(rejectionReason))
         .build();
   }
 
@@ -243,7 +250,12 @@ public class Reservation {
    */
   public Reservation complete(String confirmTxHash) {
     guardTransition(ReservationStatus.SETTLED);
-    return toBuilder().status(ReservationStatus.SETTLED).txHash(confirmTxHash).build();
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.SETTLED)
+                .escrowStatus(ReservationEscrowStatus.SETTLED)
+                .txHash(confirmTxHash))
+        .build();
   }
 
   /**
@@ -408,8 +420,14 @@ public class Reservation {
         .escrowStatus(ReservationEscrowStatus.LOCKED)
         .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
         .contractDeadlineAt(contractDeadlineAt)
+        .currentExecutionIntentPublicId(null)
         .pendingAction(null)
         .pendingAttemptToken(null)
+        .pendingExpectedVersion(null)
+        .pendingExpectedStatus(null)
+        .pendingExpectedEscrowStatus(null)
+        .priorStatus(null)
+        .priorEscrowStatus(null)
         .build();
   }
 
@@ -421,8 +439,14 @@ public class Reservation {
         .escrowStatus(ReservationEscrowStatus.DEADLINE_RECOVERY_REQUIRED)
         .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
         .contractDeadlineAt(contractDeadlineAt)
+        .currentExecutionIntentPublicId(null)
         .pendingAction(null)
         .pendingAttemptToken(null)
+        .pendingExpectedVersion(null)
+        .pendingExpectedStatus(null)
+        .pendingExpectedEscrowStatus(null)
+        .priorStatus(null)
+        .priorEscrowStatus(null)
         .build();
   }
 
@@ -452,8 +476,12 @@ public class Reservation {
         .escrowStatus(nextEscrowStatus)
         .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
         .contractDeadlineAt(contractDeadlineAt)
+        .currentExecutionIntentPublicId(null)
         .pendingAction(null)
         .pendingAttemptToken(null)
+        .pendingExpectedVersion(null)
+        .pendingExpectedStatus(null)
+        .pendingExpectedEscrowStatus(null)
         .priorStatus(null)
         .priorEscrowStatus(null)
         .build();
@@ -479,8 +507,14 @@ public class Reservation {
         .escrowStatus(ReservationEscrowStatus.DEADLINE_SYNC_REQUIRED)
         .escrowFailureCode(failureCode)
         .escrowFailureMessage(failureMessage)
+        .currentExecutionIntentPublicId(null)
         .pendingAction(null)
         .pendingAttemptToken(null)
+        .pendingExpectedVersion(null)
+        .pendingExpectedStatus(null)
+        .pendingExpectedEscrowStatus(null)
+        .priorStatus(null)
+        .priorEscrowStatus(null)
         .build();
   }
 
@@ -501,8 +535,12 @@ public class Reservation {
         .txHash(txHash)
         .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
         .contractDeadlineAt(contractDeadlineAt)
+        .currentExecutionIntentPublicId(null)
         .pendingAction(null)
         .pendingAttemptToken(null)
+        .pendingExpectedVersion(null)
+        .pendingExpectedStatus(null)
+        .pendingExpectedEscrowStatus(null)
         .priorStatus(null)
         .priorEscrowStatus(null)
         .build();
@@ -510,9 +548,10 @@ public class Reservation {
 
   public Reservation markDeadlineRefundAvailable() {
     guardTransition(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
-    return toBuilder()
-        .status(ReservationStatus.DEADLINE_REFUND_AVAILABLE)
-        .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE)
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.DEADLINE_REFUND_AVAILABLE)
+                .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE))
         .build();
   }
 
@@ -538,36 +577,31 @@ public class Reservation {
 
   public Reservation markDeadlineRefunded(String txHash) {
     guardTransition(ReservationStatus.DEADLINE_REFUNDED);
-    return toBuilder()
-        .status(ReservationStatus.DEADLINE_REFUNDED)
-        .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUNDED)
-        .txHash(txHash)
-        .pendingAction(null)
-        .pendingAttemptToken(null)
-        .priorStatus(null)
-        .priorEscrowStatus(null)
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.DEADLINE_REFUNDED)
+                .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUNDED)
+                .txHash(txHash))
         .build();
   }
 
   public Reservation markHoldExpired() {
     guardTransition(ReservationStatus.HOLD_EXPIRED);
-    return toBuilder()
-        .status(ReservationStatus.HOLD_EXPIRED)
-        .escrowStatus(ReservationEscrowStatus.HOLD_EXPIRED)
-        .pendingAction(null)
-        .pendingAttemptToken(null)
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.HOLD_EXPIRED)
+                .escrowStatus(ReservationEscrowStatus.HOLD_EXPIRED))
         .build();
   }
 
   public Reservation markPaymentFailed(String failureCode, String failureMessage) {
     guardTransition(ReservationStatus.PAYMENT_FAILED);
-    return toBuilder()
-        .status(ReservationStatus.PAYMENT_FAILED)
-        .escrowStatus(ReservationEscrowStatus.PAYMENT_FAILED)
-        .escrowFailureCode(failureCode)
-        .escrowFailureMessage(failureMessage)
-        .pendingAction(null)
-        .pendingAttemptToken(null)
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.PAYMENT_FAILED)
+                .escrowStatus(ReservationEscrowStatus.PAYMENT_FAILED)
+                .escrowFailureCode(failureCode)
+                .escrowFailureMessage(failureMessage))
         .build();
   }
 
@@ -584,10 +618,15 @@ public class Reservation {
   }
 
   public Reservation beginRejectPending(String pendingAttemptToken) {
+    return beginRejectPending(pendingAttemptToken, null);
+  }
+
+  public Reservation beginRejectPending(String pendingAttemptToken, String rejectionReason) {
     guardTransition(ReservationStatus.REJECT_PENDING);
     return toBuilder()
         .status(ReservationStatus.REJECT_PENDING)
         .escrowStatus(ReservationEscrowStatus.REJECT_PENDING)
+        .rejectionReason(rejectionReason)
         .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
         .pendingAttemptToken(pendingAttemptToken)
         .priorStatus(ReservationStatus.PENDING)
@@ -614,15 +653,22 @@ public class Reservation {
           "Prior status is not available for rollback from " + status);
     }
     guardTransition(priorStatus);
-    return toBuilder()
-        .status(priorStatus)
-        .escrowStatus(priorEscrowStatus)
-        .currentExecutionIntentPublicId(null)
-        .pendingAction(null)
-        .pendingAttemptToken(null)
-        .priorStatus(null)
-        .priorEscrowStatus(null)
-        .build();
+    ReservationBuilder builder =
+        toBuilder()
+            .status(priorStatus)
+            .escrowStatus(priorEscrowStatus)
+            .currentExecutionIntentPublicId(null)
+            .pendingAction(null)
+            .pendingAttemptToken(null)
+            .pendingExpectedVersion(null)
+            .pendingExpectedStatus(null)
+            .pendingExpectedEscrowStatus(null)
+            .priorStatus(null)
+            .priorEscrowStatus(null);
+    if (pendingAction == ReservationEscrowAction.TRAINER_REJECT) {
+      builder.rejectionReason(null);
+    }
+    return builder.build();
   }
 
   public boolean isLegacySchedulerEligibleAt(LocalDateTime now) {
@@ -653,5 +699,17 @@ public class Reservation {
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Cannot transition from " + status + " to " + next);
     }
+  }
+
+  private ReservationBuilder clearPendingExecutionState(ReservationBuilder builder) {
+    return builder
+        .currentExecutionIntentPublicId(null)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .pendingExpectedVersion(null)
+        .pendingExpectedStatus(null)
+        .pendingExpectedEscrowStatus(null)
+        .priorStatus(null)
+        .priorEscrowStatus(null);
   }
 }

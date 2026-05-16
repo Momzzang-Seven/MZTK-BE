@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
-import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -19,6 +18,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Reco
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
@@ -33,7 +33,9 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Resumes or recreates user-owned marketplace execution intents for app re-entry. */
 @Slf4j
@@ -46,17 +48,20 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
+  private final CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   private final LoadReservationExecutionWritePort loadReservationExecutionWritePort;
   private final ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   private final LoadReservationWalletPort loadReservationWalletPort;
   private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   private final Clock clock;
+  private TransactionOperations transactionOperations;
 
   public RecoverReservationEscrowService(
       LoadReservationPort loadReservationPort,
       SaveReservationPort saveReservationPort,
       @Nullable PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
+      @Nullable CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
       @Nullable LoadReservationExecutionWritePort loadReservationExecutionWritePort,
       @Nullable ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
       @Nullable LoadReservationWalletPort loadReservationWalletPort,
@@ -69,6 +74,10 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
         prepareReservationEscrowExecutionPort == null
             ? DisabledReservationWeb3PortFactory.prepareExecution()
             : prepareReservationEscrowExecutionPort;
+    this.cancelReservationEscrowExecutionPort =
+        cancelReservationEscrowExecutionPort == null
+            ? DisabledReservationWeb3PortFactory.cancelExecution()
+            : cancelReservationEscrowExecutionPort;
     this.loadReservationExecutionWritePort =
         loadReservationExecutionWritePort == null
             ? DisabledReservationWeb3PortFactory.executionWrite()
@@ -92,17 +101,23 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     this.clock = clock;
   }
 
+  @org.springframework.beans.factory.annotation.Autowired
+  void setTransactionManager(PlatformTransactionManager transactionManager) {
+    this.transactionOperations = new TransactionTemplate(transactionManager);
+  }
+
   @Override
-  @Transactional
   public RecoverReservationEscrowResult execute(RecoverReservationEscrowCommand command) {
     Reservation reservation =
-        loadReservationPort
-            .findByIdWithLock(command.reservationId())
-            .orElseThrow(
-                () ->
-                    new BusinessException(
-                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
-                        "Reservation not found: " + command.reservationId()));
+        runInTransaction(
+            () ->
+                loadReservationPort
+                    .findByIdWithLock(command.reservationId())
+                    .orElseThrow(
+                        () ->
+                            new BusinessException(
+                                ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
+                                "Reservation not found: " + command.reservationId())));
     RecoveryFlow flow = resolveFlow(reservation);
     validateActor(reservation, command.requesterId(), flow);
 
@@ -251,7 +266,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
   private RecoverReservationEscrowResult prepareRecovery(
       Long requesterId, Reservation reservation, RecoveryFlow flow) {
-    Reservation current = ensurePreparedLocalState(reservation, flow);
+    Reservation current = runInTransaction(() -> ensurePreparedLocalState(reservation, flow));
     PrepareReservationEscrowResult prepared =
         switch (flow.action()) {
           case PURCHASE ->
@@ -272,7 +287,13 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
                   commandFor(
                       current, "BUYER", requesterId, current.getTrainerId(), "DEADLINE_REFUNDED"));
         };
-    Reservation saved = saveReservationPort.save(bind(current, flow, prepared));
+    Reservation saved;
+    try {
+      saved = runInTransaction(() -> bindPreparedRecovery(current, flow, prepared));
+    } catch (RuntimeException e) {
+      compensateBindFailure(current, flow, prepared, e);
+      throw e;
+    }
     log.info(
         "Reservation recovery intent prepared: id={}, requesterId={}, action={}, intentId={}",
         saved.getId(),
@@ -280,6 +301,80 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
         flow.action(),
         prepared.web3().executionIntent().id());
     return result(saved, prepared.web3());
+  }
+
+  private Reservation bindPreparedRecovery(
+      Reservation expected, RecoveryFlow flow, PrepareReservationEscrowResult prepared) {
+    Reservation current =
+        loadReservationPort
+            .findByIdWithLock(expected.getId())
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
+                        "Reservation not found: " + expected.getId()));
+    validateRecoveryBindSnapshot(current, expected);
+    return saveReservationPort.save(bind(current, flow, prepared));
+  }
+
+  private void validateRecoveryBindSnapshot(Reservation current, Reservation expected) {
+    if (current.getStatus() != expected.getStatus()
+        || !equalsNullable(current.getPendingAttemptToken(), expected.getPendingAttemptToken())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "marketplace reservation state changed before recovered execution intent bind");
+    }
+  }
+
+  private void compensateBindFailure(
+      Reservation expected,
+      RecoveryFlow flow,
+      PrepareReservationEscrowResult prepared,
+      RuntimeException cause) {
+    if (cancelSignablePreparedIntent(prepared, cause)) {
+      rollbackRecoveredPending(expected, flow, cause);
+    }
+  }
+
+  private boolean cancelSignablePreparedIntent(
+      PrepareReservationEscrowResult prepared, RuntimeException cause) {
+    String executionIntentId = prepared.web3().executionIntent().id();
+    try {
+      return cancelReservationEscrowExecutionPort.cancelSignableIntent(
+          executionIntentId,
+          "MARKETPLACE_RECOVERY_BIND_FAILED",
+          cause.getMessage() == null ? "marketplace recovery bind failed" : cause.getMessage());
+    } catch (RuntimeException cancelFailure) {
+      log.warn(
+          "Failed to cancel marketplace recovery intent after Phase B bind failure: intentId={}",
+          executionIntentId,
+          cancelFailure);
+      return false;
+    }
+  }
+
+  private void rollbackRecoveredPending(
+      Reservation expected, RecoveryFlow flow, RuntimeException cause) {
+    runInTransaction(
+        () -> {
+          loadReservationPort
+              .findByIdWithLock(expected.getId())
+              .filter(
+                  current ->
+                      current.getStatus() == expected.getStatus()
+                          && equalsNullable(
+                              current.getPendingAttemptToken(), expected.getPendingAttemptToken()))
+              .ifPresent(
+                  current -> {
+                    Reservation rollback =
+                        flow.action() == RecoveryAction.PURCHASE
+                            ? current.markPaymentFailed(
+                                cause.getClass().getSimpleName(), cause.getMessage())
+                            : current.rollbackToPriorState();
+                    saveReservationPort.save(rollback);
+                  });
+          return null;
+        });
   }
 
   private Reservation ensurePreparedLocalState(Reservation reservation, RecoveryFlow flow) {
@@ -399,7 +494,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
             ? payment.tokenAddress()
             : reservation.getTokenAddress(),
         reservation.getPriceBaseUnits() == null
-            ? BigInteger.valueOf(reservation.getBookedPriceAmount()).toString()
+            ? payment.priceBaseUnits(reservation.getBookedPriceAmount()).toString()
             : reservation.getPriceBaseUnits(),
         reservation.getBookedPriceAmount(),
         reservation.sessionEndAt(),
@@ -439,6 +534,17 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
           ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
           "Reservation order key is missing and cannot be derived");
     }
+  }
+
+  private boolean equalsNullable(Object left, Object right) {
+    return left == null ? right == null : left.equals(right);
+  }
+
+  private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
+    if (transactionOperations == null) {
+      return supplier.get();
+    }
+    return transactionOperations.execute(status -> supplier.get());
   }
 
   private enum RecoveryAction {

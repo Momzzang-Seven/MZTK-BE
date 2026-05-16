@@ -187,6 +187,35 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
                     .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
   }
 
+  @Test
+  @DisplayName("payload hash는 signedAt/signature/callData 같은 volatile calldata material을 제외한다")
+  void build_payloadHash_excludesVolatileSignatureAndCallData() {
+    given(getActiveWalletAddressUseCase.execute(10L)).willReturn(Optional.of(BUYER));
+    given(eip7702ChainPort.loadPendingAccountNonce(BUYER)).willReturn(BigInteger.valueOf(7));
+    given(eip7702AuthorizationPort.buildSigningHashHex(10L, DELEGATE, BigInteger.valueOf(7)))
+        .willReturn("0xauthorizationHash");
+    given(signMarketplaceServerSigPort.sign(any()))
+        .willReturn(new MarketplaceServerSigResult(1_000L, signature((byte) 1), SIGNING_INSTANT))
+        .willReturn(
+            new MarketplaceServerSigResult(
+                1_001L, signature((byte) 2), SIGNING_INSTANT.plusSeconds(1)));
+    given(
+            buildMarketplaceEscrowCallDataPort.encode(
+                any(), any(), any(), any(), any(), anyLong(), any()))
+        .willReturn("0xcalldata1")
+        .willReturn("0xcalldata2");
+
+    MarketplaceExecutionDraft first =
+        sut.build(request(MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE));
+    MarketplaceExecutionDraft second =
+        sut.build(request(MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE));
+
+    assertThat(first.payloadHash()).isEqualTo(second.payloadHash());
+    assertThat(first.payloadSnapshotJson()).contains("\"callData\":\"0xcalldata1\"");
+    assertThat(second.payloadSnapshotJson()).contains("\"callData\":\"0xcalldata2\"");
+    assertThat(first.payloadSnapshotJson()).isNotEqualTo(second.payloadSnapshotJson());
+  }
+
   private MarketplaceEscrowExecutionRequest request(MarketplaceAllowanceStrategy strategy) {
     return request(MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, strategy);
   }
@@ -219,5 +248,11 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
         1_800L,
         "attempt-token",
         "PENDING");
+  }
+
+  private byte[] signature(byte fill) {
+    byte[] bytes = new byte[65];
+    java.util.Arrays.fill(bytes, fill);
+    return bytes;
   }
 }

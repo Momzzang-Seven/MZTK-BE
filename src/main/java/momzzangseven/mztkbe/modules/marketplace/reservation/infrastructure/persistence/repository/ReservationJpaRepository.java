@@ -86,16 +86,7 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "GROUP BY r.slotId")
   List<Object[]> countActiveBySlotIdIn(@Param("slotIds") List<Long> slotIds);
 
-  /**
-   * Same as {@link #countActiveBySlotId} but acquires a pessimistic write lock on matched rows.
-   *
-   * <p>Prevents concurrent INSERT race conditions during reservation creation. Must be called
-   * within an active transaction.
-   *
-   * @param slotId target slot ID
-   * @return active reservation count (PENDING + APPROVED)
-   */
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  /** Counts active reservations after the slot/date capacity key has been locked by the caller. */
   @Query(
       "SELECT COUNT(r) FROM ReservationEntity r "
           + "WHERE r.slotId = :slotId "

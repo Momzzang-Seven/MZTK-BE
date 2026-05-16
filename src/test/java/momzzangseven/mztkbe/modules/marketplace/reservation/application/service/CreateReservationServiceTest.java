@@ -94,6 +94,7 @@ class CreateReservationServiceTest {
       LocalDate.of(2024, 6, 3).with(java.time.temporal.TemporalAdjusters.next(DayOfWeek.MONDAY));
   private static final LocalTime START_TIME = LocalTime.of(10, 0);
   private static final int PRICE = 50_000;
+  private static final BigInteger PRICE_BASE_UNITS = new BigInteger("50000000000000000000000");
   private static final int CAPACITY = 3;
 
   private ClassSlot slot;
@@ -141,7 +142,7 @@ class CreateReservationServiceTest {
 
     command =
         new CreateReservationCommand(
-            USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, BigInteger.valueOf(PRICE));
+            USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, PRICE_BASE_UNITS);
   }
 
   @Nested
@@ -582,7 +583,12 @@ class CreateReservationServiceTest {
 
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
-      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      org.mockito.BDDMockito.willThrow(
+              new BusinessException(
+                  ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
+                  "signed amount does not match marketplace class price token base units"))
+          .given(precheckReservationPurchasePort)
+          .precheckPurchase(any());
 
       // when & then
       assertThatThrownBy(() -> sut.execute(wrongAmountCmd))
@@ -617,7 +623,7 @@ class CreateReservationServiceTest {
       LocalDate tuesday = MONDAY.plusDays(1);
       CreateReservationCommand wrongDayCmd =
           new CreateReservationCommand(
-              USER_ID, CLASS_ID, SLOT_ID, tuesday, START_TIME, null, BigInteger.valueOf(PRICE));
+              USER_ID, CLASS_ID, SLOT_ID, tuesday, START_TIME, null, PRICE_BASE_UNITS);
 
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
 
@@ -676,7 +682,7 @@ class CreateReservationServiceTest {
 
       CreateReservationCommand pastCmd =
           new CreateReservationCommand(
-              USER_ID, CLASS_ID, SLOT_ID, today, pastTime, null, BigInteger.valueOf(PRICE));
+              USER_ID, CLASS_ID, SLOT_ID, today, pastTime, null, PRICE_BASE_UNITS);
 
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(mondaySlot));
 
@@ -774,7 +780,7 @@ class CreateReservationServiceTest {
             String.valueOf(SLOT_ID),
             MONDAY.toString(),
             START_TIME.toString(),
-            BigInteger.valueOf(PRICE).toString(),
+            PRICE_BASE_UNITS.toString(),
             String.valueOf(TRAINER_ID),
             String.valueOf(PRICE)));
   }

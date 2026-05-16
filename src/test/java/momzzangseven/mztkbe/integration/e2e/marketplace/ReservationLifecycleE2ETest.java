@@ -164,7 +164,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
                       "reservationTime",
                       "10:00:00",
                       "signedAmount",
-                      50_000,
+                      tokenBaseUnits(50_000),
                       "delegationSignature",
                       "0x" + "a".repeat(130),
                       "executionSignature",
@@ -378,7 +378,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
                       "reservationTime",
                       "09:00:00",
                       "signedAmount",
-                      50_000,
+                      tokenBaseUnits(50_000),
                       "delegationSignature",
                       "0x" + "a".repeat(130),
                       "executionSignature",
@@ -416,7 +416,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
                       "reservationTime",
                       "09:00:00",
                       "signedAmount",
-                      99_999, // wrong amount
+                      tokenBaseUnits(99_999), // wrong amount
                       "delegationSignature",
                       "0x" + "a".repeat(130),
                       "executionSignature",
@@ -542,7 +542,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
                       "reservationTime",
                       "12:00:00",
                       "signedAmount",
-                      10_000,
+                      tokenBaseUnits(10_000),
                       "delegationSignature",
                       "0x" + "a".repeat(130),
                       "executionSignature",
@@ -881,7 +881,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
                     "reservationTime",
                     time,
                     "signedAmount",
-                    amount,
+                    tokenBaseUnits(amount),
                     "delegationSignature",
                     "0x" + "a".repeat(130),
                     "executionSignature",
@@ -937,6 +937,12 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
   private String walletFor(Long userId) {
     return String.format(Locale.ROOT, "0x%040x", userId);
+  }
+
+  private String tokenBaseUnits(long tokenAmount) {
+    return java.math.BigInteger.valueOf(tokenAmount)
+        .multiply(java.math.BigInteger.TEN.pow(18))
+        .toString();
   }
 
   private void assertDbStatus(long reservationId, String expectedStatus) {

@@ -58,7 +58,7 @@ import org.web3j.utils.Numeric;
  * <ol>
  *   <li>Slot x date x time cross-validation (pessimistic lock on slot)
  *   <li>Class is active
- *   <li>Price match (signed amount == class.priceAmount)
+ *   <li>Price match (signed amount == class.priceAmount converted to token base units)
  *   <li>Trainer not suspended
  *   <li>Slot capacity check (active count &lt; capacity)
  *   <li>Persist a scheduler-invisible local hold, prepare a shared execution intent outside the DB
@@ -240,12 +240,6 @@ public class CreateReservationService implements CreateReservationUseCase {
           ErrorCode.MARKETPLACE_CLASS_INACTIVE, "Class is not active: " + command.classId());
     }
 
-    BigInteger expectedAmount = BigInteger.valueOf(cls.getPriceAmount());
-    if (!expectedAmount.equals(command.signedAmount())) {
-      throw new BusinessException(
-          ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
-          "Signed amount " + command.signedAmount() + " != class price " + cls.getPriceAmount());
-    }
     return new CreateLocalContext(slot, cls);
   }
 
@@ -323,7 +317,7 @@ public class CreateReservationService implements CreateReservationUseCase {
     String orderId = UUID.randomUUID().toString();
     String orderKey = orderKeyFromUuid(orderId);
     var paymentConfig = loadReservationEscrowPaymentConfigPort.load();
-    BigInteger priceBaseUnits = paymentConfig.priceBaseUnits(command.signedAmount());
+    BigInteger priceBaseUnits = validateSignedPrice(paymentConfig, command, cls);
     String buyerWallet = loadActiveWalletOrThrow(command.userId());
     String trainerWallet = loadActiveWalletOrThrow(cls.getTrainerId());
     Instant expectedDeadlineInstant =
@@ -444,6 +438,17 @@ public class CreateReservationService implements CreateReservationUseCase {
                       phaseA.reservation().getId(), prepared.web3().executionIntent().id()));
           return null;
         });
+  }
+
+  private BigInteger validateSignedPrice(
+      LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig paymentConfig,
+      CreateReservationCommand command,
+      MarketplaceClass cls) {
+    try {
+      return paymentConfig.priceBaseUnits(command.signedAmount(), cls.getPriceAmount());
+    } catch (IllegalArgumentException e) {
+      throw new BusinessException(ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH, e.getMessage());
+    }
   }
 
   private void validatePurchaseBindSnapshot(Reservation current, Reservation expected) {

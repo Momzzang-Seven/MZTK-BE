@@ -37,12 +37,6 @@ public class PrecheckMarketplacePurchaseService implements PrecheckMarketplacePu
           "buyer cannot purchase own marketplace class",
           false);
     }
-    if (!command.signedAmount().equals(BigInteger.valueOf(command.bookedPriceAmountKrw()))) {
-      throw new Web3TransferException(
-          ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
-          "signed amount does not match marketplace class price",
-          false);
-    }
     String buyerWallet = activeWallet(command.buyerUserId());
     String trainerWallet = activeWallet(command.trainerUserId());
     if (buyerWallet.equals(trainerWallet)) {
@@ -52,13 +46,22 @@ public class PrecheckMarketplacePurchaseService implements PrecheckMarketplacePu
           false);
     }
     var config = loadMarketplacePurchaseConfigPort.loadPurchaseConfig();
+    BigInteger expectedPriceBaseUnits =
+        BigInteger.valueOf(command.bookedPriceAmountKrw())
+            .multiply(BigInteger.TEN.pow(config.decimals()));
+    if (!command.signedAmount().equals(expectedPriceBaseUnits)) {
+      throw new Web3TransferException(
+          ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
+          "signed amount does not match marketplace class price token base units",
+          false);
+    }
     precheckMarketplacePurchaseFundingPort.precheck(
         new PrecheckMarketplacePurchaseFundingPort.PurchaseFundingCheck(
             buyerWallet,
             trainerWallet,
             config.escrowContractAddress(),
             config.tokenAddress(),
-            command.signedAmount()));
+            expectedPriceBaseUnits));
   }
 
   private String activeWallet(Long userId) {

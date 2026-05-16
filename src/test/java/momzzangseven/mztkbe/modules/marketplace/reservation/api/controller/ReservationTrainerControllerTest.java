@@ -583,6 +583,15 @@ class ReservationTrainerControllerTest {
           .perform(post("/marketplace/trainer/reservations/1/web3/recover"))
           .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("[TC-17] 일반 유저가 트레이너 recover 요청하면 403을 반환한다")
+    void recover_userRole_returns403() throws Exception {
+      mockMvc
+          .perform(
+              post("/marketplace/trainer/reservations/1/web3/recover").with(userPrincipal(50L)))
+          .andExpect(status().isForbidden());
+    }
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────
@@ -591,6 +600,13 @@ class ReservationTrainerControllerTest {
     UsernamePasswordAuthenticationToken token =
         new UsernamePasswordAuthenticationToken(
             trainerId, null, List.of(new SimpleGrantedAuthority("ROLE_TRAINER")));
+    return SecurityMockMvcRequestPostProcessors.authentication(token);
+  }
+
+  private RequestPostProcessor userPrincipal(Long userId) {
+    UsernamePasswordAuthenticationToken token =
+        new UsernamePasswordAuthenticationToken(
+            userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
     return SecurityMockMvcRequestPostProcessors.authentication(token);
   }
 

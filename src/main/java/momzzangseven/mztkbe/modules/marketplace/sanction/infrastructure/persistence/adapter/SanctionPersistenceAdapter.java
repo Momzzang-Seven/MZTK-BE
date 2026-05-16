@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persiste
 import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persistence.entity.TrainerStrikeRecordEntity;
 import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persistence.repository.TrainerSanctionJpaRepository;
 import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persistence.repository.TrainerStrikeRecordJpaRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -29,7 +30,7 @@ public class SanctionPersistenceAdapter
     TrainerSanctionEntity sanction =
         sanctionRepository
             .findByIdWithLock(trainerId)
-            .orElseGet(() -> TrainerSanctionEntity.builder().trainerId(trainerId).build());
+            .orElseGet(() -> createAndLockSanctionRow(trainerId));
 
     LocalDateTime now = LocalDateTime.now(clock);
     boolean wasBanned =
@@ -78,6 +79,17 @@ public class SanctionPersistenceAdapter
 
   private boolean hasSource(String sourceType, String sourceId) {
     return sourceType != null && !sourceType.isBlank() && sourceId != null && !sourceId.isBlank();
+  }
+
+  private TrainerSanctionEntity createAndLockSanctionRow(Long trainerId) {
+    try {
+      sanctionRepository.saveAndFlush(TrainerSanctionEntity.builder().trainerId(trainerId).build());
+    } catch (DataIntegrityViolationException e) {
+      log.info("Trainer sanction row already created concurrently: trainerId={}", trainerId);
+    }
+    return sanctionRepository
+        .findByIdWithLock(trainerId)
+        .orElseGet(() -> TrainerSanctionEntity.builder().trainerId(trainerId).build());
   }
 
   @Override

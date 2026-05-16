@@ -1,7 +1,9 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
@@ -12,11 +14,15 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
@@ -50,6 +56,7 @@ class RecoverReservationEscrowServiceTest {
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
+  @Mock private CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   @Mock private LoadReservationExecutionWritePort loadReservationExecutionWritePort;
   @Mock private ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   @Mock private LoadReservationWalletPort loadReservationWalletPort;
@@ -65,6 +72,7 @@ class RecoverReservationEscrowServiceTest {
             loadReservationPort,
             saveReservationPort,
             prepareReservationEscrowExecutionPort,
+            cancelReservationEscrowExecutionPort,
             loadReservationExecutionWritePort,
             replayConfirmedReservationExecutionPort,
             loadReservationWalletPort,
@@ -191,6 +199,49 @@ class RecoverReservationEscrowServiceTest {
     then(saveReservationPort).should().save(reservationCaptor.capture());
     assertThat(reservationCaptor.getValue().getCurrentExecutionIntentPublicId())
         .isEqualTo("intent-1");
+  }
+
+  @Test
+  @DisplayName("recovery Phase B bind 실패 시 signable intent를 취소하고 local purchase hold를 종료한다")
+  void recovery_phaseB_bindFailure_cancelsIntentAndMarksPaymentFailed() {
+    Reservation reservation = reservation(ReservationStatus.PURCHASE_PENDING);
+    Reservation changed = reservation.toBuilder().status(ReservationStatus.PENDING).build();
+    AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willReturn(Optional.of(changed))
+        .willReturn(Optional.of(reservation));
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0, Reservation.class);
+              latestSaved.set(saved);
+              return saved;
+            });
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_ABSENT, 0L));
+    given(loadReservationEscrowPaymentConfigPort.load())
+        .willReturn(
+            new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+    given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+        .willReturn(new PrepareReservationEscrowResult(web3()));
+    given(cancelReservationEscrowExecutionPort.cancelSignableIntent(any(), any(), any()))
+        .willReturn(true);
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+    then(cancelReservationEscrowExecutionPort)
+        .should()
+        .cancelSignableIntent(eq("intent-1"), eq("MARKETPLACE_RECOVERY_BIND_FAILED"), any());
+    assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.PAYMENT_FAILED);
+    assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isNull();
   }
 
   private Reservation reservation(ReservationStatus status) {

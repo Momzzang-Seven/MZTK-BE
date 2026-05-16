@@ -24,6 +24,8 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -63,6 +65,8 @@ class RejectReservationServiceTest {
         .reservationTime(LocalTime.of(10, 0))
         .durationMinutes(60)
         .status(ReservationStatus.PENDING)
+        .escrowStatus(ReservationEscrowStatus.LOCKED)
+        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
         .orderId(ORDER_ID)
         .bookedPriceAmount(50_000)
         .version(0L)
@@ -226,6 +230,27 @@ class RejectReservationServiceTest {
           .isInstanceOf(BusinessException.class);
 
       assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.REJECT_PENDING);
+    }
+
+    @Test
+    @DisplayName("[RJ-05] legacy dispatch 예약은 사용자 EIP-7702 반려 준비로 진입할 수 없다")
+    void legacy_dispatch_예약_반려_차단() {
+      Reservation legacy =
+          pendingReservation().toBuilder()
+              .escrowFlow(ReservationEscrowFlow.LEGACY_DISPATCH)
+              .escrowStatus(ReservationEscrowStatus.NONE)
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(legacy));
+
+      assertThatThrownBy(
+              () -> sut.execute(new RejectReservationCommand(RESERVATION_ID, TRAINER_ID, "일정 불가")))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS.getCode()));
+
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
   }
 }

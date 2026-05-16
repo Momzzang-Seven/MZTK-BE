@@ -30,6 +30,7 @@ class PrecheckMarketplacePurchaseServiceTest {
   private static final String TRAINER_WALLET = "0x2222222222222222222222222222222222222222";
   private static final String ESCROW = "0x3333333333333333333333333333333333333333";
   private static final String TOKEN = "0x4444444444444444444444444444444444444444";
+  private static final BigInteger PRICE_BASE_UNITS = new BigInteger("50000000000000000000000");
 
   @Mock private LoadMarketplaceActiveWalletPort loadMarketplaceActiveWalletPort;
   @Mock private LoadMarketplacePurchaseConfigPort loadMarketplacePurchaseConfigPort;
@@ -57,7 +58,7 @@ class PrecheckMarketplacePurchaseServiceTest {
         .willReturn(
             new LoadMarketplacePurchaseConfigPort.MarketplacePurchaseConfig(ESCROW, TOKEN, 18));
 
-    sut.precheck(command(10L, 20L, BigInteger.valueOf(50_000), 50_000));
+    sut.precheck(command(10L, 20L, PRICE_BASE_UNITS, 50_000));
 
     ArgumentCaptor<PrecheckMarketplacePurchaseFundingPort.PurchaseFundingCheck> captor =
         ArgumentCaptor.forClass(PrecheckMarketplacePurchaseFundingPort.PurchaseFundingCheck.class);
@@ -66,13 +67,13 @@ class PrecheckMarketplacePurchaseServiceTest {
     assertThat(captor.getValue().trainerWalletAddress()).isEqualTo(TRAINER_WALLET);
     assertThat(captor.getValue().escrowContractAddress()).isEqualTo(ESCROW);
     assertThat(captor.getValue().tokenAddress()).isEqualTo(TOKEN);
-    assertThat(captor.getValue().priceBaseUnits()).isEqualTo(BigInteger.valueOf(50_000));
+    assertThat(captor.getValue().priceBaseUnits()).isEqualTo(PRICE_BASE_UNITS);
   }
 
   @Test
   @DisplayName("buyer user와 trainer user가 같으면 funding precheck 전에 차단한다")
   void precheck_blocks_same_user_self_purchase() {
-    assertThatThrownBy(() -> sut.precheck(command(10L, 10L, BigInteger.valueOf(50_000), 50_000)))
+    assertThatThrownBy(() -> sut.precheck(command(10L, 10L, PRICE_BASE_UNITS, 50_000)))
         .isInstanceOf(BusinessException.class)
         .satisfies(
             ex ->
@@ -90,7 +91,7 @@ class PrecheckMarketplacePurchaseServiceTest {
     given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(20L))
         .willReturn(Optional.of(BUYER_WALLET));
 
-    assertThatThrownBy(() -> sut.precheck(command(10L, 20L, BigInteger.valueOf(50_000), 50_000)))
+    assertThatThrownBy(() -> sut.precheck(command(10L, 20L, PRICE_BASE_UNITS, 50_000)))
         .isInstanceOf(BusinessException.class)
         .satisfies(
             ex ->
@@ -109,7 +110,7 @@ class PrecheckMarketplacePurchaseServiceTest {
     given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(20L))
         .willReturn(Optional.empty());
 
-    assertThatThrownBy(() -> sut.precheck(command(10L, 20L, BigInteger.valueOf(50_000), 50_000)))
+    assertThatThrownBy(() -> sut.precheck(command(10L, 20L, PRICE_BASE_UNITS, 50_000)))
         .isInstanceOf(WalletNotConnectedException.class);
 
     then(precheckMarketplacePurchaseFundingPort).shouldHaveNoInteractions();
@@ -118,14 +119,23 @@ class PrecheckMarketplacePurchaseServiceTest {
   @Test
   @DisplayName("signed amount와 클래스 가격 snapshot이 다르면 funding precheck 전에 차단한다")
   void precheck_blocks_price_mismatch() {
-    assertThatThrownBy(() -> sut.precheck(command(10L, 20L, BigInteger.valueOf(49_000), 50_000)))
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
+        .willReturn(Optional.of(BUYER_WALLET));
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(20L))
+        .willReturn(Optional.of(TRAINER_WALLET));
+    given(loadMarketplacePurchaseConfigPort.loadPurchaseConfig())
+        .willReturn(
+            new LoadMarketplacePurchaseConfigPort.MarketplacePurchaseConfig(ESCROW, TOKEN, 18));
+
+    assertThatThrownBy(
+            () ->
+                sut.precheck(command(10L, 20L, PRICE_BASE_UNITS.subtract(BigInteger.ONE), 50_000)))
         .isInstanceOf(BusinessException.class)
         .satisfies(
             ex ->
                 assertThat(((BusinessException) ex).getCode())
                     .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH.getCode()));
 
-    then(loadMarketplaceActiveWalletPort).shouldHaveNoInteractions();
     then(precheckMarketplacePurchaseFundingPort).shouldHaveNoInteractions();
   }
 

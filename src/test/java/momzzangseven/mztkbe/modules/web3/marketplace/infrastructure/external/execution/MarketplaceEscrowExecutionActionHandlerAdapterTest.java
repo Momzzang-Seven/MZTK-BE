@@ -83,6 +83,9 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     then(saveReservationPort).should().save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.PENDING);
     assertThat(captor.getValue().getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(captor.getValue().getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(captor.getValue().getPendingAction()).isNull();
+    assertThat(captor.getValue().getPendingAttemptToken()).isNull();
     assertThat(captor.getValue().getContractDeadlineEpochSeconds()).isEqualTo(1_800_000_000L);
   }
 
@@ -231,6 +234,11 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
     then(saveReservationPort).should().save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.REJECTED);
+    assertThat(captor.getValue().getEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertThat(captor.getValue().getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(captor.getValue().getPendingAction()).isNull();
+    assertThat(captor.getValue().getPendingAttemptToken()).isNull();
+    assertThat(captor.getValue().getRejectionReason()).isEqualTo("일정 불가");
     then(recordTrainerStrikePort)
         .should()
         .recordStrike(
@@ -385,7 +393,7 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
         .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
         .escrowStatus(ReservationEscrowStatus.LOCKED)
         .build()
-        .beginRejectPending("reject-token")
+        .beginRejectPending("reject-token", "일정 불가")
         .bindPendingExecutionIntent("intent-reject");
   }
 }

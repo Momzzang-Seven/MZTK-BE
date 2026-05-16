@@ -100,7 +100,7 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
               applyPurchaseConfirmed(reservation, payload, intent.getPublicId());
           case MARKETPLACE_CLASS_CANCEL ->
               payload.actorType() == MarketplaceActorType.TRAINER
-                  ? reservation.reject(intent.getPublicId())
+                  ? reservation.reject(intent.getPublicId(), reservation.getRejectionReason())
                   : reservation.cancelByUser(intent.getPublicId());
           case MARKETPLACE_CLASS_CONFIRM -> reservation.complete(intent.getPublicId());
           case MARKETPLACE_CLASS_EXPIRED_REFUND ->

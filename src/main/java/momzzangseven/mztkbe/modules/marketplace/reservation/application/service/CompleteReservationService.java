@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
-import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -23,6 +22,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
@@ -177,6 +177,7 @@ public class CompleteReservationService implements CompleteReservationUseCase {
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Cannot complete reservation in status: " + reservation.getStatus());
     }
+    validateUserEscrowLocked(reservation, "complete");
 
     LocalDateTime sessionEnd =
         LocalDateTime.of(reservation.getReservationDate(), reservation.getReservationTime())
@@ -257,6 +258,17 @@ public class CompleteReservationService implements CompleteReservationUseCase {
     }
   }
 
+  private void validateUserEscrowLocked(Reservation reservation, String action) {
+    if (!reservation.getEffectiveEscrowFlow().isUserEip7702()
+        || reservation.getEffectiveEscrowStatus() != ReservationEscrowStatus.LOCKED) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Cannot "
+              + action
+              + " reservation before marketplace user escrow is confirmed and locked");
+    }
+  }
+
   private boolean equalsNullable(Object left, Object right) {
     return left == null ? right == null : left.equals(right);
   }
@@ -298,7 +310,7 @@ public class CompleteReservationService implements CompleteReservationUseCase {
             ? payment.tokenAddress()
             : reservation.getTokenAddress(),
         reservation.getPriceBaseUnits() == null
-            ? BigInteger.valueOf(reservation.getBookedPriceAmount()).toString()
+            ? payment.priceBaseUnits(reservation.getBookedPriceAmount()).toString()
             : reservation.getPriceBaseUnits(),
         reservation.getBookedPriceAmount(),
         reservation.sessionEndAt(),
