@@ -646,9 +646,9 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
     @Test
     @DisplayName(
-        "[E-17] 기존 row가 있고 alias가 KMS에서 DISABLED → 200, kms_key_id 변경 없음, mint 호출 없음 (PR #177 R4)")
-    void existingRowWithDisabledAlias_repairsViaUpdateAlias() throws Exception {
-      // Pre-seed row: 동일 alias + 동일 derived address + 기존 kms_key_id
+        "[E-17] 기존 row(ACTIVE) + alias=DISABLED + targetIdMatches → R5 ReactivatedEvent 재발행 → enableKey 호출 (PR #177 R5)")
+    void existingRowWithDisabledAlias_repairsViaR5ReactivatedEvent() throws Exception {
+      // Pre-seed row: 동일 alias + 동일 derived address + 기존 kms_key_id (ACTIVE 상태).
       String previousKmsId = "prev-kms-id";
       jdbcTemplate.update(
           "INSERT INTO web3_treasury_wallets"
@@ -658,35 +658,31 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
           previousKmsId,
           DERIVED_ADDRESS);
 
-      // PR #177 R4: C4 alias-repair 경로는 mint 를 실행하지 않는다 (mint-필요 분기인 FreshProvision /
-      // Backfill / ReplaceKey 만 createKey 를 호출). 따라서 mint chain 의 stub 도, pre-minted key
-      // cleanup 도 필요 없다. alias-target 이 DISABLED 라서 C4 alias-repair 분기로 분기된다.
+      // PR #177 R5: DB.status=ACTIVE + alias=DISABLED + targetIdMatches 는 C5 reactivate 가
+      // AFTER_COMMIT enableKey 단계에서 실패한 상황으로 본다. handleExistingProvisionedRow 는
+      // mint 없이 TreasuryWalletReactivatedEvent 를 재발행하고, 핸들러가 enableKey 를 다시 시도한다.
       when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
           .thenReturn(new AliasTargetInfo(KmsKeyState.DISABLED, previousKmsId));
-      // BindKmsAlias 의 ghost-recovery 에서 사용될 createAlias / updateAlias 스텁
-      org.mockito.Mockito.doThrow(
-              new KmsAliasAlreadyExistsException("alias already bound", new RuntimeException()))
-          .when(kmsKeyLifecyclePort)
-          .createAlias(eq(REWARD_ALIAS), anyString());
 
       ResponseEntity<String> res = provision();
 
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode data = objectMapper.readTree(res.getBody());
-      // 응답의 kmsKeyId 는 기존 row 의 값을 그대로 반환 (alias-repair 는 row 를 갱신하지 않음).
+      // 응답의 kmsKeyId 는 기존 row 의 값을 그대로 반환 (R5 는 row 를 갱신하지 않음).
       assertThat(data.at("/data/kmsKeyId").asText()).isEqualTo(previousKmsId);
 
-      // PR #177 R4: C4 alias-repair 분기는 mint 자체를 실행하지 않으므로 KMS mint chain 호출이 없다.
+      // R5 분기는 mint 자체를 실행하지 않으므로 KMS mint chain 호출이 없다.
       verify(kmsKeyLifecyclePort, never()).createKey();
       verify(kmsKeyLifecyclePort, never())
           .importKeyMaterial(anyString(), any(byte[].class), any(byte[].class));
-      // mint 가 없으므로 cleanup 도 없다.
+      // mint 가 없으므로 cleanup (disable + scheduleDeletion) 도 없다.
       verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
       verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(anyString(), anyInt());
 
-      // AFTER_COMMIT 핸들러가 ghost-alias 복구 → updateAlias(REWARD_ALIAS, previousKmsId)
-      verify(kmsKeyLifecyclePort).updateAlias(REWARD_ALIAS, previousKmsId);
-      assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(1);
+      // R5: alias 재바인딩 (updateAlias) 대신 enableKey 를 호출한다.
+      verify(kmsKeyLifecyclePort, never()).updateAlias(eq(REWARD_ALIAS), anyString());
+      verify(kmsKeyLifecyclePort).enableKey(previousKmsId);
+      assertThat(countKmsAuditRows("KMS_ENABLE", true)).isEqualTo(1);
     }
 
     @Test
@@ -939,6 +935,134 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       } finally {
         pool.shutdown();
       }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // [MOM-444 Step 2] In-port CAS gate scenarios
+  // ---------------------------------------------------------------------------
+
+  @Nested
+  @DisplayName("[MOM-444 Step 2] in-port CAS gate scenarios")
+  class Mom444Step2CasGateScenarios {
+
+    @Autowired
+    private momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ReplaceKmsKeyUseCase
+        replaceKmsKeyUseCase;
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-8] R5 — enableKey 실패 후 재 provision 으로 회복 (DB ACTIVE / KMS DISABLED →"
+            + " handleExistingProvisionedRow → ReactivatedEvent 재발행 → CAS pass → enableKey 재호출)")
+    void r5_enableKeyFailureRecovery_replaysReactivatedAndEnablesKey() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // 1) C0 FreshProvision — mint K0, DB row ACTIVE.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String firstKmsKeyId = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      // 2) Disable the wallet → DB DISABLED, AFTER_COMMIT disableKey(firstKmsKeyId).
+      assertThat(disableWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      // 3) Stub enableKey to throw on the FIRST call, succeed on subsequent calls.
+      org.mockito.Mockito.doThrow(new RuntimeException("simulated enableKey failure"))
+          .doNothing()
+          .when(kmsKeyLifecyclePort)
+          .enableKey(firstKmsKeyId);
+
+      // 4) Second provision (C5 ReEnableSameKey) — handler's enableKey throws but is swallowed.
+      //    CAS in EnableKmsKeyService passes (DB now ACTIVE + kmsKeyId matches) → enableKey is
+      //    actually invoked → throws → KMS_ENABLE success=false audit. HTTP stays 200.
+      ResponseEntity<String> reEnableRes = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(reEnableRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+      Map<String, Object> afterReEnableRow = walletRow(REWARD_ALIAS);
+      assertThat((String) afterReEnableRow.get("status")).isEqualTo("ACTIVE");
+
+      // 5) Third provision (R5 trigger) — DB.status=ACTIVE so handleExistingProvisionedRow runs.
+      //    Stub describeAlias to report DISABLED with matching kmsKeyId → R5 branch publishes
+      //    TreasuryWalletReactivatedEvent → handler invokes EnableKmsKeyUseCase → CAS pass →
+      //    enableKey now succeeds (per the chained stub above).
+      when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
+          .thenReturn(new AliasTargetInfo(KmsKeyState.DISABLED, firstKmsKeyId));
+      ResponseEntity<String> r5Res = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(r5Res.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      // Final DB state — same key, ACTIVE, disabled_at null.
+      Map<String, Object> finalRow = walletRow(REWARD_ALIAS);
+      assertThat((String) finalRow.get("kms_key_id")).isEqualTo(firstKmsKeyId);
+      assertThat((String) finalRow.get("status")).isEqualTo("ACTIVE");
+      assertThat(finalRow.get("disabled_at")).isNull();
+
+      // enableKey was invoked twice — first failed, second succeeded.
+      verify(kmsKeyLifecyclePort, times(2)).enableKey(firstKmsKeyId);
+
+      // Audit rows: ≥1 failure + ≥1 success on KMS_ENABLE; no KMS_ENABLE_SKIPPED (CAS passed both).
+      assertThat(countKmsAuditRows("KMS_ENABLE", false)).isGreaterThanOrEqualTo(1);
+      assertThat(countKmsAuditRows("KMS_ENABLE", true)).isGreaterThanOrEqualTo(1);
+      assertThat(countKmsAuditRows("KMS_ENABLE_SKIPPED", true)).isEqualTo(0);
+
+      // Only the initial FreshProvision minted — R5 path never mints.
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
+    }
+
+    @Test
+    @DisplayName("[E-MOM444-9] Stale Replace event — chain orphan 방지 with CAS skip")
+    void staleReplaceEvent_recordsSkipAudit_andDoesNotRevertAlias() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // Seed K0
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k0 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      // Rotate K0 → K1
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX_2, DERIVED_ADDRESS_2).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k1 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      // Rotate K1 → K2
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX_3, DERIVED_ADDRESS_3).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k2 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      // Sanity — three distinct keys, row sits at K2.
+      assertThat(k0).isNotEqualTo(k1);
+      assertThat(k1).isNotEqualTo(k2);
+      assertThat((String) walletRow(REWARD_ALIAS).get("kms_key_id")).isEqualTo(k2);
+
+      // Pre-stale audit snapshots
+      int skipBefore = countKmsAuditRows("KMS_REPLACE_SKIPPED", true);
+      int updateAliasBefore = countKmsAuditRows("KMS_UPDATE_ALIAS", true);
+
+      // Clear Mockito invocation history so verify(...) below reflects ONLY the stale execute.
+      // (The K0→K1 rotation naturally called updateAlias("reward-treasury", k1) and disabled K0;
+      // we want to assert behaviors of the stale handler specifically.)
+      org.mockito.Mockito.clearInvocations(kmsKeyLifecyclePort);
+
+      // Manually invoke the in-port with a stale K0→K1 command (as if the K0→K1 handler
+      // fired late, AFTER the K1→K2 rotation already advanced the row).
+      replaceKmsKeyUseCase.execute(
+          new momzzangseven.mztkbe.modules.web3.treasury.application.dto.ReplaceKmsKeyCommand(
+              REWARD_ALIAS, k0, k1, DERIVED_ADDRESS_2, 1L, true));
+
+      // DB.kmsKeyId still K2 — alias drift prevention worked.
+      assertThat((String) walletRow(REWARD_ALIAS).get("kms_key_id")).isEqualTo(k2);
+
+      // Exactly one new KMS_REPLACE_SKIPPED audit row (reason=KEY_ID_MISMATCH internally).
+      assertThat(countKmsAuditRows("KMS_REPLACE_SKIPPED", true)).isEqualTo(skipBefore + 1);
+
+      // No additional KMS_UPDATE_ALIAS row — stale handler did NOT touch the alias.
+      assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(updateAliasBefore);
+
+      // Post-clear: alias was never re-bound to K1 by the stale handler.
+      verify(kmsKeyLifecyclePort, never()).updateAlias(REWARD_ALIAS, k1);
+
+      // Orphan dispose path fires for K0 (command.oldKmsKeyId=K0 != current.kmsKeyId=K2).
+      // After clearInvocations the stale handler's disableKey/scheduleKeyDeletion on K0 are
+      // the only invocations on the mock — assert each happened exactly once via the orphan path.
+      verify(kmsKeyLifecyclePort, times(1)).disableKey(k0);
+      verify(kmsKeyLifecyclePort, times(1)).scheduleKeyDeletion(eq(k0), eq(7));
     }
   }
 }
