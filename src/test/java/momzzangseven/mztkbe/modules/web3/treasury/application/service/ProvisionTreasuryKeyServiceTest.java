@@ -312,6 +312,89 @@ class ProvisionTreasuryKeyServiceTest {
   }
 
   @Test
+  void c4_r5_reactivated_whenAliasDisabledAndTargetMatches() {
+    TreasuryWallet existing =
+        legacyRow(DERIVED_ADDRESS, "existing-kms-id", TreasuryWalletStatus.ACTIVE);
+    when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
+        .thenReturn(Optional.of(existing));
+    when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.DISABLED, "existing-kms-id"));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+    ProvisionTreasuryKeyResult result = service.execute(command);
+
+    assertThat(result.kmsKeyId()).isEqualTo("existing-kms-id");
+    ArgumentCaptor<TreasuryWalletReactivatedEvent> captor =
+        ArgumentCaptor.forClass(TreasuryWalletReactivatedEvent.class);
+    verify(applicationEventPublisher).publishEvent(captor.capture());
+    assertThat(captor.getValue().walletAlias()).isEqualTo("reward-treasury");
+    assertThat(captor.getValue().kmsKeyId()).isEqualTo("existing-kms-id");
+    assertThat(captor.getValue().walletAddress()).isEqualTo(DERIVED_ADDRESS);
+
+    verify(applicationEventPublisher, never())
+        .publishEvent(any(TreasuryWalletProvisionedEvent.class));
+    verify(applicationEventPublisher, never())
+        .publishEvent(any(TreasuryWalletKeyReplacedEvent.class));
+    verifyNoMintHappened();
+  }
+
+  @Test
+  void c4_aliasRepair_whenAliasDisabledButTargetMismatch_andNoMint() {
+    TreasuryWallet existing =
+        legacyRow(DERIVED_ADDRESS, "existing-kms-id", TreasuryWalletStatus.ACTIVE);
+    when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
+        .thenReturn(Optional.of(existing));
+    when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.DISABLED, "different-kms-id"));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+    ProvisionTreasuryKeyResult result = service.execute(command);
+
+    assertThat(result.kmsKeyId()).isEqualTo("existing-kms-id");
+    ArgumentCaptor<TreasuryWalletProvisionedEvent> captor =
+        ArgumentCaptor.forClass(TreasuryWalletProvisionedEvent.class);
+    verify(applicationEventPublisher).publishEvent(captor.capture());
+    assertThat(captor.getValue().aliasRepairMode()).isTrue();
+
+    verify(applicationEventPublisher, never())
+        .publishEvent(any(TreasuryWalletReactivatedEvent.class));
+    verify(applicationEventPublisher, never())
+        .publishEvent(any(TreasuryWalletKeyReplacedEvent.class));
+    verifyNoMintHappened();
+  }
+
+  @Test
+  void c4_concern2_replaceKeyNoDispose_whenAliasPendingDeletionAndTargetMatches() {
+    TreasuryWallet existing =
+        legacyRow(DERIVED_ADDRESS, "existing-kms-id", TreasuryWalletStatus.ACTIVE);
+    stubKmsMintHappyPath();
+    when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
+        .thenReturn(Optional.of(existing));
+    when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.PENDING_DELETION, "existing-kms-id"));
+    when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+    service.execute(command);
+
+    ArgumentCaptor<TreasuryWalletKeyReplacedEvent> captor =
+        ArgumentCaptor.forClass(TreasuryWalletKeyReplacedEvent.class);
+    verify(applicationEventPublisher).publishEvent(captor.capture());
+    assertThat(captor.getValue().disposeOldKey()).isFalse();
+    assertThat(captor.getValue().oldKmsKeyId()).isEqualTo("existing-kms-id");
+    assertThat(captor.getValue().newKmsKeyId()).isEqualTo("kms-key-id");
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
+
+    verify(applicationEventPublisher, never())
+        .publishEvent(any(TreasuryWalletReactivatedEvent.class));
+    verify(applicationEventPublisher, never())
+        .publishEvent(any(TreasuryWalletProvisionedEvent.class));
+  }
+
+  @Test
   void c5_reEnableSameKey_disabledActive_publishesReactivated_andNoMint() {
     TreasuryWallet disabled =
         legacyRow(DERIVED_ADDRESS, "existing-kms-id", TreasuryWalletStatus.DISABLED).toBuilder()

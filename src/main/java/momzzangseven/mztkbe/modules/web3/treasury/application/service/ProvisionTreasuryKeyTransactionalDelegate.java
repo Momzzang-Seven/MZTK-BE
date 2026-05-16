@@ -181,20 +181,25 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
 
   /**
    * C4 (IdempotentRetry) dispatch. Calls {@code describeAlias} read-only under the lock so the
-   * decision between {@code ALREADY_PROVISIONED} and alias-repair is race-free.
+   * decision between {@code ALREADY_PROVISIONED}, R5 enableKey-failure replay, concern-2 sync-drift
+   * recovery, and alias-repair is race-free.
    *
-   * <p>Three sub-cases:
+   * <p>{@code targetIdMatches} is computed once with a null-safe equals on {@code
+   * aliasInfo.targetKmsKeyId()}. Branches are evaluated in strict order:
    *
    * <ul>
-   *   <li>alias state == {@code ENABLED} && target key id matches the row's {@code kmsKeyId}: the
-   *       wallet is genuinely already provisioned and consistent with AWS — reject with {@code
-   *       ALREADY_PROVISIONED}.
-   *   <li>alias state == {@code ENABLED} but target key id != row's {@code kmsKeyId}: alias drift —
-   *       the alias has been re-bound out-of-band to a different key. Re-publish the provisioned
-   *       event in alias-repair mode so the AFTER_COMMIT handler restores the alias to the row's
-   *       kmsKeyId via {@code updateAlias}. (PR #177 R3.)
-   *   <li>alias state in {DISABLED, PENDING_DELETION, UNAVAILABLE}: classic ghost-alias from a
-   *       prior failed run — re-publish in alias-repair mode.
+   *   <li>{@code aliasState=ENABLED && targetIdMatches}: wallet is genuinely already provisioned
+   *       and consistent with AWS — reject with {@code ALREADY_PROVISIONED}.
+   *   <li>{@code aliasState=DISABLED && targetIdMatches} (PR #177 R5): C5 (DISABLED→ACTIVE
+   *       re-enable) committed but AFTER_COMMIT {@code enableKey} failed — DB is ACTIVE while the
+   *       KMS key is DISABLED. Re-publish {@code TreasuryWalletReactivatedEvent} so the handler
+   *       retries {@code enableKey} under the CAS gate. No mint.
+   *   <li>{@code aliasState=PENDING_DELETION && targetIdMatches} (PR #177 concern-2): DB/KMS sync
+   *       drift — issuing {@code updateAlias} would hit {@code KMSInvalidStateException}. Delegate
+   *       to {@link #replaceKey} with {@code disposeOldKey=false} so the dying key is left alone.
+   *   <li>else (alias-drift / ghost-alias): re-publish the provisioned event in alias-repair mode
+   *       so the AFTER_COMMIT handler restores the alias to the row's kmsKeyId via {@code
+   *       updateAlias}. (PR #177 R3.)
    * </ul>
    */
   private ProvisionTreasuryKeyResult handleExistingProvisionedRow(
@@ -205,16 +210,39 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       AtomicBoolean failureAuditWritten) {
     AliasTargetInfo aliasInfo = kmsKeyLifecyclePort.describeAlias(existing.getWalletAlias());
     KmsKeyState aliasState = aliasInfo.state();
-    boolean aliasMatchesRow =
-        aliasState == KmsKeyState.ENABLED
+    boolean targetIdMatches =
+        aliasInfo.targetKmsKeyId() != null
             && existing.getKmsKeyId().equals(aliasInfo.targetKmsKeyId());
 
-    if (aliasMatchesRow) {
+    if (aliasState == KmsKeyState.ENABLED && targetIdMatches) {
       treasuryAuditRecorder.record(
           command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
       failureAuditWritten.set(true);
       throw new TreasuryWalletAlreadyProvisionedException(
           "treasury wallet already provisioned for alias '" + existing.getWalletAlias() + "'");
+    }
+
+    if (aliasState == KmsKeyState.DISABLED && targetIdMatches) {
+      log.warn(
+          "Re-publishing reactivated event to recover from prior enableKey failure"
+              + " (alias={}, kmsKeyId={})",
+          existing.getWalletAlias(),
+          existing.getKmsKeyId());
+      applicationEventPublisher.publishEvent(
+          new TreasuryWalletReactivatedEvent(
+              existing.getWalletAlias(),
+              existing.getKmsKeyId(),
+              existing.getWalletAddress(),
+              command.operatorUserId()));
+      return ProvisionTreasuryKeyResult.from(existing, role);
+    }
+
+    if (aliasState == KmsKeyState.PENDING_DELETION && targetIdMatches) {
+      log.warn(
+          "Recovering DB/KMS sync drift via fresh key (alias={}, pendingDeletionKmsKeyId={})",
+          existing.getWalletAlias(),
+          existing.getKmsKeyId());
+      return replaceKey(command, role, existing, derivedAddress, false, failureAuditWritten);
     }
 
     log.warn(
