@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -7,11 +8,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletKeyReplacedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletProvisionedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletReactivatedEvent;
@@ -25,16 +29,23 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Transactional inner stage of the MOM-444 3-phase provisioning flow.
+ * Transactional inner stage of the MOM-444 / PR #177 R3+R4 provisioning flow.
  *
  * <p>Extracted from {@link ProvisionTreasuryKeyService} into its own bean so Spring AOP can apply
- * {@link Transactional} to {@link #lockedCommit} when the outer service calls it (self-invocation
- * would bypass the proxy and run un-transactional). Holds the DB-only critical section: acquires a
- * {@code PESSIMISTIC_WRITE} row lock on {@code wallet_alias}, dispatches to one of the five MOM-444
- * actions, persists the row, and publishes the AFTER_COMMIT event. KMS mutations all happen outside
- * this method — the only KMS call retained inside the transaction is the read-only {@code
- * describeAliasTarget} on the IdempotentRetry (C4) path, which must observe alias state under lock
- * to race-freely choose between {@code ALREADY_PROVISIONED} and alias-repair.
+ * {@link Transactional} to {@link #lockedCommit} when the outer service calls it — self-invocation
+ * would bypass the proxy and run un-transactional. Holds the DB critical section: acquires a {@code
+ * PESSIMISTIC_WRITE} row lock on {@code wallet_alias}, decides which of the five MOM-444 actions
+ * applies, and — only for the three actions that need a fresh KMS key (FreshProvision / Backfill /
+ * ReplaceKey) — mints the key under the lock. The other two actions (IdempotentRetry,
+ * ReEnableSameKey) skip the mint entirely so that the common admin retry path does not leave orphan
+ * keys behind even when the cleanup sync fails.
+ *
+ * <p>KMS side-effects ({@code createAlias / updateAlias / disableKey / scheduleKeyDeletion /
+ * enableKey}) still run from AFTER_COMMIT handlers, never from inside this method — keeping the
+ * DB-first / KMS-post-commit ordering from the {@code treasury_save_first_ordering} memory intact.
+ * The mint chain ({@code createKey / getParametersForImport / wrap / importKeyMaterial /
+ * signDigest}) plus the read-only {@code describeAlias} on the IdempotentRetry path are the only
+ * KMS calls that happen inside the transaction.
  */
 @Component
 @Slf4j
@@ -42,32 +53,32 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class ProvisionTreasuryKeyTransactionalDelegate {
 
   private static final int CLEANUP_PENDING_WINDOW_DAYS = 7;
+  private static final int SANITY_DIGEST_BYTES = 32;
+  private static final int RAW_PRIVATE_KEY_BYTES = 32;
 
   private final LoadTreasuryWalletPort loadTreasuryWalletPort;
   private final SaveTreasuryWalletPort saveTreasuryWalletPort;
   private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
+  private final KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
+  private final SignDigestPort signDigestPort;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;
+  private final SecureRandom secureRandom = new SecureRandom();
 
   /**
-   * Acquire row lock, dispatch to one of five actions, save and publish event. Caller is
-   * responsible for cleaning up {@code preMintedKeyId} when {@code attachedFlag} stays false on
-   * return.
+   * Acquire the alias row lock, decide which action applies, mint a fresh KMS key only when the
+   * chosen action requires one, persist the row, and publish the AFTER_COMMIT event.
    *
-   * <p>{@code failureAuditWritten} is set whenever the delegate (this method, its inner dispatch
-   * targets, or the registered rollback synchronizer) records a failure audit row. The outer
-   * service checks this flag in its catch block to avoid writing a second audit row for the same
-   * failure (e.g. C4 reject's {@code ALREADY_PROVISIONED} or the synchronizer's {@code
-   * TX_STATUS_UNKNOWN}).
+   * <p>{@code failureAuditWritten} is the outer-catch dedup interlock: whenever this method (or its
+   * inner dispatch targets, or the registered rollback synchronizer) records a treasury_provision
+   * audit failure row, it must set the flag so the outer service catch does not record a second row
+   * with the bare exception class name.
    */
   @Transactional
   public ProvisionTreasuryKeyResult lockedCommit(
       ProvisionTreasuryKeyCommand command,
       String derivedAddress,
-      String preMintedKeyId,
-      AtomicBoolean attachedFlag,
-      AtomicBoolean cleanupInvoked,
       AtomicBoolean failureAuditWritten) {
 
     TreasuryRole role = command.role();
@@ -75,30 +86,14 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
     Optional<TreasuryWallet> existingOpt = loadTreasuryWalletPort.loadByAliasForUpdate(walletAlias);
 
     if (existingOpt.isEmpty()) {
-      return freshProvision(
-          command,
-          walletAlias,
-          role,
-          derivedAddress,
-          preMintedKeyId,
-          attachedFlag,
-          cleanupInvoked,
-          failureAuditWritten);
+      return freshProvision(command, walletAlias, role, derivedAddress, failureAuditWritten);
     }
 
     TreasuryWallet existing = existingOpt.get();
     boolean addressMatches = derivedAddress.equalsIgnoreCase(existing.getWalletAddress());
 
     if (existing.getKmsKeyId() == null) {
-      return backfill(
-          command,
-          role,
-          existing,
-          derivedAddress,
-          preMintedKeyId,
-          attachedFlag,
-          cleanupInvoked,
-          failureAuditWritten);
+      return backfill(command, role, existing, derivedAddress, failureAuditWritten);
     }
 
     if (addressMatches) {
@@ -109,32 +104,14 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
         case DISABLED:
           return reEnableSameKey(command, existing, role);
         case ARCHIVED:
-          return replaceKey(
-              command,
-              role,
-              existing,
-              derivedAddress,
-              preMintedKeyId,
-              false,
-              attachedFlag,
-              cleanupInvoked,
-              failureAuditWritten);
+          return replaceKey(command, role, existing, derivedAddress, false, failureAuditWritten);
         default:
           throw new IllegalStateException("Unsupported status: " + existing.getStatus());
       }
     }
 
     boolean disposeOldKey = existing.getStatus() != TreasuryWalletStatus.ARCHIVED;
-    return replaceKey(
-        command,
-        role,
-        existing,
-        derivedAddress,
-        preMintedKeyId,
-        disposeOldKey,
-        attachedFlag,
-        cleanupInvoked,
-        failureAuditWritten);
+    return replaceKey(command, role, existing, derivedAddress, disposeOldKey, failureAuditWritten);
   }
 
   private ProvisionTreasuryKeyResult freshProvision(
@@ -142,23 +119,14 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       String walletAlias,
       TreasuryRole role,
       String derivedAddress,
-      String preMintedKeyId,
-      AtomicBoolean attachedFlag,
-      AtomicBoolean cleanupInvoked,
       AtomicBoolean failureAuditWritten) {
-    registerCleanupOnRollback(
-        preMintedKeyId,
-        cleanupInvoked,
-        failureAuditWritten,
-        command.operatorUserId(),
-        derivedAddress);
+    String kmsKeyId = mintNewKey(command, derivedAddress, failureAuditWritten);
     TreasuryWallet wallet =
-        TreasuryWallet.provision(walletAlias, preMintedKeyId, derivedAddress, role, clock);
+        TreasuryWallet.provision(walletAlias, kmsKeyId, derivedAddress, role, clock);
     TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
-    attachedFlag.set(true);
     applicationEventPublisher.publishEvent(
         new TreasuryWalletProvisionedEvent(
-            walletAlias, preMintedKeyId, derivedAddress, command.operatorUserId(), false));
+            walletAlias, kmsKeyId, derivedAddress, command.operatorUserId(), false));
     return ProvisionTreasuryKeyResult.from(saved, role);
   }
 
@@ -167,27 +135,13 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       TreasuryRole role,
       TreasuryWallet existing,
       String derivedAddress,
-      String preMintedKeyId,
-      AtomicBoolean attachedFlag,
-      AtomicBoolean cleanupInvoked,
       AtomicBoolean failureAuditWritten) {
-    registerCleanupOnRollback(
-        preMintedKeyId,
-        cleanupInvoked,
-        failureAuditWritten,
-        command.operatorUserId(),
-        derivedAddress);
-    TreasuryWallet wallet =
-        TreasuryWallet.backfill(existing, preMintedKeyId, derivedAddress, clock);
+    String kmsKeyId = mintNewKey(command, derivedAddress, failureAuditWritten);
+    TreasuryWallet wallet = TreasuryWallet.backfill(existing, kmsKeyId, derivedAddress, clock);
     TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
-    attachedFlag.set(true);
     applicationEventPublisher.publishEvent(
         new TreasuryWalletProvisionedEvent(
-            existing.getWalletAlias(),
-            preMintedKeyId,
-            derivedAddress,
-            command.operatorUserId(),
-            false));
+            existing.getWalletAlias(), kmsKeyId, derivedAddress, command.operatorUserId(), false));
     return ProvisionTreasuryKeyResult.from(saved, role);
   }
 
@@ -209,26 +163,16 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       TreasuryRole role,
       TreasuryWallet existing,
       String derivedAddress,
-      String preMintedKeyId,
       boolean disposeOldKey,
-      AtomicBoolean attachedFlag,
-      AtomicBoolean cleanupInvoked,
       AtomicBoolean failureAuditWritten) {
-    registerCleanupOnRollback(
-        preMintedKeyId,
-        cleanupInvoked,
-        failureAuditWritten,
-        command.operatorUserId(),
-        derivedAddress);
-    TreasuryWallet rotated =
-        TreasuryWallet.replaceKey(existing, preMintedKeyId, derivedAddress, clock);
+    String kmsKeyId = mintNewKey(command, derivedAddress, failureAuditWritten);
+    TreasuryWallet rotated = TreasuryWallet.replaceKey(existing, kmsKeyId, derivedAddress, clock);
     TreasuryWallet saved = saveTreasuryWalletPort.save(rotated);
-    attachedFlag.set(true);
     applicationEventPublisher.publishEvent(
         new TreasuryWalletKeyReplacedEvent(
             existing.getWalletAlias(),
             existing.getKmsKeyId(),
-            preMintedKeyId,
+            kmsKeyId,
             derivedAddress,
             command.operatorUserId(),
             disposeOldKey));
@@ -236,9 +180,22 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
   }
 
   /**
-   * C4 dispatch: alias가 ENABLED 면 {@code ALREADY_PROVISIONED}, 그 외(DISABLED / PENDING_DELETION /
-   * UNAVAILABLE) 면 alias-repair 이벤트 재발행. {@code describeAliasTarget} 는 read-only KMS API 로, MOM-444
-   * §4.0.2 의 "TX 안에 잔존하는 KMS 호출" 예외 항목.
+   * C4 (IdempotentRetry) dispatch. Calls {@code describeAlias} read-only under the lock so the
+   * decision between {@code ALREADY_PROVISIONED} and alias-repair is race-free.
+   *
+   * <p>Three sub-cases:
+   *
+   * <ul>
+   *   <li>alias state == {@code ENABLED} && target key id matches the row's {@code kmsKeyId}: the
+   *       wallet is genuinely already provisioned and consistent with AWS — reject with {@code
+   *       ALREADY_PROVISIONED}.
+   *   <li>alias state == {@code ENABLED} but target key id != row's {@code kmsKeyId}: alias drift —
+   *       the alias has been re-bound out-of-band to a different key. Re-publish the provisioned
+   *       event in alias-repair mode so the AFTER_COMMIT handler restores the alias to the row's
+   *       kmsKeyId via {@code updateAlias}. (PR #177 R3.)
+   *   <li>alias state in {DISABLED, PENDING_DELETION, UNAVAILABLE}: classic ghost-alias from a
+   *       prior failed run — re-publish in alias-repair mode.
+   * </ul>
    */
   private ProvisionTreasuryKeyResult handleExistingProvisionedRow(
       ProvisionTreasuryKeyCommand command,
@@ -246,22 +203,27 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       String derivedAddress,
       TreasuryRole role,
       AtomicBoolean failureAuditWritten) {
-    KmsKeyState aliasState = kmsKeyLifecyclePort.describeAliasTarget(existing.getWalletAlias());
-    boolean needsAliasRepair =
-        aliasState == KmsKeyState.UNAVAILABLE
-            || aliasState == KmsKeyState.PENDING_DELETION
-            || aliasState == KmsKeyState.DISABLED;
-    if (!needsAliasRepair) {
+    AliasTargetInfo aliasInfo = kmsKeyLifecyclePort.describeAlias(existing.getWalletAlias());
+    KmsKeyState aliasState = aliasInfo.state();
+    boolean aliasMatchesRow =
+        aliasState == KmsKeyState.ENABLED
+            && existing.getKmsKeyId().equals(aliasInfo.targetKmsKeyId());
+
+    if (aliasMatchesRow) {
       treasuryAuditRecorder.record(
           command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
       failureAuditWritten.set(true);
       throw new TreasuryWalletAlreadyProvisionedException(
           "treasury wallet already provisioned for alias '" + existing.getWalletAlias() + "'");
     }
+
     log.warn(
-        "Re-publishing provisioned event in alias-repair mode (alias={}, aliasState={})",
+        "Re-publishing provisioned event in alias-repair mode (alias={}, aliasState={},"
+            + " aliasTarget={}, rowKmsKeyId={})",
         existing.getWalletAlias(),
-        aliasState);
+        aliasState,
+        aliasInfo.targetKmsKeyId(),
+        existing.getKmsKeyId());
     applicationEventPublisher.publishEvent(
         new TreasuryWalletProvisionedEvent(
             existing.getWalletAlias(),
@@ -270,6 +232,49 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
             command.operatorUserId(),
             true));
     return ProvisionTreasuryKeyResult.from(existing, role);
+  }
+
+  /**
+   * Mint a fresh KMS key plus key material under the row lock: {@code createKey →
+   * getParametersForImport → wrap → importKeyMaterial → signDigest}. Registers the rollback cleanup
+   * sync as soon as the key id is known so a subsequent save/event failure rolls back the row and
+   * disposes the orphan key. On any RuntimeException during mint itself cleans up directly, records
+   * the failure audit row, and rethrows.
+   */
+  private String mintNewKey(
+      ProvisionTreasuryKeyCommand command,
+      String derivedAddress,
+      AtomicBoolean failureAuditWritten) {
+    String kmsKeyId = null;
+    byte[] rawPrivateKey = decodePrivateKey(command.rawPrivateKey());
+    byte[] wrappedKey = null;
+    AtomicBoolean cleanupInvoked = new AtomicBoolean(false);
+    try {
+      kmsKeyId = kmsKeyLifecyclePort.createKey();
+      registerCleanupOnRollback(
+          kmsKeyId, cleanupInvoked, failureAuditWritten, command.operatorUserId(), derivedAddress);
+      KmsKeyLifecyclePort.ImportParams params =
+          kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
+      wrappedKey = kmsKeyMaterialWrapperPort.wrap(rawPrivateKey, params.wrappingPublicKey());
+      kmsKeyLifecyclePort.importKeyMaterial(kmsKeyId, wrappedKey, params.importToken());
+      byte[] digest = new byte[SANITY_DIGEST_BYTES];
+      secureRandom.nextBytes(digest);
+      signDigestPort.signDigest(kmsKeyId, digest, derivedAddress);
+      return kmsKeyId;
+    } catch (RuntimeException e) {
+      if (kmsKeyId != null && cleanupInvoked.compareAndSet(false, true)) {
+        log.warn("Mint failed mid-flight; cleaning up KMS key={}", kmsKeyId);
+        cleanupKmsKey(kmsKeyId);
+      }
+      if (failureAuditWritten.compareAndSet(false, true)) {
+        treasuryAuditRecorder.record(
+            command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
+      }
+      throw e;
+    } finally {
+      zeroize(rawPrivateKey);
+      zeroize(wrappedKey);
+    }
   }
 
   private void registerCleanupOnRollback(
@@ -287,8 +292,8 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
   }
 
   /**
-   * Factory for the rollback-cleanup synchronization. Extracted to package-private so unit tests
-   * can drive {@code afterCompletion(...)} directly without needing a real transaction context.
+   * Factory for the rollback-cleanup synchronization. Package-private so unit tests can drive
+   * {@code afterCompletion(...)} directly without spinning up a real transaction context.
    */
   TransactionSynchronization buildCleanupSync(
       String createdKmsKeyId,
@@ -338,6 +343,27 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       kmsKeyLifecyclePort.scheduleKeyDeletion(kmsKeyId, CLEANUP_PENDING_WINDOW_DAYS);
     } catch (RuntimeException ex) {
       log.warn("Cleanup scheduleKeyDeletion failed for kmsKeyId={}", kmsKeyId, ex);
+    }
+  }
+
+  private static byte[] decodePrivateKey(String rawPrivateKey) {
+    String normalized = rawPrivateKey.trim().toLowerCase(java.util.Locale.ROOT);
+    if (normalized.startsWith("0x")) {
+      normalized = normalized.substring(2);
+    }
+    java.math.BigInteger value = new java.math.BigInteger(normalized, 16);
+    byte[] padded = new byte[RAW_PRIVATE_KEY_BYTES];
+    byte[] valueBytes = value.toByteArray();
+    int srcOffset =
+        valueBytes.length > RAW_PRIVATE_KEY_BYTES ? valueBytes.length - RAW_PRIVATE_KEY_BYTES : 0;
+    int dstOffset = RAW_PRIVATE_KEY_BYTES - (valueBytes.length - srcOffset);
+    System.arraycopy(valueBytes, srcOffset, padded, dstOffset, valueBytes.length - srcOffset);
+    return padded;
+  }
+
+  private static void zeroize(byte[] sensitive) {
+    if (sensitive != null) {
+      java.util.Arrays.fill(sensitive, (byte) 0);
     }
   }
 }

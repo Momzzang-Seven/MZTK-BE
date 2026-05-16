@@ -13,8 +13,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicBoolean;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,8 @@ class ProvisionTreasuryKeyTransactionalDelegateCleanupSyncTest {
   @Mock private LoadTreasuryWalletPort loadTreasuryWalletPort;
   @Mock private SaveTreasuryWalletPort saveTreasuryWalletPort;
   @Mock private KmsKeyLifecyclePort kmsKeyLifecyclePort;
+  @Mock private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
+  @Mock private SignDigestPort signDigestPort;
   @Mock private TreasuryAuditRecorder treasuryAuditRecorder;
   @Mock private ApplicationEventPublisher applicationEventPublisher;
 
@@ -53,6 +57,8 @@ class ProvisionTreasuryKeyTransactionalDelegateCleanupSyncTest {
             loadTreasuryWalletPort,
             saveTreasuryWalletPort,
             kmsKeyLifecyclePort,
+            kmsKeyMaterialWrapperPort,
+            signDigestPort,
             treasuryAuditRecorder,
             applicationEventPublisher,
             fixed);

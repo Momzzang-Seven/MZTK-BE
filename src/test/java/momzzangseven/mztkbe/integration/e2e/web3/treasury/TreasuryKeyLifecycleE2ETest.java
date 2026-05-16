@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -20,6 +21,7 @@ import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
@@ -607,8 +609,9 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       stubSuccessfulProvision();
       assertThat(provision().getStatusCode()).isEqualTo(HttpStatus.OK);
 
-      // Force ENABLED to disable alias-repair branch
-      when(kmsKeyLifecyclePort.describeAliasTarget(REWARD_ALIAS)).thenReturn(KmsKeyState.ENABLED);
+      // alias points to the row's kmsKeyId in ENABLED state → C4 reject (no alias drift)
+      when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
+          .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, MOCK_KMS_KEY_ID));
 
       ResponseEntity<String> res = provision();
 
@@ -621,6 +624,8 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       // Two audit rows: 1 success (first provision) + 1 failure (second)
       assertThat(countProvisionAuditRows(true)).isEqualTo(1);
       assertThat(countProvisionAuditRows(false)).isEqualTo(1);
+      // C4 idempotent reject path does not mint a new key (PR #177 R4).
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
     }
 
     /** Helper: configure importKeyMaterial mock to throw. */
@@ -641,7 +646,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
     @Test
     @DisplayName(
-        "[E-17] 기존 row가 있고 alias가 KMS에서 DISABLED → 200, kms_key_id 변경 없음, pre-minted key 는 outer cleanup 으로 회수 (MOM-444 3-phase)")
+        "[E-17] 기존 row가 있고 alias가 KMS에서 DISABLED → 200, kms_key_id 변경 없음, mint 호출 없음 (PR #177 R4)")
     void existingRowWithDisabledAlias_repairsViaUpdateAlias() throws Exception {
       // Pre-seed row: 동일 alias + 동일 derived address + 기존 kms_key_id
       String previousKmsId = "prev-kms-id";
@@ -653,12 +658,11 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
           previousKmsId,
           DERIVED_ADDRESS);
 
-      // MOM-444: Phase 1 pre-mint 은 alias-repair 경로에서도 항상 실행된다 (TX 바깥에서 row state 와
-      // 무관하게 createKey + import + sign sanity 가 선행됨). 따라서 stub 이 필요하다. 이 pre-minted
-      // key 는 C4 alias-repair 분기에서 row 에 attach 되지 않으므로 outer finally 가 회수한다.
-      stubSuccessfulProvision();
-      // alias-target 은 DISABLED → C4 alias-repair 분기
-      when(kmsKeyLifecyclePort.describeAliasTarget(REWARD_ALIAS)).thenReturn(KmsKeyState.DISABLED);
+      // PR #177 R4: C4 alias-repair 경로는 mint 를 실행하지 않는다 (mint-필요 분기인 FreshProvision /
+      // Backfill / ReplaceKey 만 createKey 를 호출). 따라서 mint chain 의 stub 도, pre-minted key
+      // cleanup 도 필요 없다. alias-target 이 DISABLED 라서 C4 alias-repair 분기로 분기된다.
+      when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
+          .thenReturn(new AliasTargetInfo(KmsKeyState.DISABLED, previousKmsId));
       // BindKmsAlias 의 ghost-recovery 에서 사용될 createAlias / updateAlias 스텁
       org.mockito.Mockito.doThrow(
               new KmsAliasAlreadyExistsException("alias already bound", new RuntimeException()))
@@ -672,18 +676,54 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       // 응답의 kmsKeyId 는 기존 row 의 값을 그대로 반환 (alias-repair 는 row 를 갱신하지 않음).
       assertThat(data.at("/data/kmsKeyId").asText()).isEqualTo(previousKmsId);
 
-      // MOM-444: Phase 1 은 row state 무관하게 실행 — createKey/import 가 한 번씩 호출된다.
-      verify(kmsKeyLifecyclePort).createKey();
-      verify(kmsKeyLifecyclePort)
+      // PR #177 R4: C4 alias-repair 분기는 mint 자체를 실행하지 않으므로 KMS mint chain 호출이 없다.
+      verify(kmsKeyLifecyclePort, never()).createKey();
+      verify(kmsKeyLifecyclePort, never())
           .importKeyMaterial(anyString(), any(byte[].class), any(byte[].class));
-
-      // alias-repair 분기는 row 에 pre-minted key 를 attach 하지 않으므로 outer finally 가 회수.
-      verify(kmsKeyLifecyclePort).disableKey(MOCK_KMS_KEY_ID);
-      verify(kmsKeyLifecyclePort).scheduleKeyDeletion(MOCK_KMS_KEY_ID, 7);
+      // mint 가 없으므로 cleanup 도 없다.
+      verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(anyString(), anyInt());
 
       // AFTER_COMMIT 핸들러가 ghost-alias 복구 → updateAlias(REWARD_ALIAS, previousKmsId)
       verify(kmsKeyLifecyclePort).updateAlias(REWARD_ALIAS, previousKmsId);
       assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName(
+        "[E-17b] 기존 row가 있고 alias가 ENABLED 이지만 다른 key 를 가리킴 → alias drift → updateAlias 로 복구 (PR #177 R3)")
+    void existingRowWithEnabledButDriftedAlias_repairsViaUpdateAlias() throws Exception {
+      // Pre-seed row: 동일 alias + 동일 derived address + 기존 kms_key_id
+      String previousKmsId = "prev-kms-id";
+      String driftedKmsId = "drift-kms-id";
+      jdbcTemplate.update(
+          "INSERT INTO web3_treasury_wallets"
+              + " (wallet_alias, kms_key_id, treasury_address, status, key_origin, created_at, updated_at)"
+              + " VALUES (?, ?, ?, 'ACTIVE', 'IMPORTED', NOW(), NOW())",
+          REWARD_ALIAS,
+          previousKmsId,
+          DERIVED_ADDRESS);
+
+      // PR #177 R3: alias 가 ENABLED 이지만 row 의 kmsKeyId 와 다른 key 를 가리키면 alias drift 로
+      // 판단해 alias-repair 분기로 라우팅된다.
+      when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
+          .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, driftedKmsId));
+      // BindKmsAlias 의 ghost-recovery 에서 사용될 createAlias / updateAlias 스텁
+      org.mockito.Mockito.doThrow(
+              new KmsAliasAlreadyExistsException("alias already bound", new RuntimeException()))
+          .when(kmsKeyLifecyclePort)
+          .createAlias(eq(REWARD_ALIAS), anyString());
+
+      ResponseEntity<String> res = provision();
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode data = objectMapper.readTree(res.getBody());
+      assertThat(data.at("/data/kmsKeyId").asText()).isEqualTo(previousKmsId);
+
+      // C4 alias-repair: mint 안 함.
+      verify(kmsKeyLifecyclePort, never()).createKey();
+      // AFTER_COMMIT handler 에서 alias 를 row 의 kmsKeyId 로 재바인딩.
+      verify(kmsKeyLifecyclePort).updateAlias(REWARD_ALIAS, previousKmsId);
     }
   }
 
@@ -793,6 +833,9 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
       verify(kmsKeyLifecyclePort).enableKey(firstKmsKeyId);
       assertThat(countKmsAuditRows("KMS_ENABLE", true)).isGreaterThanOrEqualTo(1);
+      // PR #177 R4: C5 reactivate path does not mint a new KMS key — only the first provision
+      // (FreshProvision) called createKey.
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
     }
 
     @Test

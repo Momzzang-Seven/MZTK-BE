@@ -1,7 +1,5 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 
-import java.math.BigInteger;
-import java.security.SecureRandom;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
@@ -14,51 +12,34 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProvisionTreasuryKeyUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.Credentials;
 
 /**
- * MOM-444 3-phase provisioning orchestrator.
+ * MOM-444 / PR #177 R3+R4 provisioning orchestrator.
  *
- * <p>This service hosts the outer flow only — there is intentionally NO {@code @Transactional} on
- * {@link #execute}. The flow is:
+ * <p>Thin outer shell: validates the command, derives the wallet address from the supplied raw key,
+ * fails fast on {@code expectedAddress} mismatch, then hands off to {@link
+ * ProvisionTreasuryKeyTransactionalDelegate#lockedCommit} for everything that requires the row lock
+ * — including the conditional KMS mint, the DB row write, and the AFTER_COMMIT event publication.
+ * The mint chain ({@code createKey / import / signDigest}) used to run unconditionally outside the
+ * transaction; after PR #177 R4 it lives inside the delegate and runs only for the actions that
+ * actually need a fresh KMS key, so admin retries (C4 / C5) no longer leave orphan keys behind on
+ * cleanup failure.
  *
- * <ol>
- *   <li><b>Phase 1 (no TX, no lock):</b> validate, derive address, then pre-mint a KMS key ({@code
- *       createKey} → {@code getParametersForImport} → wrap → {@code importKeyMaterial} → {@code
- *       signDigest} sanity check). Any failure cleans up the partially-minted key.
- *   <li><b>Phase 2 (TX with row lock):</b> delegate to {@link
- *       ProvisionTreasuryKeyTransactionalDelegate#lockedCommit} which acquires {@code
- *       loadByAliasForUpdate} (PESSIMISTIC_WRITE), dispatches to one of five actions
- *       (FreshProvision / Backfill / IdempotentRetry / ReEnableSameKey / ReplaceKey), persists the
- *       row, and publishes the AFTER_COMMIT event.
- *   <li><b>Phase 3 (AFTER_COMMIT handlers, no TX, no lock):</b> KMS alias bind/update, old-key
- *       dispose, or enableKey — each handler is in {@code modules/web3/treasury/infrastructure/
- *       event/} and records {@code KMS_*} audit rows on success/failure.
- * </ol>
- *
- * <p><b>pre-minted key cleanup state machine.</b> The {@code attachedFlag} / {@code cleanupInvoked}
- * interlock ensures the pre-minted key is cleaned up exactly once when it isn't attached to a
- * committed row, and is never disposed when the row commit succeeded with the key attached. See
- * spec §4.0.3.
+ * <p>The outer try/catch survives only as the audit safety net for failures that escape the
+ * delegate without already writing a treasury_provision audit row (e.g. an unexpected
+ * RuntimeException between the delegate's catch handlers and the rollback sync). The {@code
+ * failureAuditWritten} AtomicBoolean is the interlock the delegate flips when it has already
+ * recorded a failure row.
  */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase {
 
-  private static final int RAW_PRIVATE_KEY_BYTES = 32;
-  private static final int SANITY_DIGEST_BYTES = 32;
-
   private final ProvisionTreasuryKeyTransactionalDelegate delegate;
-  private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
-  private final KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
-  private final SignDigestPort signDigestPort;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
-  private final SecureRandom secureRandom = new SecureRandom();
 
   @Override
   @AdminOnly(
@@ -79,82 +60,21 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
           "derived address does not match expectedAddress");
     }
 
-    String preMintedKeyId = mintAndSanityCheck(command, derivedAddress);
-    AtomicBoolean attachedFlag = new AtomicBoolean(false);
-    AtomicBoolean cleanupInvoked = new AtomicBoolean(false);
     AtomicBoolean failureAuditWritten = new AtomicBoolean(false);
-
     try {
-      return delegate.lockedCommit(
-          command,
-          derivedAddress,
-          preMintedKeyId,
-          attachedFlag,
-          cleanupInvoked,
-          failureAuditWritten);
+      return delegate.lockedCommit(command, derivedAddress, failureAuditWritten);
     } catch (RuntimeException e) {
-      // Skip the audit when the delegate (C4 reject path or STATUS_UNKNOWN synchronizer) already
-      // recorded a failure row for this call. Preserves the operator-friendly failure_reason
-      // string and prevents a second row with the bare exception class name.
       if (failureAuditWritten.compareAndSet(false, true)) {
         treasuryAuditRecorder.record(
             command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
       }
       throw e;
-    } finally {
-      if (!attachedFlag.get() && cleanupInvoked.compareAndSet(false, true)) {
-        delegate.cleanupKmsKey(preMintedKeyId);
-      }
-    }
-  }
-
-  /**
-   * Phase 1 — pre-mint KMS key + import key material + sanity-sign roundtrip. Runs OUTSIDE any
-   * {@code @Transactional}: holding a row lock during the (~1–2s) KMS calls would serialize
-   * concurrent provisioning unnecessarily. Failures here cleanup the partially-minted key.
-   */
-  private String mintAndSanityCheck(ProvisionTreasuryKeyCommand command, String derivedAddress) {
-    String kmsKeyId = null;
-    byte[] rawPrivateKey = decodePrivateKey(command.rawPrivateKey());
-    byte[] wrappedKey = null;
-    try {
-      kmsKeyId = kmsKeyLifecyclePort.createKey();
-      KmsKeyLifecyclePort.ImportParams params =
-          kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
-      wrappedKey = kmsKeyMaterialWrapperPort.wrap(rawPrivateKey, params.wrappingPublicKey());
-      kmsKeyLifecyclePort.importKeyMaterial(kmsKeyId, wrappedKey, params.importToken());
-      byte[] digest = new byte[SANITY_DIGEST_BYTES];
-      secureRandom.nextBytes(digest);
-      signDigestPort.signDigest(kmsKeyId, digest, derivedAddress);
-      return kmsKeyId;
-    } catch (RuntimeException e) {
-      if (kmsKeyId != null) {
-        delegate.cleanupKmsKey(kmsKeyId);
-      }
-      treasuryAuditRecorder.record(
-          command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
-      throw e;
-    } finally {
-      zeroize(rawPrivateKey);
-      zeroize(wrappedKey);
     }
   }
 
   private static String deriveAddress(String rawPrivateKey) {
     String normalized = normalizePrivateKey(rawPrivateKey);
     return Credentials.create(normalized).getAddress().toLowerCase(Locale.ROOT);
-  }
-
-  private static byte[] decodePrivateKey(String rawPrivateKey) {
-    String normalized = normalizePrivateKey(rawPrivateKey);
-    BigInteger value = new BigInteger(normalized, 16);
-    byte[] padded = new byte[RAW_PRIVATE_KEY_BYTES];
-    byte[] valueBytes = value.toByteArray();
-    int srcOffset =
-        valueBytes.length > RAW_PRIVATE_KEY_BYTES ? valueBytes.length - RAW_PRIVATE_KEY_BYTES : 0;
-    int dstOffset = RAW_PRIVATE_KEY_BYTES - (valueBytes.length - srcOffset);
-    System.arraycopy(valueBytes, srcOffset, padded, dstOffset, valueBytes.length - srcOffset);
-    return padded;
   }
 
   private static String normalizePrivateKey(String rawPrivateKey) {
@@ -172,11 +92,5 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       throw new TreasuryPrivateKeyInvalidException("rawPrivateKey must be hex string");
     }
     return normalized;
-  }
-
-  private static void zeroize(byte[] sensitive) {
-    if (sensitive != null) {
-      java.util.Arrays.fill(sensitive, (byte) 0);
-    }
   }
 }

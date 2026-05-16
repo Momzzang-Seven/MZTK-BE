@@ -66,11 +66,11 @@ class LocalKmsKeyLifecycleAdapterTest {
     }
 
     @Test
-    @DisplayName("[M-107] describeAliasTarget")
-    void describeAliasTarget_throwsUnsupported() {
-      assertThatThrownBy(() -> adapter.describeAliasTarget("a"))
+    @DisplayName("[M-107] describeAlias")
+    void describeAlias_throwsUnsupported() {
+      assertThatThrownBy(() -> adapter.describeAlias("a"))
           .isInstanceOf(UnsupportedOperationException.class)
-          .hasMessageContaining("describeAliasTarget");
+          .hasMessageContaining("describeAlias");
     }
 
     @Test

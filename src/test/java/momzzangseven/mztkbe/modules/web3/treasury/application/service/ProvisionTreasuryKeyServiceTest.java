@@ -24,6 +24,7 @@ import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
@@ -76,16 +77,12 @@ class ProvisionTreasuryKeyServiceTest {
             loadTreasuryWalletPort,
             saveTreasuryWalletPort,
             kmsKeyLifecyclePort,
+            kmsKeyMaterialWrapperPort,
+            signDigestPort,
             treasuryAuditRecorder,
             applicationEventPublisher,
             fixed);
-    service =
-        new ProvisionTreasuryKeyService(
-            delegate,
-            kmsKeyLifecyclePort,
-            kmsKeyMaterialWrapperPort,
-            signDigestPort,
-            treasuryAuditRecorder);
+    service = new ProvisionTreasuryKeyService(delegate, treasuryAuditRecorder);
   }
 
   // ---------- Input validation ----------
@@ -113,10 +110,13 @@ class ProvisionTreasuryKeyServiceTest {
     verify(kmsKeyLifecyclePort, never()).createKey();
   }
 
-  // ---------- Pre-mint failures ----------
+  // ---------- Mint failures (mint now lives inside the delegate, called only by mint-required
+  // actions). Use C0 fixture (existingOpt empty → FreshProvision) so mint is exercised.
 
   @Test
-  void execute_cleansUpPreMintedKey_whenSignDigestFails() {
+  void execute_cleansUpMintedKey_whenSignDigestFails() {
+    when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
+        .thenReturn(Optional.empty());
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
         .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
@@ -134,12 +134,13 @@ class ProvisionTreasuryKeyServiceTest {
 
     verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
     verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
-    verify(loadTreasuryWalletPort, never()).loadByAliasForUpdate(anyString());
     verify(saveTreasuryWalletPort, never()).save(any());
   }
 
   @Test
-  void execute_cleansUpPreMintedKey_whenImportKeyMaterialFails() {
+  void execute_cleansUpMintedKey_whenImportKeyMaterialFails() {
+    when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
+        .thenReturn(Optional.empty());
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
         .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
@@ -156,11 +157,12 @@ class ProvisionTreasuryKeyServiceTest {
 
     verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
     verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
-    verify(loadTreasuryWalletPort, never()).loadByAliasForUpdate(anyString());
   }
 
   @Test
   void execute_sanitySignTerminalKmsFailure_propagatesNonRetryable() {
+    when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
+        .thenReturn(Optional.empty());
     stubKmsMintHappyPathExceptSign();
     KmsSignFailedException terminal =
         new KmsSignFailedException("kms denied", new RuntimeException("AccessDenied"), false);
@@ -196,6 +198,7 @@ class ProvisionTreasuryKeyServiceTest {
     verify(applicationEventPublisher).publishEvent(captor.capture());
     assertThat(captor.getValue().kmsKeyId()).isEqualTo("kms-key-id");
     assertThat(captor.getValue().aliasRepairMode()).isFalse();
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
     verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
   }
 
@@ -212,6 +215,7 @@ class ProvisionTreasuryKeyServiceTest {
     service.execute(command);
 
     verify(applicationEventPublisher).publishEvent(any(TreasuryWalletProvisionedEvent.class));
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
@@ -227,6 +231,7 @@ class ProvisionTreasuryKeyServiceTest {
     service.execute(command);
 
     verify(applicationEventPublisher).publishEvent(any(TreasuryWalletProvisionedEvent.class));
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
@@ -242,36 +247,34 @@ class ProvisionTreasuryKeyServiceTest {
     service.execute(command);
 
     verify(applicationEventPublisher).publishEvent(any(TreasuryWalletProvisionedEvent.class));
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
-  void c4_alreadyProvisionedActive_throws() {
+  void c4_alreadyProvisionedActive_andAliasMatchesRow_throws_andNoMint() {
     TreasuryWallet existing =
         legacyRow(DERIVED_ADDRESS, "existing-kms-id", TreasuryWalletStatus.ACTIVE);
-    stubKmsMintHappyPath();
     when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
         .thenReturn(Optional.of(existing));
-    when(kmsKeyLifecyclePort.describeAliasTarget("reward-treasury"))
-        .thenReturn(KmsKeyState.ENABLED);
+    when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, "existing-kms-id"));
 
     ProvisionTreasuryKeyCommand command =
         new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
     assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(TreasuryWalletAlreadyProvisionedException.class);
 
-    // Pre-minted key (unused) gets cleaned up
-    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+    verifyNoMintHappened();
   }
 
   @Test
-  void c4_aliasRepairMode_whenAliasPointsToPendingDeletion() {
+  void c4_aliasRepairMode_whenAliasPointsToPendingDeletion_andNoMint() {
     TreasuryWallet existing =
         legacyRow(DERIVED_ADDRESS, "existing-kms-id", TreasuryWalletStatus.ACTIVE);
-    stubKmsMintHappyPath();
     when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
         .thenReturn(Optional.of(existing));
-    when(kmsKeyLifecyclePort.describeAliasTarget("reward-treasury"))
-        .thenReturn(KmsKeyState.PENDING_DELETION);
+    when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.PENDING_DELETION, "stale-kms-id"));
 
     ProvisionTreasuryKeyCommand command =
         new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
@@ -282,17 +285,38 @@ class ProvisionTreasuryKeyServiceTest {
         ArgumentCaptor.forClass(TreasuryWalletProvisionedEvent.class);
     verify(applicationEventPublisher).publishEvent(captor.capture());
     assertThat(captor.getValue().aliasRepairMode()).isTrue();
-    // The C4 repair path doesn't attach the pre-minted key — outer finally cleans it up
-    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+
+    verifyNoMintHappened();
   }
 
   @Test
-  void c5_reEnableSameKey_disabledActive_publishesReactivated() {
+  void c4_aliasRepairMode_whenAliasEnabledButTargetMismatch_andNoMint() {
+    TreasuryWallet existing =
+        legacyRow(DERIVED_ADDRESS, "existing-kms-id", TreasuryWalletStatus.ACTIVE);
+    when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
+        .thenReturn(Optional.of(existing));
+    when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, "drift-kms-id"));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+    ProvisionTreasuryKeyResult result = service.execute(command);
+
+    assertThat(result.kmsKeyId()).isEqualTo("existing-kms-id");
+    ArgumentCaptor<TreasuryWalletProvisionedEvent> captor =
+        ArgumentCaptor.forClass(TreasuryWalletProvisionedEvent.class);
+    verify(applicationEventPublisher).publishEvent(captor.capture());
+    assertThat(captor.getValue().aliasRepairMode()).isTrue();
+
+    verifyNoMintHappened();
+  }
+
+  @Test
+  void c5_reEnableSameKey_disabledActive_publishesReactivated_andNoMint() {
     TreasuryWallet disabled =
         legacyRow(DERIVED_ADDRESS, "existing-kms-id", TreasuryWalletStatus.DISABLED).toBuilder()
             .disabledAt(LocalDateTime.parse("2025-12-01T00:00:00"))
             .build();
-    stubKmsMintHappyPath();
     when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
         .thenReturn(Optional.of(disabled));
     when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -302,8 +326,8 @@ class ProvisionTreasuryKeyServiceTest {
     service.execute(command);
 
     verify(applicationEventPublisher).publishEvent(any(TreasuryWalletReactivatedEvent.class));
-    // Pre-minted key unused → outer finally cleanup
-    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+
+    verifyNoMintHappened();
   }
 
   @Test
@@ -325,6 +349,7 @@ class ProvisionTreasuryKeyServiceTest {
     assertThat(captor.getValue().disposeOldKey()).isFalse();
     assertThat(captor.getValue().oldKmsKeyId()).isEqualTo("old-kms-id");
     assertThat(captor.getValue().newKmsKeyId()).isEqualTo("kms-key-id");
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
@@ -344,6 +369,7 @@ class ProvisionTreasuryKeyServiceTest {
         ArgumentCaptor.forClass(TreasuryWalletKeyReplacedEvent.class);
     verify(applicationEventPublisher).publishEvent(captor.capture());
     assertThat(captor.getValue().disposeOldKey()).isTrue();
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
@@ -363,6 +389,7 @@ class ProvisionTreasuryKeyServiceTest {
         ArgumentCaptor.forClass(TreasuryWalletKeyReplacedEvent.class);
     verify(applicationEventPublisher).publishEvent(captor.capture());
     assertThat(captor.getValue().disposeOldKey()).isTrue();
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
@@ -382,6 +409,7 @@ class ProvisionTreasuryKeyServiceTest {
         ArgumentCaptor.forClass(TreasuryWalletKeyReplacedEvent.class);
     verify(applicationEventPublisher).publishEvent(captor.capture());
     assertThat(captor.getValue().disposeOldKey()).isFalse();
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
@@ -400,6 +428,7 @@ class ProvisionTreasuryKeyServiceTest {
     ArgumentCaptor<TreasuryWallet> captor = ArgumentCaptor.forClass(TreasuryWallet.class);
     verify(saveTreasuryWalletPort).save(captor.capture());
     assertThat(captor.getValue().getWalletAddress()).isEqualToIgnoringCase(DERIVED_ADDRESS);
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
@@ -416,6 +445,7 @@ class ProvisionTreasuryKeyServiceTest {
     service.execute(command);
 
     verify(applicationEventPublisher).publishEvent(any(TreasuryWalletProvisionedEvent.class));
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   @Test
@@ -432,6 +462,7 @@ class ProvisionTreasuryKeyServiceTest {
     service.execute(command);
 
     verify(applicationEventPublisher).publishEvent(any(TreasuryWalletProvisionedEvent.class));
+    verify(kmsKeyLifecyclePort, times(1)).createKey();
   }
 
   // ---------- audit de-dup (I1) ----------
@@ -443,39 +474,26 @@ class ProvisionTreasuryKeyServiceTest {
    */
   @Test
   void outerCatch_skipsAudit_whenDelegateAlreadyAudited() {
-    stubKmsMintHappyPath();
     ProvisionTreasuryKeyTransactionalDelegate spyDelegate = Mockito.spy(delegate);
     Mockito.doAnswer(
             inv -> {
-              AtomicBoolean failureAuditWritten = inv.getArgument(5);
+              AtomicBoolean failureAuditWritten = inv.getArgument(2);
               failureAuditWritten.set(true);
               throw new TransactionSystemException("commit returned STATUS_UNKNOWN");
             })
         .when(spyDelegate)
-        .lockedCommit(any(), anyString(), anyString(), any(), any(), any());
+        .lockedCommit(any(), anyString(), any());
     ProvisionTreasuryKeyService spyService =
-        new ProvisionTreasuryKeyService(
-            spyDelegate,
-            kmsKeyLifecyclePort,
-            kmsKeyMaterialWrapperPort,
-            signDigestPort,
-            treasuryAuditRecorder);
+        new ProvisionTreasuryKeyService(spyDelegate, treasuryAuditRecorder);
 
     ProvisionTreasuryKeyCommand command =
         new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
     assertThatThrownBy(() -> spyService.execute(command))
         .isInstanceOf(TransactionSystemException.class);
 
-    // The outer catch must not write a second audit row for this call. The only acceptable
-    // invocation
-    // is the synchronizer's own row, which we simulated by setting the flag — the recorder mock
-    // here
-    // never sees it because we set the flag without delegating to the real recorder.
+    // The outer catch must not write a second audit row when the delegate has already audited.
     verify(treasuryAuditRecorder, never())
         .record(eq(1L), anyString(), eq(false), eq("TransactionSystemException"));
-    // The pre-minted key cleanup must still run (outer finally), because attachedFlag stayed false.
-    verify(kmsKeyLifecyclePort, times(1)).disableKey("kms-key-id");
-    verify(kmsKeyLifecyclePort, times(1)).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
   }
 
   // ---------- helpers ----------
@@ -496,6 +514,16 @@ class ProvisionTreasuryKeyServiceTest {
         .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
     when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
         .thenReturn(new byte[] {3});
+  }
+
+  private void verifyNoMintHappened() {
+    verify(kmsKeyLifecyclePort, never()).createKey();
+    verify(kmsKeyLifecyclePort, never()).getParametersForImport(anyString());
+    verify(kmsKeyLifecyclePort, never())
+        .importKeyMaterial(anyString(), any(byte[].class), any(byte[].class));
+    verify(signDigestPort, never()).signDigest(anyString(), any(byte[].class), anyString());
+    verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
+    verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(anyString(), anyInt());
   }
 
   private static TreasuryWallet legacyRow(
