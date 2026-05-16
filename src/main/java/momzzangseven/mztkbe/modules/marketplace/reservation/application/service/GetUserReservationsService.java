@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import java.util.List;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorCodec;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
@@ -10,12 +9,16 @@ import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,7 +50,6 @@ import org.springframework.transaction.annotation.Transactional;
  * paginated in the same time-descending order the user sees in the list.
  */
 @Service
-@RequiredArgsConstructor
 public class GetUserReservationsService implements GetUserReservationsUseCase {
 
   // CURSOR_SCOPE is now status-dependent; use GetUserReservationsQuery.cursorScope(status).
@@ -55,6 +57,40 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
   private final LoadReservationPort loadReservationPort;
   private final LoadClassSummaryPort loadClassSummaryPort;
   private final LoadUserSummaryPort loadUserSummaryPort;
+  private final LoadReservationExecutionResumePort loadReservationExecutionResumePort;
+  private final RepairReservationChainReadUseCase repairReservationChainReadUseCase;
+
+  @Autowired
+  public GetUserReservationsService(
+      LoadReservationPort loadReservationPort,
+      LoadClassSummaryPort loadClassSummaryPort,
+      LoadUserSummaryPort loadUserSummaryPort,
+      @Nullable LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      @Nullable RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+    this.loadReservationPort = loadReservationPort;
+    this.loadClassSummaryPort = loadClassSummaryPort;
+    this.loadUserSummaryPort = loadUserSummaryPort;
+    this.loadReservationExecutionResumePort =
+        loadReservationExecutionResumePort == null
+            ? emptyResumePort()
+            : loadReservationExecutionResumePort;
+    this.repairReservationChainReadUseCase =
+        repairReservationChainReadUseCase == null
+            ? noOpRepairUseCase()
+            : repairReservationChainReadUseCase;
+  }
+
+  public GetUserReservationsService(
+      LoadReservationPort loadReservationPort,
+      LoadClassSummaryPort loadClassSummaryPort,
+      LoadUserSummaryPort loadUserSummaryPort) {
+    this(
+        loadReservationPort,
+        loadClassSummaryPort,
+        loadUserSummaryPort,
+        emptyResumePort(),
+        noOpRepairUseCase());
+  }
 
   @Override
   @Transactional(readOnly = true)
@@ -68,6 +104,7 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
 
     boolean hasNext = loaded.size() > pageRequest.size();
     List<Reservation> page = hasNext ? loaded.subList(0, pageRequest.size()) : loaded;
+    page = repairReservationChainReadUseCase.repairBatch(page);
 
     if (page.isEmpty()) {
       return new CursorSlice<>(List.of(), false, null);
@@ -79,6 +116,13 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
 
     List<Long> trainerIds = page.stream().map(Reservation::getTrainerId).distinct().toList();
     Map<Long, UserSummary> trainerSummaries = loadUserSummaryPort.findByIds(trainerIds);
+    Map<
+            Long,
+            momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                .ReservationExecutionResumeView>
+        web3ByReservationId =
+            loadReservationExecutionResumePort.loadLatestBatch(
+                page.stream().map(Reservation::getId).toList());
 
     List<ReservationSummaryResult> items =
         page.stream()
@@ -103,7 +147,12 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
                       priceAmount,
                       cs != null ? cs.thumbnailFinalObjectKey() : null,
                       ts != null ? ts.nickname() : null,
-                      null); // userNickname not needed on user-list path
+                      null,
+                      ReservationExecutionResumeViewer.hydrate(
+                          r,
+                          query.userId(),
+                          web3ByReservationId.get(
+                              r.getId()))); // userNickname not needed on user-list path
                 })
             .toList();
 
@@ -119,5 +168,40 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
             : null;
 
     return new CursorSlice<>(items, hasNext, nextCursor);
+  }
+
+  private static LoadReservationExecutionResumePort emptyResumePort() {
+    return new LoadReservationExecutionResumePort() {
+      @Override
+      public java.util.Optional<
+              momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                  .ReservationExecutionResumeView>
+          loadLatest(Long reservationId) {
+        return java.util.Optional.empty();
+      }
+
+      @Override
+      public java.util.Map<
+              Long,
+              momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                  .ReservationExecutionResumeView>
+          loadLatestBatch(java.util.Collection<Long> reservationIds) {
+        return java.util.Map.of();
+      }
+    };
+  }
+
+  private static RepairReservationChainReadUseCase noOpRepairUseCase() {
+    return new RepairReservationChainReadUseCase() {
+      @Override
+      public Reservation repairOne(Reservation reservation) {
+        return reservation;
+      }
+
+      @Override
+      public java.util.List<Reservation> repairBatch(java.util.List<Reservation> reservations) {
+        return reservations;
+      }
+    };
   }
 }

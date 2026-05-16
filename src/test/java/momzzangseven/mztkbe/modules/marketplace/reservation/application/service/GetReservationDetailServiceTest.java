@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -12,6 +14,7 @@ import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAcce
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -65,6 +68,29 @@ class GetReservationDetailServiceTest {
     // then
     assertThat(result.reservationId()).isEqualTo(10L);
     assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - chain read repair 결과를 응답 매핑 전에 반영한다")
+  void execute_AppliesChainReadRepairBeforeMapping() {
+    Reservation original =
+        sampleReservation(1L, 2L).toBuilder()
+            .status(ReservationStatus.DEADLINE_SYNC_REQUIRED)
+            .build();
+    Reservation repaired = original.toBuilder().status(ReservationStatus.USER_CANCELLED).build();
+    RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
+    GetReservationDetailService repairingSut =
+        new GetReservationDetailService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(original));
+    given(repairUseCase.repairOne(original)).willReturn(repaired);
+    given(loadClassSummaryPort.findBySlotId(any())).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    GetReservationResult result = repairingSut.execute(new GetReservationQuery(10L, 1L));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
+    then(repairUseCase).should().repairOne(original);
   }
 
   @Test

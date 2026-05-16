@@ -7,24 +7,29 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.event.EscrowDispatchEventListener;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,6 +41,10 @@ class CancelPendingReservationServiceTest {
 
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
+  @Mock private PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
+  @Mock private CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
+  @Mock private LoadReservationWalletPort loadReservationWalletPort;
+  @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @InjectMocks private CancelPendingReservationService sut;
@@ -43,6 +52,7 @@ class CancelPendingReservationServiceTest {
   private static final Long RESERVATION_ID = 1L;
   private static final Long USER_ID = 50L;
   private static final Long OTHER_USER_ID = 999L;
+  private static final String ORDER_ID = "123e4567-e89b-12d3-a456-426614174000";
 
   private Reservation pendingReservation() {
     return Reservation.builder()
@@ -54,7 +64,8 @@ class CancelPendingReservationServiceTest {
         .reservationTime(LocalTime.of(14, 0))
         .durationMinutes(60)
         .status(ReservationStatus.PENDING)
-        .orderId("order-cancel")
+        .orderId(ORDER_ID)
+        .bookedPriceAmount(50_000)
         .version(0L)
         .build();
   }
@@ -64,31 +75,54 @@ class CancelPendingReservationServiceTest {
   class 성공 {
 
     @Test
-    @DisplayName("[CP-01] PENDING 예약을 본인이 취소하면 USER_CANCELLED 반환 및 EscrowDispatchEvent 발행")
+    @DisplayName("[CP-01] PENDING 예약을 본인이 취소하면 CANCEL_PENDING 및 Web3 실행 정보를 반환")
     void 정상_취소() {
-      // given — service saves with PENDING_TX_HASH sentinel; real escrow call happens AFTER_COMMIT
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
-          .willReturn(Optional.of(pendingReservation()));
-      Reservation cancelled =
-          pendingReservation().cancelByUser(EscrowDispatchEventListener.PENDING_TX_HASH);
-      given(saveReservationPort.save(any())).willReturn(cancelled);
+          .willReturn(Optional.of(pendingReservation()))
+          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18));
+      given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
 
       // when
       CancelPendingReservationResult result =
           sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID));
 
       // then
-      assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
-      then(saveReservationPort).should().save(any());
-
-      // EscrowDispatchEvent published with CANCEL action
-      ArgumentCaptor<EscrowDispatchEvent> eventCaptor =
-          ArgumentCaptor.forClass(EscrowDispatchEvent.class);
-      then(eventPublisher).should().publishEvent(eventCaptor.capture());
-      assertThat(eventCaptor.getValue().action())
-          .isEqualTo(EscrowDispatchEvent.EscrowAction.CANCEL);
-      assertThat(eventCaptor.getValue().orderId()).isEqualTo("order-cancel");
+      assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+      assertThat(result.web3()).isNotNull();
+      assertThat(result.web3().actionType()).isEqualTo("MARKETPLACE_CLASS_CANCEL");
+      then(saveReservationPort).should(org.mockito.Mockito.times(2)).save(any());
+      then(eventPublisher).shouldHaveNoInteractions();
     }
+  }
+
+  private ReservationExecutionWriteView web3() {
+    return new ReservationExecutionWriteView(
+        new ReservationExecutionWriteView.Resource("ORDER", "1", "PENDING_EXECUTION"),
+        "MARKETPLACE_CLASS_CANCEL",
+        "0x" + "0".repeat(63) + "1",
+        new ReservationExecutionWriteView.ExecutionIntent(
+            "intent-1", "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(5), 300L),
+        new ReservationExecutionWriteView.Execution("EIP7702", 1),
+        null,
+        null,
+        false,
+        null,
+        null);
   }
 
   @Nested
@@ -122,6 +156,89 @@ class CancelPendingReservationServiceTest {
       assertThatThrownBy(
               () -> sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, OTHER_USER_ID)))
           .isInstanceOf(MarketplaceUnauthorizedAccessException.class);
+    }
+
+    @Test
+    @DisplayName("[CP-05] Phase B 바인딩 실패 시 signable intent를 취소하고 pending 상태를 롤백한다")
+    void phase_b_바인딩_실패_보상() {
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(pendingReservation()))
+          .willAnswer(
+              invocation -> {
+                Reservation current = latestSaved.get();
+                return Optional.of(current.toBuilder().status(ReservationStatus.PENDING).build());
+              })
+          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18));
+      given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+      given(cancelReservationEscrowExecutionPort.cancelSignableIntent(any(), any(), any()))
+          .willReturn(true);
+
+      assertThatThrownBy(
+              () -> sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+      then(cancelReservationEscrowExecutionPort)
+          .should()
+          .cancelSignableIntent(
+              org.mockito.ArgumentMatchers.eq("intent-1"),
+              org.mockito.ArgumentMatchers.eq("MARKETPLACE_PHASE_B_BIND_FAILED"),
+              any());
+      assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("[CP-06] Phase B 보상에서 intent 취소가 불가하면 pending 상태를 즉시 롤백하지 않는다")
+    void phase_b_보상_취소_불가_시_즉시_롤백하지_않음() {
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(pendingReservation()))
+          .willAnswer(
+              invocation -> {
+                Reservation current = latestSaved.get();
+                return Optional.of(current.toBuilder().status(ReservationStatus.PENDING).build());
+              });
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18));
+      given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+      given(cancelReservationEscrowExecutionPort.cancelSignableIntent(any(), any(), any()))
+          .willReturn(false);
+
+      assertThatThrownBy(
+              () -> sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID)))
+          .isInstanceOf(BusinessException.class);
+
+      assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.CANCEL_PENDING);
     }
 
     @Test

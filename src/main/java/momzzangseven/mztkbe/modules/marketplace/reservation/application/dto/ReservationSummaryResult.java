@@ -50,7 +50,8 @@ public record ReservationSummaryResult(
     Integer priceAmount,
     String trainerNickname,
     String userNickname,
-    String thumbnailFinalObjectKey) {
+    String thumbnailFinalObjectKey,
+    ReservationExecutionResumeView web3Execution) {
 
   /**
    * Build a summary from a reservation domain object enriched with cross-module summaries.
@@ -70,6 +71,24 @@ public record ReservationSummaryResult(
       String thumbnailFinalObjectKey,
       String trainerNickname,
       String userNickname) {
+    return from(
+        reservation,
+        classTitle,
+        priceAmount,
+        thumbnailFinalObjectKey,
+        trainerNickname,
+        userNickname,
+        null);
+  }
+
+  public static ReservationSummaryResult from(
+      Reservation reservation,
+      String classTitle,
+      Integer priceAmount,
+      String thumbnailFinalObjectKey,
+      String trainerNickname,
+      String userNickname,
+      ReservationExecutionResumeView web3Execution) {
     return new ReservationSummaryResult(
         reservation.getId(),
         reservation.getSlotId(),
@@ -84,6 +103,7 @@ public record ReservationSummaryResult(
         priceAmount,
         trainerNickname,
         userNickname,
-        thumbnailFinalObjectKey);
+        thumbnailFinalObjectKey,
+        web3Execution);
   }
 }

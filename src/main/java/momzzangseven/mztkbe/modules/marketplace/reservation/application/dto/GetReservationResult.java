@@ -64,7 +64,8 @@ public record GetReservationResult(
     Integer priceAmount,
     String trainerNickname,
     String userNickname,
-    String thumbnailFinalObjectKey) {
+    String thumbnailFinalObjectKey,
+    ReservationExecutionResumeView web3Execution) {
 
   /**
    * Build a detail result from a reservation domain object.
@@ -91,6 +92,24 @@ public record GetReservationResult(
       String thumbnailFinalObjectKey,
       String trainerNickname,
       String userNickname) {
+    return from(
+        reservation,
+        classTitle,
+        priceAmount,
+        thumbnailFinalObjectKey,
+        trainerNickname,
+        userNickname,
+        null);
+  }
+
+  public static GetReservationResult from(
+      Reservation reservation,
+      String classTitle,
+      Integer priceAmount,
+      String thumbnailFinalObjectKey,
+      String trainerNickname,
+      String userNickname,
+      ReservationExecutionResumeView web3Execution) {
     return new GetReservationResult(
         reservation.getId(),
         reservation.getUserId(),
@@ -109,6 +128,7 @@ public record GetReservationResult(
         priceAmount,
         trainerNickname,
         userNickname,
-        thumbnailFinalObjectKey);
+        thumbnailFinalObjectKey,
+        web3Execution);
   }
 }

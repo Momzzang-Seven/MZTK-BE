@@ -1,9 +1,13 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
@@ -13,6 +17,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reserva
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.event.EscrowDispatchEventListener;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,8 +33,15 @@ class AutoCancelBatchItemProcessorTest {
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
   @Mock private RecordTrainerStrikePort recordTrainerStrikePort;
+  @Mock private Clock clock;
 
   @InjectMocks private AutoCancelBatchItemProcessor sut;
+
+  @BeforeEach
+  void setUpClock() {
+    given(clock.instant()).willReturn(Instant.parse("2026-05-16T00:00:00Z"));
+    given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+  }
 
   @Test
   @DisplayName(
@@ -48,6 +60,7 @@ class AutoCancelBatchItemProcessorTest {
     given(fresh.getOrderId()).willReturn(orderId);
     given(fresh.getTrainerId()).willReturn(trainerId);
     given(fresh.getStatus()).willReturn(ReservationStatus.PENDING);
+    given(fresh.isLegacySchedulerEligibleAt(any())).willReturn(true);
 
     given(loadReservationPort.findByIdWithLock(reservationId)).willReturn(Optional.of(fresh));
 
@@ -98,6 +111,26 @@ class AutoCancelBatchItemProcessorTest {
     sut.process(stale);
 
     // Assert — no DB save, no escrow call, no strike
+    org.mockito.Mockito.verifyNoInteractions(
+        saveReservationPort, submitEscrowTransactionPort, recordTrainerStrikePort);
+  }
+
+  @Test
+  @DisplayName("process - USER_EIP7702 locked row이면 legacy auto-cancel을 건너뛴다")
+  void process_skipsUserEip7702LockedRow() {
+    Reservation stale = org.mockito.Mockito.mock(Reservation.class);
+    Long reservationId = 3L;
+    given(stale.getId()).willReturn(reservationId);
+
+    Reservation fresh = org.mockito.Mockito.mock(Reservation.class);
+    given(fresh.getId()).willReturn(reservationId);
+    given(fresh.getStatus()).willReturn(ReservationStatus.PENDING);
+    given(fresh.isLegacySchedulerEligibleAt(any())).willReturn(false);
+
+    given(loadReservationPort.findByIdWithLock(reservationId)).willReturn(Optional.of(fresh));
+
+    sut.process(stale);
+
     org.mockito.Mockito.verifyNoInteractions(
         saveReservationPort, submitEscrowTransactionPort, recordTrainerStrikePort);
   }

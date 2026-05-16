@@ -8,4 +8,14 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
  * @param reservationId the newly created reservation's primary key
  * @param status initial status (always {@code PENDING})
  */
-public record CreateReservationResult(Long reservationId, ReservationStatus status) {}
+public record CreateReservationResult(
+    Long reservationId,
+    ReservationStatus status,
+    String escrowStatus,
+    String orderKey,
+    ReservationExecutionWriteView web3) {
+
+  public CreateReservationResult(Long reservationId, ReservationStatus status) {
+    this(reservationId, status, null, null, null);
+  }
+}

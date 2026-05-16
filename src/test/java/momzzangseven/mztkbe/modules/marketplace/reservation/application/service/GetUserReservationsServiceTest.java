@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -13,6 +15,7 @@ import java.util.Map;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -86,6 +89,30 @@ class GetUserReservationsServiceTest {
     // then
     assertThat(result.items()).hasSize(1);
     assertThat(result.items().get(0).status()).isEqualTo(ReservationStatus.PENDING);
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - chain read repair 결과를 목록 응답 매핑 전에 반영한다")
+  void execute_AppliesChainReadRepairBeforeMapping() {
+    Reservation original =
+        sampleReservation(1L).toBuilder().status(ReservationStatus.DEADLINE_SYNC_REQUIRED).build();
+    Reservation repaired = original.toBuilder().status(ReservationStatus.DEADLINE_REFUNDED).build();
+    RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
+    GetUserReservationsService repairingSut =
+        new GetUserReservationsService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+    given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
+        .willReturn(List.of(original));
+    given(repairUseCase.repairBatch(List.of(original))).willReturn(List.of(repaired));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    CursorSlice<ReservationSummaryResult> result =
+        repairingSut.execute(new GetUserReservationsQuery(1L, null));
+
+    assertThat(result.items()).hasSize(1);
+    assertThat(result.items().getFirst().status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+    then(repairUseCase).should().repairBatch(List.of(original));
   }
 
   @Test

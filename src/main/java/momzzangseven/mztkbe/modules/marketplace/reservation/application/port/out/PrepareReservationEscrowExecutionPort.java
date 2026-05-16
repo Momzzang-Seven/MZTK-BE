@@ -11,4 +11,6 @@ public interface PrepareReservationEscrowExecutionPort {
   PrepareReservationEscrowResult prepareCancel(PrepareReservationEscrowCommand command);
 
   PrepareReservationEscrowResult prepareConfirm(PrepareReservationEscrowCommand command);
+
+  PrepareReservationEscrowResult prepareDeadlineRefund(PrepareReservationEscrowCommand command);
 }

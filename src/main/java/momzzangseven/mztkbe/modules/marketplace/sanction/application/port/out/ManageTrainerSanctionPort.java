@@ -17,7 +17,18 @@ public interface ManageTrainerSanctionPort {
    * @param reason strike reason ("REJECT" or "TIMEOUT")
    * @return result indicating updated strike count and whether a suspension was triggered
    */
-  RecordStrikeResult recordStrike(Long trainerId, String reason);
+  default RecordStrikeResult recordStrike(Long trainerId, String reason) {
+    return recordStrike(trainerId, reason, null, null);
+  }
+
+  /**
+   * Record a strike with an optional idempotency source.
+   *
+   * <p>When {@code sourceType/sourceId} are present, repeated calls for the same source must not
+   * increment the trainer's strike count. This is required for confirmed hook replay.
+   */
+  RecordStrikeResult recordStrike(
+      Long trainerId, String reason, String sourceType, String sourceId);
 
   /**
    * Result of a {@link #recordStrike} call.

@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -34,6 +36,7 @@ public class AutoSettleBatchItemProcessor {
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  private final Clock clock;
 
   /**
    * Settles a single approved reservation in its own isolated transaction.
@@ -63,11 +66,14 @@ public class AutoSettleBatchItemProcessor {
                 });
 
     // Guard: re-validate status with the fresh locked row before any side-effect.
-    if (!reservation.getStatus().canTransitionTo(ReservationStatus.AUTO_SETTLED)) {
+    LocalDateTime now = LocalDateTime.now(clock);
+    if (!reservation.getStatus().canTransitionTo(ReservationStatus.AUTO_SETTLED)
+        || !reservation.isLegacySchedulerEligibleAt(now)) {
       log.info(
-          "AutoSettle skipped: reservation {} is no longer APPROVED (status={})",
+          "AutoSettle skipped: reservation {} is not legacy scheduler eligible (status={}, flow={})",
           reservation.getId(),
-          reservation.getStatus());
+          reservation.getStatus(),
+          reservation.getEffectiveEscrowFlow());
       return;
     }
 

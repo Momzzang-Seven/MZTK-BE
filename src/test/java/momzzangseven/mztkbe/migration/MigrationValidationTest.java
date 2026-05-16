@@ -152,6 +152,35 @@ class MigrationValidationTest {
         .contains("STALE");
   }
 
+  @Test
+  @DisplayName("marketplace reservation user escrow schema supports MOM-313 local state")
+  void marketplaceReservationUserEscrowSchemaSupportsLocalState() {
+    assertThat(columnExists("class_reservations", "escrow_status")).isTrue();
+    assertThat(columnExists("class_reservations", "escrow_flow")).isTrue();
+    assertThat(columnExists("class_reservations", "order_key")).isTrue();
+    assertThat(columnExists("class_reservations", "current_execution_intent_public_id")).isTrue();
+    assertThat(columnExists("class_reservations", "contract_deadline_epoch_seconds")).isTrue();
+    assertThat(columnExists("class_reservations", "contract_deadline_at")).isTrue();
+    assertThat(indexExists("uk_class_reservations_order_key")).isTrue();
+    assertThat(indexExists("uk_class_reservations_active_buyer_slot_datetime")).isTrue();
+    assertThat(indexExists("uk_reservation_create_idempotency_buyer_key")).isTrue();
+    assertThat(indexExists("uk_reservation_slot_date_locks_slot_date")).isTrue();
+    assertThat(indexExists("uk_trainer_strike_records_source")).isTrue();
+
+    String statusConstraint = checkClause("class_reservations", "chk_class_reservations_status");
+    assertThat(statusConstraint)
+        .contains("PURCHASE_PREPARING")
+        .contains("PURCHASE_PENDING")
+        .contains("DEADLINE_REFUND_AVAILABLE")
+        .contains("DEADLINE_REFUNDED");
+
+    String deadlineConstraint =
+        checkClause("class_reservations", "chk_class_reservations_contract_deadline_pair");
+    assertThat(deadlineConstraint)
+        .contains("contract_deadline_epoch_seconds")
+        .contains("contract_deadline_at");
+  }
+
   private void insertWeb3Transaction(
       String idempotencyKey, String referenceType, String referenceId) {
     jdbcTemplate.update(
@@ -204,5 +233,21 @@ class MigrationValidationTest {
             tableName,
             columnName);
     return count != null && count > 0;
+  }
+
+  private String checkClause(String tableName, String constraintName) {
+    return jdbcTemplate.queryForObject(
+        """
+        SELECT cc.check_clause
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.check_constraints cc
+          ON tc.constraint_schema = cc.constraint_schema
+         AND tc.constraint_name = cc.constraint_name
+        WHERE tc.table_name = ?
+          AND tc.constraint_name = ?
+        """,
+        String.class,
+        tableName,
+        constraintName);
   }
 }

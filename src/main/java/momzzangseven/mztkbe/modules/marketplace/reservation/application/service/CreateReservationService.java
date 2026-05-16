@@ -1,10 +1,13 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -17,16 +20,35 @@ import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrecheckReservationPurchaseCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
-import org.springframework.context.ApplicationEventPublisher;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.web3j.utils.Numeric;
 
 /**
  * Service that creates a new reservation via EIP-7702 escrow.
@@ -39,20 +61,17 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Price match (signed amount == class.priceAmount)
  *   <li>Trainer not suspended
  *   <li>Slot capacity check (active count &lt; capacity)
- *   <li>Persist PENDING reservation first (DB commit) → dispatch EscrowDispatchEvent(PURCHASE)
- *       AFTER_COMMIT → listener calls purchaseClass on-chain and writes back real txHash.
+ *   <li>Persist a scheduler-invisible local hold, prepare a shared execution intent outside the DB
+ *       lock, then relock and bind the intent.
  * </ol>
  *
- * <p><b>DB-first ordering:</b><br>
- * The reservation row is persisted with a sentinel {@code txHash} before any on-chain call. After
- * the DB transaction commits, {@link EscrowDispatchEvent} (PURCHASE action) is handled AFTER_COMMIT
- * by {@code EscrowDispatchEventListener}, which calls {@code purchaseClass} on-chain and writes
- * back the real txHash. This ensures the DB row always exists before any on-chain side-effect,
- * making reconciliation possible if the on-chain call fails.
+ * <p><b>Two-phase ordering:</b><br>
+ * The local hold and idempotency row are committed before Web3 prepare. External KMS/RPC/shared
+ * execution work happens outside the reservation row lock, and Phase B relocks the row with the
+ * pending-attempt token before exposing the sign request.
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class CreateReservationService implements CreateReservationUseCase {
 
   private final GetClassSlotInfoUseCase getClassSlotInfoUseCase;
@@ -60,11 +79,72 @@ public class CreateReservationService implements CreateReservationUseCase {
   private final CheckTrainerSanctionPort checkTrainerSanctionPort;
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
-  private final ApplicationEventPublisher eventPublisher;
+  private final LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
+  private final SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
+  private final PrecheckReservationPurchasePort precheckReservationPurchasePort;
+  private final PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
+  private final CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
+  private final LoadReservationExecutionWritePort loadReservationExecutionWritePort;
+  private final LoadReservationWalletPort loadReservationWalletPort;
+  private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   private final Clock clock;
+  private TransactionOperations transactionOperations;
+
+  public CreateReservationService(
+      GetClassSlotInfoUseCase getClassSlotInfoUseCase,
+      GetClassInfoUseCase getClassInfoUseCase,
+      CheckTrainerSanctionPort checkTrainerSanctionPort,
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort,
+      SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort,
+      @Nullable PrecheckReservationPurchasePort precheckReservationPurchasePort,
+      @Nullable PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
+      @Nullable CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
+      @Nullable LoadReservationExecutionWritePort loadReservationExecutionWritePort,
+      @Nullable LoadReservationWalletPort loadReservationWalletPort,
+      @Nullable LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
+      Clock clock) {
+    this.getClassSlotInfoUseCase = getClassSlotInfoUseCase;
+    this.getClassInfoUseCase = getClassInfoUseCase;
+    this.checkTrainerSanctionPort = checkTrainerSanctionPort;
+    this.loadReservationPort = loadReservationPort;
+    this.saveReservationPort = saveReservationPort;
+    this.loadReservationCreateIdempotencyPort = loadReservationCreateIdempotencyPort;
+    this.saveReservationCreateIdempotencyPort = saveReservationCreateIdempotencyPort;
+    this.precheckReservationPurchasePort =
+        precheckReservationPurchasePort == null
+            ? DisabledReservationWeb3PortFactory.precheckPurchase()
+            : precheckReservationPurchasePort;
+    this.prepareReservationEscrowExecutionPort =
+        prepareReservationEscrowExecutionPort == null
+            ? DisabledReservationWeb3PortFactory.prepareExecution()
+            : prepareReservationEscrowExecutionPort;
+    this.cancelReservationEscrowExecutionPort =
+        cancelReservationEscrowExecutionPort == null
+            ? DisabledReservationWeb3PortFactory.cancelExecution()
+            : cancelReservationEscrowExecutionPort;
+    this.loadReservationExecutionWritePort =
+        loadReservationExecutionWritePort == null
+            ? DisabledReservationWeb3PortFactory.executionWrite()
+            : loadReservationExecutionWritePort;
+    this.loadReservationWalletPort =
+        loadReservationWalletPort == null
+            ? DisabledReservationWeb3PortFactory.wallet()
+            : loadReservationWalletPort;
+    this.loadReservationEscrowPaymentConfigPort =
+        loadReservationEscrowPaymentConfigPort == null
+            ? DisabledReservationWeb3PortFactory.paymentConfig()
+            : loadReservationEscrowPaymentConfigPort;
+    this.clock = clock;
+  }
+
+  @Autowired
+  void setTransactionManager(PlatformTransactionManager transactionManager) {
+    this.transactionOperations = new TransactionTemplate(transactionManager);
+  }
 
   @Override
-  @Transactional
   public CreateReservationResult execute(CreateReservationCommand command) {
     command.validate();
     log.debug(
@@ -73,7 +153,40 @@ public class CreateReservationService implements CreateReservationUseCase {
         command.classId(),
         command.slotId());
 
-    // 1. Load the target slot with pessimistic write lock — prevents over-commit under concurrency
+    CreateLocalContext precheckContext = runInTransaction(() -> loadValidatedLocalContext(command));
+    precheckReservationPurchasePort.precheckPurchase(
+        new PrecheckReservationPurchaseCommand(
+            command.userId(),
+            precheckContext.cls().getTrainerId(),
+            command.classId(),
+            precheckContext.slot().getId(),
+            command.reservationDate(),
+            command.reservationTime(),
+            command.signedAmount(),
+            precheckContext.cls().getPriceAmount()));
+
+    PhaseAResult phaseA = runInTransaction(() -> preparePurchasePhaseA(command));
+    if (phaseA.replayResult() != null) {
+      return phaseA.replayResult();
+    }
+
+    PrepareReservationEscrowResult prepared;
+    try {
+      prepared = prepareReservationEscrowExecutionPort.preparePurchase(phaseA.prepareCommand());
+    } catch (RuntimeException e) {
+      markPurchasePrepareFailed(phaseA, e);
+      throw e;
+    }
+    try {
+      markPurchaseIntentCreated(phaseA, prepared);
+      return runInTransaction(() -> bindPurchasePhaseB(command, phaseA, prepared));
+    } catch (RuntimeException e) {
+      compensatePurchaseBindFailure(phaseA, prepared, e);
+      throw e;
+    }
+  }
+
+  private CreateLocalContext loadValidatedLocalContext(CreateReservationCommand command) {
     ClassSlot slot =
         getClassSlotInfoUseCase
             .findByIdWithLock(command.slotId())
@@ -108,7 +221,6 @@ public class CreateReservationService implements CreateReservationUseCase {
       throw new ReservationInvalidSlotDateException(slot.getId());
     }
 
-    // 2-a. 요청한 세션 시작 시각이 현재 시각보다 미래인지 확인
     LocalDateTime requestedSessionStart =
         LocalDateTime.of(command.reservationDate(), command.reservationTime());
     if (requestedSessionStart.isBefore(LocalDateTime.now(clock))) {
@@ -128,20 +240,69 @@ public class CreateReservationService implements CreateReservationUseCase {
           ErrorCode.MARKETPLACE_CLASS_INACTIVE, "Class is not active: " + command.classId());
     }
 
-    // 4. Price mismatch guard
     BigInteger expectedAmount = BigInteger.valueOf(cls.getPriceAmount());
     if (!expectedAmount.equals(command.signedAmount())) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
           "Signed amount " + command.signedAmount() + " != class price " + cls.getPriceAmount());
     }
+    return new CreateLocalContext(slot, cls);
+  }
+
+  private PhaseAResult preparePurchasePhaseA(CreateReservationCommand command) {
+    CreateLocalContext context = loadValidatedLocalContext(command);
+    ClassSlot slot = context.slot();
+    MarketplaceClass cls = context.cls();
 
     // 5. Trainer sanction check
     if (checkTrainerSanctionPort.hasActiveSanction(cls.getTrainerId())) {
       throw new TrainerSuspendedException();
     }
 
-    // 6. Capacity check with pessimistic write lock — prevents over-commit under concurrency
+    // 6. Capacity check with slot/date lock — prevents empty-date phantom over-commit under
+    // concurrency.
+    loadReservationPort.lockSlotDateCapacityKey(slot.getId(), command.reservationDate());
+    String keyHash = sha256Hex(createIdempotencyKey(command));
+    String payloadHash =
+        sha256Hex(createPayload(command, cls.getTrainerId(), cls.getPriceAmount()));
+    ReservationCreateIdempotency idempotency = null;
+    var existingKey =
+        loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(
+            command.userId(), keyHash);
+    if (existingKey.isPresent()) {
+      idempotency = existingKey.get();
+      if (!payloadHash.equals(idempotency.getPayloadHash())) {
+        throw new BusinessException(
+            ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT,
+            "idempotency key was reused with a different marketplace reservation payload");
+      }
+      if (idempotency.getReservationId() != null) {
+        return PhaseAResult.replay(replayCreateResult(command.userId(), idempotency));
+      }
+      if (idempotency.getStatus() == ReservationCreateIdempotencyStatus.FAILED
+          || isExpired(idempotency.getExpiresAt())) {
+        idempotency =
+            saveReservationCreateIdempotencyPort.save(
+                idempotency.restart(payloadHash, LocalDateTime.now(clock).plusMinutes(30)));
+      } else {
+        throw new BusinessException(
+            ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+            "same marketplace reservation create request is still preparing");
+      }
+    }
+    loadReservationPort
+        .findActiveByBuyerAndSlotDateTimeWithLock(
+            command.userId(), slot.getId(), command.reservationDate(), command.reservationTime())
+        .ifPresent(
+            existing -> {
+              if (canReleaseExpiredUnboundHold(existing)) {
+                saveReservationPort.save(existing.markHoldExpired());
+                return;
+              }
+              throw new BusinessException(
+                  ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT,
+                  "active reservation already exists for the same buyer/slot/date/time");
+            });
     int activeCount =
         loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(
             slot.getId(), command.reservationDate());
@@ -151,11 +312,32 @@ public class CreateReservationService implements CreateReservationUseCase {
           "Slot " + slot.getId() + " is at full capacity (" + slot.getCapacity() + ")");
     }
 
-    // 7. Generate orderId and persist PENDING reservation with sentinel txHash BEFORE on-chain
-    // call.
-    //    DB row must exist first so that on-chain tx is always traceable via orderId even if the
-    //    subsequent escrow call or txHash write-back fails (reconciliation-friendly ordering).
+    if (idempotency == null) {
+      idempotency = saveCreateIdempotency(command.userId(), keyHash, payloadHash);
+    }
+    if (idempotency.getReservationId() != null) {
+      return PhaseAResult.replay(replayCreateResult(command.userId(), idempotency));
+    }
+
+    // 7. Generate orderId and persist a local hold before creating the shared execution intent.
     String orderId = UUID.randomUUID().toString();
+    String orderKey = orderKeyFromUuid(orderId);
+    var paymentConfig = loadReservationEscrowPaymentConfigPort.load();
+    BigInteger priceBaseUnits = paymentConfig.priceBaseUnits(command.signedAmount());
+    String buyerWallet = loadActiveWalletOrThrow(command.userId());
+    String trainerWallet = loadActiveWalletOrThrow(cls.getTrainerId());
+    Instant expectedDeadlineInstant =
+        clock.instant().plusSeconds(paymentConfig.defaultDeadlineDurationSeconds());
+    LocalDateTime expectedDeadlineAt =
+        LocalDateTime.ofInstant(expectedDeadlineInstant, clock.getZone());
+    if (LocalDateTime.of(command.reservationDate(), command.reservationTime())
+        .plusMinutes(cls.getDurationMinutes())
+        .plusHours(24)
+        .isAfter(expectedDeadlineAt)) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
+          "Reservation completion window does not fit before the marketplace escrow deadline");
+    }
     Reservation reservation =
         Reservation.createPending(
             command.userId(),
@@ -166,29 +348,308 @@ public class CreateReservationService implements CreateReservationUseCase {
             cls.getDurationMinutes(),
             command.userRequest(),
             orderId,
-            "ESCROW_DISPATCH_PENDING",
+            null,
             cls.getPriceAmount(), // snapshot: price at booking time
             cls.getTitle()); // snapshot: title at booking time
 
-    Reservation saved = saveReservationPort.save(reservation);
-
-    // 8. Dispatch PURCHASE event AFTER_COMMIT — EscrowDispatchEventListener calls purchaseClass
-    //    on-chain and writes back the real txHash in a REQUIRES_NEW transaction.
-    eventPublisher.publishEvent(
-        new EscrowDispatchEvent(
+    String purchaseAttemptToken = UUID.randomUUID().toString();
+    Reservation preparing =
+        reservation.beginPurchasePreparing(
+            keyHash,
+            payloadHash,
+            LocalDateTime.now(clock).plusMinutes(10),
+            orderKey,
+            buyerWallet,
+            trainerWallet,
+            paymentConfig.tokenAddress(),
+            priceBaseUnits.toString(),
+            expectedDeadlineInstant.getEpochSecond(),
+            expectedDeadlineAt,
+            purchaseAttemptToken);
+    Reservation saved = saveReservationPort.save(preparing);
+    PrepareReservationEscrowCommand prepareCommand =
+        new PrepareReservationEscrowCommand(
             saved.getId(),
-            orderId,
-            EscrowAction.PURCHASE,
-            command.delegationSignature(),
-            command.executionSignature(),
-            expectedAmount));
+            saved.getOrderId(),
+            saved.getOrderKey(),
+            "BUYER",
+            saved.getUserId(),
+            saved.getUserId(),
+            saved.getTrainerId(),
+            saved.getUserId(),
+            saved.getTrainerId(),
+            saved.getVersion(),
+            ReservationStatus.PURCHASE_PREPARING,
+            ReservationEscrowStatus.PURCHASE_PREPARING,
+            saved.getBuyerWalletAddress(),
+            saved.getTrainerWalletAddress(),
+            saved.getTokenAddress(),
+            saved.getPriceBaseUnits(),
+            saved.getBookedPriceAmount(),
+            saved.sessionEndAt(),
+            saved.getExpectedContractDeadlineEpochSeconds(),
+            saved.getContractDeadlineEpochSeconds(),
+            saved.getPendingAttemptToken(),
+            ReservationStatus.PENDING.name());
+
+    return PhaseAResult.pending(saved, idempotency, prepareCommand);
+  }
+
+  private CreateReservationResult bindPurchasePhaseB(
+      CreateReservationCommand command,
+      PhaseAResult phaseA,
+      PrepareReservationEscrowResult prepared) {
+    Reservation current =
+        loadReservationPort
+            .findByIdWithLock(phaseA.reservation().getId())
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
+                        "Reservation not found: " + phaseA.reservation().getId()));
+    validatePurchaseBindSnapshot(current, phaseA.reservation());
+    Reservation bound =
+        saveReservationPort.save(
+            current.bindPurchaseIntent(prepared.web3().executionIntent().id()));
+    saveReservationCreateIdempotencyPort.save(
+        phaseA
+            .idempotency()
+            .markBound(
+                bound.getId(), prepared.web3().executionIntent().id(), "{\"status\":\"BOUND\"}")
+            .markCompleted("{\"status\":\"COMPLETED\"}"));
 
     log.info(
-        "Reservation created (escrow dispatch pending): id={}, userId={}, classId={}",
-        saved.getId(),
-        saved.getUserId(),
-        command.classId());
+        "Reservation purchase intent prepared: id={}, userId={}, classId={}, intentId={}",
+        bound.getId(),
+        bound.getUserId(),
+        command.classId(),
+        prepared.web3().executionIntent().id());
 
-    return new CreateReservationResult(saved.getId(), saved.getStatus());
+    return new CreateReservationResult(
+        bound.getId(),
+        bound.getStatus(),
+        bound.getEffectiveEscrowStatus().name(),
+        bound.getOrderKey(),
+        prepared.web3());
+  }
+
+  private void markPurchaseIntentCreated(
+      PhaseAResult phaseA, PrepareReservationEscrowResult prepared) {
+    runInTransaction(
+        () -> {
+          saveReservationCreateIdempotencyPort.save(
+              phaseA
+                  .idempotency()
+                  .markIntentCreated(
+                      phaseA.reservation().getId(), prepared.web3().executionIntent().id()));
+          return null;
+        });
+  }
+
+  private void validatePurchaseBindSnapshot(Reservation current, Reservation expected) {
+    if (current.getStatus() != ReservationStatus.PURCHASE_PREPARING
+        || current.getEffectiveEscrowStatus() != ReservationEscrowStatus.PURCHASE_PREPARING
+        || !equalsNullable(current.getPendingAttemptToken(), expected.getPendingAttemptToken())
+        || !equalsNullable(current.getVersion(), expected.getVersion())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "marketplace purchase reservation state changed before execution intent bind");
+    }
+  }
+
+  private void markPurchasePrepareFailed(PhaseAResult phaseA, RuntimeException cause) {
+    runInTransaction(
+        () -> {
+          loadReservationPort
+              .findByIdWithLock(phaseA.reservation().getId())
+              .filter(
+                  reservation ->
+                      reservation.getStatus() == ReservationStatus.PURCHASE_PREPARING
+                          && reservation.getCurrentExecutionIntentPublicId() == null)
+              .ifPresent(
+                  reservation ->
+                      saveReservationPort.save(
+                          reservation.markPaymentFailed(
+                              cause.getClass().getSimpleName(), cause.getMessage())));
+          saveReservationCreateIdempotencyPort.save(
+              phaseA.idempotency().markFailed("{\"status\":\"FAILED\"}"));
+          return null;
+        });
+  }
+
+  private void compensatePurchaseBindFailure(
+      PhaseAResult phaseA, PrepareReservationEscrowResult prepared, RuntimeException cause) {
+    if (!cancelSignablePreparedIntent(prepared, cause)) {
+      return;
+    }
+    markPurchasePrepareFailed(phaseA, cause);
+  }
+
+  private boolean cancelSignablePreparedIntent(
+      PrepareReservationEscrowResult prepared, RuntimeException cause) {
+    String executionIntentId = prepared.web3().executionIntent().id();
+    try {
+      return cancelReservationEscrowExecutionPort.cancelSignableIntent(
+          executionIntentId,
+          "MARKETPLACE_PHASE_B_BIND_FAILED",
+          cause.getMessage() == null ? "marketplace reservation bind failed" : cause.getMessage());
+    } catch (RuntimeException cancelFailure) {
+      log.warn(
+          "Failed to cancel marketplace purchase intent after Phase B bind failure: intentId={}",
+          executionIntentId,
+          cancelFailure);
+      return false;
+    }
+  }
+
+  private ReservationCreateIdempotency saveCreateIdempotency(
+      Long buyerId, String keyHash, String payloadHash) {
+    try {
+      return saveReservationCreateIdempotencyPort.save(
+          ReservationCreateIdempotency.preparing(
+              buyerId, keyHash, payloadHash, LocalDateTime.now(clock).plusMinutes(30)));
+    } catch (DataIntegrityViolationException e) {
+      ReservationCreateIdempotency existing =
+          loadReservationCreateIdempotencyPort
+              .findByBuyerIdAndKeyHashWithLock(buyerId, keyHash)
+              .orElseThrow(() -> e);
+      if (!payloadHash.equals(existing.getPayloadHash())) {
+        throw new BusinessException(
+            ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT,
+            "idempotency key was reused with a different marketplace reservation payload");
+      }
+      if (existing.getReservationId() == null) {
+        throw new BusinessException(
+            ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+            "same marketplace reservation create request is still preparing");
+      }
+      return existing;
+    }
+  }
+
+  private boolean isExpired(LocalDateTime expiresAt) {
+    return expiresAt != null && !LocalDateTime.now(clock).isBefore(expiresAt);
+  }
+
+  private boolean equalsNullable(Object left, Object right) {
+    return left == null ? right == null : left.equals(right);
+  }
+
+  private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
+    if (transactionOperations == null) {
+      return supplier.get();
+    }
+    return transactionOperations.execute(status -> supplier.get());
+  }
+
+  private boolean canReleaseExpiredUnboundHold(Reservation reservation) {
+    return reservation.getStatus() == ReservationStatus.PURCHASE_PREPARING
+        && reservation.getCurrentExecutionIntentPublicId() == null
+        && reservation.getHoldExpiresAt() != null
+        && !LocalDateTime.now(clock).isBefore(reservation.getHoldExpiresAt());
+  }
+
+  private CreateReservationResult replayCreateResult(
+      Long buyerId, ReservationCreateIdempotency idempotency) {
+    Reservation reservation =
+        loadReservationPort
+            .findById(idempotency.getReservationId())
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
+                        "Reservation not found: " + idempotency.getReservationId()));
+    String intentId =
+        idempotency.getCurrentExecutionIntentPublicId() != null
+            ? idempotency.getCurrentExecutionIntentPublicId()
+            : reservation.getCurrentExecutionIntentPublicId();
+    ReservationExecutionWriteView web3 =
+        intentId == null || intentId.isBlank()
+            ? null
+            : loadReservationExecutionWritePort
+                .load(buyerId, intentId)
+                .asExistingForOrder(reservation.getOrderKey());
+    return new CreateReservationResult(
+        reservation.getId(),
+        reservation.getStatus(),
+        reservation.getEffectiveEscrowStatus().name(),
+        reservation.getOrderKey(),
+        web3);
+  }
+
+  private String loadActiveWalletOrThrow(Long userId) {
+    return loadReservationWalletPort
+        .loadActiveWalletAddress(userId)
+        .orElseThrow(
+            () ->
+                new BusinessException(
+                    ErrorCode.WALLET_NOT_CONNECTED, "Active wallet not found: userId=" + userId));
+  }
+
+  private String createIdempotencyKey(CreateReservationCommand command) {
+    if (command.idempotencyKey() != null && !command.idempotencyKey().isBlank()) {
+      return command.userId() + ":" + command.idempotencyKey().trim();
+    }
+    return String.join(
+        ":",
+        "natural",
+        String.valueOf(command.userId()),
+        String.valueOf(command.slotId()),
+        command.reservationDate().toString(),
+        command.reservationTime().toString());
+  }
+
+  private String createPayload(
+      CreateReservationCommand command, Long trainerId, Integer bookedPriceAmountKrw) {
+    return String.join(
+        ":",
+        String.valueOf(command.userId()),
+        String.valueOf(command.classId()),
+        String.valueOf(command.slotId()),
+        command.reservationDate().toString(),
+        command.reservationTime().toString(),
+        command.signedAmount().toString(),
+        String.valueOf(trainerId),
+        String.valueOf(bookedPriceAmountKrw));
+  }
+
+  private String sha256Hex(String value) {
+    try {
+      return Numeric.toHexString(
+          MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+    } catch (Exception e) {
+      throw new IllegalStateException("failed to hash marketplace reservation create input", e);
+    }
+  }
+
+  private String orderKeyFromUuid(String orderId) {
+    UUID uuid = UUID.fromString(orderId);
+    return "0x"
+        + "0".repeat(32)
+        + String.format(
+            Locale.ROOT,
+            "%016x%016x",
+            uuid.getMostSignificantBits(),
+            uuid.getLeastSignificantBits());
+  }
+
+  private record CreateLocalContext(ClassSlot slot, MarketplaceClass cls) {}
+
+  private record PhaseAResult(
+      Reservation reservation,
+      ReservationCreateIdempotency idempotency,
+      PrepareReservationEscrowCommand prepareCommand,
+      CreateReservationResult replayResult) {
+
+    static PhaseAResult pending(
+        Reservation reservation,
+        ReservationCreateIdempotency idempotency,
+        PrepareReservationEscrowCommand prepareCommand) {
+      return new PhaseAResult(reservation, idempotency, prepareCommand, null);
+    }
+
+    static PhaseAResult replay(CreateReservationResult replayResult) {
+      return new PhaseAResult(null, null, null, replayResult);
+    }
   }
 }

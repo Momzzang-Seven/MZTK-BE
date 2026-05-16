@@ -7,11 +7,14 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 public record MarketplaceExecutionIntentResult(
     Resource resource,
     String actionType,
+    String orderKey,
     ExecutionIntent executionIntent,
     Execution execution,
     MarketplaceSignRequest signRequest,
     String signRequestUnavailableReason,
-    boolean existing) {
+    boolean existing,
+    MarketplaceSignatureMeta signatureMeta,
+    MarketplaceTokenMovement tokenMovement) {
 
   private static final String AWAITING_SIGNATURE = "AWAITING_SIGNATURE";
 
@@ -21,6 +24,9 @@ public record MarketplaceExecutionIntentResult(
     }
     if (actionType == null || actionType.isBlank()) {
       throw new Web3InvalidInputException("actionType is required");
+    }
+    if (orderKey == null || orderKey.isBlank()) {
+      orderKey = null;
     }
     if (executionIntent == null) {
       throw new Web3InvalidInputException("executionIntent is required");
@@ -35,6 +41,27 @@ public record MarketplaceExecutionIntentResult(
     if (AWAITING_SIGNATURE.equals(executionIntent.status()) && signRequest == null) {
       throw new Web3InvalidInputException("signRequest is required for AWAITING_SIGNATURE");
     }
+  }
+
+  public MarketplaceExecutionIntentResult(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      MarketplaceSignRequest signRequest,
+      String signRequestUnavailableReason,
+      boolean existing) {
+    this(
+        resource,
+        actionType,
+        null,
+        executionIntent,
+        execution,
+        signRequest,
+        signRequestUnavailableReason,
+        existing,
+        null,
+        null);
   }
 
   public record Resource(String type, String id, String status) {
@@ -52,7 +79,8 @@ public record MarketplaceExecutionIntentResult(
     }
   }
 
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, Long expiresAtEpochSeconds) {
 
     public ExecutionIntent {
       if (id == null || id.isBlank()) {
@@ -64,6 +92,10 @@ public record MarketplaceExecutionIntentResult(
       if (expiresAt == null) {
         throw new Web3InvalidInputException("executionIntent.expiresAt is required");
       }
+    }
+
+    public ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
+      this(id, status, expiresAt, null);
     }
   }
 

@@ -35,7 +35,10 @@ class RecordTrainerStrikeServiceTest {
       // given
       given(
               manageTrainerSanctionPort.recordStrike(
-                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_TIMEOUT)))
+                  eq(TRAINER_ID),
+                  eq(RecordTrainerStrikeCommand.REASON_TIMEOUT),
+                  eq(null),
+                  eq(null)))
           .willReturn(new RecordStrikeResult(1, false));
 
       // when
@@ -45,7 +48,7 @@ class RecordTrainerStrikeServiceTest {
       // then
       then(manageTrainerSanctionPort)
           .should()
-          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_TIMEOUT);
+          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_TIMEOUT, null, null);
     }
 
     @Test
@@ -54,7 +57,7 @@ class RecordTrainerStrikeServiceTest {
       // given
       given(
               manageTrainerSanctionPort.recordStrike(
-                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_REJECT)))
+                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_REJECT), eq(null), eq(null)))
           .willReturn(new RecordStrikeResult(2, false));
 
       // when
@@ -64,7 +67,7 @@ class RecordTrainerStrikeServiceTest {
       // then
       then(manageTrainerSanctionPort)
           .should()
-          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_REJECT);
+          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_REJECT, null, null);
     }
 
     @Test
@@ -73,7 +76,10 @@ class RecordTrainerStrikeServiceTest {
       // given
       given(
               manageTrainerSanctionPort.recordStrike(
-                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_TIMEOUT)))
+                  eq(TRAINER_ID),
+                  eq(RecordTrainerStrikeCommand.REASON_TIMEOUT),
+                  eq(null),
+                  eq(null)))
           .willReturn(new RecordStrikeResult(3, true));
 
       // when: 예외 없이 완료되어야 함
@@ -83,7 +89,7 @@ class RecordTrainerStrikeServiceTest {
       // then
       then(manageTrainerSanctionPort)
           .should()
-          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_TIMEOUT);
+          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_TIMEOUT, null, null);
     }
   }
 }

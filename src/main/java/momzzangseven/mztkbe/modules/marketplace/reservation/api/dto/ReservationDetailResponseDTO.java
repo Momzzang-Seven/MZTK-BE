@@ -34,7 +34,8 @@ public record ReservationDetailResponseDTO(
     Integer priceAmount,
     String trainerNickname,
     String userNickname,
-    String thumbnailFinalObjectKey) {
+    String thumbnailFinalObjectKey,
+    ReservationWeb3ExecutionResponseDTO web3Execution) {
 
   public static ReservationDetailResponseDTO from(GetReservationResult result) {
     return new ReservationDetailResponseDTO(
@@ -55,6 +56,7 @@ public record ReservationDetailResponseDTO(
         result.priceAmount(),
         result.trainerNickname(),
         result.userNickname(),
-        result.thumbnailFinalObjectKey());
+        result.thumbnailFinalObjectKey(),
+        ReservationWeb3ExecutionResponseDTO.from(result.web3Execution()));
   }
 }

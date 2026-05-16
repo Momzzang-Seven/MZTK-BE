@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -14,6 +16,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -93,6 +96,31 @@ class GetTrainerReservationsServiceTest {
     // then
     assertThat(result.items()).hasSize(1);
     assertThat(result.items().get(0).status()).isEqualTo(ReservationStatus.APPROVED);
+  }
+
+  @Test
+  @DisplayName("트레이너 수강 신청 목록 조회 - chain read repair 결과를 목록 응답 매핑 전에 반영한다")
+  void execute_AppliesChainReadRepairBeforeMapping() {
+    Reservation original =
+        sampleReservation(2L).toBuilder().status(ReservationStatus.DEADLINE_SYNC_REQUIRED).build();
+    Reservation repaired = original.toBuilder().status(ReservationStatus.DEADLINE_REFUNDED).build();
+    RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
+    GetTrainerReservationsService repairingSut =
+        new GetTrainerReservationsService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+    given(loadReservationPort.findByTrainerIdCursor(any(), any(), any()))
+        .willReturn(List.of(original));
+    given(repairUseCase.repairBatch(List.of(original))).willReturn(List.of(repaired));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findById(2L)).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    CursorSlice<ReservationSummaryResult> result =
+        repairingSut.execute(new GetTrainerReservationsQuery(2L, null));
+
+    assertThat(result.items()).hasSize(1);
+    assertThat(result.items().getFirst().status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+    then(repairUseCase).should().repairBatch(List.of(original));
   }
 
   @Test

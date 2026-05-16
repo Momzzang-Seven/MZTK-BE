@@ -17,8 +17,6 @@ import java.time.LocalTime;
  * @param reservationTime requested session start time
  * @param userRequest optional note from the user (nullable)
  * @param signedAmount the amount the user signed (used for price-mismatch validation)
- * @param delegationSignature EIP-7702 authorization tuple signature
- * @param executionSignature purchaseClass execution signature
  */
 public record CreateReservationCommand(
     Long userId,
@@ -27,17 +25,27 @@ public record CreateReservationCommand(
     LocalDate reservationDate,
     LocalTime reservationTime,
     String userRequest,
-    BigInteger signedAmount,
-    String delegationSignature,
-    String executionSignature) {
+    String idempotencyKey,
+    BigInteger signedAmount) {
+
+  public CreateReservationCommand(
+      Long userId,
+      Long classId,
+      Long slotId,
+      LocalDate reservationDate,
+      LocalTime reservationTime,
+      String userRequest,
+      BigInteger signedAmount) {
+    this(
+        userId, classId, slotId, reservationDate, reservationTime, userRequest, null, signedAmount);
+  }
 
   /**
    * Validates structural preconditions of the command.
    *
    * <p>Does not validate business rules (price match, capacity, etc.) — those belong in the
    * service. This method guards against obviously malformed input that would cause a
-   * NullPointerException or data-corruption downstream, including basic EIP-7702 signature format
-   * checks.
+   * NullPointerException or data-corruption downstream.
    *
    * @throws IllegalArgumentException when any required field is null, non-positive, or blank
    */
@@ -59,33 +67,6 @@ public record CreateReservationCommand(
     }
     if (signedAmount == null || signedAmount.signum() <= 0) {
       throw new IllegalArgumentException("signedAmount must be a positive value");
-    }
-    validateSignature("delegationSignature", delegationSignature);
-    validateSignature("executionSignature", executionSignature);
-  }
-
-  /**
-   * Validates that a Web3 signature string is structurally sound:
-   *
-   * <ul>
-   *   <li>Not null or blank
-   *   <li>Starts with {@code "0x"} (EIP prefix)
-   *   <li>At least 132 characters total ({@code "0x"} + 130 hex chars for a 65-byte ECDSA sig)
-   * </ul>
-   *
-   * <p>Does NOT perform cryptographic verification — that is deferred to the relayer (web3 module).
-   */
-  private static void validateSignature(String fieldName, String sig) {
-    if (sig == null || sig.isBlank()) {
-      throw new IllegalArgumentException(fieldName + " must not be blank");
-    }
-    if (!sig.startsWith("0x")) {
-      throw new IllegalArgumentException(fieldName + " must start with '0x'");
-    }
-    // EIP-7702 / ECDSA: 0x + 130 hex chars = 132 minimum
-    if (sig.length() < 132) {
-      throw new IllegalArgumentException(
-          fieldName + " is too short (minimum 132 chars including '0x' prefix)");
     }
   }
 }

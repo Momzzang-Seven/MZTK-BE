@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +54,18 @@ public class ApproveReservationService implements ApproveReservationUseCase {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Cannot approve reservation in status: " + reservation.getStatus());
+    }
+    if (reservation.getEffectiveEscrowFlow().isUserEip7702()
+        && reservation.getEffectiveEscrowStatus() != ReservationEscrowStatus.LOCKED) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Cannot approve reservation before purchase escrow is locked: "
+              + reservation.getEffectiveEscrowStatus());
+    }
+    if ("ESCROW_DISPATCH_PENDING".equals(reservation.getTxHash())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
+          "Cannot approve reservation while legacy escrow dispatch is unresolved");
     }
 
     Reservation approved = reservation.approve();

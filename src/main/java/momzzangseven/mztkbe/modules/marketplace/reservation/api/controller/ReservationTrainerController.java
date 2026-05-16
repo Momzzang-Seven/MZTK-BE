@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ApproveReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RecoverReservationEscrowResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationCursorResponse;
@@ -15,9 +16,11 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationD
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ApproveReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApproveReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +49,7 @@ public class ReservationTrainerController {
   private final GetReservationDetailUseCase getReservationDetailUseCase;
   private final ApproveReservationUseCase approveReservationUseCase;
   private final RejectReservationUseCase rejectReservationUseCase;
+  private final RecoverReservationEscrowUseCase recoverReservationEscrowUseCase;
 
   @GetMapping
   public ResponseEntity<ApiResponse<ReservationCursorResponse>> getTrainerReservations(
@@ -94,6 +98,17 @@ public class ReservationTrainerController {
         ApiResponse.success(
             RejectReservationResponseDTO.from(
                 rejectReservationUseCase.execute(request.toCommand(id, trainerId)))));
+  }
+
+  @PostMapping("/{id}/web3/recover")
+  public ResponseEntity<ApiResponse<RecoverReservationEscrowResponseDTO>> recoverReservationEscrow(
+      @PathVariable @Positive Long id, @AuthenticationPrincipal Long trainerId) {
+    requireTrainerId(trainerId);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            RecoverReservationEscrowResponseDTO.from(
+                recoverReservationEscrowUseCase.execute(
+                    new RecoverReservationEscrowCommand(id, trainerId)))));
   }
 
   private void requireTrainerId(Long trainerId) {

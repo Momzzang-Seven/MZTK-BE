@@ -3,8 +3,16 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.api.dto;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RejectReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
-public record RejectReservationResponseDTO(Long reservationId, ReservationStatus status) {
+public record RejectReservationResponseDTO(
+    Long reservationId,
+    ReservationStatus status,
+    String escrowStatus,
+    ReservationWeb3WriteResponseDTO web3) {
   public static RejectReservationResponseDTO from(RejectReservationResult result) {
-    return new RejectReservationResponseDTO(result.reservationId(), result.status());
+    return new RejectReservationResponseDTO(
+        result.reservationId(),
+        result.status(),
+        result.escrowStatus(),
+        ReservationWeb3WriteResponseDTO.from(result.web3()));
   }
 }

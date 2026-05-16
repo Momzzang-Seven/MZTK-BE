@@ -80,4 +80,61 @@ class ReservationStatusTest {
       }
     }
   }
+
+  @Test
+  @DisplayName("user escrow statuses are scheduler-invisible and explicit")
+  void userEscrowStatusesAreSchedulerInvisible() {
+    assertThat(ReservationStatus.PURCHASE_PREPARING.isSchedulerInvisibleUserState()).isTrue();
+    assertThat(ReservationStatus.PURCHASE_PENDING.isSchedulerInvisibleUserState()).isTrue();
+    assertThat(ReservationStatus.CANCEL_PENDING.isSchedulerInvisibleUserState()).isTrue();
+    assertThat(ReservationStatus.REJECT_PENDING.isSchedulerInvisibleUserState()).isTrue();
+    assertThat(ReservationStatus.CONFIRM_PENDING.isSchedulerInvisibleUserState()).isTrue();
+    assertThat(ReservationStatus.DEADLINE_RECOVERY_REQUIRED.isSchedulerInvisibleUserState())
+        .isTrue();
+    assertThat(ReservationStatus.DEADLINE_SYNC_REQUIRED.isSchedulerInvisibleUserState()).isTrue();
+    assertThat(ReservationStatus.DEADLINE_REFUND_AVAILABLE.isSchedulerInvisibleUserState())
+        .isTrue();
+
+    assertThat(ReservationStatus.PENDING.isSchedulerInvisibleUserState()).isFalse();
+    assertThat(ReservationStatus.APPROVED.isSchedulerInvisibleUserState()).isFalse();
+  }
+
+  @Test
+  @DisplayName("canTransitionTo - user escrow transition matrix")
+  void canTransitionTo_UserEscrowTransitions() {
+    assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.PURCHASE_PREPARING))
+        .isTrue();
+    assertThat(
+            ReservationStatus.PURCHASE_PREPARING.canTransitionTo(
+                ReservationStatus.PURCHASE_PENDING))
+        .isTrue();
+    assertThat(ReservationStatus.PURCHASE_PREPARING.canTransitionTo(ReservationStatus.PENDING))
+        .isTrue();
+    assertThat(ReservationStatus.PURCHASE_PENDING.canTransitionTo(ReservationStatus.PENDING))
+        .isTrue();
+    assertThat(
+            ReservationStatus.PURCHASE_PENDING.canTransitionTo(
+                ReservationStatus.DEADLINE_RECOVERY_REQUIRED))
+        .isTrue();
+    assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.CANCEL_PENDING))
+        .isTrue();
+    assertThat(ReservationStatus.CANCEL_PENDING.canTransitionTo(ReservationStatus.USER_CANCELLED))
+        .isTrue();
+    assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.REJECT_PENDING))
+        .isTrue();
+    assertThat(ReservationStatus.REJECT_PENDING.canTransitionTo(ReservationStatus.REJECTED))
+        .isTrue();
+    assertThat(ReservationStatus.APPROVED.canTransitionTo(ReservationStatus.CONFIRM_PENDING))
+        .isTrue();
+    assertThat(ReservationStatus.CONFIRM_PENDING.canTransitionTo(ReservationStatus.SETTLED))
+        .isTrue();
+    assertThat(
+            ReservationStatus.DEADLINE_REFUND_AVAILABLE.canTransitionTo(
+                ReservationStatus.DEADLINE_REFUND_PENDING))
+        .isTrue();
+    assertThat(
+            ReservationStatus.DEADLINE_REFUND_PENDING.canTransitionTo(
+                ReservationStatus.DEADLINE_REFUNDED))
+        .isTrue();
+  }
 }

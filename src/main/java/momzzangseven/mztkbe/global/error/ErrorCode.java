@@ -552,6 +552,45 @@ public enum ErrorCode {
       "Class is not currently active and cannot accept reservations",
       HttpStatus.CONFLICT),
 
+  MARKETPLACE_WEB3_DISABLED(
+      "MARKETPLACE_033", "Marketplace Web3 execution is disabled", HttpStatus.SERVICE_UNAVAILABLE),
+  MARKETPLACE_SWITCH_WALLET_REQUIRED(
+      "MARKETPLACE_034", "Switch to the wallet used for this reservation", HttpStatus.CONFLICT),
+  MARKETPLACE_ACTIVE_EXECUTION_CONFLICT(
+      "MARKETPLACE_035", "Marketplace execution is already in progress", HttpStatus.CONFLICT),
+  MARKETPLACE_DEADLINE_SYNC_REQUIRED(
+      "MARKETPLACE_036",
+      "Marketplace deadline must be synced before this action",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_DEADLINE_REFUND_REQUIRED(
+      "MARKETPLACE_037", "Reservation deadline expired; refund is required", HttpStatus.CONFLICT),
+  MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED(
+      "MARKETPLACE_038", "Reservation execution window has expired", HttpStatus.CONFLICT),
+  MARKETPLACE_INSUFFICIENT_ALLOWANCE(
+      "MARKETPLACE_039",
+      "Token allowance is insufficient for marketplace purchase",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_INSUFFICIENT_TOKEN_BALANCE(
+      "MARKETPLACE_040",
+      "Token balance is insufficient for marketplace purchase",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_CONFIRMED_REPAIR_REQUIRED(
+      "MARKETPLACE_041",
+      "Confirmed marketplace execution must be repaired first",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_APPROVAL_WINDOW_EXPIRED(
+      "MARKETPLACE_042", "Reservation approval window has expired", HttpStatus.CONFLICT),
+  MARKETPLACE_STALE_SIGN_REQUEST(
+      "MARKETPLACE_043", "Marketplace sign request is stale", HttpStatus.CONFLICT),
+  MARKETPLACE_EXECUTION_NOT_OWNED(
+      "MARKETPLACE_044", "Marketplace execution is not owned by this user", HttpStatus.FORBIDDEN),
+  MARKETPLACE_IDEMPOTENCY_CONFLICT(
+      "MARKETPLACE_045",
+      "Marketplace idempotency key conflicts with another request",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_CANNOT_BUY_OWN_CLASS(
+      "MARKETPLACE_046", "Buyer cannot purchase their own class", HttpStatus.CONFLICT),
+
   MARKETPLACE_RESERVATION_PAST_TIME(
       "MARKETPLACE_031",
       "Cannot book a session whose start time is already in the past",

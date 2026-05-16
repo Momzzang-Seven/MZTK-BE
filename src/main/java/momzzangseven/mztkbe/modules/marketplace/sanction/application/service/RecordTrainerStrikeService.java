@@ -29,12 +29,15 @@ public class RecordTrainerStrikeService implements RecordTrainerStrikeUseCase {
         "RecordTrainerStrike: trainerId={}, reason={}", command.trainerId(), command.reason());
 
     ManageTrainerSanctionPort.RecordStrikeResult result =
-        manageTrainerSanctionPort.recordStrike(command.trainerId(), command.reason());
+        manageTrainerSanctionPort.recordStrike(
+            command.trainerId(), command.reason(), command.sourceType(), command.sourceId());
 
     log.info(
-        "Strike recorded: trainerId={}, reason={}, strikeCount={}, isBanned={}",
+        "Strike recorded: trainerId={}, reason={}, sourceType={}, sourceId={}, strikeCount={}, isBanned={}",
         command.trainerId(),
         command.reason(),
+        command.sourceType(),
+        command.sourceId(),
         result.strikeCount(),
         result.isBanned());
   }

@@ -1,23 +1,32 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
-import lombok.RequiredArgsConstructor;
+import java.math.BigInteger;
+import java.util.Locale;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CancelPendingReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.event.EscrowDispatchEventListener;
-import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Service for a user to cancel their own PENDING reservation.
@@ -25,28 +34,110 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Only PENDING reservations may be cancelled by the user. Once a trainer approves (APPROVED),
  * the user can no longer cancel unilaterally.
  *
- * <p><b>Transaction ordering (DB-first, escrow-after-commit):</b><br>
- * The reservation row is saved as USER_CANCELLED with a sentinel {@code txHash}, the DB transaction
- * is committed, then {@link EscrowDispatchEvent} is handled AFTER_COMMIT by {@code
- * EscrowDispatchEventListener} to call {@code cancelClass} on-chain and write back the real txHash.
+ * <p><b>Two-phase ordering:</b><br>
+ * The reservation first moves to a scheduler-invisible cancel-pending state, then Web3 prepare runs
+ * outside the row lock. Phase B relocks and binds the shared execution intent before returning the
+ * sign request.
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class CancelPendingReservationService implements CancelPendingReservationUseCase {
 
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
-  private final ApplicationEventPublisher eventPublisher;
+  private final PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
+  private final CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
+  private final LoadReservationWalletPort loadReservationWalletPort;
+  private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
+  private TransactionOperations transactionOperations;
+
+  @Autowired
+  public CancelPendingReservationService(
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      @Nullable PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
+      @Nullable CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
+      @Nullable LoadReservationWalletPort loadReservationWalletPort,
+      @Nullable LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort) {
+    this.loadReservationPort = loadReservationPort;
+    this.saveReservationPort = saveReservationPort;
+    this.prepareReservationEscrowExecutionPort =
+        prepareReservationEscrowExecutionPort == null
+            ? DisabledReservationWeb3PortFactory.prepareExecution()
+            : prepareReservationEscrowExecutionPort;
+    this.cancelReservationEscrowExecutionPort =
+        cancelReservationEscrowExecutionPort == null
+            ? DisabledReservationWeb3PortFactory.cancelExecution()
+            : cancelReservationEscrowExecutionPort;
+    this.loadReservationWalletPort =
+        loadReservationWalletPort == null
+            ? DisabledReservationWeb3PortFactory.wallet()
+            : loadReservationWalletPort;
+    this.loadReservationEscrowPaymentConfigPort =
+        loadReservationEscrowPaymentConfigPort == null
+            ? DisabledReservationWeb3PortFactory.paymentConfig()
+            : loadReservationEscrowPaymentConfigPort;
+  }
+
+  @Autowired
+  void setTransactionManager(PlatformTransactionManager transactionManager) {
+    this.transactionOperations = new TransactionTemplate(transactionManager);
+  }
+
+  public CancelPendingReservationService(
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      org.springframework.context.ApplicationEventPublisher ignored) {
+    this(
+        loadReservationPort,
+        saveReservationPort,
+        fakePreparePort(),
+        DisabledReservationWeb3PortFactory.cancelExecution(),
+        userId -> java.util.Optional.of("0x1111111111111111111111111111111111111111"),
+        () ->
+            new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18));
+  }
 
   @Override
-  @Transactional
   public CancelPendingReservationResult execute(CancelPendingReservationCommand command) {
     log.debug(
         "CancelPendingReservation: reservationId={}, userId={}",
         command.reservationId(),
         command.userId());
 
+    PendingPreparation phaseA = runInTransaction(() -> beginCancel(command));
+    PrepareReservationEscrowResult prepared;
+    try {
+      prepared = prepareReservationEscrowExecutionPort.prepareCancel(phaseA.prepareCommand());
+    } catch (RuntimeException e) {
+      rollbackPending(phaseA);
+      throw e;
+    }
+    Reservation saved;
+    try {
+      saved =
+          runInTransaction(
+              () ->
+                  bindPendingExecution(
+                      phaseA,
+                      prepared.web3().executionIntent().id(),
+                      ReservationStatus.CANCEL_PENDING));
+    } catch (RuntimeException e) {
+      compensateBindFailure(phaseA, prepared, e);
+      throw e;
+    }
+
+    log.info(
+        "Reservation cancel intent prepared: id={}, userId={}, intentId={}",
+        saved.getId(),
+        command.userId(),
+        prepared.web3().executionIntent().id());
+    return new CancelPendingReservationResult(
+        saved.getId(), saved.getStatus(), saved.getEffectiveEscrowStatus().name(), prepared.web3());
+  }
+
+  private PendingPreparation beginCancel(CancelPendingReservationCommand command) {
     Reservation reservation =
         loadReservationPort
             .findByIdWithLock(command.reservationId())
@@ -66,15 +157,208 @@ public class CancelPendingReservationService implements CancelPendingReservation
           "Cannot cancel reservation in status: " + reservation.getStatus());
     }
 
-    // Persist USER_CANCELLED with sentinel txHash; real escrow cancelClass call happens
-    // AFTER_COMMIT.
-    Reservation cancelled = reservation.cancelByUser(EscrowDispatchEventListener.PENDING_TX_HASH);
-    Reservation saved = saveReservationPort.save(cancelled);
-
-    eventPublisher.publishEvent(
-        EscrowDispatchEvent.of(saved.getId(), reservation.getOrderId(), EscrowAction.CANCEL));
-
-    log.info("Reservation user-cancelled: id={}, userId={}", saved.getId(), command.userId());
-    return new CancelPendingReservationResult(saved.getId(), saved.getStatus());
+    Reservation pending =
+        saveReservationPort.save(reservation.beginCancelPending(UUID.randomUUID().toString()));
+    return new PendingPreparation(
+        pending,
+        commandFor(pending, "BUYER", command.userId(), pending.getTrainerId(), "USER_CANCELLED"));
   }
+
+  private Reservation bindPendingExecution(
+      PendingPreparation phaseA, String executionIntentId, ReservationStatus expectedStatus) {
+    Reservation current =
+        loadReservationPort
+            .findByIdWithLock(phaseA.reservation().getId())
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
+                        "Reservation not found: " + phaseA.reservation().getId()));
+    validatePendingSnapshot(current, phaseA.reservation(), expectedStatus);
+    return saveReservationPort.save(current.bindPendingExecutionIntent(executionIntentId));
+  }
+
+  private void rollbackPending(PendingPreparation phaseA) {
+    runInTransaction(
+        () -> {
+          loadReservationPort
+              .findByIdWithLock(phaseA.reservation().getId())
+              .filter(
+                  reservation ->
+                      reservation.getStatus() == phaseA.reservation().getStatus()
+                          && reservation.getCurrentExecutionIntentPublicId() == null
+                          && equalsNullable(
+                              reservation.getPendingAttemptToken(),
+                              phaseA.reservation().getPendingAttemptToken()))
+              .ifPresent(
+                  reservation -> saveReservationPort.save(reservation.rollbackToPriorState()));
+          return null;
+        });
+  }
+
+  private void compensateBindFailure(
+      PendingPreparation phaseA, PrepareReservationEscrowResult prepared, RuntimeException cause) {
+    if (cancelSignablePreparedIntent(prepared, cause)) {
+      rollbackPending(phaseA);
+    }
+  }
+
+  private boolean cancelSignablePreparedIntent(
+      PrepareReservationEscrowResult prepared, RuntimeException cause) {
+    String executionIntentId = prepared.web3().executionIntent().id();
+    try {
+      return cancelReservationEscrowExecutionPort.cancelSignableIntent(
+          executionIntentId,
+          "MARKETPLACE_PHASE_B_BIND_FAILED",
+          cause.getMessage() == null ? "marketplace reservation bind failed" : cause.getMessage());
+    } catch (RuntimeException cancelFailure) {
+      log.warn(
+          "Failed to cancel marketplace cancel intent after Phase B bind failure: intentId={}",
+          executionIntentId,
+          cancelFailure);
+      return false;
+    }
+  }
+
+  private void validatePendingSnapshot(
+      Reservation current, Reservation expected, ReservationStatus expectedStatus) {
+    if (current.getStatus() != expectedStatus
+        || !equalsNullable(current.getPendingAttemptToken(), expected.getPendingAttemptToken())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "marketplace reservation state changed before execution intent bind");
+    }
+  }
+
+  private boolean equalsNullable(Object left, Object right) {
+    return left == null ? right == null : left.equals(right);
+  }
+
+  private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
+    if (transactionOperations == null) {
+      return supplier.get();
+    }
+    return transactionOperations.execute(status -> supplier.get());
+  }
+
+  private PrepareReservationEscrowCommand commandFor(
+      Reservation reservation,
+      String actorType,
+      Long authorityUserId,
+      Long counterpartyUserId,
+      String targetTerminalStatus) {
+    String buyerWallet =
+        walletOrSnapshot(reservation.getBuyerWalletAddress(), reservation.getUserId());
+    String trainerWallet =
+        walletOrSnapshot(reservation.getTrainerWalletAddress(), reservation.getTrainerId());
+    var payment = loadReservationEscrowPaymentConfigPort.load();
+    return new PrepareReservationEscrowCommand(
+        reservation.getId(),
+        reservation.getOrderId(),
+        ensureOrderKey(reservation),
+        actorType,
+        authorityUserId,
+        authorityUserId,
+        counterpartyUserId,
+        reservation.getUserId(),
+        reservation.getTrainerId(),
+        reservation.getVersion(),
+        reservation.getPriorStatus(),
+        reservation.getPriorEscrowStatus(),
+        buyerWallet,
+        trainerWallet,
+        reservation.getTokenAddress() == null
+            ? payment.tokenAddress()
+            : reservation.getTokenAddress(),
+        reservation.getPriceBaseUnits() == null
+            ? BigInteger.valueOf(reservation.getBookedPriceAmount()).toString()
+            : reservation.getPriceBaseUnits(),
+        reservation.getBookedPriceAmount(),
+        reservation.sessionEndAt(),
+        reservation.getExpectedContractDeadlineEpochSeconds(),
+        reservation.getContractDeadlineEpochSeconds(),
+        reservation.getPendingAttemptToken(),
+        targetTerminalStatus);
+  }
+
+  private String walletOrSnapshot(String snapshot, Long userId) {
+    if (snapshot != null && !snapshot.isBlank()) {
+      return snapshot;
+    }
+    return loadReservationWalletPort
+        .loadActiveWalletAddress(userId)
+        .orElseThrow(
+            () ->
+                new BusinessException(
+                    ErrorCode.WALLET_NOT_CONNECTED, "Active wallet not found: userId=" + userId));
+  }
+
+  private String ensureOrderKey(Reservation reservation) {
+    if (reservation.getOrderKey() != null && !reservation.getOrderKey().isBlank()) {
+      return reservation.getOrderKey();
+    }
+    try {
+      UUID uuid = UUID.fromString(reservation.getOrderId());
+      return "0x"
+          + "0".repeat(32)
+          + String.format(
+              Locale.ROOT,
+              "%016x%016x",
+              uuid.getMostSignificantBits(),
+              uuid.getLeastSignificantBits());
+    } catch (RuntimeException e) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
+          "Reservation order key is missing and cannot be derived");
+    }
+  }
+
+  private static PrepareReservationEscrowExecutionPort fakePreparePort() {
+    return new PrepareReservationEscrowExecutionPort() {
+      @Override
+      public PrepareReservationEscrowResult preparePurchase(
+          PrepareReservationEscrowCommand command) {
+        return fakeResult();
+      }
+
+      @Override
+      public PrepareReservationEscrowResult prepareCancel(PrepareReservationEscrowCommand command) {
+        return fakeResult();
+      }
+
+      @Override
+      public PrepareReservationEscrowResult prepareConfirm(
+          PrepareReservationEscrowCommand command) {
+        return fakeResult();
+      }
+
+      @Override
+      public PrepareReservationEscrowResult prepareDeadlineRefund(
+          PrepareReservationEscrowCommand command) {
+        return fakeResult();
+      }
+    };
+  }
+
+  private static PrepareReservationEscrowResult fakeResult() {
+    return new PrepareReservationEscrowResult(
+        new ReservationExecutionWriteView(
+            new ReservationExecutionWriteView.Resource("ORDER", "1", "PENDING_EXECUTION"),
+            "MARKETPLACE_CLASS_CANCEL",
+            "0x" + "0".repeat(63) + "1",
+            new ReservationExecutionWriteView.ExecutionIntent(
+                "intent-1",
+                "AWAITING_SIGNATURE",
+                java.time.LocalDateTime.now().plusMinutes(5),
+                300L),
+            new ReservationExecutionWriteView.Execution("EIP7702", 1),
+            null,
+            null,
+            false,
+            null,
+            null));
+  }
+
+  private record PendingPreparation(
+      Reservation reservation, PrepareReservationEscrowCommand prepareCommand) {}
 }

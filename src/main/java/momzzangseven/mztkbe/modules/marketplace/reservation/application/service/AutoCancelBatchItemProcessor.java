@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -38,6 +40,7 @@ public class AutoCancelBatchItemProcessor {
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
   private final RecordTrainerStrikePort recordTrainerStrikePort;
+  private final Clock clock;
 
   /**
    * Processes a single auto-cancel item in its own isolated transaction.
@@ -70,11 +73,14 @@ public class AutoCancelBatchItemProcessor {
                 });
 
     // Guard: re-validate status with the fresh locked row before any side-effect.
-    if (!reservation.getStatus().canTimeoutCancel()) {
+    LocalDateTime now = LocalDateTime.now(clock);
+    if (!reservation.getStatus().canTimeoutCancel()
+        || !reservation.isLegacySchedulerEligibleAt(now)) {
       log.info(
-          "AutoCancel skipped: reservation {} is no longer PENDING (status={})",
+          "AutoCancel skipped: reservation {} is not legacy scheduler eligible (status={}, flow={})",
           reservation.getId(),
-          reservation.getStatus());
+          reservation.getStatus(),
+          reservation.getEffectiveEscrowFlow());
       return;
     }
 

@@ -24,7 +24,8 @@ public class SanctionPersistenceAdapter
   private final Clock clock;
 
   @Override
-  public RecordStrikeResult recordStrike(Long trainerId, String reason) {
+  public RecordStrikeResult recordStrike(
+      Long trainerId, String reason, String sourceType, String sourceId) {
     TrainerSanctionEntity sanction =
         sanctionRepository
             .findByIdWithLock(trainerId)
@@ -33,6 +34,19 @@ public class SanctionPersistenceAdapter
     LocalDateTime now = LocalDateTime.now(clock);
     boolean wasBanned =
         sanction.getSuspendedUntil() != null && sanction.getSuspendedUntil().isAfter(now);
+
+    if (hasSource(sourceType, sourceId)
+        && strikeRecordRepository.existsBySourceTypeAndSourceId(sourceType, sourceId)) {
+      boolean isBanned =
+          sanction.getSuspendedUntil() != null && sanction.getSuspendedUntil().isAfter(now);
+      log.info(
+          "Skipped duplicate trainer strike: trainerId={}, reason={}, sourceType={}, sourceId={}",
+          trainerId,
+          reason,
+          sourceType,
+          sourceId);
+      return new RecordStrikeResult(sanction.getStrikeCount(), !wasBanned && isBanned);
+    }
 
     TrainerSanctionEntity updatedSanction = sanction.addStrike(now);
     boolean isBanned =
@@ -44,7 +58,12 @@ public class SanctionPersistenceAdapter
     sanctionRepository.save(updatedSanction);
 
     TrainerStrikeRecordEntity record =
-        TrainerStrikeRecordEntity.builder().trainerId(trainerId).reason(reason).build();
+        TrainerStrikeRecordEntity.builder()
+            .trainerId(trainerId)
+            .reason(reason)
+            .sourceType(sourceType)
+            .sourceId(sourceId)
+            .build();
     strikeRecordRepository.save(record);
 
     log.info(
@@ -55,6 +74,10 @@ public class SanctionPersistenceAdapter
         isBanned);
 
     return new RecordStrikeResult(updatedSanction.getStrikeCount(), newlyBanned);
+  }
+
+  private boolean hasSource(String sourceType, String sourceId) {
+    return sourceType != null && !sourceType.isBlank() && sourceId != null && !sourceId.isBlank();
   }
 
   @Override

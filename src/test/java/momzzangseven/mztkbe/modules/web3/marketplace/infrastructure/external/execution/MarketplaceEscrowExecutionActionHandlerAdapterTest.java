@@ -1,0 +1,391 @@
+package momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.external.execution;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.util.Optional;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceEscrowOrderPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceEscrowOrderView;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceActorType;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAllowanceStrategy;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class MarketplaceEscrowExecutionActionHandlerAdapterTest {
+
+  private static final String ORDER_ID = "00000000-0000-0000-0000-000000000123";
+  private static final String ORDER_KEY =
+      "0x0000000000000000000000000000000000000000000000000000000000000123";
+
+  @Mock private LoadReservationPort loadReservationPort;
+  @Mock private SaveReservationPort saveReservationPort;
+  @Mock private RecordTrainerStrikePort recordTrainerStrikePort;
+  @Mock private LoadMarketplaceEscrowOrderPort loadMarketplaceEscrowOrderPort;
+
+  private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+  private MarketplaceEscrowExecutionActionHandlerAdapter sut;
+
+  @BeforeEach
+  void setUp() {
+    sut =
+        new MarketplaceEscrowExecutionActionHandlerAdapter(
+            objectMapper,
+            loadReservationPort,
+            saveReservationPort,
+            Clock.fixed(Instant.parse("2026-05-16T00:00:00Z"), ZoneOffset.UTC));
+    sut.setRecordTrainerStrikePort(recordTrainerStrikePort);
+    sut.setLoadMarketplaceEscrowOrderPort(loadMarketplaceEscrowOrderPort);
+  }
+
+  @Test
+  @DisplayName("confirmed purchase orphan intent syncs by reservation id and pending attempt token")
+  void afterExecutionConfirmed_purchaseOrphan_syncsByPendingAttemptToken() throws Exception {
+    Reservation reservation = purchasePreparing("purchase-token");
+    ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.empty());
+    given(loadReservationPort.findByIdWithLock(123L)).willReturn(Optional.of(reservation));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(captor.getValue().getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(captor.getValue().getContractDeadlineEpochSeconds()).isEqualTo(1_800_000_000L);
+  }
+
+  @Test
+  @DisplayName("confirmed orphan intent with a stale pending token is ignored")
+  void afterExecutionConfirmed_staleOrphanToken_ignored() throws Exception {
+    Reservation reservation = purchasePreparing("current-token");
+    ExecutionIntent intent = intent("intent-1", payload("stale-token"));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.empty());
+    given(loadReservationPort.findByIdWithLock(123L)).willReturn(Optional.of(reservation));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("confirmed purchase marks deadline recovery when actual deadline is unsafe")
+  void afterExecutionConfirmed_purchaseDeadlineUnsafe_marksRecoveryRequired() throws Exception {
+    Reservation reservation = purchasePreparing("purchase-token");
+    ExecutionIntent intent = intent("intent-1", payload("purchase-token", 1L, 1L));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.of(reservation.bindPurchaseIntent("intent-1")));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus())
+        .isEqualTo(ReservationStatus.DEADLINE_RECOVERY_REQUIRED);
+  }
+
+  @Test
+  @DisplayName("confirmed purchase uses getOrder deadline instead of the payload expected deadline")
+  void afterExecutionConfirmed_purchaseUsesActualChainDeadline() throws Exception {
+    Reservation reservation = purchasePreparing("purchase-token");
+    ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.of(reservation.bindPurchaseIntent("intent-1")));
+    given(loadMarketplaceEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(MarketplaceEscrowOrderView.STATE_CREATED, 1_900_000_000L));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(captor.getValue().getContractDeadlineEpochSeconds()).isEqualTo(1_900_000_000L);
+  }
+
+  @Test
+  @DisplayName("confirmed purchase syncs admin-refunded chain state without reopening PENDING")
+  void afterExecutionConfirmed_purchaseChainAdminRefunded_syncsTimeoutCancelled() throws Exception {
+    Reservation reservation = purchasePreparing("purchase-token");
+    ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.of(reservation.bindPurchaseIntent("intent-1")));
+    given(loadMarketplaceEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(MarketplaceEscrowOrderView.STATE_ADMIN_REFUNDED, 1_900_000_000L));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
+    assertThat(captor.getValue().getContractDeadlineEpochSeconds()).isEqualTo(1_900_000_000L);
+  }
+
+  @Test
+  @DisplayName("confirmed purchase with absent getOrder result moves to deadline sync required")
+  void afterExecutionConfirmed_purchaseChainOrderAbsent_marksDeadlineSyncRequired()
+      throws Exception {
+    Reservation reservation = purchasePreparing("purchase-token");
+    ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.of(reservation.bindPurchaseIntent("intent-1")));
+    given(loadMarketplaceEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(
+            new MarketplaceEscrowOrderView(
+                ORDER_KEY,
+                BigInteger.ZERO,
+                "0x0000000000000000000000000000000000000000",
+                0L,
+                MarketplaceEscrowOrderView.STATE_ABSENT,
+                "0x0000000000000000000000000000000000000000",
+                "0x0000000000000000000000000000000000000000"));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.DEADLINE_SYNC_REQUIRED);
+  }
+
+  @Test
+  @DisplayName("action plan maps refund-like marketplace actions to SERVER_TO_USER reference type")
+  void buildActionPlan_refundLikeActions_useServerToUserReferenceType() throws Exception {
+    ExecutionActionPlan buyerCancelPlan =
+        sut.buildActionPlan(
+            intent(
+                "intent-cancel",
+                payload(
+                    "cancel-token",
+                    MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+                    MarketplaceActorType.BUYER)));
+    ExecutionActionPlan trainerRejectPlan =
+        sut.buildActionPlan(
+            intent(
+                "intent-reject",
+                payload(
+                    "reject-token",
+                    MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+                    MarketplaceActorType.TRAINER)));
+    ExecutionActionPlan deadlineRefundPlan =
+        sut.buildActionPlan(
+            intent(
+                "intent-refund",
+                payload(
+                    "refund-token",
+                    MarketplaceExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND,
+                    MarketplaceActorType.BUYER)));
+
+    assertThat(buyerCancelPlan.referenceType()).isEqualTo(ExecutionReferenceType.SERVER_TO_USER);
+    assertThat(trainerRejectPlan.referenceType()).isEqualTo(ExecutionReferenceType.SERVER_TO_USER);
+    assertThat(deadlineRefundPlan.referenceType()).isEqualTo(ExecutionReferenceType.SERVER_TO_USER);
+  }
+
+  @Test
+  @DisplayName(
+      "confirmed trainer reject records a source-idempotent trainer strike after local reject")
+  void afterExecutionConfirmed_trainerReject_recordsSourceIdempotentStrike() throws Exception {
+    Reservation reservation = rejectPending();
+    MarketplaceEscrowExecutionPayload payload =
+        payload(
+            "reject-token",
+            MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+            MarketplaceActorType.TRAINER);
+    ExecutionIntent intent =
+        intent("intent-reject", ExecutionActionType.MARKETPLACE_CLASS_CANCEL, payload);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-reject"))
+        .willReturn(Optional.of(reservation));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.REJECTED);
+    then(recordTrainerStrikePort)
+        .should()
+        .recordStrike(
+            9L,
+            TrainerStrikeEvent.REASON_REJECT,
+            RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+            "123");
+  }
+
+  private Reservation purchasePreparing(String pendingAttemptToken) {
+    return Reservation.createPending(
+            7L,
+            9L,
+            11L,
+            LocalDate.of(2026, 5, 20),
+            LocalTime.of(10, 0),
+            60,
+            null,
+            ORDER_ID,
+            null,
+            50_000,
+            "PT")
+        .toBuilder()
+        .id(123L)
+        .version(0L)
+        .build()
+        .beginPurchasePreparing(
+            "key",
+            "payload",
+            LocalDateTime.of(2026, 5, 16, 1, 0),
+            ORDER_KEY,
+            "0x1111111111111111111111111111111111111111",
+            "0x2222222222222222222222222222222222222222",
+            "0x3333333333333333333333333333333333333333",
+            "50000",
+            1_800_000_000L,
+            LocalDateTime.of(2027, 1, 15, 8, 0),
+            pendingAttemptToken);
+  }
+
+  private ExecutionIntent intent(String publicId, MarketplaceEscrowExecutionPayload payload)
+      throws Exception {
+    return intent(publicId, ExecutionActionType.MARKETPLACE_CLASS_PURCHASE, payload);
+  }
+
+  private ExecutionIntent intent(
+      String publicId, ExecutionActionType actionType, MarketplaceEscrowExecutionPayload payload)
+      throws Exception {
+    return ExecutionIntent.builder()
+        .publicId(publicId)
+        .actionType(actionType)
+        .status(ExecutionIntentStatus.CONFIRMED)
+        .payloadSnapshotJson(objectMapper.writeValueAsString(payload))
+        .build();
+  }
+
+  private MarketplaceEscrowExecutionPayload payload(String pendingAttemptToken) {
+    return payload(pendingAttemptToken, 1_800_000_000L, null);
+  }
+
+  private MarketplaceEscrowExecutionPayload payload(
+      String pendingAttemptToken,
+      MarketplaceExecutionActionType actionType,
+      MarketplaceActorType actorType) {
+    return payload(pendingAttemptToken, 1_800_000_000L, null, actionType, actorType);
+  }
+
+  private MarketplaceEscrowExecutionPayload payload(
+      String pendingAttemptToken,
+      Long expectedDeadlineEpochSeconds,
+      Long contractDeadlineEpochSeconds) {
+    return payload(
+        pendingAttemptToken,
+        expectedDeadlineEpochSeconds,
+        contractDeadlineEpochSeconds,
+        MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
+        MarketplaceActorType.BUYER);
+  }
+
+  private MarketplaceEscrowExecutionPayload payload(
+      String pendingAttemptToken,
+      Long expectedDeadlineEpochSeconds,
+      Long contractDeadlineEpochSeconds,
+      MarketplaceExecutionActionType actionType,
+      MarketplaceActorType actorType) {
+    return new MarketplaceEscrowExecutionPayload(
+        actionType,
+        actorType,
+        123L,
+        "123",
+        ORDER_ID,
+        ORDER_KEY,
+        7L,
+        7L,
+        9L,
+        7L,
+        9L,
+        0L,
+        "PURCHASE_PREPARING",
+        "PURCHASE_PREPARING",
+        "0x1111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222",
+        "0x3333333333333333333333333333333333333333",
+        BigInteger.valueOf(50_000),
+        MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
+        LocalDateTime.of(2026, 5, 20, 11, 0),
+        expectedDeadlineEpochSeconds,
+        contractDeadlineEpochSeconds,
+        pendingAttemptToken,
+        "PENDING",
+        "0x4444444444444444444444444444444444444444",
+        "0x1234",
+        new MarketplaceTokenMovement(
+            "0x3333333333333333333333333333333333333333",
+            BigInteger.valueOf(50_000),
+            "BUYER",
+            "0x1111111111111111111111111111111111111111",
+            "ESCROW",
+            "0x4444444444444444444444444444444444444444"),
+        1_700_000_000L,
+        "0x" + "a".repeat(130));
+  }
+
+  private MarketplaceEscrowOrderView order(int state, long deadlineEpochSeconds) {
+    return new MarketplaceEscrowOrderView(
+        ORDER_KEY,
+        BigInteger.valueOf(50_000),
+        "0x3333333333333333333333333333333333333333",
+        deadlineEpochSeconds,
+        state,
+        "0x1111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222");
+  }
+
+  private Reservation rejectPending() {
+    return Reservation.createPending(
+            7L,
+            9L,
+            11L,
+            LocalDate.of(2026, 5, 20),
+            LocalTime.of(10, 0),
+            60,
+            null,
+            ORDER_ID,
+            null,
+            50_000,
+            "PT")
+        .toBuilder()
+        .id(123L)
+        .version(0L)
+        .orderKey(ORDER_KEY)
+        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+        .escrowStatus(ReservationEscrowStatus.LOCKED)
+        .build()
+        .beginRejectPending("reject-token")
+        .bindPendingExecutionIntent("intent-reject");
+  }
+}

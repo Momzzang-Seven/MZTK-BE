@@ -18,6 +18,9 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -56,6 +59,14 @@ public class ReservationEntity {
   @Column(nullable = false, length = 30)
   private ReservationStatus status;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "escrow_status", length = 40)
+  private ReservationEscrowStatus escrowStatus;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "escrow_flow", length = 30)
+  private ReservationEscrowFlow escrowFlow;
+
   @Column(name = "user_request", length = 500)
   private String userRequest;
 
@@ -65,8 +76,88 @@ public class ReservationEntity {
   @Column(name = "order_id", length = 100)
   private String orderId;
 
+  @Column(name = "order_key", length = 66)
+  private String orderKey;
+
+  @Column(name = "current_execution_intent_public_id", length = 36)
+  private String currentExecutionIntentPublicId;
+
+  @Column(name = "buyer_wallet_address", length = 42)
+  private String buyerWalletAddress;
+
+  @Column(name = "trainer_wallet_address", length = 42)
+  private String trainerWalletAddress;
+
+  @Column(name = "token_address", length = 42)
+  private String tokenAddress;
+
+  @Column(name = "price_base_units", length = 100)
+  private String priceBaseUnits;
+
   @Column(name = "tx_hash", length = 100)
   private String txHash;
+
+  @Column(name = "hold_expires_at")
+  private LocalDateTime holdExpiresAt;
+
+  @Column(name = "pending_action_expires_at")
+  private LocalDateTime pendingActionExpiresAt;
+
+  @Column(name = "expected_contract_deadline_epoch_seconds")
+  private Long expectedContractDeadlineEpochSeconds;
+
+  @Column(name = "expected_contract_deadline_at")
+  private LocalDateTime expectedContractDeadlineAt;
+
+  @Column(name = "contract_deadline_epoch_seconds")
+  private Long contractDeadlineEpochSeconds;
+
+  @Column(name = "contract_deadline_at")
+  private LocalDateTime contractDeadlineAt;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "pending_action", length = 40)
+  private ReservationEscrowAction pendingAction;
+
+  @Column(name = "pending_attempt_token", length = 100)
+  private String pendingAttemptToken;
+
+  @Column(name = "pending_expected_version")
+  private Long pendingExpectedVersion;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "pending_expected_status", length = 30)
+  private ReservationStatus pendingExpectedStatus;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "pending_expected_escrow_status", length = 40)
+  private ReservationEscrowStatus pendingExpectedEscrowStatus;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "prior_status", length = 30)
+  private ReservationStatus priorStatus;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "prior_escrow_status", length = 40)
+  private ReservationEscrowStatus priorEscrowStatus;
+
+  @Column(name = "create_idempotency_key_hash", length = 128)
+  private String createIdempotencyKeyHash;
+
+  @Column(name = "create_payload_hash", length = 128)
+  private String createPayloadHash;
+
+  @Column(name = "server_signature_signed_at")
+  private LocalDateTime serverSignatureSignedAt;
+
+  @Column(name = "server_signature_expires_at")
+  private LocalDateTime serverSignatureExpiresAt;
+
+  @Column(name = "escrow_failure_code", length = 100)
+  private String escrowFailureCode;
+
+  @Column(name = "escrow_failure_message", length = 500)
+  private String escrowFailureMessage;
 
   /** Snapshot of priceAmount at booking time. NULL for legacy records created before this field. */
   @Column(name = "booked_price_amount")
@@ -98,10 +189,37 @@ public class ReservationEntity {
         .reservationTime(domain.getReservationTime())
         .durationMinutes(domain.getDurationMinutes())
         .status(domain.getStatus())
+        .escrowStatus(domain.getEscrowStatus())
+        .escrowFlow(domain.getEscrowFlow())
         .userRequest(domain.getUserRequest())
         .rejectionReason(domain.getRejectionReason())
         .orderId(domain.getOrderId())
+        .orderKey(domain.getOrderKey())
+        .currentExecutionIntentPublicId(domain.getCurrentExecutionIntentPublicId())
+        .buyerWalletAddress(domain.getBuyerWalletAddress())
+        .trainerWalletAddress(domain.getTrainerWalletAddress())
+        .tokenAddress(domain.getTokenAddress())
+        .priceBaseUnits(domain.getPriceBaseUnits())
         .txHash(domain.getTxHash())
+        .holdExpiresAt(domain.getHoldExpiresAt())
+        .pendingActionExpiresAt(domain.getPendingActionExpiresAt())
+        .expectedContractDeadlineEpochSeconds(domain.getExpectedContractDeadlineEpochSeconds())
+        .expectedContractDeadlineAt(domain.getExpectedContractDeadlineAt())
+        .contractDeadlineEpochSeconds(domain.getContractDeadlineEpochSeconds())
+        .contractDeadlineAt(domain.getContractDeadlineAt())
+        .pendingAction(domain.getPendingAction())
+        .pendingAttemptToken(domain.getPendingAttemptToken())
+        .pendingExpectedVersion(domain.getPendingExpectedVersion())
+        .pendingExpectedStatus(domain.getPendingExpectedStatus())
+        .pendingExpectedEscrowStatus(domain.getPendingExpectedEscrowStatus())
+        .priorStatus(domain.getPriorStatus())
+        .priorEscrowStatus(domain.getPriorEscrowStatus())
+        .createIdempotencyKeyHash(domain.getCreateIdempotencyKeyHash())
+        .createPayloadHash(domain.getCreatePayloadHash())
+        .serverSignatureSignedAt(domain.getServerSignatureSignedAt())
+        .serverSignatureExpiresAt(domain.getServerSignatureExpiresAt())
+        .escrowFailureCode(domain.getEscrowFailureCode())
+        .escrowFailureMessage(domain.getEscrowFailureMessage())
         .bookedPriceAmount(domain.getBookedPriceAmount())
         .bookedClassTitle(domain.getBookedClassTitle())
         .version(domain.getVersion())
@@ -118,10 +236,37 @@ public class ReservationEntity {
         .reservationTime(this.reservationTime)
         .durationMinutes(this.durationMinutes)
         .status(this.status)
+        .escrowStatus(this.escrowStatus)
+        .escrowFlow(this.escrowFlow)
         .userRequest(this.userRequest)
         .rejectionReason(this.rejectionReason)
         .orderId(this.orderId)
+        .orderKey(this.orderKey)
+        .currentExecutionIntentPublicId(this.currentExecutionIntentPublicId)
+        .buyerWalletAddress(this.buyerWalletAddress)
+        .trainerWalletAddress(this.trainerWalletAddress)
+        .tokenAddress(this.tokenAddress)
+        .priceBaseUnits(this.priceBaseUnits)
         .txHash(this.txHash)
+        .holdExpiresAt(this.holdExpiresAt)
+        .pendingActionExpiresAt(this.pendingActionExpiresAt)
+        .expectedContractDeadlineEpochSeconds(this.expectedContractDeadlineEpochSeconds)
+        .expectedContractDeadlineAt(this.expectedContractDeadlineAt)
+        .contractDeadlineEpochSeconds(this.contractDeadlineEpochSeconds)
+        .contractDeadlineAt(this.contractDeadlineAt)
+        .pendingAction(this.pendingAction)
+        .pendingAttemptToken(this.pendingAttemptToken)
+        .pendingExpectedVersion(this.pendingExpectedVersion)
+        .pendingExpectedStatus(this.pendingExpectedStatus)
+        .pendingExpectedEscrowStatus(this.pendingExpectedEscrowStatus)
+        .priorStatus(this.priorStatus)
+        .priorEscrowStatus(this.priorEscrowStatus)
+        .createIdempotencyKeyHash(this.createIdempotencyKeyHash)
+        .createPayloadHash(this.createPayloadHash)
+        .serverSignatureSignedAt(this.serverSignatureSignedAt)
+        .serverSignatureExpiresAt(this.serverSignatureExpiresAt)
+        .escrowFailureCode(this.escrowFailureCode)
+        .escrowFailureMessage(this.escrowFailureMessage)
         .bookedPriceAmount(this.bookedPriceAmount)
         .bookedClassTitle(this.bookedClassTitle)
         .version(this.version)

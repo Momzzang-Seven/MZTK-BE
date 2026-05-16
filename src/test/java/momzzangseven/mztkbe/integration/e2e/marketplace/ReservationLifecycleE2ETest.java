@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.integration.e2e.marketplace;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.sql.PreparedStatement;
@@ -8,13 +10,25 @@ import java.sql.Timestamp;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -77,6 +91,42 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
+  @MockitoBean private PrecheckReservationPurchasePort precheckReservationPurchasePort;
+  @MockitoBean private PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
+  @MockitoBean private LoadReservationWalletPort loadReservationWalletPort;
+
+  @MockitoBean
+  private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
+
+  private final AtomicLong intentSequence = new AtomicLong();
+
+  @BeforeEach
+  void setUpMarketplaceWeb3Mocks() {
+    given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+        .willAnswer(invocation -> Optional.of(walletFor(invocation.getArgument(0, Long.class))));
+    given(loadReservationEscrowPaymentConfigPort.load())
+        .willReturn(
+            new ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18, 1_209_600L));
+    given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+        .willAnswer(
+            invocation ->
+                new PrepareReservationEscrowResult(web3WriteView("MARKETPLACE_CLASS_PURCHASE")));
+    given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
+        .willAnswer(
+            invocation ->
+                new PrepareReservationEscrowResult(web3WriteView("MARKETPLACE_CLASS_CANCEL")));
+    given(prepareReservationEscrowExecutionPort.prepareConfirm(any()))
+        .willAnswer(
+            invocation ->
+                new PrepareReservationEscrowResult(web3WriteView("MARKETPLACE_CLASS_CONFIRM")));
+    given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+        .willAnswer(
+            invocation ->
+                new PrepareReservationEscrowResult(
+                    web3WriteView("MARKETPLACE_CLASS_EXPIRED_REFUND")));
+  }
+
   // ===================================================================
   // Happy-path: PENDING → APPROVED → SETTLED
   // ===================================================================
@@ -126,7 +176,10 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       JsonNode createRoot = parse(createResponse);
       assertThat(createRoot.at("/status").asText()).isEqualTo("SUCCESS");
       long reservationId = createRoot.at("/data/reservationId").asLong();
-      assertThat(createRoot.at("/data/status").asText()).isEqualTo("PENDING");
+      assertThat(createRoot.at("/data/status").asText()).isEqualTo("PURCHASE_PENDING");
+      assertThat(createRoot.at("/data/web3/executionIntent/id").asText()).isNotBlank();
+      assertDbStatus(reservationId, "PURCHASE_PENDING");
+      markPurchaseConfirmedForE2E(reservationId);
       assertDbStatus(reservationId, "PENDING");
 
       // trainer approves
@@ -158,8 +211,10 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               String.class);
 
       assertThat(completeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-      assertThat(parse(completeResponse).at("/data/status").asText()).isEqualTo("SETTLED");
-      assertDbStatus(reservationId, "SETTLED");
+      JsonNode completeRoot = parse(completeResponse);
+      assertThat(completeRoot.at("/data/status").asText()).isEqualTo("CONFIRM_PENDING");
+      assertThat(completeRoot.at("/data/web3/executionIntent/id").asText()).isNotBlank();
+      assertDbStatus(reservationId, "CONFIRM_PENDING");
     }
   }
 
@@ -198,14 +253,16 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
       assertThat(rejectResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode rejectRoot = parse(rejectResponse);
-      assertThat(rejectRoot.at("/data/status").asText()).isEqualTo("REJECTED");
-      assertDbStatus(reservationId, "REJECTED");
+      assertThat(rejectRoot.at("/data/status").asText()).isEqualTo("REJECT_PENDING");
+      assertThat(rejectRoot.at("/data/web3/executionIntent/id").asText()).isNotBlank();
+      assertDbStatus(reservationId, "REJECT_PENDING");
 
-      // txHash should have been updated (stub returns deterministic value)
-      String txHash =
+      String currentExecutionIntentId =
           jdbcTemplate.queryForObject(
-              "SELECT tx_hash FROM class_reservations WHERE id = ?", String.class, reservationId);
-      assertThat(txHash).isNotBlank();
+              "SELECT current_execution_intent_public_id FROM class_reservations WHERE id = ?",
+              String.class,
+              reservationId);
+      assertThat(currentExecutionIntentId).isNotBlank();
     }
   }
 
@@ -239,8 +296,10 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               String.class);
 
       assertThat(cancelResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-      assertThat(parse(cancelResponse).at("/data/status").asText()).isEqualTo("USER_CANCELLED");
-      assertDbStatus(reservationId, "USER_CANCELLED");
+      JsonNode cancelRoot = parse(cancelResponse);
+      assertThat(cancelRoot.at("/data/status").asText()).isEqualTo("CANCEL_PENDING");
+      assertThat(cancelRoot.at("/data/web3/executionIntent/id").asText()).isNotBlank();
+      assertDbStatus(reservationId, "CANCEL_PENDING");
     }
   }
 
@@ -832,10 +891,52 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     try {
-      return parse(response).at("/data/reservationId").asLong();
+      long reservationId = parse(response).at("/data/reservationId").asLong();
+      markPurchaseConfirmedForE2E(reservationId);
+      return reservationId;
     } catch (Exception e) {
       throw new IllegalStateException("Failed to parse reservationId: " + response.getBody(), e);
     }
+  }
+
+  private void markPurchaseConfirmedForE2E(long reservationId) {
+    Instant deadline = Instant.now().plusSeconds(604_800L);
+    jdbcTemplate.update(
+        "UPDATE class_reservations"
+            + " SET status = 'PENDING',"
+            + " escrow_status = 'LOCKED',"
+            + " escrow_flow = 'USER_EIP7702',"
+            + " current_execution_intent_public_id = NULL,"
+            + " contract_deadline_epoch_seconds = ?,"
+            + " contract_deadline_at = ?,"
+            + " tx_hash = ?"
+            + " WHERE id = ?",
+        deadline.getEpochSecond(),
+        Timestamp.from(deadline),
+        "0x" + "1".repeat(64),
+        reservationId);
+  }
+
+  private ReservationExecutionWriteView web3WriteView(String actionType) {
+    long next = intentSequence.incrementAndGet();
+    String intentId = String.format(Locale.ROOT, "00000000-0000-0000-0000-%012d", next);
+    return new ReservationExecutionWriteView(
+        new ReservationExecutionWriteView.Resource(
+            "MARKETPLACE_RESERVATION", String.valueOf(next), "PENDING"),
+        actionType,
+        "0x" + "0".repeat(63) + "1",
+        new ReservationExecutionWriteView.ExecutionIntent(
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(5), 300L),
+        new ReservationExecutionWriteView.Execution("EIP7702", 1),
+        null,
+        null,
+        false,
+        null,
+        null);
+  }
+
+  private String walletFor(Long userId) {
+    return String.format(Locale.ROOT, "0x%040x", userId);
   }
 
   private void assertDbStatus(long reservationId, String expectedStatus) {

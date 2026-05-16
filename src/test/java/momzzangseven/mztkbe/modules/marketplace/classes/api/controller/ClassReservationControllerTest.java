@@ -18,15 +18,21 @@ import java.util.Map;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CompleteReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CancelPendingReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ClaimExpiredRefundReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CompleteReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -86,6 +92,8 @@ class ClassReservationControllerTest {
   @MockitoBean private CreateReservationUseCase createReservationUseCase;
   @MockitoBean private CancelPendingReservationUseCase cancelPendingReservationUseCase;
   @MockitoBean private CompleteReservationUseCase completeReservationUseCase;
+  @MockitoBean private ClaimExpiredRefundReservationUseCase claimExpiredRefundReservationUseCase;
+  @MockitoBean private RecoverReservationEscrowUseCase recoverReservationEscrowUseCase;
 
   // ── fixtures ────────────────────────────────────────────────────────────
 
@@ -127,7 +135,34 @@ class ClassReservationControllerTest {
         SAMPLE_CLASS_SUMMARY.priceAmount(),
         SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
         SAMPLE_TRAINER_SUMMARY.nickname(),
-        null); // userNickname not exposed on user-list path
+        null, // userNickname not exposed on user-list path
+        web3ExecutionView("MARKETPLACE_CLASS_PURCHASE", "PURCHASE", true, true));
+  }
+
+  private ReservationSummaryResult repairedSummaryResult() {
+    return ReservationSummaryResult.from(
+        momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
+            .id(1L)
+            .slotId(10L)
+            .trainerId(100L)
+            .userId(50L)
+            .reservationDate(FUTURE_DATE)
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.DEADLINE_REFUNDED)
+            .userRequest(null)
+            .build(),
+        SAMPLE_CLASS_SUMMARY.title(),
+        SAMPLE_CLASS_SUMMARY.priceAmount(),
+        SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
+        SAMPLE_TRAINER_SUMMARY.nickname(),
+        null,
+        web3ExecutionView(
+            "DEADLINE_REFUNDED",
+            "MARKETPLACE_CLASS_EXPIRED_REFUND",
+            "DEADLINE_REFUND",
+            false,
+            false));
   }
 
   private GetReservationResult detailResult(Long viewerId) {
@@ -151,7 +186,102 @@ class ClassReservationControllerTest {
         SAMPLE_CLASS_SUMMARY.priceAmount(),
         SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
         SAMPLE_TRAINER_SUMMARY.nickname(),
-        SAMPLE_USER_SUMMARY.nickname());
+        SAMPLE_USER_SUMMARY.nickname(),
+        web3ExecutionView("MARKETPLACE_CLASS_PURCHASE", "PURCHASE", true, true));
+  }
+
+  private GetReservationResult repairedDetailResult(Long viewerId) {
+    return GetReservationResult.from(
+        momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
+            .id(1L)
+            .userId(viewerId)
+            .trainerId(100L)
+            .slotId(10L)
+            .reservationDate(FUTURE_DATE)
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.DEADLINE_REFUNDED)
+            .userRequest(null)
+            .orderId("order-abc")
+            .txHash("0xrefund")
+            .createdAt(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
+            .build(),
+        SAMPLE_CLASS_SUMMARY.title(),
+        SAMPLE_CLASS_SUMMARY.priceAmount(),
+        SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
+        SAMPLE_TRAINER_SUMMARY.nickname(),
+        SAMPLE_USER_SUMMARY.nickname(),
+        web3ExecutionView(
+            "DEADLINE_REFUNDED",
+            "MARKETPLACE_CLASS_EXPIRED_REFUND",
+            "DEADLINE_REFUND",
+            false,
+            false));
+  }
+
+  private ReservationExecutionResumeView web3ExecutionView(
+      String actionType, String viewerAction, boolean viewerCanExecute, boolean viewerCanRecover) {
+    return web3ExecutionView(
+        "PENDING", actionType, viewerAction, viewerCanExecute, viewerCanRecover);
+  }
+
+  private ReservationExecutionResumeView web3ExecutionView(
+      String resourceStatus,
+      String actionType,
+      String viewerAction,
+      boolean viewerCanExecute,
+      boolean viewerCanRecover) {
+    return new ReservationExecutionResumeView(
+        new ReservationExecutionResumeView.Resource("ORDER", "0xorderkey", resourceStatus),
+        actionType,
+        new ReservationExecutionResumeView.ExecutionIntent(
+            "intent-public-1",
+            "AWAITING_SIGNATURE",
+            LocalDateTime.of(2025, 6, 10, 9, 55),
+            1_749_527_700L),
+        new ReservationExecutionResumeView.Execution("EIP7702", 1),
+        new ReservationExecutionResumeView.Transaction(77L, "SIGNED", "0xabc"),
+        viewerAction,
+        viewerCanExecute,
+        viewerCanRecover);
+  }
+
+  private ReservationExecutionWriteView web3WriteView(String actionType) {
+    return web3WriteView(actionType, true);
+  }
+
+  private ReservationExecutionWriteView web3WriteView(
+      String actionType, boolean includeSignatureMeta) {
+    String fromRole = "MARKETPLACE_CLASS_PURCHASE".equals(actionType) ? "BUYER" : "ESCROW";
+    String toRole =
+        switch (actionType) {
+          case "MARKETPLACE_CLASS_PURCHASE" -> "ESCROW";
+          case "MARKETPLACE_CLASS_CONFIRM" -> "TRAINER";
+          default -> "BUYER";
+        };
+    return new ReservationExecutionWriteView(
+        new ReservationExecutionWriteView.Resource("ORDER", "1", "PENDING_EXECUTION"),
+        actionType,
+        "0xorderkey",
+        new ReservationExecutionWriteView.ExecutionIntent(
+            "intent-write-1",
+            "AWAITING_SIGNATURE",
+            LocalDateTime.of(2025, 6, 10, 9, 55),
+            1_749_527_700L),
+        new ReservationExecutionWriteView.Execution("EIP7702", 1),
+        new ReservationExecutionWriteView.SignRequest(
+            new ReservationExecutionWriteView.Authorization(
+                10L, "0xdelegate", 7L, "0xauthorizationHash"),
+            new ReservationExecutionWriteView.Submit("0xexecutionDigest", 1_749_527_760L),
+            null),
+        null,
+        false,
+        includeSignatureMeta
+            ? new ReservationExecutionWriteView.SignatureMeta(1_749_527_600L, 1_749_527_760L)
+            : null,
+        new ReservationExecutionWriteView.TokenMovement(
+            "0xtoken", "50000000000000000000", fromRole, "0xfrom", toRole, "0xto"));
   }
 
   /** Minimal valid create-reservation request body. */
@@ -161,8 +291,6 @@ class ClassReservationControllerTest {
     body.put("reservationDate", FUTURE_DATE.toString());
     body.put("reservationTime", "10:00:00");
     body.put("signedAmount", 1000);
-    body.put("delegationSignature", "0xDELEGATION");
-    body.put("executionSignature", "0xEXECUTION");
     return body;
   }
 
@@ -219,9 +347,51 @@ class ClassReservationControllerTest {
           .andExpect(jsonPath("$.data.reservations[0].trainerNickname").value("trainer-nick"))
           .andExpect(
               jsonPath("$.data.reservations[0].thumbnailFinalObjectKey").value("thumb/yoga.jpg"))
+          // web3 read hydration contract
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.actionType")
+                  .value("MARKETPLACE_CLASS_PURCHASE"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.executionIntent.id")
+                  .value("intent-public-1"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.executionIntent.expiresAtEpochSeconds")
+                  .value(1_749_527_700L))
+          .andExpect(jsonPath("$.data.reservations[0].web3Execution.transaction.id").value(77))
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.transaction.status").value("SIGNED"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.transaction.txHash").value("0xabc"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.viewerAction").value("PURCHASE"))
+          .andExpect(jsonPath("$.data.reservations[0].web3Execution.viewerCanExecute").value(true))
+          .andExpect(jsonPath("$.data.reservations[0].web3Execution.viewerCanRecover").value(true))
           // cursor contract
           .andExpect(jsonPath("$.data.hasNext").value(false))
           .andExpect(jsonPath("$.data.nextCursor").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("[CR-03b] chain read repair가 반영된 목록 결과를 같은 API 응답에 노출한다")
+    void getMyReservations_repairedReadResult_returnsRepairedStatus() throws Exception {
+      given(getUserReservationsUseCase.execute(any()))
+          .willReturn(new CursorSlice<>(List.of(repairedSummaryResult()), false, null));
+
+      mockMvc
+          .perform(get("/marketplace/me/reservations").with(userPrincipal(50L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.reservations[0].reservationId").value(1))
+          .andExpect(jsonPath("$.data.reservations[0].status").value("DEADLINE_REFUNDED"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.resource.status")
+                  .value("DEADLINE_REFUNDED"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.actionType")
+                  .value("MARKETPLACE_CLASS_EXPIRED_REFUND"))
+          .andExpect(jsonPath("$.data.reservations[0].web3Execution.viewerCanExecute").value(false))
+          .andExpect(
+              jsonPath("$.data.reservations[0].web3Execution.viewerCanRecover").value(false));
     }
 
     @Test
@@ -250,6 +420,20 @@ class ClassReservationControllerTest {
           .andExpect(jsonPath("$.data.reservations").isArray())
           .andExpect(jsonPath("$.data.hasNext").value(false));
     }
+
+    @Test
+    @DisplayName("[CR-06b] user in-flight status 필터도 API 파라미터로 허용한다")
+    void getMyReservations_withInFlightStatusFilter_returns200() throws Exception {
+      given(getUserReservationsUseCase.execute(any()))
+          .willReturn(new CursorSlice<>(List.of(), false, null));
+
+      mockMvc
+          .perform(
+              get("/marketplace/me/reservations?status=PURCHASE_PENDING").with(userPrincipal(50L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.reservations").isArray())
+          .andExpect(jsonPath("$.data.hasNext").value(false));
+    }
   }
 
   // ── GET /marketplace/reservations/{id} ─────────────────────────────────
@@ -274,7 +458,39 @@ class ClassReservationControllerTest {
           .andExpect(jsonPath("$.data.priceAmount").value(50000))
           .andExpect(jsonPath("$.data.thumbnailFinalObjectKey").value("thumb/yoga.jpg"))
           .andExpect(jsonPath("$.data.trainerNickname").value("trainer-nick"))
-          .andExpect(jsonPath("$.data.userNickname").value("user-nick"));
+          .andExpect(jsonPath("$.data.userNickname").value("user-nick"))
+          // web3 read hydration contract
+          .andExpect(
+              jsonPath("$.data.web3Execution.actionType").value("MARKETPLACE_CLASS_PURCHASE"))
+          .andExpect(jsonPath("$.data.web3Execution.executionIntent.id").value("intent-public-1"))
+          .andExpect(
+              jsonPath("$.data.web3Execution.executionIntent.expiresAtEpochSeconds")
+                  .value(1_749_527_700L))
+          .andExpect(jsonPath("$.data.web3Execution.transaction.id").value(77))
+          .andExpect(jsonPath("$.data.web3Execution.transaction.status").value("SIGNED"))
+          .andExpect(jsonPath("$.data.web3Execution.transaction.txHash").value("0xabc"))
+          .andExpect(jsonPath("$.data.web3Execution.viewerAction").value("PURCHASE"))
+          .andExpect(jsonPath("$.data.web3Execution.viewerCanExecute").value(true))
+          .andExpect(jsonPath("$.data.web3Execution.viewerCanRecover").value(true));
+    }
+
+    @Test
+    @DisplayName("[CR-07b] chain read repair가 반영된 상세 결과를 같은 API 응답에 노출한다")
+    void getDetail_repairedReadResult_returnsRepairedStatus() throws Exception {
+      given(getReservationDetailUseCase.execute(any())).willReturn(repairedDetailResult(50L));
+
+      mockMvc
+          .perform(get("/marketplace/reservations/1").with(userPrincipal(50L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.reservationId").value(1))
+          .andExpect(jsonPath("$.data.status").value("DEADLINE_REFUNDED"))
+          .andExpect(jsonPath("$.data.txHash").value("0xrefund"))
+          .andExpect(jsonPath("$.data.web3Execution.resource.status").value("DEADLINE_REFUNDED"))
+          .andExpect(
+              jsonPath("$.data.web3Execution.actionType").value("MARKETPLACE_CLASS_EXPIRED_REFUND"))
+          .andExpect(jsonPath("$.data.web3Execution.viewerCanExecute").value(false))
+          .andExpect(jsonPath("$.data.web3Execution.viewerCanRecover").value(false));
     }
 
     @Test
@@ -299,10 +515,16 @@ class ClassReservationControllerTest {
   class CreateReservation {
 
     @Test
-    @DisplayName("[CR-10] 정상 요청 시 200 + PENDING 상태를 반환한다")
+    @DisplayName("[CR-10] 정상 요청 시 200 + purchase execution write 응답을 반환한다")
     void create_validRequest_returns200() throws Exception {
       given(createReservationUseCase.execute(any()))
-          .willReturn(new CreateReservationResult(1L, ReservationStatus.PENDING));
+          .willReturn(
+              new CreateReservationResult(
+                  1L,
+                  ReservationStatus.PURCHASE_PENDING,
+                  "PURCHASE_PENDING",
+                  "0xorderkey",
+                  web3WriteView("MARKETPLACE_CLASS_PURCHASE")));
 
       mockMvc
           .perform(
@@ -313,7 +535,22 @@ class ClassReservationControllerTest {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservationId").value(1))
-          .andExpect(jsonPath("$.data.status").value("PENDING"));
+          .andExpect(jsonPath("$.data.status").value("PURCHASE_PENDING"))
+          .andExpect(jsonPath("$.data.escrowStatus").value("PURCHASE_PENDING"))
+          .andExpect(jsonPath("$.data.orderKey").value("0xorderkey"))
+          .andExpect(jsonPath("$.data.web3.actionType").value("MARKETPLACE_CLASS_PURCHASE"))
+          .andExpect(jsonPath("$.data.web3.orderKey").value("0xorderkey"))
+          .andExpect(jsonPath("$.data.web3.executionIntent.id").value("intent-write-1"))
+          .andExpect(
+              jsonPath("$.data.web3.executionIntent.expiresAtEpochSeconds").value(1_749_527_700L))
+          .andExpect(jsonPath("$.data.web3.execution.mode").value("EIP7702"))
+          .andExpect(jsonPath("$.data.web3.signRequest.authorization.chainId").value(10))
+          .andExpect(
+              jsonPath("$.data.web3.signRequest.submit.deadlineEpochSeconds").value(1_749_527_760L))
+          .andExpect(jsonPath("$.data.web3.signatureMeta.signedAt").value(1_749_527_600L))
+          .andExpect(jsonPath("$.data.web3.signatureMeta.signatureExpiresAt").value(1_749_527_760L))
+          .andExpect(
+              jsonPath("$.data.web3.tokenMovement.amountBaseUnits").value("50000000000000000000"));
     }
 
     @Test
@@ -347,10 +584,19 @@ class ClassReservationControllerTest {
     }
 
     @Test
-    @DisplayName("[CR-13] delegationSignature가 공백이면 400을 반환한다 (@NotBlank)")
-    void create_blankSignature_returns400() throws Exception {
+    @DisplayName("[CR-13] legacy signature 필드는 request contract에서 제거되어 역직렬화 시 무시된다")
+    void create_legacySignatureFields_areIgnored() throws Exception {
+      given(createReservationUseCase.execute(any()))
+          .willReturn(
+              new CreateReservationResult(
+                  1L,
+                  ReservationStatus.PURCHASE_PENDING,
+                  "PURCHASE_PENDING",
+                  "0xorderkey",
+                  web3WriteView("MARKETPLACE_CLASS_PURCHASE")));
       Map<String, Object> body = new LinkedHashMap<>(validCreateBody());
       body.put("delegationSignature", "   ");
+      body.put("executionSignature", "   ");
 
       mockMvc
           .perform(
@@ -358,7 +604,8 @@ class ClassReservationControllerTest {
                   .with(userPrincipal(50L))
                   .contentType(APPLICATION_JSON)
                   .content(json(body)))
-          .andExpect(status().isBadRequest());
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.web3.actionType").value("MARKETPLACE_CLASS_PURCHASE"));
     }
 
     @Test
@@ -398,14 +645,22 @@ class ClassReservationControllerTest {
     @DisplayName("[CR-16] 정상 취소 요청 시 200 + CANCELLED 상태를 반환한다")
     void cancel_authenticated_returns200() throws Exception {
       given(cancelPendingReservationUseCase.execute(any()))
-          .willReturn(new CancelPendingReservationResult(1L, ReservationStatus.USER_CANCELLED));
+          .willReturn(
+              new CancelPendingReservationResult(
+                  1L,
+                  ReservationStatus.CANCEL_PENDING,
+                  "CANCEL_PENDING",
+                  web3WriteView("MARKETPLACE_CLASS_CANCEL")));
 
       mockMvc
           .perform(patch("/marketplace/me/reservations/1/cancel").with(userPrincipal(50L)))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservationId").value(1))
-          .andExpect(jsonPath("$.data.status").value("USER_CANCELLED"));
+          .andExpect(jsonPath("$.data.status").value("CANCEL_PENDING"))
+          .andExpect(jsonPath("$.data.escrowStatus").value("CANCEL_PENDING"))
+          .andExpect(jsonPath("$.data.web3.actionType").value("MARKETPLACE_CLASS_CANCEL"))
+          .andExpect(jsonPath("$.data.web3.signatureMeta.signedAt").value(1_749_527_600L));
     }
 
     @Test
@@ -435,14 +690,23 @@ class ClassReservationControllerTest {
     @DisplayName("[CR-19] 정상 완료 요청 시 200 + SETTLED 상태를 반환한다")
     void complete_authenticated_returns200() throws Exception {
       given(completeReservationUseCase.execute(any()))
-          .willReturn(new CompleteReservationResult(1L, ReservationStatus.SETTLED));
+          .willReturn(
+              new CompleteReservationResult(
+                  1L,
+                  ReservationStatus.CONFIRM_PENDING,
+                  "CONFIRM_PENDING",
+                  web3WriteView("MARKETPLACE_CLASS_CONFIRM")));
 
       mockMvc
           .perform(patch("/marketplace/me/reservations/1/complete").with(userPrincipal(50L)))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservationId").value(1))
-          .andExpect(jsonPath("$.data.status").value("SETTLED"));
+          .andExpect(jsonPath("$.data.status").value("CONFIRM_PENDING"))
+          .andExpect(jsonPath("$.data.escrowStatus").value("CONFIRM_PENDING"))
+          .andExpect(jsonPath("$.data.web3.actionType").value("MARKETPLACE_CLASS_CONFIRM"))
+          .andExpect(
+              jsonPath("$.data.web3.signatureMeta.signatureExpiresAt").value(1_749_527_760L));
     }
 
     @Test
@@ -459,6 +723,84 @@ class ClassReservationControllerTest {
       mockMvc
           .perform(patch("/marketplace/me/reservations/-1/complete").with(userPrincipal(50L)))
           .andExpect(status().isBadRequest());
+    }
+  }
+
+  // ── PATCH /marketplace/me/reservations/{id}/deadline-refund ───────────
+
+  @Nested
+  @DisplayName("PATCH /marketplace/me/reservations/{id}/deadline-refund")
+  class ClaimExpiredRefund {
+
+    @Test
+    @DisplayName("[CR-22] deadline refund 요청 시 200 + expired refund execution write 응답을 반환한다")
+    void claimExpiredRefund_authenticated_returns200() throws Exception {
+      given(claimExpiredRefundReservationUseCase.execute(any()))
+          .willReturn(
+              new ClaimExpiredRefundReservationResult(
+                  1L,
+                  ReservationStatus.DEADLINE_REFUND_PENDING,
+                  "DEADLINE_REFUND_PENDING",
+                  web3WriteView("MARKETPLACE_CLASS_EXPIRED_REFUND", false)));
+
+      mockMvc
+          .perform(patch("/marketplace/me/reservations/1/deadline-refund").with(userPrincipal(50L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.reservationId").value(1))
+          .andExpect(jsonPath("$.data.status").value("DEADLINE_REFUND_PENDING"))
+          .andExpect(jsonPath("$.data.escrowStatus").value("DEADLINE_REFUND_PENDING"))
+          .andExpect(jsonPath("$.data.web3.actionType").value("MARKETPLACE_CLASS_EXPIRED_REFUND"))
+          .andExpect(jsonPath("$.data.web3.executionIntent.id").value("intent-write-1"))
+          .andExpect(jsonPath("$.data.web3.signatureMeta").doesNotExist())
+          .andExpect(jsonPath("$.data.web3.tokenMovement.fromRole").value("ESCROW"))
+          .andExpect(jsonPath("$.data.web3.tokenMovement.toRole").value("BUYER"));
+    }
+
+    @Test
+    @DisplayName("[CR-23] 인증 없이 deadline refund 요청하면 401을 반환한다")
+    void claimExpiredRefund_unauthenticated_returns401() throws Exception {
+      mockMvc
+          .perform(patch("/marketplace/me/reservations/1/deadline-refund"))
+          .andExpect(status().isUnauthorized());
+    }
+  }
+
+  // ── POST /marketplace/me/reservations/{id}/web3/recover ────────────────
+
+  @Nested
+  @DisplayName("POST /marketplace/me/reservations/{id}/web3/recover")
+  class RecoverReservationEscrow {
+
+    @Test
+    @DisplayName("[CR-24] recover 요청 시 200 + recovered execution write 응답을 반환한다")
+    void recover_authenticated_returns200() throws Exception {
+      given(recoverReservationEscrowUseCase.execute(any()))
+          .willReturn(
+              new RecoverReservationEscrowResult(
+                  1L,
+                  ReservationStatus.PURCHASE_PENDING,
+                  "PURCHASE_PENDING",
+                  web3WriteView("MARKETPLACE_CLASS_PURCHASE")));
+
+      mockMvc
+          .perform(post("/marketplace/me/reservations/1/web3/recover").with(userPrincipal(50L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.reservationId").value(1))
+          .andExpect(jsonPath("$.data.status").value("PURCHASE_PENDING"))
+          .andExpect(jsonPath("$.data.escrowStatus").value("PURCHASE_PENDING"))
+          .andExpect(jsonPath("$.data.web3.actionType").value("MARKETPLACE_CLASS_PURCHASE"))
+          .andExpect(jsonPath("$.data.web3.executionIntent.id").value("intent-write-1"))
+          .andExpect(jsonPath("$.data.web3.signatureMeta.signedAt").value(1_749_527_600L));
+    }
+
+    @Test
+    @DisplayName("[CR-25] 인증 없이 recover 요청하면 401을 반환한다")
+    void recover_unauthenticated_returns401() throws Exception {
+      mockMvc
+          .perform(post("/marketplace/me/reservations/1/web3/recover"))
+          .andExpect(status().isUnauthorized());
     }
   }
 

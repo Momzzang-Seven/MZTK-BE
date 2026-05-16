@@ -33,7 +33,8 @@ public record ReservationSummaryResponseDTO(
     Integer priceAmount,
     String trainerNickname,
     String userNickname,
-    String thumbnailFinalObjectKey) {
+    String thumbnailFinalObjectKey,
+    ReservationWeb3ExecutionResponseDTO web3Execution) {
 
   public static ReservationSummaryResponseDTO from(ReservationSummaryResult result) {
     return new ReservationSummaryResponseDTO(
@@ -50,6 +51,7 @@ public record ReservationSummaryResponseDTO(
         result.priceAmount(),
         result.trainerNickname(),
         result.userNickname(),
-        result.thumbnailFinalObjectKey());
+        result.thumbnailFinalObjectKey(),
+        ReservationWeb3ExecutionResponseDTO.from(result.web3Execution()));
   }
 }

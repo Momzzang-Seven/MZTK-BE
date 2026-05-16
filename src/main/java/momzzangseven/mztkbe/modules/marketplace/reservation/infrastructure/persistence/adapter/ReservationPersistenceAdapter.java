@@ -16,7 +16,10 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reserva
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationJpaRepository;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationSlotDateLockJpaRepository;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.ConnectionCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -25,6 +28,8 @@ import org.springframework.stereotype.Component;
 public class ReservationPersistenceAdapter implements LoadReservationPort, SaveReservationPort {
 
   private final ReservationJpaRepository reservationJpaRepository;
+  private final ReservationSlotDateLockJpaRepository slotDateLockJpaRepository;
+  private final JdbcTemplate jdbcTemplate;
 
   @Override
   public Optional<Reservation> findById(Long reservationId) {
@@ -35,6 +40,24 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   public Optional<Reservation> findByIdWithLock(Long reservationId) {
     return reservationJpaRepository
         .findByIdWithLock(reservationId)
+        .map(ReservationEntity::toDomain);
+  }
+
+  @Override
+  public Optional<Reservation> findByCurrentExecutionIntentPublicIdWithLock(String publicId) {
+    return reservationJpaRepository
+        .findByCurrentExecutionIntentPublicIdWithLock(publicId)
+        .map(ReservationEntity::toDomain);
+  }
+
+  @Override
+  public Optional<Reservation> findActiveByBuyerAndSlotDateTimeWithLock(
+      Long buyerId, Long slotId, LocalDate reservationDate, LocalTime reservationTime) {
+    return reservationJpaRepository
+        .findActiveByBuyerAndSlotDateTimeWithLock(
+            buyerId, slotId, reservationDate, reservationTime, PageRequest.of(0, 1))
+        .stream()
+        .findFirst()
         .map(ReservationEntity::toDomain);
   }
 
@@ -65,6 +88,44 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   }
 
   @Override
+  public void lockSlotDateCapacityKey(Long slotId, java.time.LocalDate date) {
+    insertSlotDateLockIfAbsent(slotId, date);
+    slotDateLockJpaRepository
+        .findBySlotIdAndReservationDateForUpdate(slotId, date)
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "Failed to lock slot/date capacity key: slotId=" + slotId + ", date=" + date));
+  }
+
+  private void insertSlotDateLockIfAbsent(Long slotId, java.time.LocalDate date) {
+    String databaseProductName =
+        jdbcTemplate.execute(
+            (ConnectionCallback<String>)
+                connection -> connection.getMetaData().getDatabaseProductName());
+    if (databaseProductName != null && databaseProductName.toLowerCase().contains("h2")) {
+      jdbcTemplate.update(
+          """
+          MERGE INTO reservation_slot_date_locks (class_slot_id, reservation_date, created_at)
+          KEY (class_slot_id, reservation_date)
+          VALUES (?, ?, CURRENT_TIMESTAMP)
+          """,
+          slotId,
+          date);
+      return;
+    }
+
+    jdbcTemplate.update(
+        """
+        INSERT INTO reservation_slot_date_locks (class_slot_id, reservation_date, created_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT (class_slot_id, reservation_date) DO NOTHING
+        """,
+        slotId,
+        date);
+  }
+
+  @Override
   public Map<java.time.LocalDate, Integer> countActiveReservationsBySlotIdAndDateRange(
       Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate) {
     List<Object[]> rows =
@@ -87,6 +148,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
       LocalDateTime nowMinusTimeout, LocalDateTime nowPlusWindow, int batchSize) {
     return reservationJpaRepository
         .findPendingForAutoCancel(
+            nowPlusWindow.minusHours(1),
             nowMinusTimeout,
             nowPlusWindow.toLocalDate(),
             nowPlusWindow.toLocalTime(),
@@ -105,7 +167,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
     // Fetch batchSize * 2 to account for some rows that might be filtered out
     return reservationJpaRepository
         .findApprovedCandidates(
-            targetDate, org.springframework.data.domain.PageRequest.of(0, batchSize * 2))
+            now, targetDate, org.springframework.data.domain.PageRequest.of(0, batchSize * 2))
         .stream()
         .map(ReservationEntity::toDomain)
         .filter(r -> r.sessionEndAt().plusHours(24).isBefore(now))

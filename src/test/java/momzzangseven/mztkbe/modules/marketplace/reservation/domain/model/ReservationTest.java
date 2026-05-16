@@ -7,6 +7,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -141,5 +143,81 @@ class ReservationTest {
 
     // 2025-01-01T10:00 + 60 minutes = 2025-01-01T11:00
     assertThat(endAt).isEqualTo(LocalDateTime.of(2025, 1, 1, 11, 0));
+  }
+
+  @Test
+  @DisplayName("user escrow purchase transitions stay scheduler-invisible until confirmed")
+  void userEscrowPurchaseTransitions() {
+    Reservation pending = createDefaultPendingReservation();
+
+    Reservation preparing =
+        pending.beginPurchasePreparing(
+            "key-hash",
+            "payload-hash",
+            LocalDateTime.of(2026, 5, 16, 10, 0),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "purchase-token");
+    Reservation purchasePending = preparing.bindPurchaseIntent("intent-public-id");
+    Reservation locked =
+        purchasePending.markPurchaseConfirmedLocked(
+            1_800_000_000L, LocalDateTime.of(2027, 1, 15, 8, 0));
+
+    assertThat(preparing.getStatus()).isEqualTo(ReservationStatus.PURCHASE_PREPARING);
+    assertThat(preparing.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.PURCHASE_PREPARING);
+    assertThat(preparing.getEscrowFlow()).isEqualTo(ReservationEscrowFlow.USER_EIP7702);
+    assertThat(preparing.getPendingAttemptToken()).isEqualTo("purchase-token");
+    assertThat(preparing.getStatus().isSchedulerInvisibleUserState()).isTrue();
+    assertThat(purchasePending.getStatus()).isEqualTo(ReservationStatus.PURCHASE_PENDING);
+    assertThat(purchasePending.getCurrentExecutionIntentPublicId()).isEqualTo("intent-public-id");
+    assertThat(locked.getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(locked.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(locked.getContractDeadlineEpochSeconds()).isEqualTo(1_800_000_000L);
+    assertThat(locked.getContractDeadlineAt()).isEqualTo(LocalDateTime.of(2027, 1, 15, 8, 0));
+    assertThat(locked.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 0, 0))).isFalse();
+  }
+
+  @Test
+  @DisplayName("deadline refund transitions use scheduler-invisible business statuses")
+  void deadlineRefundTransitions() {
+    Reservation locked =
+        createDefaultPendingReservation()
+            .beginPurchasePreparing("key", "payload", LocalDateTime.of(2026, 5, 16, 10, 0))
+            .bindPurchaseIntent("intent")
+            .markPurchaseConfirmedLocked(100L, LocalDateTime.of(2026, 5, 16, 9, 0));
+
+    Reservation available = locked.markDeadlineRefundAvailable();
+    Reservation pending = available.beginDeadlineRefundPending("attempt-token");
+    Reservation refunded = pending.markDeadlineRefunded("refund-tx");
+
+    assertThat(available.getStatus()).isEqualTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+    assertThat(available.getStatus().isSchedulerInvisibleUserState()).isTrue();
+    assertThat(pending.getStatus()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(pending.getEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.DEADLINE_REFUND_PENDING);
+    assertThat(refunded.getStatus()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+    assertThat(refunded.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.DEADLINE_REFUNDED);
+    assertThat(refunded.getTxHash()).isEqualTo("refund-tx");
+    assertThat(refunded.getStatus().isTerminal()).isTrue();
+  }
+
+  @Test
+  @DisplayName("legacy scheduler guard rejects USER_EIP7702 and expired deadline rows")
+  void legacySchedulerGuard() {
+    Reservation legacy = createDefaultPendingReservation();
+    Reservation userFlow =
+        legacy.beginPurchasePreparing("key", "payload", LocalDateTime.of(2026, 5, 16, 10, 0));
+    Reservation expiredLegacy =
+        legacy.toBuilder().contractDeadlineAt(LocalDateTime.of(2026, 5, 16, 9, 0)).build();
+
+    assertThat(legacy.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 8, 0))).isTrue();
+    assertThat(userFlow.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 8, 0))).isFalse();
+    assertThat(expiredLegacy.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 9, 1)))
+        .isFalse();
   }
 }

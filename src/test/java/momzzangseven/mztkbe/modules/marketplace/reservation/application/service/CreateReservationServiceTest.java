@@ -7,11 +7,16 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
@@ -20,24 +25,34 @@ import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.web3j.utils.Numeric;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -49,7 +64,14 @@ class CreateReservationServiceTest {
   @Mock private CheckTrainerSanctionPort checkTrainerSanctionPort;
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
-  @Mock private ApplicationEventPublisher eventPublisher;
+  @Mock private LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
+  @Mock private SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
+  @Mock private PrecheckReservationPurchasePort precheckReservationPurchasePort;
+  @Mock private PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
+  @Mock private CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
+  @Mock private LoadReservationExecutionWritePort loadReservationExecutionWritePort;
+  @Mock private LoadReservationWalletPort loadReservationWalletPort;
+  @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
 
   /**
    * Fixed clock: 2024-06-03T10:00:00 KST (UTC+9). MONDAY is set to 2024-06-10, which is after this
@@ -87,7 +109,14 @@ class CreateReservationServiceTest {
             checkTrainerSanctionPort,
             loadReservationPort,
             saveReservationPort,
-            eventPublisher,
+            loadReservationCreateIdempotencyPort,
+            saveReservationCreateIdempotencyPort,
+            precheckReservationPurchasePort,
+            prepareReservationEscrowExecutionPort,
+            cancelReservationEscrowExecutionPort,
+            loadReservationExecutionWritePort,
+            loadReservationWalletPort,
+            loadReservationEscrowPaymentConfigPort,
             FIXED_CLOCK);
 
     slot =
@@ -112,15 +141,7 @@ class CreateReservationServiceTest {
 
     command =
         new CreateReservationCommand(
-            USER_ID,
-            CLASS_ID,
-            SLOT_ID,
-            MONDAY,
-            START_TIME,
-            null,
-            BigInteger.valueOf(PRICE),
-            "0x" + "a".repeat(130),
-            "0x" + "b".repeat(130));
+            USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, BigInteger.valueOf(PRICE));
   }
 
   @Nested
@@ -134,39 +155,397 @@ class CreateReservationServiceTest {
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(Optional.empty());
+      given(
+              loadReservationPort.findActiveByBuyerAndSlotDateTimeWithLock(
+                  any(), any(), any(), any()))
+          .willReturn(Optional.empty());
       given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
           .willReturn(0);
-      Reservation saved =
-          Reservation.createPending(
-              USER_ID,
-              TRAINER_ID,
-              SLOT_ID,
-              MONDAY,
-              START_TIME,
-              60,
-              null,
-              "order-1",
-              "ESCROW_DISPATCH_PENDING",
-              PRICE,
-              "테스트 클래스");
-      given(saveReservationPort.save(any())).willReturn(saved);
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, ReservationCreateIdempotency.class));
+      given(loadReservationWalletPort.loadActiveWalletAddress(USER_ID))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationWalletPort.loadActiveWalletAddress(TRAINER_ID))
+          .willReturn(Optional.of("0x2222222222222222222222222222222222222222"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved =
+                    invocation.getArgument(0, Reservation.class).toBuilder()
+                        .id(1L)
+                        .version(0L)
+                        .build();
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationPort.findByIdWithLock(1L))
+          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
 
       // when
       CreateReservationResult result = sut.execute(command);
 
-      // then: PENDING 상태 반환
-      assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
-      then(saveReservationPort).should().save(any());
+      // then: purchase intent is bound and returned
+      assertThat(result.status()).isEqualTo(ReservationStatus.PURCHASE_PENDING);
+      assertThat(result.web3()).isNotNull();
+      then(saveReservationPort).should(org.mockito.Mockito.times(2)).save(any());
+      then(prepareReservationEscrowExecutionPort).should().preparePurchase(any());
+      org.mockito.ArgumentCaptor<ReservationCreateIdempotency> idempotencyCaptor =
+          org.mockito.ArgumentCaptor.forClass(ReservationCreateIdempotency.class);
+      then(saveReservationCreateIdempotencyPort)
+          .should(org.mockito.Mockito.times(3))
+          .save(idempotencyCaptor.capture());
+      assertThat(idempotencyCaptor.getAllValues())
+          .extracting(ReservationCreateIdempotency::getStatus)
+          .containsExactly(
+              ReservationCreateIdempotencyStatus.PREPARING,
+              ReservationCreateIdempotencyStatus.INTENT_CREATED,
+              ReservationCreateIdempotencyStatus.COMPLETED);
+    }
 
-      // then: EscrowDispatchEvent(PURCHASE)가 발행되어야 함 (on-chain 호출은 AFTER_COMMIT 리스너가 담당)
-      ArgumentCaptor<EscrowDispatchEvent> captor =
-          ArgumentCaptor.forClass(EscrowDispatchEvent.class);
-      then(eventPublisher).should().publishEvent(captor.capture());
-      EscrowDispatchEvent event = captor.getValue();
-      assertThat(event.action()).isEqualTo(EscrowAction.PURCHASE);
-      assertThat(event.delegationSignature()).isEqualTo("0x" + "a".repeat(130));
-      assertThat(event.executionSignature()).isEqualTo("0x" + "b".repeat(130));
-      assertThat(event.amount()).isEqualTo(BigInteger.valueOf(PRICE));
+    @Test
+    @DisplayName("[CR-09] Phase B 바인딩 실패 시 signable intent를 취소하고 hold를 실패 처리한다")
+    void phase_b_바인딩_실패_보상() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(Optional.empty());
+      given(
+              loadReservationPort.findActiveByBuyerAndSlotDateTimeWithLock(
+                  any(), any(), any(), any()))
+          .willReturn(Optional.empty());
+      given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
+          .willReturn(0);
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, ReservationCreateIdempotency.class));
+      given(loadReservationWalletPort.loadActiveWalletAddress(USER_ID))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationWalletPort.loadActiveWalletAddress(TRAINER_ID))
+          .willReturn(Optional.of("0x2222222222222222222222222222222222222222"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved =
+                    invocation.getArgument(0, Reservation.class).toBuilder()
+                        .id(1L)
+                        .version(0L)
+                        .build();
+                latestSaved.set(saved);
+                return saved;
+              });
+      AtomicInteger lockedLoads = new AtomicInteger();
+      given(loadReservationPort.findByIdWithLock(1L))
+          .willAnswer(
+              invocation -> {
+                Reservation current = latestSaved.get();
+                if (lockedLoads.getAndIncrement() == 0) {
+                  return Optional.of(current.toBuilder().version(99L).build());
+                }
+                return Optional.of(current);
+              });
+      given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+      given(cancelReservationEscrowExecutionPort.cancelSignableIntent(any(), any(), any()))
+          .willReturn(true);
+
+      assertThatThrownBy(() -> sut.execute(command))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+      then(cancelReservationEscrowExecutionPort)
+          .should()
+          .cancelSignableIntent(
+              org.mockito.ArgumentMatchers.eq("intent-1"),
+              org.mockito.ArgumentMatchers.eq("MARKETPLACE_PHASE_B_BIND_FAILED"),
+              any());
+      assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.PAYMENT_FAILED);
+    }
+
+    @Test
+    @DisplayName("[CR-11] Phase B 보상에서 intent 취소가 불가하면 purchase hold를 즉시 실패 처리하지 않는다")
+    void phase_b_보상_취소_불가_시_즉시_실패처리하지_않음() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(Optional.empty());
+      given(
+              loadReservationPort.findActiveByBuyerAndSlotDateTimeWithLock(
+                  any(), any(), any(), any()))
+          .willReturn(Optional.empty());
+      given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
+          .willReturn(0);
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, ReservationCreateIdempotency.class));
+      given(loadReservationWalletPort.loadActiveWalletAddress(USER_ID))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationWalletPort.loadActiveWalletAddress(TRAINER_ID))
+          .willReturn(Optional.of("0x2222222222222222222222222222222222222222"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved =
+                    invocation.getArgument(0, Reservation.class).toBuilder()
+                        .id(1L)
+                        .version(0L)
+                        .build();
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationPort.findByIdWithLock(1L))
+          .willAnswer(
+              invocation -> {
+                Reservation current = latestSaved.get();
+                return Optional.of(current.toBuilder().version(99L).build());
+              });
+      given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+      given(cancelReservationEscrowExecutionPort.cancelSignableIntent(any(), any(), any()))
+          .willReturn(false);
+
+      assertThatThrownBy(() -> sut.execute(command)).isInstanceOf(BusinessException.class);
+
+      assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.PURCHASE_PREPARING);
+    }
+
+    @Test
+    @DisplayName("[CR-08] 같은 슬롯의 만료된 unbound hold는 HOLD_EXPIRED로 전환하고 새 예약을 진행한다")
+    void 만료된_홀드_정리_후_예약_생성() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(Optional.empty());
+      given(
+              loadReservationPort.findActiveByBuyerAndSlotDateTimeWithLock(
+                  any(), any(), any(), any()))
+          .willReturn(Optional.of(expiredUnboundHold()));
+      given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
+          .willReturn(0);
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, ReservationCreateIdempotency.class));
+      given(loadReservationWalletPort.loadActiveWalletAddress(USER_ID))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationWalletPort.loadActiveWalletAddress(TRAINER_ID))
+          .willReturn(Optional.of("0x2222222222222222222222222222222222222222"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved =
+                    invocation.getArgument(0, Reservation.class).toBuilder()
+                        .id(1L)
+                        .version(0L)
+                        .build();
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationPort.findByIdWithLock(1L))
+          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+
+      CreateReservationResult result = sut.execute(command);
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.PURCHASE_PENDING);
+      then(saveReservationPort).should(org.mockito.Mockito.times(3)).save(any());
+    }
+
+    @Test
+    @DisplayName("[CR-10] 완료된 create idempotency replay는 저장 스냅샷 대신 현재 execution intent를 재조회한다")
+    void 완료된_idempotency_replay는_execution_intent를_재조회한다() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      Reservation existingReservation =
+          replayReservation(ReservationStatus.PURCHASE_PENDING, "intent-existing");
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(
+              Optional.of(
+                  ReservationCreateIdempotency.builder()
+                      .buyerId(USER_ID)
+                      .payloadHash(expectedPayloadHash())
+                      .status(ReservationCreateIdempotencyStatus.COMPLETED)
+                      .reservationId(existingReservation.getId())
+                      .currentExecutionIntentPublicId("intent-existing")
+                      .responseSnapshotJson("{\"stale\":true}")
+                      .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+                      .build()));
+      given(loadReservationPort.findById(existingReservation.getId()))
+          .willReturn(Optional.of(existingReservation));
+      given(loadReservationExecutionWritePort.load(USER_ID, "intent-existing")).willReturn(web3());
+
+      CreateReservationResult result = sut.execute(command);
+
+      assertThat(result.reservationId()).isEqualTo(existingReservation.getId());
+      assertThat(result.web3()).isNotNull();
+      assertThat(result.web3().existing()).isTrue();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+      then(saveReservationPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[CR-12] BOUND create idempotency replay도 저장 스냅샷 대신 현재 execution intent를 재조회한다")
+    void bound_idempotency_replay도_execution_intent를_재조회한다() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      Reservation existingReservation =
+          replayReservation(ReservationStatus.PURCHASE_PENDING, "intent-bound");
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(
+              Optional.of(
+                  ReservationCreateIdempotency.builder()
+                      .buyerId(USER_ID)
+                      .payloadHash(expectedPayloadHash())
+                      .status(ReservationCreateIdempotencyStatus.BOUND)
+                      .reservationId(existingReservation.getId())
+                      .currentExecutionIntentPublicId("intent-bound")
+                      .responseSnapshotJson("{\"stale\":true}")
+                      .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+                      .build()));
+      given(loadReservationPort.findById(existingReservation.getId()))
+          .willReturn(Optional.of(existingReservation));
+      given(loadReservationExecutionWritePort.load(USER_ID, "intent-bound")).willReturn(web3());
+
+      CreateReservationResult result = sut.execute(command);
+
+      assertThat(result.reservationId()).isEqualTo(existingReservation.getId());
+      assertThat(result.web3()).isNotNull();
+      assertThat(result.web3().existing()).isTrue();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+      then(saveReservationPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[CR-11] 같은 idempotency key 동시 생성 loser는 winner row를 재조회해 deterministic replay한다")
+    void 동시_생성_loser는_winner를_재조회한다() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(Optional.empty())
+          .willReturn(
+              Optional.of(
+                  ReservationCreateIdempotency.builder()
+                      .buyerId(USER_ID)
+                      .payloadHash(expectedPayloadHash())
+                      .status(ReservationCreateIdempotencyStatus.INTENT_CREATED)
+                      .reservationId(44L)
+                      .currentExecutionIntentPublicId("intent-winner")
+                      .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+                      .build()));
+      given(
+              loadReservationPort.findActiveByBuyerAndSlotDateTimeWithLock(
+                  any(), any(), any(), any()))
+          .willReturn(Optional.empty());
+      given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
+          .willReturn(0);
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willThrow(new DataIntegrityViolationException("duplicate idempotency key"));
+      Reservation existingReservation =
+          replayReservation(ReservationStatus.PURCHASE_PENDING, "intent-winner").toBuilder()
+              .id(44L)
+              .build();
+      given(loadReservationPort.findById(44L)).willReturn(Optional.of(existingReservation));
+      given(loadReservationExecutionWritePort.load(USER_ID, "intent-winner")).willReturn(web3());
+
+      CreateReservationResult result = sut.execute(command);
+
+      assertThat(result.reservationId()).isEqualTo(44L);
+      assertThat(result.web3()).isNotNull();
+      assertThat(result.web3().existing()).isTrue();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[CR-13] FAILED create idempotency는 새 hold와 execution intent 생성으로 재시작한다")
+    void failed_idempotency는_새_예약_생성으로_재시작한다() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(
+              Optional.of(
+                  ReservationCreateIdempotency.builder()
+                      .buyerId(USER_ID)
+                      .keyHash("key")
+                      .payloadHash(expectedPayloadHash())
+                      .status(ReservationCreateIdempotencyStatus.FAILED)
+                      .responseSnapshotJson("{\"status\":\"FAILED\"}")
+                      .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+                      .build()));
+      given(
+              loadReservationPort.findActiveByBuyerAndSlotDateTimeWithLock(
+                  any(), any(), any(), any()))
+          .willReturn(Optional.empty());
+      given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
+          .willReturn(0);
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, ReservationCreateIdempotency.class));
+      given(loadReservationWalletPort.loadActiveWalletAddress(USER_ID))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationWalletPort.loadActiveWalletAddress(TRAINER_ID))
+          .willReturn(Optional.of("0x2222222222222222222222222222222222222222"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved =
+                    invocation.getArgument(0, Reservation.class).toBuilder()
+                        .id(1L)
+                        .version(0L)
+                        .build();
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationPort.findByIdWithLock(1L))
+          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+
+      CreateReservationResult result = sut.execute(command);
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.PURCHASE_PENDING);
+      org.mockito.ArgumentCaptor<ReservationCreateIdempotency> idempotencyCaptor =
+          org.mockito.ArgumentCaptor.forClass(ReservationCreateIdempotency.class);
+      then(saveReservationCreateIdempotencyPort)
+          .should(org.mockito.Mockito.times(3))
+          .save(idempotencyCaptor.capture());
+      assertThat(idempotencyCaptor.getAllValues())
+          .extracting(ReservationCreateIdempotency::getStatus)
+          .containsExactly(
+              ReservationCreateIdempotencyStatus.PREPARING,
+              ReservationCreateIdempotencyStatus.INTENT_CREATED,
+              ReservationCreateIdempotencyStatus.COMPLETED);
     }
   }
 
@@ -199,15 +578,7 @@ class CreateReservationServiceTest {
       // given: 서명 금액이 실제 수업 가격과 다름
       CreateReservationCommand wrongAmountCmd =
           new CreateReservationCommand(
-              USER_ID,
-              CLASS_ID,
-              SLOT_ID,
-              MONDAY,
-              START_TIME,
-              null,
-              BigInteger.valueOf(99_999L),
-              "0x" + "a".repeat(130),
-              "0x" + "b".repeat(130));
+              USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, BigInteger.valueOf(99_999L));
 
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
@@ -246,15 +617,7 @@ class CreateReservationServiceTest {
       LocalDate tuesday = MONDAY.plusDays(1);
       CreateReservationCommand wrongDayCmd =
           new CreateReservationCommand(
-              USER_ID,
-              CLASS_ID,
-              SLOT_ID,
-              tuesday,
-              START_TIME,
-              null,
-              BigInteger.valueOf(PRICE),
-              "0x" + "a".repeat(130),
-              "0x" + "b".repeat(130));
+              USER_ID, CLASS_ID, SLOT_ID, tuesday, START_TIME, null, BigInteger.valueOf(PRICE));
 
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
 
@@ -313,15 +676,7 @@ class CreateReservationServiceTest {
 
       CreateReservationCommand pastCmd =
           new CreateReservationCommand(
-              USER_ID,
-              CLASS_ID,
-              SLOT_ID,
-              today,
-              pastTime,
-              null,
-              BigInteger.valueOf(PRICE),
-              "0x" + "a".repeat(130),
-              "0x" + "b".repeat(130));
+              USER_ID, CLASS_ID, SLOT_ID, today, pastTime, null, BigInteger.valueOf(PRICE));
 
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(mondaySlot));
 
@@ -332,6 +687,104 @@ class CreateReservationServiceTest {
               ex ->
                   assertThat(((BusinessException) ex).getCode())
                       .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_PAST_TIME.getCode()));
+    }
+
+    @Test
+    @DisplayName("[CR-12] PREPARING create idempotency가 살아 있으면 active execution conflict를 반환한다")
+    void preparing_idempotency가_살아있으면_conflict() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(
+              Optional.of(
+                  ReservationCreateIdempotency.builder()
+                      .buyerId(USER_ID)
+                      .payloadHash(expectedPayloadHash())
+                      .status(ReservationCreateIdempotencyStatus.PREPARING)
+                      .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+                      .build()));
+
+      assertThatThrownBy(() -> sut.execute(command))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+  }
+
+  private ReservationExecutionWriteView web3() {
+    return new ReservationExecutionWriteView(
+        new ReservationExecutionWriteView.Resource("ORDER", "1", "PENDING_EXECUTION"),
+        "MARKETPLACE_CLASS_PURCHASE",
+        "0x" + "0".repeat(63) + "1",
+        new ReservationExecutionWriteView.ExecutionIntent(
+            "intent-1", "AWAITING_SIGNATURE", LocalDateTime.now(FIXED_CLOCK).plusMinutes(5), 300L),
+        new ReservationExecutionWriteView.Execution("EIP7702", 1),
+        null,
+        null,
+        false,
+        null,
+        null);
+  }
+
+  private Reservation expiredUnboundHold() {
+    return Reservation.builder()
+        .id(77L)
+        .userId(USER_ID)
+        .trainerId(TRAINER_ID)
+        .slotId(SLOT_ID)
+        .reservationDate(MONDAY)
+        .reservationTime(START_TIME)
+        .durationMinutes(60)
+        .status(ReservationStatus.PURCHASE_PREPARING)
+        .orderId("123e4567-e89b-12d3-a456-426614174000")
+        .bookedPriceAmount(PRICE)
+        .holdExpiresAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+        .version(0L)
+        .build();
+  }
+
+  private Reservation replayReservation(ReservationStatus status, String intentId) {
+    return Reservation.builder()
+        .id(33L)
+        .userId(USER_ID)
+        .trainerId(TRAINER_ID)
+        .slotId(SLOT_ID)
+        .reservationDate(MONDAY)
+        .reservationTime(START_TIME)
+        .durationMinutes(60)
+        .status(status)
+        .orderId("123e4567-e89b-12d3-a456-426614174000")
+        .orderKey("0x" + "0".repeat(32) + "123e4567e89b12d3a456426614174000")
+        .currentExecutionIntentPublicId(intentId)
+        .bookedPriceAmount(PRICE)
+        .version(0L)
+        .build();
+  }
+
+  private String expectedPayloadHash() {
+    return sha256Hex(
+        String.join(
+            ":",
+            String.valueOf(USER_ID),
+            String.valueOf(CLASS_ID),
+            String.valueOf(SLOT_ID),
+            MONDAY.toString(),
+            START_TIME.toString(),
+            BigInteger.valueOf(PRICE).toString(),
+            String.valueOf(TRAINER_ID),
+            String.valueOf(PRICE)));
+  }
+
+  private String sha256Hex(String value) {
+    try {
+      return Numeric.toHexString(
+          MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
     }
   }
 }

@@ -106,11 +106,11 @@ class ReservationMarketplaceExecutionAdapterTest {
   }
 
   @Test
-  void commandDoesNotCarryOrderKeyOrTokenWeiFields() {
+  void commandCarriesOnchainExecutionFields() {
     assertThat(PrepareReservationEscrowCommand.class.getRecordComponents())
         .extracting(component -> component.getName())
-        .doesNotContain("orderKey", "tokenAddress", "priceAmountWei")
-        .contains("orderId", "bookedPriceAmountKrw");
+        .doesNotContain("priceAmountWei")
+        .contains("orderId", "orderKey", "tokenAddress", "priceBaseUnits", "bookedPriceAmountKrw");
   }
 
   private static PrepareReservationEscrowCommand command() {

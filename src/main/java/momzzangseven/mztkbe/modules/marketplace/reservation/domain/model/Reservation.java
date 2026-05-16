@@ -9,6 +9,9 @@ import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
 /**
@@ -59,6 +62,12 @@ public class Reservation {
   /** Current lifecycle status of this reservation. */
   private final ReservationStatus status;
 
+  /** User-managed on-chain escrow substate. Null means legacy row before MOM-313 backfill. */
+  private final ReservationEscrowStatus escrowStatus;
+
+  /** Execution model that owns this row. Null is treated as legacy dispatch for old rows. */
+  private final ReservationEscrowFlow escrowFlow;
+
   /** Optional note from the user (max 500 chars). */
   private final String userRequest;
 
@@ -68,8 +77,39 @@ public class Reservation {
   /** Server-generated UUID used as the on-chain order identifier in the escrow contract. */
   private final String orderId;
 
+  /** Canonical Solidity order key: lowercase 0x + 64 hex chars. */
+  private final String orderKey;
+
+  /** Shared execution public id currently bound to this reservation. */
+  private final String currentExecutionIntentPublicId;
+
+  private final String buyerWalletAddress;
+  private final String trainerWalletAddress;
+  private final String tokenAddress;
+  private final String priceBaseUnits;
+
   /** Most recent on-chain transaction hash associated with this reservation. */
   private final String txHash;
+
+  private final LocalDateTime holdExpiresAt;
+  private final LocalDateTime pendingActionExpiresAt;
+  private final Long expectedContractDeadlineEpochSeconds;
+  private final LocalDateTime expectedContractDeadlineAt;
+  private final Long contractDeadlineEpochSeconds;
+  private final LocalDateTime contractDeadlineAt;
+  private final ReservationEscrowAction pendingAction;
+  private final String pendingAttemptToken;
+  private final Long pendingExpectedVersion;
+  private final ReservationStatus pendingExpectedStatus;
+  private final ReservationEscrowStatus pendingExpectedEscrowStatus;
+  private final ReservationStatus priorStatus;
+  private final ReservationEscrowStatus priorEscrowStatus;
+  private final String createIdempotencyKeyHash;
+  private final String createPayloadHash;
+  private final LocalDateTime serverSignatureSignedAt;
+  private final LocalDateTime serverSignatureExpiresAt;
+  private final String escrowFailureCode;
+  private final String escrowFailureMessage;
 
   /**
    * Class price in KRW at the moment of booking. Denormalised snapshot so that past reservations
@@ -132,6 +172,8 @@ public class Reservation {
         .reservationTime(reservationTime)
         .durationMinutes(durationMinutes)
         .status(ReservationStatus.PENDING)
+        .escrowStatus(ReservationEscrowStatus.NONE)
+        .escrowFlow(ReservationEscrowFlow.LEGACY_DISPATCH)
         .userRequest(userRequest)
         .rejectionReason(null)
         .orderId(orderId)
@@ -256,6 +298,349 @@ public class Reservation {
    */
   public Reservation updateTxHash(String newTxHash) {
     return toBuilder().txHash(newTxHash).build();
+  }
+
+  public Reservation beginPurchasePreparing(
+      String createIdempotencyKeyHash, String createPayloadHash, LocalDateTime holdExpiresAt) {
+    return beginPurchasePreparing(
+        createIdempotencyKeyHash,
+        createPayloadHash,
+        holdExpiresAt,
+        orderKey,
+        buyerWalletAddress,
+        trainerWalletAddress,
+        tokenAddress,
+        priceBaseUnits,
+        expectedContractDeadlineEpochSeconds,
+        expectedContractDeadlineAt,
+        pendingAttemptToken);
+  }
+
+  public Reservation beginPurchasePreparing(
+      String createIdempotencyKeyHash,
+      String createPayloadHash,
+      LocalDateTime holdExpiresAt,
+      String orderKey,
+      String buyerWalletAddress,
+      String trainerWalletAddress,
+      String tokenAddress,
+      String priceBaseUnits,
+      Long expectedContractDeadlineEpochSeconds,
+      LocalDateTime expectedContractDeadlineAt) {
+    return beginPurchasePreparing(
+        createIdempotencyKeyHash,
+        createPayloadHash,
+        holdExpiresAt,
+        orderKey,
+        buyerWalletAddress,
+        trainerWalletAddress,
+        tokenAddress,
+        priceBaseUnits,
+        expectedContractDeadlineEpochSeconds,
+        expectedContractDeadlineAt,
+        pendingAttemptToken);
+  }
+
+  public Reservation beginPurchasePreparing(
+      String createIdempotencyKeyHash,
+      String createPayloadHash,
+      LocalDateTime holdExpiresAt,
+      String orderKey,
+      String buyerWalletAddress,
+      String trainerWalletAddress,
+      String tokenAddress,
+      String priceBaseUnits,
+      Long expectedContractDeadlineEpochSeconds,
+      LocalDateTime expectedContractDeadlineAt,
+      String pendingAttemptToken) {
+    guardTransition(ReservationStatus.PURCHASE_PREPARING);
+    return toBuilder()
+        .status(ReservationStatus.PURCHASE_PREPARING)
+        .escrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
+        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+        .orderKey(orderKey)
+        .buyerWalletAddress(buyerWalletAddress)
+        .trainerWalletAddress(trainerWalletAddress)
+        .tokenAddress(tokenAddress)
+        .priceBaseUnits(priceBaseUnits)
+        .expectedContractDeadlineEpochSeconds(expectedContractDeadlineEpochSeconds)
+        .expectedContractDeadlineAt(expectedContractDeadlineAt)
+        .pendingAction(ReservationEscrowAction.PURCHASE)
+        .pendingAttemptToken(pendingAttemptToken)
+        .holdExpiresAt(holdExpiresAt)
+        .createIdempotencyKeyHash(createIdempotencyKeyHash)
+        .createPayloadHash(createPayloadHash)
+        .build();
+  }
+
+  public Reservation bindPendingExecutionIntent(String executionIntentPublicId) {
+    ReservationEscrowStatus nextEscrowStatus =
+        switch (status) {
+          case CANCEL_PENDING -> ReservationEscrowStatus.CANCEL_PENDING;
+          case REJECT_PENDING -> ReservationEscrowStatus.REJECT_PENDING;
+          case CONFIRM_PENDING -> ReservationEscrowStatus.CONFIRM_PENDING;
+          case DEADLINE_REFUND_PENDING -> ReservationEscrowStatus.DEADLINE_REFUND_PENDING;
+          default ->
+              throw new BusinessException(
+                  ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+                  "Cannot bind execution intent from " + status);
+        };
+    return toBuilder()
+        .currentExecutionIntentPublicId(executionIntentPublicId)
+        .escrowStatus(nextEscrowStatus)
+        .build();
+  }
+
+  public Reservation bindPurchaseIntent(String executionIntentPublicId) {
+    guardTransition(ReservationStatus.PURCHASE_PENDING);
+    return toBuilder()
+        .status(ReservationStatus.PURCHASE_PENDING)
+        .escrowStatus(ReservationEscrowStatus.PURCHASE_PENDING)
+        .currentExecutionIntentPublicId(executionIntentPublicId)
+        .build();
+  }
+
+  public Reservation markPurchaseConfirmedLocked(
+      Long contractDeadlineEpochSeconds, LocalDateTime contractDeadlineAt) {
+    guardTransition(ReservationStatus.PENDING);
+    return toBuilder()
+        .status(ReservationStatus.PENDING)
+        .escrowStatus(ReservationEscrowStatus.LOCKED)
+        .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
+        .contractDeadlineAt(contractDeadlineAt)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .build();
+  }
+
+  public Reservation markPurchaseDeadlineRecoveryRequired(
+      Long contractDeadlineEpochSeconds, LocalDateTime contractDeadlineAt) {
+    guardTransition(ReservationStatus.DEADLINE_RECOVERY_REQUIRED);
+    return toBuilder()
+        .status(ReservationStatus.DEADLINE_RECOVERY_REQUIRED)
+        .escrowStatus(ReservationEscrowStatus.DEADLINE_RECOVERY_REQUIRED)
+        .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
+        .contractDeadlineAt(contractDeadlineAt)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .build();
+  }
+
+  public Reservation repairCreatedChainOrder(
+      Long contractDeadlineEpochSeconds,
+      LocalDateTime contractDeadlineAt,
+      boolean completionWindowFits) {
+    if (!isCreatedChainRepairCandidate()) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Cannot repair created chain order from " + status);
+    }
+    ReservationStatus nextStatus;
+    ReservationEscrowStatus nextEscrowStatus;
+    if (completionWindowFits) {
+      nextStatus =
+          status == ReservationStatus.APPROVED
+              ? ReservationStatus.APPROVED
+              : ReservationStatus.PENDING;
+      nextEscrowStatus = ReservationEscrowStatus.LOCKED;
+    } else {
+      nextStatus = ReservationStatus.DEADLINE_RECOVERY_REQUIRED;
+      nextEscrowStatus = ReservationEscrowStatus.DEADLINE_RECOVERY_REQUIRED;
+    }
+    return toBuilder()
+        .status(nextStatus)
+        .escrowStatus(nextEscrowStatus)
+        .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
+        .contractDeadlineAt(contractDeadlineAt)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .priorStatus(null)
+        .priorEscrowStatus(null)
+        .build();
+  }
+
+  private boolean isCreatedChainRepairCandidate() {
+    return switch (status) {
+      case PURCHASE_PREPARING,
+              PURCHASE_PENDING,
+              PENDING,
+              APPROVED,
+              DEADLINE_RECOVERY_REQUIRED,
+              DEADLINE_SYNC_REQUIRED ->
+          true;
+      default -> false;
+    };
+  }
+
+  public Reservation markDeadlineSyncRequired(String failureCode, String failureMessage) {
+    guardTransition(ReservationStatus.DEADLINE_SYNC_REQUIRED);
+    return toBuilder()
+        .status(ReservationStatus.DEADLINE_SYNC_REQUIRED)
+        .escrowStatus(ReservationEscrowStatus.DEADLINE_SYNC_REQUIRED)
+        .escrowFailureCode(failureCode)
+        .escrowFailureMessage(failureMessage)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .build();
+  }
+
+  public Reservation syncChainOutcome(
+      ReservationStatus outcomeStatus,
+      ReservationEscrowStatus outcomeEscrowStatus,
+      String txHash,
+      Long contractDeadlineEpochSeconds,
+      LocalDateTime contractDeadlineAt) {
+    if (!outcomeStatus.isTerminal() && outcomeStatus != ReservationStatus.MANUAL_SYNC_REQUIRED) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Unsupported chain outcome status: " + outcomeStatus);
+    }
+    return toBuilder()
+        .status(outcomeStatus)
+        .escrowStatus(outcomeEscrowStatus)
+        .txHash(txHash)
+        .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
+        .contractDeadlineAt(contractDeadlineAt)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .priorStatus(null)
+        .priorEscrowStatus(null)
+        .build();
+  }
+
+  public Reservation markDeadlineRefundAvailable() {
+    guardTransition(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+    return toBuilder()
+        .status(ReservationStatus.DEADLINE_REFUND_AVAILABLE)
+        .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE)
+        .build();
+  }
+
+  public Reservation markDeadlineRefundAvailable(
+      Long contractDeadlineEpochSeconds, LocalDateTime contractDeadlineAt) {
+    return markDeadlineRefundAvailable().toBuilder()
+        .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
+        .contractDeadlineAt(contractDeadlineAt)
+        .build();
+  }
+
+  public Reservation beginDeadlineRefundPending(String pendingAttemptToken) {
+    guardTransition(ReservationStatus.DEADLINE_REFUND_PENDING);
+    return toBuilder()
+        .status(ReservationStatus.DEADLINE_REFUND_PENDING)
+        .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUND_PENDING)
+        .pendingAction(ReservationEscrowAction.DEADLINE_REFUND)
+        .pendingAttemptToken(pendingAttemptToken)
+        .priorStatus(ReservationStatus.DEADLINE_REFUND_AVAILABLE)
+        .priorEscrowStatus(getEffectiveEscrowStatus())
+        .build();
+  }
+
+  public Reservation markDeadlineRefunded(String txHash) {
+    guardTransition(ReservationStatus.DEADLINE_REFUNDED);
+    return toBuilder()
+        .status(ReservationStatus.DEADLINE_REFUNDED)
+        .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUNDED)
+        .txHash(txHash)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .priorStatus(null)
+        .priorEscrowStatus(null)
+        .build();
+  }
+
+  public Reservation markHoldExpired() {
+    guardTransition(ReservationStatus.HOLD_EXPIRED);
+    return toBuilder()
+        .status(ReservationStatus.HOLD_EXPIRED)
+        .escrowStatus(ReservationEscrowStatus.HOLD_EXPIRED)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .build();
+  }
+
+  public Reservation markPaymentFailed(String failureCode, String failureMessage) {
+    guardTransition(ReservationStatus.PAYMENT_FAILED);
+    return toBuilder()
+        .status(ReservationStatus.PAYMENT_FAILED)
+        .escrowStatus(ReservationEscrowStatus.PAYMENT_FAILED)
+        .escrowFailureCode(failureCode)
+        .escrowFailureMessage(failureMessage)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .build();
+  }
+
+  public Reservation beginCancelPending(String pendingAttemptToken) {
+    guardTransition(ReservationStatus.CANCEL_PENDING);
+    return toBuilder()
+        .status(ReservationStatus.CANCEL_PENDING)
+        .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
+        .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
+        .pendingAttemptToken(pendingAttemptToken)
+        .priorStatus(ReservationStatus.PENDING)
+        .priorEscrowStatus(getEffectiveEscrowStatus())
+        .build();
+  }
+
+  public Reservation beginRejectPending(String pendingAttemptToken) {
+    guardTransition(ReservationStatus.REJECT_PENDING);
+    return toBuilder()
+        .status(ReservationStatus.REJECT_PENDING)
+        .escrowStatus(ReservationEscrowStatus.REJECT_PENDING)
+        .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+        .pendingAttemptToken(pendingAttemptToken)
+        .priorStatus(ReservationStatus.PENDING)
+        .priorEscrowStatus(getEffectiveEscrowStatus())
+        .build();
+  }
+
+  public Reservation beginConfirmPending(String pendingAttemptToken) {
+    guardTransition(ReservationStatus.CONFIRM_PENDING);
+    return toBuilder()
+        .status(ReservationStatus.CONFIRM_PENDING)
+        .escrowStatus(ReservationEscrowStatus.CONFIRM_PENDING)
+        .pendingAction(ReservationEscrowAction.BUYER_CONFIRM)
+        .pendingAttemptToken(pendingAttemptToken)
+        .priorStatus(ReservationStatus.APPROVED)
+        .priorEscrowStatus(getEffectiveEscrowStatus())
+        .build();
+  }
+
+  public Reservation rollbackToPriorState() {
+    if (priorStatus == null) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Prior status is not available for rollback from " + status);
+    }
+    guardTransition(priorStatus);
+    return toBuilder()
+        .status(priorStatus)
+        .escrowStatus(priorEscrowStatus)
+        .currentExecutionIntentPublicId(null)
+        .pendingAction(null)
+        .pendingAttemptToken(null)
+        .priorStatus(null)
+        .priorEscrowStatus(null)
+        .build();
+  }
+
+  public boolean isLegacySchedulerEligibleAt(LocalDateTime now) {
+    if (getEffectiveEscrowFlow().isUserEip7702() || status.isSchedulerInvisibleUserState()) {
+      return false;
+    }
+    if (contractDeadlineAt != null && now.isAfter(contractDeadlineAt)) {
+      return false;
+    }
+    return true;
+  }
+
+  public ReservationEscrowStatus getEffectiveEscrowStatus() {
+    return escrowStatus == null ? ReservationEscrowStatus.NONE : escrowStatus;
+  }
+
+  public ReservationEscrowFlow getEffectiveEscrowFlow() {
+    return escrowFlow == null ? ReservationEscrowFlow.LEGACY_DISPATCH : escrowFlow;
   }
 
   // ============================================================

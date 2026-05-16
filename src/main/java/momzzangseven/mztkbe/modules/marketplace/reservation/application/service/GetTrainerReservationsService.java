@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import java.util.List;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorCodec;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
@@ -10,12 +9,16 @@ import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +47,6 @@ import org.springframework.transaction.annotation.Transactional;
  * This matches the user-list sort contract so trainers and users see the same temporal ordering.
  */
 @Service
-@RequiredArgsConstructor
 public class GetTrainerReservationsService implements GetTrainerReservationsUseCase {
 
   // CURSOR_SCOPE is now status-dependent; use GetTrainerReservationsQuery.cursorScope(status).
@@ -52,6 +54,40 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
   private final LoadReservationPort loadReservationPort;
   private final LoadClassSummaryPort loadClassSummaryPort;
   private final LoadUserSummaryPort loadUserSummaryPort;
+  private final LoadReservationExecutionResumePort loadReservationExecutionResumePort;
+  private final RepairReservationChainReadUseCase repairReservationChainReadUseCase;
+
+  @Autowired
+  public GetTrainerReservationsService(
+      LoadReservationPort loadReservationPort,
+      LoadClassSummaryPort loadClassSummaryPort,
+      LoadUserSummaryPort loadUserSummaryPort,
+      @Nullable LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      @Nullable RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+    this.loadReservationPort = loadReservationPort;
+    this.loadClassSummaryPort = loadClassSummaryPort;
+    this.loadUserSummaryPort = loadUserSummaryPort;
+    this.loadReservationExecutionResumePort =
+        loadReservationExecutionResumePort == null
+            ? emptyResumePort()
+            : loadReservationExecutionResumePort;
+    this.repairReservationChainReadUseCase =
+        repairReservationChainReadUseCase == null
+            ? noOpRepairUseCase()
+            : repairReservationChainReadUseCase;
+  }
+
+  public GetTrainerReservationsService(
+      LoadReservationPort loadReservationPort,
+      LoadClassSummaryPort loadClassSummaryPort,
+      LoadUserSummaryPort loadUserSummaryPort) {
+    this(
+        loadReservationPort,
+        loadClassSummaryPort,
+        loadUserSummaryPort,
+        emptyResumePort(),
+        noOpRepairUseCase());
+  }
 
   @Override
   @Transactional(readOnly = true)
@@ -65,6 +101,7 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
 
     boolean hasNext = loaded.size() > pageRequest.size();
     List<Reservation> page = hasNext ? loaded.subList(0, pageRequest.size()) : loaded;
+    page = repairReservationChainReadUseCase.repairBatch(page);
 
     if (page.isEmpty()) {
       return new CursorSlice<>(List.of(), false, null);
@@ -80,6 +117,13 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
     // Batch-load user (booker) nicknames for the current page.
     List<Long> userIds = page.stream().map(Reservation::getUserId).distinct().toList();
     Map<Long, UserSummary> userSummaries = loadUserSummaryPort.findByIds(userIds);
+    Map<
+            Long,
+            momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                .ReservationExecutionResumeView>
+        web3ByReservationId =
+            loadReservationExecutionResumePort.loadLatestBatch(
+                page.stream().map(Reservation::getId).toList());
 
     List<ReservationSummaryResult> items =
         page.stream()
@@ -104,7 +148,9 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
                       priceAmount,
                       cs != null ? cs.thumbnailFinalObjectKey() : null,
                       trainerSummary != null ? trainerSummary.nickname() : null,
-                      userSummary != null ? userSummary.nickname() : null);
+                      userSummary != null ? userSummary.nickname() : null,
+                      ReservationExecutionResumeViewer.hydrate(
+                          r, query.trainerId(), web3ByReservationId.get(r.getId())));
                 })
             .toList();
 
@@ -118,5 +164,40 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
             : null;
 
     return new CursorSlice<>(items, hasNext, nextCursor);
+  }
+
+  private static LoadReservationExecutionResumePort emptyResumePort() {
+    return new LoadReservationExecutionResumePort() {
+      @Override
+      public java.util.Optional<
+              momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                  .ReservationExecutionResumeView>
+          loadLatest(Long reservationId) {
+        return java.util.Optional.empty();
+      }
+
+      @Override
+      public java.util.Map<
+              Long,
+              momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                  .ReservationExecutionResumeView>
+          loadLatestBatch(java.util.Collection<Long> reservationIds) {
+        return java.util.Map.of();
+      }
+    };
+  }
+
+  private static RepairReservationChainReadUseCase noOpRepairUseCase() {
+    return new RepairReservationChainReadUseCase() {
+      @Override
+      public Reservation repairOne(Reservation reservation) {
+        return reservation;
+      }
+
+      @Override
+      public java.util.List<Reservation> repairBatch(java.util.List<Reservation> reservations) {
+        return reservations;
+      }
+    };
   }
 }

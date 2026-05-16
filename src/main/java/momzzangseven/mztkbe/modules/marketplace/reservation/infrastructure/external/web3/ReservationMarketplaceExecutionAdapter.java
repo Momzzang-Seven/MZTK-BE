@@ -9,6 +9,8 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.Marketplace
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceSignRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.PrepareMarketplaceUserExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceActorType;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAllowanceStrategy;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -41,6 +43,12 @@ public class ReservationMarketplaceExecutionAdapter
     return prepare(command, MarketplaceExecutionActionType.MARKETPLACE_CLASS_CONFIRM);
   }
 
+  @Override
+  public PrepareReservationEscrowResult prepareDeadlineRefund(
+      PrepareReservationEscrowCommand command) {
+    return prepare(command, MarketplaceExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND);
+  }
+
   private PrepareReservationEscrowResult prepare(
       PrepareReservationEscrowCommand command, MarketplaceExecutionActionType actionType) {
     MarketplaceExecutionIntentResult result =
@@ -56,14 +64,29 @@ public class ReservationMarketplaceExecutionAdapter
         command.reservationId(),
         resourceId,
         command.orderId(),
+        command.orderKey(),
+        MarketplaceActorType.valueOf(command.actorType()),
+        command.authorityUserId(),
         command.requesterUserId(),
+        command.counterpartyUserId(),
         command.buyerUserId(),
         command.trainerUserId(),
         command.reservationVersion(),
+        command.expectedReservationStatus() == null
+            ? null
+            : command.expectedReservationStatus().name(),
+        command.expectedEscrowStatus() == null ? null : command.expectedEscrowStatus().name(),
         command.buyerWalletAddress(),
         command.trainerWalletAddress(),
+        command.tokenAddress(),
+        new java.math.BigInteger(command.priceBaseUnits()),
+        MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
         command.bookedPriceAmountKrw(),
-        command.sessionEndAt());
+        command.sessionEndAt(),
+        command.expectedContractDeadlineEpochSeconds(),
+        command.contractDeadlineEpochSeconds(),
+        command.pendingAttemptToken(),
+        command.targetTerminalStatus());
   }
 
   private ReservationExecutionWriteView toView(MarketplaceExecutionIntentResult result) {
@@ -71,15 +94,19 @@ public class ReservationMarketplaceExecutionAdapter
         new ReservationExecutionWriteView.Resource(
             result.resource().type(), result.resource().id(), result.resource().status()),
         result.actionType(),
+        result.orderKey(),
         new ReservationExecutionWriteView.ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new ReservationExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
         result.signRequestUnavailableReason(),
-        result.existing());
+        result.existing(),
+        toSignatureMeta(result.signatureMeta()),
+        toTokenMovement(result.tokenMovement()));
   }
 
   private ReservationExecutionWriteView.SignRequest toSignRequest(MarketplaceSignRequest request) {
@@ -128,5 +155,29 @@ public class ReservationMarketplaceExecutionAdapter
         transaction.maxPriorityFeePerGasHex(),
         transaction.maxFeePerGasHex(),
         transaction.expectedNonce());
+  }
+
+  private ReservationExecutionWriteView.SignatureMeta toSignatureMeta(
+      momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceSignatureMeta meta) {
+    if (meta == null) {
+      return null;
+    }
+    return new ReservationExecutionWriteView.SignatureMeta(
+        meta.signedAt(), meta.signatureExpiresAt());
+  }
+
+  private ReservationExecutionWriteView.TokenMovement toTokenMovement(
+      momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement
+          movement) {
+    if (movement == null) {
+      return null;
+    }
+    return new ReservationExecutionWriteView.TokenMovement(
+        movement.tokenAddress(),
+        movement.amountBaseUnits().toString(),
+        movement.fromRole(),
+        movement.fromAddress(),
+        movement.toRole(),
+        movement.toAddress());
   }
 }

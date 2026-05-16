@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.api.dto;
 
 import jakarta.validation.constraints.FutureOrPresent;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -15,9 +14,8 @@ public record CreateReservationRequestDTO(
     @NotNull @FutureOrPresent LocalDate reservationDate,
     @NotNull LocalTime reservationTime,
     @Size(max = 500) String userRequest,
-    @NotNull BigInteger signedAmount,
-    @NotBlank String delegationSignature,
-    @NotBlank String executionSignature) {
+    @Size(max = 200) String idempotencyKey,
+    @NotNull BigInteger signedAmount) {
 
   public CreateReservationCommand toCommand(Long userId, Long classId) {
     return new CreateReservationCommand(
@@ -27,8 +25,7 @@ public record CreateReservationRequestDTO(
         reservationDate,
         reservationTime,
         userRequest,
-        signedAmount,
-        delegationSignature,
-        executionSignature);
+        idempotencyKey,
+        signedAmount);
   }
 }
