@@ -102,7 +102,14 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
   @Override
   public void afterExecutionConfirmed(ExecutionIntent intent, ExecutionActionPlan actionPlan) {
     MarketplaceEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
+    ChainOrderLookup chainOrderLookup = loadChainOrderBeforeReservationLock(payload);
     Reservation reservation = loadReservationForHook(intent, payload);
+    String txHash = txHash(intent);
+    if (isAlreadyApplied(reservation, payload)) {
+      repairTxHashIfNeeded(reservation, txHash);
+      recordTrainerRejectStrikeIfNeeded(reservation, payload);
+      return;
+    }
     if (!isCurrentOrRecoverableOrphan(intent, payload, reservation)) {
       log.warn(
           "Skipping stale marketplace confirmation: intentId={}, reservationId={}",
@@ -110,15 +117,16 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
           reservation.getId());
       return;
     }
-    if (isAlreadyApplied(reservation, payload)) {
-      repairTxHashIfNeeded(reservation, txHash(intent));
-      recordTrainerRejectStrikeIfNeeded(reservation, payload);
+    if (chainOrderLookup.failure() != null) {
+      saveReservationPort.save(
+          reservation.markDeadlineSyncRequired(
+              "CHAIN_ORDER_READ_FAILED", chainOrderLookup.failure().getMessage()));
       return;
     }
-    String txHash = txHash(intent);
     Reservation updated =
         switch (payload.actionType()) {
-          case MARKETPLACE_CLASS_PURCHASE -> applyPurchaseConfirmed(reservation, payload, txHash);
+          case MARKETPLACE_CLASS_PURCHASE ->
+              applyPurchaseConfirmed(reservation, payload, txHash, chainOrderLookup.order());
           case MARKETPLACE_CLASS_CANCEL ->
               payload.actorType() == MarketplaceActorType.TRAINER
                   ? reservation.reject(txHash, reservation.getRejectionReason())
@@ -213,8 +221,10 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
   }
 
   private Reservation applyPurchaseConfirmed(
-      Reservation reservation, MarketplaceEscrowExecutionPayload payload, String txHash) {
-    MarketplaceEscrowOrderView chainOrder = loadChainOrder(payload.orderKey());
+      Reservation reservation,
+      MarketplaceEscrowExecutionPayload payload,
+      String txHash,
+      @Nullable MarketplaceEscrowOrderView chainOrder) {
     if (chainOrder != null) {
       return applyPurchaseChainState(reservation, payload, chainOrder, txHash);
     }
@@ -298,12 +308,22 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
     };
   }
 
-  @Nullable
-  private MarketplaceEscrowOrderView loadChainOrder(String orderKey) {
-    if (loadMarketplaceEscrowOrderPort == null) {
-      return null;
+  private ChainOrderLookup loadChainOrderBeforeReservationLock(
+      MarketplaceEscrowExecutionPayload payload) {
+    if (payload.actionType() != MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE
+        || loadMarketplaceEscrowOrderPort == null) {
+      return ChainOrderLookup.notLoaded();
     }
-    return loadMarketplaceEscrowOrderPort.getOrder(orderKey);
+    try {
+      return ChainOrderLookup.loaded(loadMarketplaceEscrowOrderPort.getOrder(payload.orderKey()));
+    } catch (RuntimeException e) {
+      log.warn(
+          "Failed to load marketplace chain order before reservation hook lock: reservationId={}, orderKey={}",
+          payload.reservationId(),
+          payload.orderKey(),
+          e);
+      return ChainOrderLookup.failed(e);
+    }
   }
 
   private LocalDateTime deadlineAt(Long epochSeconds) {
@@ -358,6 +378,22 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
     } catch (JsonProcessingException e) {
       throw new IllegalStateException(
           "failed to deserialize marketplace escrow execution payload", e);
+    }
+  }
+
+  private record ChainOrderLookup(
+      @Nullable MarketplaceEscrowOrderView order, @Nullable RuntimeException failure) {
+
+    private static ChainOrderLookup notLoaded() {
+      return new ChainOrderLookup(null, null);
+    }
+
+    private static ChainOrderLookup loaded(@Nullable MarketplaceEscrowOrderView order) {
+      return new ChainOrderLookup(order, null);
+    }
+
+    private static ChainOrderLookup failed(RuntimeException failure) {
+      return new ChainOrderLookup(null, failure);
     }
   }
 }

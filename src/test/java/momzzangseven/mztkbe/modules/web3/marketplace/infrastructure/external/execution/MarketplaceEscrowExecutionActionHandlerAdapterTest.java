@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigInteger;
@@ -46,7 +47,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -149,6 +152,32 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     then(saveReservationPort).should().save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.PENDING);
     assertThat(captor.getValue().getContractDeadlineEpochSeconds()).isEqualTo(1_900_000_000L);
+    InOrder inOrder = Mockito.inOrder(loadMarketplaceEscrowOrderPort, loadReservationPort);
+    inOrder.verify(loadMarketplaceEscrowOrderPort).getOrder(ORDER_KEY);
+    inOrder.verify(loadReservationPort).findByCurrentExecutionIntentPublicIdWithLock("intent-1");
+  }
+
+  @Test
+  @DisplayName("confirmed purchase getOrder failure stores sync-required without holding the lock")
+  void afterExecutionConfirmed_purchaseChainOrderReadFailure_marksDeadlineSyncRequired()
+      throws Exception {
+    Reservation reservation = purchasePreparing("purchase-token").bindPurchaseIntent("intent-1");
+    ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
+    willThrow(new IllegalStateException("rpc unavailable"))
+        .given(loadMarketplaceEscrowOrderPort)
+        .getOrder(ORDER_KEY);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.of(reservation));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    InOrder inOrder = Mockito.inOrder(loadMarketplaceEscrowOrderPort, loadReservationPort);
+    inOrder.verify(loadMarketplaceEscrowOrderPort).getOrder(ORDER_KEY);
+    inOrder.verify(loadReservationPort).findByCurrentExecutionIntentPublicIdWithLock("intent-1");
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.DEADLINE_SYNC_REQUIRED);
+    assertThat(captor.getValue().getEscrowFailureCode()).isEqualTo("CHAIN_ORDER_READ_FAILED");
   }
 
   @Test
@@ -293,6 +322,38 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  @DisplayName("confirmed replay repairs tx hash when the local outcome was already applied")
+  void afterExecutionConfirmed_alreadyApplied_repairTxHash() throws Exception {
+    String txHash = "0x" + "2".repeat(64);
+    Reservation reservation =
+        purchasePreparing("purchase-token")
+            .markPurchaseConfirmedLocked(1_800_000_000L, LocalDateTime.of(2027, 1, 15, 8, 0));
+    ExecutionIntent intent =
+        intent(
+                "intent-1",
+                ExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
+                payload("purchase-token"))
+            .toBuilder()
+            .submittedTxId(56L)
+            .build();
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.empty());
+    given(loadReservationPort.findByIdWithLock(123L)).willReturn(Optional.of(reservation));
+    given(loadExecutionTransactionPort.findById(56L))
+        .willReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    56L, ExecutionTransactionStatus.SUCCEEDED, txHash)));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(captor.getValue().getTxHash()).isEqualTo(txHash);
+  }
+
+  @Test
   @DisplayName("terminated purchase marks the reservation and create idempotency as failed")
   void afterExecutionTerminated_purchase_marksIdempotencyFailed() throws Exception {
     Reservation reservation = purchasePreparing("purchase-token").bindPurchaseIntent("intent-1");
@@ -325,6 +386,7 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     then(saveReservationCreateIdempotencyPort).should().save(idempotencyCaptor.capture());
     assertThat(idempotencyCaptor.getValue().getStatus())
         .isEqualTo(ReservationCreateIdempotencyStatus.FAILED);
+    assertThat(idempotencyCaptor.getValue().getCurrentExecutionIntentPublicId()).isNull();
   }
 
   private Reservation purchasePreparing(String pendingAttemptToken) {

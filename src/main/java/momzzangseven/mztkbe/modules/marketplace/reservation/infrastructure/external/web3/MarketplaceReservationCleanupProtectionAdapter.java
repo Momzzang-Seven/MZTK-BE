@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationCreateIdempotencyJpaRepository;
@@ -44,7 +45,11 @@ public class MarketplaceReservationCleanupProtectionAdapter
       protectedPublicIds.addAll(
           reservationJpaRepository.findCurrentExecutionIntentPublicIdsIn(publicIds));
       protectedPublicIds.addAll(
-          createIdempotencyJpaRepository.findCurrentExecutionIntentPublicIdsIn(publicIds));
+          createIdempotencyJpaRepository.findCurrentExecutionIntentPublicIdsIn(
+              publicIds,
+              EnumSet.of(
+                  ReservationCreateIdempotencyStatus.INTENT_CREATED,
+                  ReservationCreateIdempotencyStatus.BOUND)));
     }
 
     for (MarketplaceExecutionCleanupIntent intent : intents) {

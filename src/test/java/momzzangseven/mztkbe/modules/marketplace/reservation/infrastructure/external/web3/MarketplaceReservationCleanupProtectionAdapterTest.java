@@ -30,7 +30,9 @@ class MarketplaceReservationCleanupProtectionAdapterTest {
   void findProtectedExecutionIntentPublicIds_returnsReferencedAndOrphanFallbackIntents() {
     given(reservationJpaRepository.findCurrentExecutionIntentPublicIdsIn(anyCollection()))
         .willReturn(List.of("intent-current"));
-    given(createIdempotencyJpaRepository.findCurrentExecutionIntentPublicIdsIn(anyCollection()))
+    given(
+            createIdempotencyJpaRepository.findCurrentExecutionIntentPublicIdsIn(
+                anyCollection(), anyCollection()))
         .willReturn(List.of("intent-create"));
     given(
             reservationJpaRepository.countUnboundPendingAction(

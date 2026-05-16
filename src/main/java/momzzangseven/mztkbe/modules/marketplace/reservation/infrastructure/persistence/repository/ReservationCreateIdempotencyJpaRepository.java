@@ -4,6 +4,7 @@ import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationCreateIdempotencyEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -47,7 +48,9 @@ public interface ReservationCreateIdempotencyJpaRepository
 
   @Query(
       "SELECT k.currentExecutionIntentPublicId FROM ReservationCreateIdempotencyEntity k "
-          + "WHERE k.currentExecutionIntentPublicId IN :publicIds")
+          + "WHERE k.currentExecutionIntentPublicId IN :publicIds "
+          + "AND k.status IN :activeStatuses")
   List<String> findCurrentExecutionIntentPublicIdsIn(
-      @Param("publicIds") Collection<String> publicIds);
+      @Param("publicIds") Collection<String> publicIds,
+      @Param("activeStatuses") Collection<ReservationCreateIdempotencyStatus> activeStatuses);
 }

@@ -58,6 +58,7 @@ public class ReservationCreateIdempotency {
   public ReservationCreateIdempotency markCompleted(String responseSnapshotJson) {
     return toBuilder()
         .status(ReservationCreateIdempotencyStatus.COMPLETED)
+        .currentExecutionIntentPublicId(null)
         .responseSnapshotJson(responseSnapshotJson)
         .build();
   }
@@ -65,6 +66,7 @@ public class ReservationCreateIdempotency {
   public ReservationCreateIdempotency markFailed(String responseSnapshotJson) {
     return toBuilder()
         .status(ReservationCreateIdempotencyStatus.FAILED)
+        .currentExecutionIntentPublicId(null)
         .responseSnapshotJson(responseSnapshotJson)
         .build();
   }
