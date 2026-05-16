@@ -51,7 +51,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.web3j.utils.Numeric;
 
 @ExtendWith(MockitoExtension.class)
@@ -143,6 +142,17 @@ class CreateReservationServiceTest {
     command =
         new CreateReservationCommand(
             USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, PRICE_BASE_UNITS);
+
+    given(saveReservationCreateIdempotencyPort.reservePreparing(any(), any(), any(), any()))
+        .willAnswer(
+            invocation ->
+                new SaveReservationCreateIdempotencyPort.ReserveCreateIdempotencyResult(
+                    ReservationCreateIdempotency.preparing(
+                        invocation.getArgument(0, Long.class),
+                        invocation.getArgument(1, String.class),
+                        invocation.getArgument(2, String.class),
+                        invocation.getArgument(3, LocalDateTime.class)),
+                    true));
   }
 
   @Nested
@@ -202,12 +212,11 @@ class CreateReservationServiceTest {
       org.mockito.ArgumentCaptor<ReservationCreateIdempotency> idempotencyCaptor =
           org.mockito.ArgumentCaptor.forClass(ReservationCreateIdempotency.class);
       then(saveReservationCreateIdempotencyPort)
-          .should(org.mockito.Mockito.times(3))
+          .should(org.mockito.Mockito.times(2))
           .save(idempotencyCaptor.capture());
       assertThat(idempotencyCaptor.getAllValues())
           .extracting(ReservationCreateIdempotency::getStatus)
           .containsExactly(
-              ReservationCreateIdempotencyStatus.PREPARING,
               ReservationCreateIdempotencyStatus.INTENT_CREATED,
               ReservationCreateIdempotencyStatus.COMPLETED);
     }
@@ -466,8 +475,19 @@ class CreateReservationServiceTest {
           .willReturn(Optional.empty());
       given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
           .willReturn(0);
-      given(saveReservationCreateIdempotencyPort.save(any()))
-          .willThrow(new DataIntegrityViolationException("duplicate idempotency key"));
+      ReservationCreateIdempotency winnerKey =
+          ReservationCreateIdempotency.builder()
+              .buyerId(USER_ID)
+              .payloadHash(expectedPayloadHash())
+              .status(ReservationCreateIdempotencyStatus.INTENT_CREATED)
+              .reservationId(44L)
+              .currentExecutionIntentPublicId("intent-winner")
+              .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+              .build();
+      given(saveReservationCreateIdempotencyPort.reservePreparing(any(), any(), any(), any()))
+          .willReturn(
+              new SaveReservationCreateIdempotencyPort.ReserveCreateIdempotencyResult(
+                  winnerKey, false));
       Reservation existingReservation =
           replayReservation(ReservationStatus.PURCHASE_PENDING, "intent-winner").toBuilder()
               .id(44L)

@@ -42,7 +42,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -270,14 +269,13 @@ public class CreateReservationService implements CreateReservationUseCase {
             ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT,
             "idempotency key was reused with a different marketplace reservation payload");
       }
-      if (idempotency.getReservationId() != null) {
-        return PhaseAResult.replay(replayCreateResult(command.userId(), idempotency));
-      }
       if (idempotency.getStatus() == ReservationCreateIdempotencyStatus.FAILED
           || isExpired(idempotency.getExpiresAt())) {
         idempotency =
             saveReservationCreateIdempotencyPort.save(
                 idempotency.restart(payloadHash, LocalDateTime.now(clock).plusMinutes(30)));
+      } else if (idempotency.getReservationId() != null) {
+        return PhaseAResult.replay(replayCreateResult(command.userId(), idempotency));
       } else {
         throw new BusinessException(
             ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
@@ -509,27 +507,21 @@ public class CreateReservationService implements CreateReservationUseCase {
 
   private ReservationCreateIdempotency saveCreateIdempotency(
       Long buyerId, String keyHash, String payloadHash) {
-    try {
-      return saveReservationCreateIdempotencyPort.save(
-          ReservationCreateIdempotency.preparing(
-              buyerId, keyHash, payloadHash, LocalDateTime.now(clock).plusMinutes(30)));
-    } catch (DataIntegrityViolationException e) {
-      ReservationCreateIdempotency existing =
-          loadReservationCreateIdempotencyPort
-              .findByBuyerIdAndKeyHashWithLock(buyerId, keyHash)
-              .orElseThrow(() -> e);
-      if (!payloadHash.equals(existing.getPayloadHash())) {
-        throw new BusinessException(
-            ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT,
-            "idempotency key was reused with a different marketplace reservation payload");
-      }
-      if (existing.getReservationId() == null) {
-        throw new BusinessException(
-            ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
-            "same marketplace reservation create request is still preparing");
-      }
-      return existing;
+    SaveReservationCreateIdempotencyPort.ReserveCreateIdempotencyResult reservation =
+        saveReservationCreateIdempotencyPort.reservePreparing(
+            buyerId, keyHash, payloadHash, LocalDateTime.now(clock).plusMinutes(30));
+    ReservationCreateIdempotency idempotency = reservation.idempotency();
+    if (!payloadHash.equals(idempotency.getPayloadHash())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT,
+          "idempotency key was reused with a different marketplace reservation payload");
     }
+    if (!reservation.created() && idempotency.getReservationId() == null) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "same marketplace reservation create request is still preparing");
+    }
+    return idempotency;
   }
 
   private boolean isExpired(LocalDateTime expiresAt) {

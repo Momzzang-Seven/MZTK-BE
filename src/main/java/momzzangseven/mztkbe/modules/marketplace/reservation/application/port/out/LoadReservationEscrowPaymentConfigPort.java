@@ -2,7 +2,15 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.ou
 
 import java.math.BigInteger;
 
-/** Reservation-owned output port for marketplace escrow payment configuration. */
+/**
+ * Reservation-owned output port for marketplace escrow payment configuration.
+ *
+ * <p>MOM-313 fixes the on-chain policy as: the class {@code priceAmount} remains the existing KRW
+ * display amount, and the escrow charge is the same whole-unit amount in the reward token converted
+ * to ERC-20 base units. If product changes away from "30,000 KRW display price charges 30,000
+ * MZTK", replace this record method with an explicit KRW-to-token pricing port before signing
+ * marketplace calldata.
+ */
 public interface LoadReservationEscrowPaymentConfigPort {
 
   ReservationEscrowPaymentConfig load();

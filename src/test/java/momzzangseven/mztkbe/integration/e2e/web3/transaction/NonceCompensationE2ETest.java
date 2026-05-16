@@ -143,8 +143,9 @@ class NonceCompensationE2ETest extends E2ETestBase {
     return jdbcTemplate.queryForObject(
         "INSERT INTO web3_transactions"
             + " (idempotency_key, reference_type, reference_id, from_address, to_address,"
-            + " amount_wei, nonce, status)"
-            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED') RETURNING id",
+            + " amount_wei, nonce, status, processing_until)"
+            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED',"
+            + " CURRENT_TIMESTAMP + INTERVAL '1 hour') RETURNING id",
         Long.class,
         idempotencyKey,
         referenceId,
@@ -158,8 +159,9 @@ class NonceCompensationE2ETest extends E2ETestBase {
     return jdbcTemplate.queryForObject(
         "INSERT INTO web3_transactions"
             + " (idempotency_key, reference_type, reference_id, from_address, to_address,"
-            + " amount_wei, nonce, status, failure_reason)"
-            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED', ?) RETURNING id",
+            + " amount_wei, nonce, status, failure_reason, processing_until)"
+            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED', ?,"
+            + " CURRENT_TIMESTAMP + INTERVAL '1 hour') RETURNING id",
         Long.class,
         idempotencyKey,
         referenceId,

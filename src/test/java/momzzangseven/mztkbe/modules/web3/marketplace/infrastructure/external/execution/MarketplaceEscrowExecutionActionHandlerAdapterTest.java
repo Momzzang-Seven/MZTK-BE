@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.external.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
@@ -13,19 +14,26 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceEscrowOrderPort;
@@ -52,6 +60,9 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private RecordTrainerStrikePort recordTrainerStrikePort;
   @Mock private LoadMarketplaceEscrowOrderPort loadMarketplaceEscrowOrderPort;
+  @Mock private LoadExecutionTransactionPort loadExecutionTransactionPort;
+  @Mock private LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
+  @Mock private SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
 
   private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
   private MarketplaceEscrowExecutionActionHandlerAdapter sut;
@@ -66,6 +77,9 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
             Clock.fixed(Instant.parse("2026-05-16T00:00:00Z"), ZoneOffset.UTC));
     sut.setRecordTrainerStrikePort(recordTrainerStrikePort);
     sut.setLoadMarketplaceEscrowOrderPort(loadMarketplaceEscrowOrderPort);
+    sut.setLoadExecutionTransactionPort(loadExecutionTransactionPort);
+    sut.setReservationCreateIdempotencyPorts(
+        loadReservationCreateIdempotencyPort, saveReservationCreateIdempotencyPort);
   }
 
   @Test
@@ -246,6 +260,71 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
             TrainerStrikeEvent.REASON_REJECT,
             RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
             "123");
+  }
+
+  @Test
+  @DisplayName(
+      "confirmed terminal actions persist the submitted on-chain tx hash, not the intent id")
+  void afterExecutionConfirmed_terminalAction_persistsSubmittedTxHash() throws Exception {
+    String txHash = "0x" + "1".repeat(64);
+    Reservation reservation = rejectPending();
+    MarketplaceEscrowExecutionPayload payload =
+        payload(
+            "reject-token",
+            MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+            MarketplaceActorType.TRAINER);
+    ExecutionIntent intent =
+        intent("intent-reject", ExecutionActionType.MARKETPLACE_CLASS_CANCEL, payload).toBuilder()
+            .submittedTxId(55L)
+            .build();
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-reject"))
+        .willReturn(Optional.of(reservation));
+    given(loadExecutionTransactionPort.findById(55L))
+        .willReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    55L, ExecutionTransactionStatus.SUCCEEDED, txHash)));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getTxHash()).isEqualTo(txHash);
+  }
+
+  @Test
+  @DisplayName("terminated purchase marks the reservation and create idempotency as failed")
+  void afterExecutionTerminated_purchase_marksIdempotencyFailed() throws Exception {
+    Reservation reservation = purchasePreparing("purchase-token").bindPurchaseIntent("intent-1");
+    ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
+    ReservationCreateIdempotency idempotency =
+        ReservationCreateIdempotency.builder()
+            .id(1L)
+            .buyerId(7L)
+            .payloadHash("payload")
+            .status(ReservationCreateIdempotencyStatus.COMPLETED)
+            .reservationId(123L)
+            .currentExecutionIntentPublicId("intent-1")
+            .expiresAt(LocalDateTime.of(2026, 5, 16, 1, 0))
+            .build();
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationCreateIdempotencyPort.findByReservationIdWithLock(123L))
+        .willReturn(Optional.of(idempotency));
+    given(saveReservationCreateIdempotencyPort.save(any(ReservationCreateIdempotency.class)))
+        .willAnswer(invocation -> invocation.getArgument(0, ReservationCreateIdempotency.class));
+
+    sut.afterExecutionTerminated(intent, null, ExecutionIntentStatus.FAILED_ONCHAIN, "REVERTED");
+
+    ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(reservationCaptor.capture());
+    assertThat(reservationCaptor.getValue().getStatus())
+        .isEqualTo(ReservationStatus.PAYMENT_FAILED);
+    ArgumentCaptor<ReservationCreateIdempotency> idempotencyCaptor =
+        ArgumentCaptor.forClass(ReservationCreateIdempotency.class);
+    then(saveReservationCreateIdempotencyPort).should().save(idempotencyCaptor.capture());
+    assertThat(idempotencyCaptor.getValue().getStatus())
+        .isEqualTo(ReservationCreateIdempotencyStatus.FAILED);
   }
 
   private Reservation purchasePreparing(String pendingAttemptToken) {

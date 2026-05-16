@@ -11,7 +11,6 @@ import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persiste
 import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persistence.entity.TrainerStrikeRecordEntity;
 import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persistence.repository.TrainerSanctionJpaRepository;
 import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persistence.repository.TrainerStrikeRecordJpaRepository;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -82,14 +81,13 @@ public class SanctionPersistenceAdapter
   }
 
   private TrainerSanctionEntity createAndLockSanctionRow(Long trainerId) {
-    try {
-      sanctionRepository.saveAndFlush(TrainerSanctionEntity.builder().trainerId(trainerId).build());
-    } catch (DataIntegrityViolationException e) {
-      log.info("Trainer sanction row already created concurrently: trainerId={}", trainerId);
-    }
+    sanctionRepository.insertIfAbsent(trainerId);
     return sanctionRepository
         .findByIdWithLock(trainerId)
-        .orElseGet(() -> TrainerSanctionEntity.builder().trainerId(trainerId).build());
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "trainer sanction row was not created or found: trainerId=" + trainerId));
   }
 
   @Override

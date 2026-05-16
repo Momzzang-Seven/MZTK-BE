@@ -23,7 +23,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 
 @ExtendWith(MockitoExtension.class)
 class SanctionPersistenceAdapterTest {
@@ -100,19 +99,17 @@ class SanctionPersistenceAdapterTest {
             TRAINER_ID, RecordTrainerStrikeCommand.REASON_REJECT, SOURCE_TYPE, SOURCE_ID);
 
     assertThat(result.strikeCount()).isEqualTo(1);
-    then(sanctionRepository).should().saveAndFlush(any(TrainerSanctionEntity.class));
+    then(sanctionRepository).should().insertIfAbsent(TRAINER_ID);
     then(sanctionRepository).should().save(any(TrainerSanctionEntity.class));
     then(strikeRecordRepository).should().save(any(TrainerStrikeRecordEntity.class));
   }
 
   @Test
-  @DisplayName("동시 첫 strike로 placeholder 생성이 충돌해도 기존 row를 다시 lock해서 strike를 기록한다")
-  void firstStrike_concurrentInsertConflict_relocksExistingRow() {
+  @DisplayName("동시 첫 strike에서 upsert가 기존 row를 만나도 다시 lock해서 strike를 기록한다")
+  void firstStrike_concurrentUpsertNoop_relocksExistingRow() {
     given(sanctionRepository.findByIdWithLock(TRAINER_ID))
         .willReturn(Optional.empty())
         .willReturn(Optional.of(TrainerSanctionEntity.builder().trainerId(TRAINER_ID).build()));
-    given(sanctionRepository.saveAndFlush(any(TrainerSanctionEntity.class)))
-        .willThrow(new DataIntegrityViolationException("duplicate trainer sanction"));
     given(strikeRecordRepository.existsBySourceTypeAndSourceId(SOURCE_TYPE, SOURCE_ID))
         .willReturn(false);
 
@@ -121,6 +118,7 @@ class SanctionPersistenceAdapterTest {
             TRAINER_ID, RecordTrainerStrikeCommand.REASON_REJECT, SOURCE_TYPE, SOURCE_ID);
 
     assertThat(result.strikeCount()).isEqualTo(1);
+    then(sanctionRepository).should().insertIfAbsent(TRAINER_ID);
     then(sanctionRepository).should().save(any(TrainerSanctionEntity.class));
     then(strikeRecordRepository).should().save(any(TrainerStrikeRecordEntity.class));
   }

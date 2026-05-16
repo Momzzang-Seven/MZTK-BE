@@ -10,8 +10,10 @@ import java.util.EnumSet;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
@@ -19,7 +21,9 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -53,6 +57,9 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
   private final Clock clock;
   @Nullable private RecordTrainerStrikePort recordTrainerStrikePort;
   @Nullable private LoadMarketplaceEscrowOrderPort loadMarketplaceEscrowOrderPort;
+  @Nullable private LoadExecutionTransactionPort loadExecutionTransactionPort;
+  @Nullable private LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
+  @Nullable private SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
 
   @Autowired(required = false)
   void setRecordTrainerStrikePort(RecordTrainerStrikePort recordTrainerStrikePort) {
@@ -63,6 +70,19 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
   void setLoadMarketplaceEscrowOrderPort(
       LoadMarketplaceEscrowOrderPort loadMarketplaceEscrowOrderPort) {
     this.loadMarketplaceEscrowOrderPort = loadMarketplaceEscrowOrderPort;
+  }
+
+  @Autowired(required = false)
+  void setLoadExecutionTransactionPort(LoadExecutionTransactionPort loadExecutionTransactionPort) {
+    this.loadExecutionTransactionPort = loadExecutionTransactionPort;
+  }
+
+  @Autowired(required = false)
+  void setReservationCreateIdempotencyPorts(
+      LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort,
+      SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort) {
+    this.loadReservationCreateIdempotencyPort = loadReservationCreateIdempotencyPort;
+    this.saveReservationCreateIdempotencyPort = saveReservationCreateIdempotencyPort;
   }
 
   @Override
@@ -91,20 +111,20 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
       return;
     }
     if (isAlreadyApplied(reservation, payload)) {
+      repairTxHashIfNeeded(reservation, txHash(intent));
       recordTrainerRejectStrikeIfNeeded(reservation, payload);
       return;
     }
+    String txHash = txHash(intent);
     Reservation updated =
         switch (payload.actionType()) {
-          case MARKETPLACE_CLASS_PURCHASE ->
-              applyPurchaseConfirmed(reservation, payload, intent.getPublicId());
+          case MARKETPLACE_CLASS_PURCHASE -> applyPurchaseConfirmed(reservation, payload, txHash);
           case MARKETPLACE_CLASS_CANCEL ->
               payload.actorType() == MarketplaceActorType.TRAINER
-                  ? reservation.reject(intent.getPublicId(), reservation.getRejectionReason())
-                  : reservation.cancelByUser(intent.getPublicId());
-          case MARKETPLACE_CLASS_CONFIRM -> reservation.complete(intent.getPublicId());
-          case MARKETPLACE_CLASS_EXPIRED_REFUND ->
-              reservation.markDeadlineRefunded(intent.getPublicId());
+                  ? reservation.reject(txHash, reservation.getRejectionReason())
+                  : reservation.cancelByUser(txHash);
+          case MARKETPLACE_CLASS_CONFIRM -> reservation.complete(txHash);
+          case MARKETPLACE_CLASS_EXPIRED_REFUND -> reservation.markDeadlineRefunded(txHash);
         };
     saveReservationPort.save(updated);
     recordTrainerRejectStrikeIfNeeded(updated, payload);
@@ -126,6 +146,7 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
             ? reservation.markPaymentFailed(terminalStatus.name(), failureReason)
             : reservation.rollbackToPriorState();
     saveReservationPort.save(updated);
+    markPurchaseCreateIdempotencyFailedIfNeeded(payload, reservation, terminalStatus);
   }
 
   private Reservation loadReservationForHook(
@@ -192,10 +213,10 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
   }
 
   private Reservation applyPurchaseConfirmed(
-      Reservation reservation, MarketplaceEscrowExecutionPayload payload, String intentPublicId) {
+      Reservation reservation, MarketplaceEscrowExecutionPayload payload, String txHash) {
     MarketplaceEscrowOrderView chainOrder = loadChainOrder(payload.orderKey());
     if (chainOrder != null) {
-      return applyPurchaseChainState(reservation, payload, chainOrder, intentPublicId);
+      return applyPurchaseChainState(reservation, payload, chainOrder, txHash);
     }
     Long deadlineEpochSeconds =
         payload.contractDeadlineEpochSeconds() == null
@@ -203,16 +224,17 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
             : payload.contractDeadlineEpochSeconds();
     LocalDateTime deadlineAt = deadlineAt(deadlineEpochSeconds);
     if (deadlineAt != null && payload.sessionEndAt().plusHours(24).isAfter(deadlineAt)) {
-      return reservation.markPurchaseDeadlineRecoveryRequired(deadlineEpochSeconds, deadlineAt);
+      return reservation.markPurchaseDeadlineRecoveryRequired(
+          deadlineEpochSeconds, deadlineAt, txHash);
     }
-    return reservation.markPurchaseConfirmedLocked(deadlineEpochSeconds, deadlineAt);
+    return reservation.markPurchaseConfirmedLocked(deadlineEpochSeconds, deadlineAt, txHash);
   }
 
   private Reservation applyPurchaseChainState(
       Reservation reservation,
       MarketplaceEscrowExecutionPayload payload,
       MarketplaceEscrowOrderView order,
-      String intentPublicId) {
+      String txHash) {
     if (order.isAbsent()) {
       return reservation.markDeadlineSyncRequired(
           "ORDER_ABSENT_AFTER_CONFIRMED",
@@ -223,15 +245,16 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
       case MarketplaceEscrowOrderView.STATE_CREATED -> {
         if (deadlineAt != null && payload.sessionEndAt().plusHours(24).isAfter(deadlineAt)) {
           yield reservation.markPurchaseDeadlineRecoveryRequired(
-              order.deadlineEpochSeconds(), deadlineAt);
+              order.deadlineEpochSeconds(), deadlineAt, txHash);
         }
-        yield reservation.markPurchaseConfirmedLocked(order.deadlineEpochSeconds(), deadlineAt);
+        yield reservation.markPurchaseConfirmedLocked(
+            order.deadlineEpochSeconds(), deadlineAt, txHash);
       }
       case MarketplaceEscrowOrderView.STATE_CONFIRMED ->
           reservation.syncChainOutcome(
               ReservationStatus.SETTLED,
               ReservationEscrowStatus.SETTLED,
-              intentPublicId,
+              txHash,
               order.deadlineEpochSeconds(),
               deadlineAt);
       case MarketplaceEscrowOrderView.STATE_CANCELLED ->
@@ -239,34 +262,34 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
               ? reservation.syncChainOutcome(
                   ReservationStatus.REJECTED,
                   ReservationEscrowStatus.REFUNDED,
-                  intentPublicId,
+                  txHash,
                   order.deadlineEpochSeconds(),
                   deadlineAt)
               : reservation.syncChainOutcome(
                   ReservationStatus.USER_CANCELLED,
                   ReservationEscrowStatus.REFUNDED,
-                  intentPublicId,
+                  txHash,
                   order.deadlineEpochSeconds(),
                   deadlineAt);
       case MarketplaceEscrowOrderView.STATE_ADMIN_SETTLED ->
           reservation.syncChainOutcome(
               ReservationStatus.AUTO_SETTLED,
               ReservationEscrowStatus.SETTLED,
-              intentPublicId,
+              txHash,
               order.deadlineEpochSeconds(),
               deadlineAt);
       case MarketplaceEscrowOrderView.STATE_ADMIN_REFUNDED ->
           reservation.syncChainOutcome(
               ReservationStatus.TIMEOUT_CANCELLED,
               ReservationEscrowStatus.REFUNDED,
-              intentPublicId,
+              txHash,
               order.deadlineEpochSeconds(),
               deadlineAt);
       case MarketplaceEscrowOrderView.STATE_DEADLINE_REFUNDED ->
           reservation.syncChainOutcome(
               ReservationStatus.DEADLINE_REFUNDED,
               ReservationEscrowStatus.DEADLINE_REFUNDED,
-              intentPublicId,
+              txHash,
               order.deadlineEpochSeconds(),
               deadlineAt);
       default ->
@@ -288,6 +311,45 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
       return null;
     }
     return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), clock.getZone());
+  }
+
+  @Nullable
+  private String txHash(ExecutionIntent intent) {
+    if (loadExecutionTransactionPort == null || intent.getSubmittedTxId() == null) {
+      return null;
+    }
+    return loadExecutionTransactionPort
+        .findById(intent.getSubmittedTxId())
+        .map(ExecutionTransactionSummary::txHash)
+        .filter(txHash -> txHash != null && !txHash.isBlank())
+        .orElse(null);
+  }
+
+  private void markPurchaseCreateIdempotencyFailedIfNeeded(
+      MarketplaceEscrowExecutionPayload payload,
+      Reservation reservation,
+      ExecutionIntentStatus terminalStatus) {
+    if (payload.actionType() != MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE
+        || loadReservationCreateIdempotencyPort == null
+        || saveReservationCreateIdempotencyPort == null) {
+      return;
+    }
+    loadReservationCreateIdempotencyPort
+        .findByReservationIdWithLock(reservation.getId())
+        .ifPresent(
+            idempotency ->
+                saveReservationCreateIdempotencyPort.save(
+                    idempotency.markFailed(
+                        "{\"status\":\"FAILED\",\"terminalStatus\":\""
+                            + terminalStatus.name()
+                            + "\"}")));
+  }
+
+  private void repairTxHashIfNeeded(Reservation reservation, @Nullable String txHash) {
+    if (txHash == null || txHash.equals(reservation.getTxHash())) {
+      return;
+    }
+    saveReservationPort.save(reservation.updateTxHash(txHash));
   }
 
   private MarketplaceEscrowExecutionPayload readPayload(String payloadSnapshotJson) {

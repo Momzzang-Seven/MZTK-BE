@@ -414,10 +414,16 @@ public class Reservation {
 
   public Reservation markPurchaseConfirmedLocked(
       Long contractDeadlineEpochSeconds, LocalDateTime contractDeadlineAt) {
+    return markPurchaseConfirmedLocked(contractDeadlineEpochSeconds, contractDeadlineAt, null);
+  }
+
+  public Reservation markPurchaseConfirmedLocked(
+      Long contractDeadlineEpochSeconds, LocalDateTime contractDeadlineAt, String txHash) {
     guardTransition(ReservationStatus.PENDING);
     return toBuilder()
         .status(ReservationStatus.PENDING)
         .escrowStatus(ReservationEscrowStatus.LOCKED)
+        .txHash(txHash)
         .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
         .contractDeadlineAt(contractDeadlineAt)
         .currentExecutionIntentPublicId(null)
@@ -433,10 +439,17 @@ public class Reservation {
 
   public Reservation markPurchaseDeadlineRecoveryRequired(
       Long contractDeadlineEpochSeconds, LocalDateTime contractDeadlineAt) {
+    return markPurchaseDeadlineRecoveryRequired(
+        contractDeadlineEpochSeconds, contractDeadlineAt, null);
+  }
+
+  public Reservation markPurchaseDeadlineRecoveryRequired(
+      Long contractDeadlineEpochSeconds, LocalDateTime contractDeadlineAt, String txHash) {
     guardTransition(ReservationStatus.DEADLINE_RECOVERY_REQUIRED);
     return toBuilder()
         .status(ReservationStatus.DEADLINE_RECOVERY_REQUIRED)
         .escrowStatus(ReservationEscrowStatus.DEADLINE_RECOVERY_REQUIRED)
+        .txHash(txHash)
         .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
         .contractDeadlineAt(contractDeadlineAt)
         .currentExecutionIntentPublicId(null)

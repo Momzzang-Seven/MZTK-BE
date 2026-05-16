@@ -7,4 +7,6 @@ public interface LoadReservationCreateIdempotencyPort {
 
   Optional<ReservationCreateIdempotency> findByBuyerIdAndKeyHashWithLock(
       Long buyerId, String keyHash);
+
+  Optional<ReservationCreateIdempotency> findByReservationIdWithLock(Long reservationId);
 }
