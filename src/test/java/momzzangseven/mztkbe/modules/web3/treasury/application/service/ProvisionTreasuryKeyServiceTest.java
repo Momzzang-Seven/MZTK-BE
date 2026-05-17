@@ -65,6 +65,7 @@ class ProvisionTreasuryKeyServiceTest {
   @Mock private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   @Mock private SignDigestPort signDigestPort;
   @Mock private TreasuryAuditRecorder treasuryAuditRecorder;
+  @Mock private KmsAuditRecorder kmsAuditRecorder;
   @Mock private ApplicationEventPublisher applicationEventPublisher;
 
   private ProvisionTreasuryKeyTransactionalDelegate delegate;
@@ -81,6 +82,7 @@ class ProvisionTreasuryKeyServiceTest {
             kmsKeyMaterialWrapperPort,
             signDigestPort,
             treasuryAuditRecorder,
+            kmsAuditRecorder,
             applicationEventPublisher,
             fixed);
     service = new ProvisionTreasuryKeyService(delegate, treasuryAuditRecorder);

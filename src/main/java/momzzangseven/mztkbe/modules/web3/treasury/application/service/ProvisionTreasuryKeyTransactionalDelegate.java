@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.KmsAuditAction;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
@@ -62,6 +63,7 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
   private final KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   private final SignDigestPort signDigestPort;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
+  private final KmsAuditRecorder kmsAuditRecorder;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;
   private final SecureRandom secureRandom = new SecureRandom();
@@ -301,10 +303,16 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
     byte[] rawPrivateKey = decodePrivateKey(command.rawPrivateKey());
     byte[] wrappedKey = null;
     AtomicBoolean cleanupInvoked = new AtomicBoolean(false);
+    String walletAlias = command.role().toAlias();
     try {
       kmsKeyId = kmsKeyLifecyclePort.createKey();
       registerCleanupOnRollback(
-          kmsKeyId, cleanupInvoked, failureAuditWritten, command.operatorUserId(), derivedAddress);
+          kmsKeyId,
+          cleanupInvoked,
+          failureAuditWritten,
+          command.operatorUserId(),
+          walletAlias,
+          derivedAddress);
       KmsKeyLifecyclePort.ImportParams params =
           kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
       wrappedKey = kmsKeyMaterialWrapperPort.wrap(rawPrivateKey, params.wrappingPublicKey());
@@ -316,7 +324,7 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
     } catch (RuntimeException e) {
       if (kmsKeyId != null && cleanupInvoked.compareAndSet(false, true)) {
         log.warn("Mint failed mid-flight; cleaning up KMS key={}", kmsKeyId);
-        cleanupKmsKey(kmsKeyId);
+        cleanupKmsKey(kmsKeyId, command.operatorUserId(), walletAlias, derivedAddress);
       }
       if (failureAuditWritten.compareAndSet(false, true)) {
         treasuryAuditRecorder.record(
@@ -334,13 +342,19 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       AtomicBoolean cleanupInvoked,
       AtomicBoolean failureAuditWritten,
       Long operatorUserId,
+      String walletAlias,
       String derivedAddress) {
     if (!TransactionSynchronizationManager.isSynchronizationActive()) {
       return;
     }
     TransactionSynchronizationManager.registerSynchronization(
         buildCleanupSync(
-            createdKmsKeyId, cleanupInvoked, failureAuditWritten, operatorUserId, derivedAddress));
+            createdKmsKeyId,
+            cleanupInvoked,
+            failureAuditWritten,
+            operatorUserId,
+            walletAlias,
+            derivedAddress));
   }
 
   /**
@@ -352,6 +366,7 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       AtomicBoolean cleanupInvoked,
       AtomicBoolean failureAuditWritten,
       Long operatorUserId,
+      String walletAlias,
       String derivedAddress) {
     return new TransactionSynchronization() {
       @Override
@@ -362,7 +377,7 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
           case STATUS_ROLLED_BACK:
             if (cleanupInvoked.compareAndSet(false, true)) {
               log.warn("Outer transaction rolled back; cleaning up KMS key={}", createdKmsKeyId);
-              cleanupKmsKey(createdKmsKeyId);
+              cleanupKmsKey(createdKmsKeyId, operatorUserId, walletAlias, derivedAddress);
             }
             return;
           case STATUS_UNKNOWN:
@@ -382,7 +397,15 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
     };
   }
 
-  void cleanupKmsKey(String kmsKeyId) {
+  /**
+   * Dispose an orphan KMS key after rollback or mid-mint failure. Each step is best-effort and
+   * isolated by its own try/catch so a failed {@code disableKey} cannot block the subsequent {@code
+   * scheduleKeyDeletion}. Failure paths additionally write a {@code KMS_DISABLE} / {@code
+   * KMS_SCHEDULE_DELETION} failure row to {@code web3_treasury_kms_audits} with the {@code
+   * kmsKeyId}, so operators can locate the orphan key when AWS-side cleanup did not succeed.
+   */
+  void cleanupKmsKey(
+      String kmsKeyId, Long operatorUserId, String walletAlias, String walletAddress) {
     if (kmsKeyId == null) {
       return;
     }
@@ -390,11 +413,27 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       kmsKeyLifecyclePort.disableKey(kmsKeyId);
     } catch (RuntimeException ex) {
       log.warn("Cleanup disableKey failed for kmsKeyId={}", kmsKeyId, ex);
+      kmsAuditRecorder.record(
+          operatorUserId,
+          walletAlias,
+          kmsKeyId,
+          walletAddress,
+          KmsAuditAction.KMS_DISABLE,
+          false,
+          ex.getClass().getSimpleName());
     }
     try {
       kmsKeyLifecyclePort.scheduleKeyDeletion(kmsKeyId, CLEANUP_PENDING_WINDOW_DAYS);
     } catch (RuntimeException ex) {
       log.warn("Cleanup scheduleKeyDeletion failed for kmsKeyId={}", kmsKeyId, ex);
+      kmsAuditRecorder.record(
+          operatorUserId,
+          walletAlias,
+          kmsKeyId,
+          walletAddress,
+          KmsAuditAction.KMS_SCHEDULE_DELETION,
+          false,
+          ex.getClass().getSimpleName());
     }
   }
 
