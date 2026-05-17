@@ -23,4 +23,9 @@ public class DescribeKmsKeyAdapter implements DescribeKmsKeyPort {
   public KmsKeyState describe(String kmsKeyId) {
     return describeKmsKeyUseCase.execute(kmsKeyId);
   }
+
+  @Override
+  public KmsKeyState describeFresh(String kmsKeyId) {
+    return describeKmsKeyUseCase.executeFresh(kmsKeyId);
+  }
 }

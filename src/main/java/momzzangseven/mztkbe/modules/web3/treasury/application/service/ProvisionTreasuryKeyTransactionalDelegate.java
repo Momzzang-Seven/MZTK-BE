@@ -314,9 +314,10 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
    *       bind/update). The two AFTER_COMMIT handlers run independently and converge.
    * </ul>
    *
-   * <p>The extra {@link DescribeKmsKeyPort#describe(String)} RPC is issued only on the mismatch
-   * path; when {@code targetIdMatches=true}, {@code aliasInfo.state()} is already the row key's
-   * state.
+   * <p>The extra {@link DescribeKmsKeyPort#describeFresh(String)} RPC is issued only on the
+   * mismatch path; when {@code targetIdMatches=true}, {@code aliasInfo.state()} is already the row
+   * key's state. The fresh (uncached) channel is used here so provisioning recovery observes
+   * post-mutation KMS state instead of the signing-path's 60s burst-absorber cache.
    */
   private ProvisionTreasuryKeyResult handleExistingDisabledRow(
       ProvisionTreasuryKeyCommand command,
@@ -331,7 +332,9 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
             && existing.getKmsKeyId().equals(aliasInfo.targetKmsKeyId());
 
     KmsKeyState rowKeyState =
-        targetIdMatches ? aliasInfo.state() : describeKmsKeyPort.describe(existing.getKmsKeyId());
+        targetIdMatches
+            ? aliasInfo.state()
+            : describeKmsKeyPort.describeFresh(existing.getKmsKeyId());
 
     boolean rowKeyDying =
         rowKeyState == KmsKeyState.PENDING_DELETION

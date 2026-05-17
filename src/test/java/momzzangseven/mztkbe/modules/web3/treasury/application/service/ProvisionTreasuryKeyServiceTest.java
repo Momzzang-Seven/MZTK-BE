@@ -518,7 +518,7 @@ class ProvisionTreasuryKeyServiceTest {
         .thenReturn(Optional.of(disabled));
     when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
         .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, "other-kms-id"));
-    when(describeKmsKeyPort.describe("existing-kms-id")).thenReturn(KmsKeyState.ENABLED);
+    when(describeKmsKeyPort.describeFresh("existing-kms-id")).thenReturn(KmsKeyState.ENABLED);
     when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     ProvisionTreasuryKeyCommand command =
@@ -532,7 +532,7 @@ class ProvisionTreasuryKeyServiceTest {
     assertThat(captor.getValue().aliasRepairMode()).isTrue();
     assertThat(captor.getValue().kmsKeyId()).isEqualTo("existing-kms-id");
     verify(saveTreasuryWalletPort, times(1)).save(any());
-    verify(describeKmsKeyPort).describe("existing-kms-id");
+    verify(describeKmsKeyPort).describeFresh("existing-kms-id");
     verifyNoMintHappened();
   }
 
@@ -546,7 +546,7 @@ class ProvisionTreasuryKeyServiceTest {
         .thenReturn(Optional.of(disabled));
     when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
         .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, "other-kms-id"));
-    when(describeKmsKeyPort.describe("existing-kms-id")).thenReturn(KmsKeyState.DISABLED);
+    when(describeKmsKeyPort.describeFresh("existing-kms-id")).thenReturn(KmsKeyState.DISABLED);
     when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     ProvisionTreasuryKeyCommand command =
@@ -571,7 +571,7 @@ class ProvisionTreasuryKeyServiceTest {
         .thenReturn(Optional.of(disabled));
     when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
         .thenReturn(new AliasTargetInfo(KmsKeyState.UNAVAILABLE, null));
-    when(describeKmsKeyPort.describe("existing-kms-id")).thenReturn(KmsKeyState.ENABLED);
+    when(describeKmsKeyPort.describeFresh("existing-kms-id")).thenReturn(KmsKeyState.ENABLED);
     when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     ProvisionTreasuryKeyCommand command =
@@ -597,7 +597,8 @@ class ProvisionTreasuryKeyServiceTest {
         .thenReturn(Optional.of(disabled));
     when(kmsKeyLifecyclePort.describeAlias("reward-treasury"))
         .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, "other-kms-id"));
-    when(describeKmsKeyPort.describe("existing-kms-id")).thenReturn(KmsKeyState.PENDING_DELETION);
+    when(describeKmsKeyPort.describeFresh("existing-kms-id"))
+        .thenReturn(KmsKeyState.PENDING_DELETION);
     when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     ProvisionTreasuryKeyCommand command =

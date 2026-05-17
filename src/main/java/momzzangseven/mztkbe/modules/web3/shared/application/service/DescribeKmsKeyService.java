@@ -9,14 +9,22 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import org.springframework.stereotype.Service;
 
 /**
- * Default {@link DescribeKmsKeyUseCase} implementation backed by an in-process Caffeine cache.
+ * Default {@link DescribeKmsKeyUseCase} implementation exposing two describe channels:
  *
- * <p>The cache absorbs burst traffic during a single signing batch — for example, the reward
- * worker's {@code VerifyTreasuryWalletForSignUseCase} call right before each sign. Without a cache,
- * each batch run would issue one DescribeKey per transaction, which is both wasteful and
- * rate-limit-sensitive.
+ * <ul>
+ *   <li>{@link #execute(String)} — cached via an in-process Caffeine cache; intended for the
+ *       signing-path's burst absorption (e.g. the reward worker's {@code
+ *       VerifyTreasuryWalletForSignUseCase} call right before each sign).
+ *   <li>{@link #executeFresh(String)} — uncached straight-through to {@link
+ *       KmsKeyDescribePort#describe(String)}; intended for provisioning-recovery decision paths
+ *       that must observe post-mutation KMS state and cannot tolerate the cache's pre-mutation view
+ *       for up to the TTL.
+ * </ul>
  *
- * <p>Cache policy (design doc §9):
+ * <p>The cache absorbs burst traffic during a single signing batch — without it, each batch run
+ * would issue one DescribeKey per transaction, which is both wasteful and rate-limit-sensitive.
+ *
+ * <p>Cache policy (design doc §9) — applies ONLY to {@link #execute(String)}:
  *
  * <ul>
  *   <li>60-second TTL via {@code expireAfterWrite} — short enough that operator actions (disable /
@@ -56,5 +64,10 @@ public class DescribeKmsKeyService implements DescribeKmsKeyUseCase {
   @Override
   public KmsKeyState execute(String kmsKeyId) {
     return cache.get(kmsKeyId, kmsKeyDescribePort::describe);
+  }
+
+  @Override
+  public KmsKeyState executeFresh(String kmsKeyId) {
+    return kmsKeyDescribePort.describe(kmsKeyId);
   }
 }
