@@ -24,9 +24,11 @@ import momzzangseven.mztkbe.integration.e2e.web3.treasury.support.InMemoryKmsKey
 import momzzangseven.mztkbe.integration.e2e.web3.treasury.support.TreasuryE2EKmsFakeConfig;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.out.KmsKeyDescribePort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.VerifyTreasuryWalletForSignUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeKmsKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
@@ -102,6 +104,8 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
   @MockitoBean private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   @MockitoBean private SignDigestPort signDigestPort;
   @MockitoSpyBean private DescribeKmsKeyPort describeKmsKeyPort;
+  @MockitoSpyBean private KmsKeyDescribePort sharedKmsKeyDescribePort;
+  @Autowired private VerifyTreasuryWalletForSignUseCase verifyTreasuryWalletForSignUseCase;
 
   private String adminToken;
 
@@ -1381,6 +1385,106 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
       // enableKey on K0 was never called — drift impossible.
       verify(kmsKeyLifecyclePort, never()).enableKey(k0);
+    }
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-stale-cache-recovery] DISABLED row + 외부 schedule-deletion + 외부 alias 재바인딩 →"
+            + " provisioning-recovery 가 describeFresh 로 stale cache 우회 → replaceKey 라우팅 (Commit 1 회귀 가드)")
+    void provisionAfterExternalScheduleDeletion_freshDescribeRoutesToReplaceKey() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // 1) C0 FreshProvision — mint K1, DB ACTIVE, KMS ENABLED, alias→K1.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k1 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      // 2) Cache warm-up via the signing-path entry point — populates DescribeKmsKeyService's
+      //    Caffeine cache with K1→ENABLED. Goes through the real shared describe port (spy)
+      //    while no stub is in place, so the cache stores the live value.
+      verifyTreasuryWalletForSignUseCase.execute(REWARD_ALIAS);
+      verify(sharedKmsKeyDescribePort, times(1)).describe(k1);
+
+      // 3) Disable the wallet — DB DISABLED, AFTER_COMMIT disableKey(K1) → KMS DISABLED.
+      assertThat(disableWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.DISABLED);
+
+      // 4) External operator intervention #1 — K1 is driven to PENDING_DELETION outside the app
+      //    (bypass the spy so the call isn't recorded against Mockito invocation history).
+      kmsFake.scheduleKeyDeletion(k1, 7);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_DELETION);
+
+      // 5) External operator intervention #2 — alias is re-bound to a new key K2 outside the app.
+      //    Pre-mint K2 in the fake so it's a known key id; then stub describeAlias on the spy to
+      //    report the externally-rotated alias target. (The fake's aliasToKeyId map still records
+      //    K1, but the production code reads alias state via describeAlias which is now
+      //    stubbed — this matches the realistic scenario where AWS state diverged from the local
+      //    fake's view.)
+      String k2 = "k2-stale-cache-recovery";
+      kmsFake.useFixedKeyIdForNextCreate(k2);
+      kmsKeyLifecyclePort.createKey(); // mint K2 in fake → ENABLED
+      doReturn(new AliasTargetInfo(KmsKeyState.ENABLED, k2))
+          .when(kmsKeyLifecyclePort)
+          .describeAlias(REWARD_ALIAS);
+
+      // 6) Stub the SHARED describe port to return PENDING_DELETION on subsequent calls. The
+      //    cache already holds K1→ENABLED from step 2, so cached execute(K1) still returns
+      //    ENABLED (cache hit, the stub is bypassed). Only executeFresh(K1) — used by
+      //    handleExistingDisabledRow's mismatch branch — reaches the spy and gets the stubbed
+      //    PENDING_DELETION. This is exactly what Commit 1's describeFresh channel guards.
+      doReturn(KmsKeyState.PENDING_DELETION).when(sharedKmsKeyDescribePort).describe(k1);
+
+      int updateAliasBefore = countKmsAuditRows("KMS_UPDATE_ALIAS", true);
+      int disableBefore = countKmsAuditRows("KMS_DISABLE", true);
+      int scheduleBefore = countKmsAuditRows("KMS_SCHEDULE_DELETION", true);
+      int sharedDescribeCallsBefore =
+          org.mockito.Mockito.mockingDetails(sharedKmsKeyDescribePort).getInvocations().stream()
+              .filter(i -> "describe".equals(i.getMethod().getName()))
+              .mapToInt(i -> 1)
+              .sum();
+      clearInvocations(kmsKeyLifecyclePort);
+
+      // 7) Re-provision with the same raw key + address. Path: addressMatches=true →
+      //    DISABLED row → handleExistingDisabledRow. describeAlias returns (ENABLED, K2),
+      //    targetIdMatches=false (K1 != K2) → describeFresh(K1) returns PENDING_DELETION via
+      //    the spy stub (bypassing the still-ENABLED cache entry). rowKeyDying=true →
+      //    replaceKey(disposeOldKey=false). AFTER_COMMIT replaces alias → K3, K1 untouched.
+      ResponseEntity<String> reRes = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(reRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> finalRow = walletRow(REWARD_ALIAS);
+      String k3 = (String) finalRow.get("kms_key_id");
+      assertThat(k3).isNotEqualTo(k1);
+      assertThat(k3).isNotEqualTo(k2);
+      assertThat((String) finalRow.get("status")).isEqualTo("ACTIVE");
+
+      // Regression-guard #1 — replaceKey branch fired: createKey ran, alias retargeted to K3.
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k3);
+      assertThat(kmsFake.keyState(k3)).isEqualTo(KmsKeyState.ENABLED);
+      assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(updateAliasBefore + 1);
+
+      // Regression-guard #2 — disposeOldKey=false: the dying K1 must not be re-disabled or
+      // re-scheduled. K1 stays PENDING_DELETION.
+      verify(kmsKeyLifecyclePort, never()).disableKey(k1);
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(eq(k1), anyInt());
+      assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(disableBefore);
+      assertThat(countKmsAuditRows("KMS_SCHEDULE_DELETION", true)).isEqualTo(scheduleBefore);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_DELETION);
+
+      // Regression-guard #3 — the shared describe port was invoked at least once AFTER the stub
+      // was installed (i.e. describeFresh actually reached the spy). Pre-Commit-1, the production
+      // code would have called the cached treasury describe path which short-circuits on the
+      // cache hit and never reaches the shared port — leaving the call count unchanged. The
+      // bug-fix wires describeFresh through this exact spy.
+      int sharedDescribeCallsAfter =
+          org.mockito.Mockito.mockingDetails(sharedKmsKeyDescribePort).getInvocations().stream()
+              .filter(i -> "describe".equals(i.getMethod().getName()))
+              .mapToInt(i -> 1)
+              .sum();
+      assertThat(sharedDescribeCallsAfter)
+          .as("describeFresh must reach the shared port even when the cache holds a stale value")
+          .isGreaterThan(sharedDescribeCallsBefore);
     }
   }
 
