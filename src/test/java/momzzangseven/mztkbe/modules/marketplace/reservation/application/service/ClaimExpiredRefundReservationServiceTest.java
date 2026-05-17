@@ -106,36 +106,6 @@ class ClaimExpiredRefundReservationServiceTest {
       assertThat(result.web3()).isNotNull();
       assertThat(result.web3().actionType()).isEqualTo("MARKETPLACE_CLASS_EXPIRED_REFUND");
     }
-
-    @Test
-    @DisplayName("[DR-01B] contract deadline과 같은 시각이면 deadline refund를 허용한다")
-    void deadline_같은_시각_환불_허용() {
-      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
-      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
-          .willReturn(Optional.of(pendingReservation(LocalDateTime.now(FIXED_CLOCK))))
-          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
-      given(saveReservationPort.save(any()))
-          .willAnswer(
-              invocation -> {
-                Reservation saved = invocation.getArgument(0, Reservation.class);
-                latestSaved.set(saved);
-                return saved;
-              });
-      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
-          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
-      given(loadReservationEscrowPaymentConfigPort.load())
-          .willReturn(
-              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
-                  "0x3333333333333333333333333333333333333333", 18));
-      given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
-          .willReturn(new PrepareReservationEscrowResult(web3()));
-
-      ClaimExpiredRefundReservationResult result =
-          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
-
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
-      assertThat(result.web3()).isNotNull();
-    }
   }
 
   @Nested
@@ -161,6 +131,24 @@ class ClaimExpiredRefundReservationServiceTest {
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(
               Optional.of(pendingReservation(LocalDateTime.now(FIXED_CLOCK).plusMinutes(1))));
+
+      assertThatThrownBy(
+              () -> sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(
+                          ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED.getCode()));
+
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[DR-03B] contract deadline과 같은 시각이면 refund intent를 만들지 않는다")
+    void deadline_같은_시각_환불_차단() {
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(pendingReservation(LocalDateTime.now(FIXED_CLOCK))));
 
       assertThatThrownBy(
               () -> sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID)))

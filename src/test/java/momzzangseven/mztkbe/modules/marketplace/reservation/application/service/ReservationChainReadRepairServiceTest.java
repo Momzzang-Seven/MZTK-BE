@@ -96,7 +96,8 @@ class ReservationChainReadRepairServiceTest {
   }
 
   @Test
-  @DisplayName("batch repair는 CANCELLED와 DEADLINE_REFUNDED 주문을 local terminal 상태로 저장한다")
+  @DisplayName(
+      "batch repair는 actor evidence 없는 CANCELLED를 manual sync로 두고 DEADLINE_REFUNDED는 terminal로 저장한다")
   void repairBatch_syncsCancelledAndDeadlineRefundedOrders() {
     Reservation cancelled = syncRequiredReservation(1L, "0x" + "0".repeat(63) + "1");
     Reservation refunded = syncRequiredReservation(2L, "0x" + "0".repeat(63) + "2");
@@ -125,7 +126,8 @@ class ReservationChainReadRepairServiceTest {
 
     assertThat(repaired)
         .extracting(Reservation::getStatus)
-        .containsExactly(ReservationStatus.USER_CANCELLED, ReservationStatus.DEADLINE_REFUNDED);
+        .containsExactly(
+            ReservationStatus.MANUAL_SYNC_REQUIRED, ReservationStatus.DEADLINE_REFUNDED);
   }
 
   @Test

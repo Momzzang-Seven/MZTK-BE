@@ -18,7 +18,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -150,12 +149,7 @@ public class ReservationChainReadRepairService implements RepairReservationChain
                   order.deadlineEpochSeconds(),
                   deadlineAt);
           case ReservationEscrowOrderView.STATE_CANCELLED ->
-              reservation.syncChainOutcome(
-                  cancelledStatus(reservation),
-                  ReservationEscrowStatus.REFUNDED,
-                  reservation.getTxHash(),
-                  order.deadlineEpochSeconds(),
-                  deadlineAt);
+              syncCancelledChainOutcome(reservation, order, deadlineAt);
           case ReservationEscrowOrderView.STATE_ADMIN_SETTLED ->
               reservation.syncChainOutcome(
                   ReservationStatus.AUTO_SETTLED,
@@ -207,11 +201,14 @@ public class ReservationChainReadRepairService implements RepairReservationChain
         order.deadlineEpochSeconds(), deadlineAt, completionWindowFits);
   }
 
-  private ReservationStatus cancelledStatus(Reservation reservation) {
-    return reservation.getPendingAction() == ReservationEscrowAction.TRAINER_REJECT
-            || reservation.getStatus() == ReservationStatus.REJECT_PENDING
-        ? ReservationStatus.REJECTED
-        : ReservationStatus.USER_CANCELLED;
+  private Reservation syncCancelledChainOutcome(
+      Reservation reservation, ReservationEscrowOrderView order, LocalDateTime deadlineAt) {
+    return reservation.syncChainOutcome(
+        ReservationStatus.MANUAL_SYNC_REQUIRED,
+        ReservationEscrowStatus.MANUAL_SYNC_REQUIRED,
+        reservation.getTxHash(),
+        order.deadlineEpochSeconds(),
+        deadlineAt);
   }
 
   private boolean sameRepairState(Reservation before, Reservation after) {

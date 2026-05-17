@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentCleanupView;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentCleanupProtectionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 @ConditionalOnProperty(
     prefix = "web3",
     name = {"eip7702.enabled", "eip7702.cleanup.enabled"},
@@ -62,17 +64,24 @@ public class CompositeExecutionCleanupProtectionAdapter
     FilterQnaExecutionCleanupCandidatesUseCase qnaProtection =
         qnaProtectionProvider.getIfAvailable();
     if (!qnaIds.isEmpty()) {
-      deletableIds.addAll(
-          qnaProtection == null ? qnaIds : qnaProtection.filterDeletableFinalizedIntentIds(qnaIds));
+      if (qnaProtection == null) {
+        log.warn("QnA execution cleanup protection is unavailable; keeping intents: {}", qnaIds);
+      } else {
+        deletableIds.addAll(qnaProtection.filterDeletableFinalizedIntentIds(qnaIds));
+      }
     }
 
     FilterMarketplaceExecutionCleanupCandidatesUseCase marketplaceProtection =
         marketplaceProtectionProvider.getIfAvailable();
     if (!marketplaceIds.isEmpty()) {
-      deletableIds.addAll(
-          marketplaceProtection == null
-              ? marketplaceIds
-              : marketplaceProtection.filterDeletableFinalizedIntentIds(marketplaceIds));
+      if (marketplaceProtection == null) {
+        log.warn(
+            "Marketplace execution cleanup protection is unavailable; keeping intents: {}",
+            marketplaceIds);
+      } else {
+        deletableIds.addAll(
+            marketplaceProtection.filterDeletableFinalizedIntentIds(marketplaceIds));
+      }
     }
 
     return candidateIntentIds.stream().filter(deletableIds::contains).toList();

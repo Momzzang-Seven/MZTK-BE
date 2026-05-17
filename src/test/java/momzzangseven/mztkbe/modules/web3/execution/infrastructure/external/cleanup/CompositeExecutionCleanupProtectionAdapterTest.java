@@ -66,6 +66,73 @@ class CompositeExecutionCleanupProtectionAdapterTest {
     assertThat(result).containsExactly(1L, 3L);
   }
 
+  @Test
+  @DisplayName("marketplace user action 전체를 marketplace 보호 필터로 라우팅한다")
+  void filterDeletableFinalizedIntentIds_routesAllMarketplaceUserActions() {
+    List<Long> candidateIds = List.of(1L, 2L, 3L, 4L);
+    given(executionIntentPersistencePort.findAllByIdsForUpdate(candidateIds))
+        .willReturn(
+            List.of(
+                view(
+                    1L,
+                    ExecutionResourceType.ORDER,
+                    "1",
+                    ExecutionActionType.MARKETPLACE_CLASS_PURCHASE),
+                view(
+                    2L,
+                    ExecutionResourceType.ORDER,
+                    "2",
+                    ExecutionActionType.MARKETPLACE_CLASS_CANCEL),
+                view(
+                    3L,
+                    ExecutionResourceType.ORDER,
+                    "3",
+                    ExecutionActionType.MARKETPLACE_CLASS_CONFIRM),
+                view(
+                    4L,
+                    ExecutionResourceType.ORDER,
+                    "4",
+                    ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND)));
+    given(marketplaceProvider.getIfAvailable()).willReturn(marketplaceProtection);
+    given(marketplaceProtection.filterDeletableFinalizedIntentIds(candidateIds))
+        .willReturn(List.of(2L, 4L));
+    CompositeExecutionCleanupProtectionAdapter adapter =
+        new CompositeExecutionCleanupProtectionAdapter(
+            executionIntentPersistencePort, qnaProvider, marketplaceProvider);
+
+    List<Long> result = adapter.filterDeletableFinalizedIntentIds(candidateIds);
+
+    assertThat(result).containsExactly(2L, 4L);
+  }
+
+  @Test
+  @DisplayName("feature protection provider가 없으면 해당 feature intent는 삭제하지 않는다")
+  void filterDeletableFinalizedIntentIds_failClosedWhenFeatureProtectionMissing() {
+    List<Long> candidateIds = List.of(1L, 2L, 3L);
+    given(executionIntentPersistencePort.findAllByIdsForUpdate(candidateIds))
+        .willReturn(
+            List.of(
+                view(
+                    1L,
+                    ExecutionResourceType.QUESTION,
+                    "101",
+                    ExecutionActionType.QNA_QUESTION_CREATE),
+                view(
+                    2L,
+                    ExecutionResourceType.ORDER,
+                    "202",
+                    ExecutionActionType.MARKETPLACE_CLASS_PURCHASE),
+                view(
+                    3L, ExecutionResourceType.TRANSFER, "303", ExecutionActionType.TRANSFER_SEND)));
+    CompositeExecutionCleanupProtectionAdapter adapter =
+        new CompositeExecutionCleanupProtectionAdapter(
+            executionIntentPersistencePort, qnaProvider, marketplaceProvider);
+
+    List<Long> result = adapter.filterDeletableFinalizedIntentIds(candidateIds);
+
+    assertThat(result).containsExactly(3L);
+  }
+
   private ExecutionIntent view(
       Long id,
       ExecutionResourceType resourceType,

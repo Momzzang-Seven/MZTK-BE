@@ -158,6 +158,26 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
+  @DisplayName("actor evidence 없는 CANCELLED order는 buyer cancel로 확정하지 않고 manual sync로 둔다")
+  void recovery_cancelledOrderWithoutActorEvidence_marksManualSyncRequired() {
+    Reservation reservation = reservation(ReservationStatus.PURCHASE_PENDING);
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CANCELLED, 1_900_000_000L));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.MANUAL_SYNC_REQUIRED);
+    assertThat(result.escrowStatus())
+        .isEqualTo(ReservationEscrowStatus.MANUAL_SYNC_REQUIRED.name());
+    assertThat(result.web3()).isNull();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
   @DisplayName("deadline 이후 cancel pending recovery는 contract가 허용하는 cancel intent를 다시 준비한다")
   void expired_cancelPending_recovery_preparesCancelIntent() {
     long deadlineEpochSeconds = FIXED_CLOCK.instant().getEpochSecond();

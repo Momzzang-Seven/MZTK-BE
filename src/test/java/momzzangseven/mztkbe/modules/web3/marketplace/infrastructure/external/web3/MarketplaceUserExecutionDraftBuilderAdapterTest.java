@@ -127,7 +127,7 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   }
 
   @Test
-  @DisplayName("deadline refund draft는 서버 signature 없이 context signingInstant 기반으로 만료를 계산한다")
+  @DisplayName("deadline refund draft는 서버 signature 없이 contract deadline cap을 적용하지 않는다")
   void build_deadlineRefund_omitsServerSignature() {
     given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
         .willReturn(Optional.of(BUYER));
@@ -141,7 +141,8 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
         sut.build(
             request(
                 MarketplaceExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND,
-                MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE));
+                MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
+                1_100L));
 
     assertThat(draft.signatureMeta()).isNull();
     assertThat(draft.expiresAt()).isEqualTo(LocalDateTime.ofEpochSecond(1_200, 0, ZoneOffset.UTC));

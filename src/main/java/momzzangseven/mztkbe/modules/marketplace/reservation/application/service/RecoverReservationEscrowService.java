@@ -203,13 +203,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
                   order.deadlineEpochSeconds(),
                   deadlineAt));
       case ReservationEscrowOrderView.STATE_CANCELLED ->
-          stopWith(
-              reservation.syncChainOutcome(
-                  cancelledStatus(reservation),
-                  ReservationEscrowStatus.REFUNDED,
-                  reservation.getTxHash(),
-                  order.deadlineEpochSeconds(),
-                  deadlineAt));
+          stopWith(syncCancelledChainOutcome(reservation, order, deadlineAt));
       case ReservationEscrowOrderView.STATE_ADMIN_SETTLED ->
           stopWith(
               reservation.syncChainOutcome(
@@ -263,7 +257,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
       return stopWith(synced);
     }
     if (flow.action() == RecoveryAction.DEADLINE_REFUND) {
-      if (deadlineAt == null || LocalDateTime.now(clock).isBefore(deadlineAt)) {
+      if (deadlineAt == null || !LocalDateTime.now(clock).isAfter(deadlineAt)) {
         throw new BusinessException(
             ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
             "Deadline refund is not yet available on the escrow contract");
@@ -289,6 +283,31 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
             || reservation.getStatus() == ReservationStatus.REJECT_PENDING
         ? ReservationStatus.REJECTED
         : ReservationStatus.USER_CANCELLED;
+  }
+
+  private boolean hasCancelActorEvidence(Reservation reservation) {
+    return reservation.getPendingAction() == ReservationEscrowAction.BUYER_CANCEL
+        || reservation.getPendingAction() == ReservationEscrowAction.TRAINER_REJECT
+        || reservation.getStatus() == ReservationStatus.CANCEL_PENDING
+        || reservation.getStatus() == ReservationStatus.REJECT_PENDING;
+  }
+
+  private Reservation syncCancelledChainOutcome(
+      Reservation reservation, ReservationEscrowOrderView order, LocalDateTime deadlineAt) {
+    if (!hasCancelActorEvidence(reservation)) {
+      return reservation.syncChainOutcome(
+          ReservationStatus.MANUAL_SYNC_REQUIRED,
+          ReservationEscrowStatus.MANUAL_SYNC_REQUIRED,
+          reservation.getTxHash(),
+          order.deadlineEpochSeconds(),
+          deadlineAt);
+    }
+    return reservation.syncChainOutcome(
+        cancelledStatus(reservation),
+        ReservationEscrowStatus.REFUNDED,
+        reservation.getTxHash(),
+        order.deadlineEpochSeconds(),
+        deadlineAt);
   }
 
   private LocalDateTime deadlineAt(Long epochSeconds) {
@@ -418,17 +437,17 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     if (reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING) {
       return reservation;
     }
+    if (reservation.getContractDeadlineAt() == null) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
+          "Contract deadline is not available for this reservation");
+    }
+    if (!LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
+          "Deadline refund is only available after the contract deadline");
+    }
     if (reservation.getStatus() != ReservationStatus.DEADLINE_REFUND_AVAILABLE) {
-      if (reservation.getContractDeadlineAt() == null) {
-        throw new BusinessException(
-            ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
-            "Contract deadline is not available for this reservation");
-      }
-      if (LocalDateTime.now(clock).isBefore(reservation.getContractDeadlineAt())) {
-        throw new BusinessException(
-            ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
-            "Deadline refund is only available after the contract deadline");
-      }
       reservation = saveReservationPort.save(reservation.markDeadlineRefundAvailable());
     }
     return saveReservationPort.save(
@@ -476,7 +495,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
   private boolean expired(Reservation reservation) {
     return reservation.getContractDeadlineAt() != null
-        && !LocalDateTime.now(clock).isBefore(reservation.getContractDeadlineAt());
+        && LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt());
   }
 
   private boolean shouldForceDeadlineRefund(Reservation reservation, RecoveryFlow flow) {
