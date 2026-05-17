@@ -34,6 +34,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -105,6 +108,51 @@ class ClaimExpiredRefundReservationServiceTest {
       assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
       assertThat(result.web3()).isNotNull();
       assertThat(result.web3().actionType()).isEqualTo("MARKETPLACE_CLASS_EXPIRED_REFUND");
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ReservationStatus.class,
+        names = {"PENDING", "APPROVED"})
+    @DisplayName("[DR-01B] 만료된 PENDING/APPROVED 예약은 refund available 전환 후 pending intent를 준비한다")
+    void 만료된_예약은_refund_available_전환_후_pending_intent_준비(ReservationStatus status) {
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(
+              Optional.of(
+                  pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
+                      .status(status)
+                      .build()))
+          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18));
+      given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+      then(saveReservationPort).should(org.mockito.Mockito.times(3)).save(captor.capture());
+      assertThat(captor.getAllValues().get(0).getStatus())
+          .isEqualTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+      assertThat(captor.getAllValues().get(1).getStatus())
+          .isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(captor.getAllValues().get(2).getStatus())
+          .isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
     }
   }
 

@@ -283,16 +283,14 @@ class CancelPendingReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[CP-07] contract deadline 이후에도 cancelClass 취소 intent 생성을 허용한다")
-    void contract_deadline_이후_취소_허용() {
+    @DisplayName("[CP-07] contract deadline 이후에는 취소 intent 대신 deadline refund required로 전환한다")
+    void contract_deadline_이후_취소_차단_및_refund_required_전환() {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();
       Reservation expired =
           pendingReservation().toBuilder()
               .contractDeadlineAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE).minusMinutes(1))
               .build();
-      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
-          .willReturn(Optional.of(expired))
-          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(expired));
       given(saveReservationPort.save(any()))
           .willAnswer(
               invocation -> {
@@ -300,20 +298,18 @@ class CancelPendingReservationServiceTest {
                 latestSaved.set(saved);
                 return saved;
               });
-      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
-          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
-      given(loadReservationEscrowPaymentConfigPort.load())
-          .willReturn(
-              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
-                  "0x3333333333333333333333333333333333333333", 18));
-      given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
-          .willReturn(new PrepareReservationEscrowResult(web3()));
 
-      CancelPendingReservationResult result =
-          sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID));
+      assertThatThrownBy(
+              () -> sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
-      then(prepareReservationEscrowExecutionPort).should().prepareCancel(any());
+      assertThat(latestSaved.get().getStatus())
+          .isEqualTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
 
     @Test

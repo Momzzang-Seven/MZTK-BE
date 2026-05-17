@@ -34,6 +34,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -103,7 +104,9 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
   @org.springframework.beans.factory.annotation.Autowired
   void setTransactionManager(PlatformTransactionManager transactionManager) {
-    this.transactionOperations = new TransactionTemplate(transactionManager);
+    TransactionTemplate template = new TransactionTemplate(transactionManager);
+    template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    this.transactionOperations = template;
   }
 
   @Override
@@ -120,9 +123,11 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
                                 "Reservation not found: " + command.reservationId())));
     RecoveryFlow flow = resolveFlow(reservation);
     if (shouldForceDeadlineRefund(reservation, flow)) {
+      RecoveryFlow expiredFlow = flow;
       Reservation expiredReservation = reservation;
       reservation = runInTransaction(() -> forceDeadlineRefundAvailable(expiredReservation));
       flow = resolveFlow(reservation);
+      requireBuyerOwnedRefundRecovery(expiredFlow, command.requesterId(), reservation);
     }
     validateActor(reservation, command.requesterId(), flow);
 
@@ -150,9 +155,11 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     reservation = chainSync.reservation();
     flow = resolveFlow(reservation);
     if (shouldForceDeadlineRefund(reservation, flow)) {
+      RecoveryFlow expiredFlow = flow;
       Reservation expiredReservation = reservation;
       reservation = runInTransaction(() -> forceDeadlineRefundAvailable(expiredReservation));
       flow = resolveFlow(reservation);
+      requireBuyerOwnedRefundRecovery(expiredFlow, command.requesterId(), reservation);
     }
     validateActor(reservation, command.requesterId(), flow);
 
@@ -501,9 +508,22 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   private boolean shouldForceDeadlineRefund(Reservation reservation, RecoveryFlow flow) {
     return expired(reservation)
         && switch (flow.action()) {
-          case BUYER_CONFIRM -> true;
+          case BUYER_CANCEL, TRAINER_REJECT, BUYER_CONFIRM -> true;
           default -> false;
         };
+  }
+
+  private void requireBuyerOwnedRefundRecovery(
+      RecoveryFlow expiredFlow, Long requesterId, Reservation reservation) {
+    if (expiredFlow.action() != RecoveryAction.TRAINER_REJECT) {
+      return;
+    }
+    if (reservation.isOwnedByUser(requesterId)) {
+      return;
+    }
+    throw new BusinessException(
+        ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED,
+        "Reservation deadline expired; buyer deadline refund is required");
   }
 
   private Reservation forceDeadlineRefundAvailable(Reservation expected) {

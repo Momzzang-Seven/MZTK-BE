@@ -28,6 +28,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -100,7 +101,9 @@ public class CompleteReservationService implements CompleteReservationUseCase {
 
   @Autowired
   void setTransactionManager(PlatformTransactionManager transactionManager) {
-    this.transactionOperations = new TransactionTemplate(transactionManager);
+    TransactionTemplate template = new TransactionTemplate(transactionManager);
+    template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    this.transactionOperations = template;
   }
 
   public CompleteReservationService(

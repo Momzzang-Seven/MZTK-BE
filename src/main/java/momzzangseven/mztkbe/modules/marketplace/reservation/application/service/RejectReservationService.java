@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -82,7 +84,9 @@ public class RejectReservationService implements RejectReservationUseCase {
 
   @Autowired
   void setTransactionManager(PlatformTransactionManager transactionManager) {
-    this.transactionOperations = new TransactionTemplate(transactionManager);
+    TransactionTemplate template = new TransactionTemplate(transactionManager);
+    template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    this.transactionOperations = template;
   }
 
   public RejectReservationService(
@@ -109,9 +113,12 @@ public class RejectReservationService implements RejectReservationUseCase {
         command.authenticatedTrainerId());
 
     PendingPreparation phaseA = runInTransaction(() -> beginReject(command));
+    if (phaseA.deadlineRefundRequired()) {
+      throw deadlineRefundRequired();
+    }
     PrepareReservationEscrowResult prepared;
     try {
-      prepared = prepareReservationEscrowExecutionPort.prepareCancel(phaseA.prepareCommand());
+      prepared = prepareReservationEscrowExecutionPort.prepareCancel(requirePrepareCommand(phaseA));
     } catch (RuntimeException e) {
       rollbackPending(phaseA);
       throw e;
@@ -159,6 +166,10 @@ public class RejectReservationService implements RejectReservationUseCase {
           "Cannot reject reservation in status: " + reservation.getStatus());
     }
     validateUserEscrowLocked(reservation, "reject");
+    Reservation deadlineRefundRequired = routeExpiredToDeadlineRefund(reservation);
+    if (deadlineRefundRequired != null) {
+      return new PendingPreparation(deadlineRefundRequired, null, true);
+    }
 
     Reservation pending =
         saveReservationPort.save(
@@ -167,7 +178,8 @@ public class RejectReservationService implements RejectReservationUseCase {
     return new PendingPreparation(
         pending,
         commandFor(
-            pending, "TRAINER", command.authenticatedTrainerId(), pending.getUserId(), "REJECTED"));
+            pending, "TRAINER", command.authenticatedTrainerId(), pending.getUserId(), "REJECTED"),
+        false);
   }
 
   private Reservation bindPendingExecution(
@@ -245,6 +257,28 @@ public class RejectReservationService implements RejectReservationUseCase {
               + action
               + " reservation before marketplace user escrow is confirmed and locked");
     }
+  }
+
+  @Nullable
+  private Reservation routeExpiredToDeadlineRefund(Reservation reservation) {
+    if (reservation.getContractDeadlineAt() == null
+        || !LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt())) {
+      return null;
+    }
+    return saveReservationPort.save(reservation.markDeadlineRefundAvailable());
+  }
+
+  private BusinessException deadlineRefundRequired() {
+    return new BusinessException(
+        ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED,
+        "Reservation deadline expired; use the deadline refund flow");
+  }
+
+  private PrepareReservationEscrowCommand requirePrepareCommand(PendingPreparation phaseA) {
+    if (phaseA.prepareCommand() == null) {
+      throw deadlineRefundRequired();
+    }
+    return phaseA.prepareCommand();
   }
 
   private boolean equalsNullable(Object left, Object right) {
@@ -377,5 +411,7 @@ public class RejectReservationService implements RejectReservationUseCase {
   }
 
   private record PendingPreparation(
-      Reservation reservation, PrepareReservationEscrowCommand prepareCommand) {}
+      Reservation reservation,
+      @Nullable PrepareReservationEscrowCommand prepareCommand,
+      boolean deadlineRefundRequired) {}
 }

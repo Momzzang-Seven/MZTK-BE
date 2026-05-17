@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 import java.util.Set;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
 final class ReservationExecutionResumeViewer {
@@ -31,12 +32,23 @@ final class ReservationExecutionResumeViewer {
       case "MARKETPLACE_CLASS_PURCHASE" -> "PURCHASE";
       case "MARKETPLACE_CLASS_CONFIRM" -> "CONFIRM";
       case "MARKETPLACE_CLASS_EXPIRED_REFUND" -> "DEADLINE_REFUND";
-      case "MARKETPLACE_CLASS_CANCEL" ->
-          reservation.getStatus() == ReservationStatus.REJECT_PENDING
-              ? "TRAINER_REJECT"
-              : "BUYER_CANCEL";
+      case "MARKETPLACE_CLASS_CANCEL" -> cancelViewerAction(reservation);
       default -> null;
     };
+  }
+
+  private static String cancelViewerAction(Reservation reservation) {
+    if (reservation.getPendingAction() == ReservationEscrowAction.TRAINER_REJECT
+        || reservation.getStatus() == ReservationStatus.REJECT_PENDING
+        || reservation.getStatus() == ReservationStatus.REJECTED) {
+      return "TRAINER_REJECT";
+    }
+    if (reservation.getPendingAction() == ReservationEscrowAction.BUYER_CANCEL
+        || reservation.getStatus() == ReservationStatus.CANCEL_PENDING
+        || reservation.getStatus() == ReservationStatus.USER_CANCELLED) {
+      return "BUYER_CANCEL";
+    }
+    return null;
   }
 
   private static boolean isViewerOwner(

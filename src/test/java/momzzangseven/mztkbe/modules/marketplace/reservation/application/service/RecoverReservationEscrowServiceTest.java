@@ -80,8 +80,9 @@ class RecoverReservationEscrowServiceTest {
             loadReservationEscrowPaymentConfigPort,
             loadReservationEscrowOrderPort,
             FIXED_CLOCK);
-    given(saveReservationPort.save(any()))
-        .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+    org.mockito.Mockito.lenient()
+        .when(saveReservationPort.save(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0, Reservation.class));
   }
 
   @Test
@@ -178,14 +179,14 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
-  @DisplayName("deadline 이후 cancel pending recovery는 contract가 허용하는 cancel intent를 다시 준비한다")
-  void expired_cancelPending_recovery_preparesCancelIntent() {
-    long deadlineEpochSeconds = FIXED_CLOCK.instant().getEpochSecond();
+  @DisplayName("deadline 이후 cancel pending recovery는 cancel 대신 deadline refund intent를 준비한다")
+  void expired_cancelPending_recovery_preparesDeadlineRefundIntent() {
+    long deadlineEpochSeconds = FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond();
     Reservation reservation =
         reservation(ReservationStatus.CANCEL_PENDING).toBuilder()
             .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
             .contractDeadlineEpochSeconds(deadlineEpochSeconds)
-            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK))
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
             .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
             .pendingAttemptToken("cancel-token")
             .priorStatus(ReservationStatus.PENDING)
@@ -209,17 +210,83 @@ class RecoverReservationEscrowServiceTest {
         .willReturn(
             new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
                 "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
-    given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
-        .willReturn(new PrepareReservationEscrowResult(web3()));
+    given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+        .willReturn(new PrepareReservationEscrowResult(web3("MARKETPLACE_CLASS_EXPIRED_REFUND")));
 
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
     assertThat(result.web3()).isNotNull();
     then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
-    then(prepareReservationEscrowExecutionPort).should().prepareCancel(any());
+    then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
     then(prepareReservationEscrowExecutionPort).shouldHaveNoMoreInteractions();
+  }
+
+  @Test
+  @DisplayName("deadline 이후 trainer reject recovery는 refund required로 전환하고 reject intent를 만들지 않는다")
+  void expired_rejectPending_recovery_marksDeadlineRefundRequired() {
+    long deadlineEpochSeconds = FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond();
+    Reservation reservation =
+        reservation(ReservationStatus.REJECT_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.REJECT_PENDING)
+            .contractDeadlineEpochSeconds(deadlineEpochSeconds)
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+            .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+            .pendingAttemptToken("reject-token")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    AtomicReference<Reservation> latestSaved = new AtomicReference<>(reservation);
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0, Reservation.class);
+              latestSaved.set(saved);
+              return saved;
+            });
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()));
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, TRAINER_ID)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
+
+    assertThat(latestSaved.get().getStatus())
+        .isEqualTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("current execution intent가 CONFIRMED이면 replay 후 최신 reservation 상태를 반환한다")
+  void recovery_currentConfirmedIntent_replaysConfirmedHookAndReturnsLatestReservation() {
+    Reservation reservation =
+        reservation(ReservationStatus.PURCHASE_PENDING).toBuilder()
+            .currentExecutionIntentPublicId("intent-1")
+            .build();
+    Reservation repaired =
+        reservation.markPurchaseConfirmedLocked(
+            1_900_000_000L, LocalDateTime.of(2030, 3, 17, 17, 46, 40));
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionWritePort.load(BUYER_ID, "intent-1"))
+        .willReturn(web3("MARKETPLACE_CLASS_PURCHASE", "CONFIRMED"));
+    given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(repaired));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(result.web3()).isNotNull();
+    then(replayConfirmedReservationExecutionPort)
+        .should()
+        .replayConfirmed("intent-1", "MARKETPLACE_CLASS_PURCHASE");
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 
   @Test
@@ -348,13 +415,21 @@ class RecoverReservationEscrowServiceTest {
   }
 
   private ReservationExecutionWriteView web3() {
+    return web3("MARKETPLACE_CLASS_PURCHASE");
+  }
+
+  private ReservationExecutionWriteView web3(String actionType) {
+    return web3(actionType, "AWAITING_SIGNATURE");
+  }
+
+  private ReservationExecutionWriteView web3(String actionType, String intentStatus) {
     return new ReservationExecutionWriteView(
         new ReservationExecutionWriteView.Resource(
             "ORDER", String.valueOf(RESERVATION_ID), "PENDING"),
-        "MARKETPLACE_CLASS_PURCHASE",
+        actionType,
         ORDER_KEY,
         new ReservationExecutionWriteView.ExecutionIntent(
-            "intent-1", "AWAITING_SIGNATURE", LocalDateTime.now(FIXED_CLOCK).plusMinutes(5), 300L),
+            "intent-1", intentStatus, LocalDateTime.now(FIXED_CLOCK).plusMinutes(5), 300L),
         new ReservationExecutionWriteView.Execution("EIP7702", 1),
         null,
         null,

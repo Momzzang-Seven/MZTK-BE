@@ -7,7 +7,6 @@ import java.nio.ByteBuffer;
 import java.util.Locale;
 import java.util.UUID;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import org.web3j.utils.Numeric;
 
 /** Codec for marketplace reservation UUIDs and Solidity {@code bytes32} order ids. */
 public final class MarketplaceEscrowIdCodec {
@@ -24,7 +23,7 @@ public final class MarketplaceEscrowIdCodec {
     buffer.putLong(0L);
     buffer.putLong(uuid.getMostSignificantBits());
     buffer.putLong(uuid.getLeastSignificantBits());
-    return Numeric.toHexString(buffer.array()).toLowerCase(Locale.ROOT);
+    return "0x" + toHex(buffer.array());
   }
 
   public static byte[] orderKeyBytes(String canonicalOrderKey) {
@@ -32,7 +31,7 @@ public final class MarketplaceEscrowIdCodec {
     if (ZERO_BYTES32.equals(normalized)) {
       throw new Web3InvalidInputException("orderKey must not be zero bytes32");
     }
-    return Numeric.hexStringToByteArray(normalized);
+    return fromHex(normalized.substring(2));
   }
 
   public static String normalizeOrderKey(String orderKey) {
@@ -71,5 +70,28 @@ public final class MarketplaceEscrowIdCodec {
     } catch (IllegalArgumentException ex) {
       throw new Web3InvalidInputException("orderId must be a UUID");
     }
+  }
+
+  private static String toHex(byte[] bytes) {
+    char[] chars = new char[bytes.length * 2];
+    for (int i = 0; i < bytes.length; i++) {
+      int value = bytes[i] & 0xff;
+      chars[i * 2] = Character.forDigit(value >>> 4, 16);
+      chars[i * 2 + 1] = Character.forDigit(value & 0x0f, 16);
+    }
+    return new String(chars);
+  }
+
+  private static byte[] fromHex(String hex) {
+    byte[] bytes = new byte[hex.length() / 2];
+    for (int i = 0; i < bytes.length; i++) {
+      int high = Character.digit(hex.charAt(i * 2), 16);
+      int low = Character.digit(hex.charAt(i * 2 + 1), 16);
+      if (high < 0 || low < 0) {
+        throw new Web3InvalidInputException("orderKey must be lowercase 0x + 64 hex chars");
+      }
+      bytes[i] = (byte) ((high << 4) + low);
+    }
+    return bytes;
   }
 }
