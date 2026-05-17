@@ -179,6 +179,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
         loadReservationExecutionStatePort.loadState(
             reservation.getCurrentExecutionIntentPublicId());
     if (isConfirmed(state.status())) {
+      validateParticipant(reservation, command.requesterId());
       replayConfirmedReservationExecutionPort.replayConfirmed(
           state.executionIntentId(), state.actionType());
       Reservation latest = loadReservationPort.findById(reservation.getId()).orElse(reservation);
@@ -680,6 +681,12 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
             ? reservation.isOwnedByUser(requesterId)
             : reservation.isOwnedByTrainer(requesterId);
     if (!allowed) {
+      throw new MarketplaceUnauthorizedAccessException();
+    }
+  }
+
+  private void validateParticipant(Reservation reservation, Long requesterId) {
+    if (!reservation.isOwnedByUser(requesterId) && !reservation.isOwnedByTrainer(requesterId)) {
       throw new MarketplaceUnauthorizedAccessException();
     }
   }

@@ -21,10 +21,17 @@ final class ReservationExecutionResumeViewer {
     String viewerAction = viewerAction(reservation, view.actionType());
     boolean owner = isViewerOwner(reservation, viewerId, viewerAction);
     String status = view.executionIntent().status();
+    boolean participant =
+        reservation.isOwnedByUser(viewerId) || reservation.isOwnedByTrainer(viewerId);
+    boolean confirmedReplayAvailable =
+        participant
+            && reservation.getCurrentExecutionIntentPublicId() != null
+            && reservation.getCurrentExecutionIntentPublicId().equals(view.executionIntent().id())
+            && "CONFIRMED".equals(status);
     return view.withViewer(
         viewerAction,
         owner && "AWAITING_SIGNATURE".equals(status),
-        owner && RECOVERABLE_STATUSES.contains(status));
+        confirmedReplayAvailable || (owner && RECOVERABLE_STATUSES.contains(status)));
   }
 
   private static String viewerAction(Reservation reservation, String actionType) {

@@ -327,6 +327,43 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  @DisplayName("confirmed trainer reject는 strike 기록 실패와 무관하게 local REJECTED를 저장한다")
+  void afterExecutionConfirmed_trainerReject_strikeFailureDoesNotRollbackReservation()
+      throws Exception {
+    Reservation reservation = rejectPending();
+    MarketplaceEscrowExecutionPayload payload =
+        payload(
+            "reject-token",
+            MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+            MarketplaceActorType.TRAINER);
+    ExecutionIntent intent =
+        intent("intent-reject", ExecutionActionType.MARKETPLACE_CLASS_CANCEL, payload);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-reject"))
+        .willReturn(Optional.of(reservation));
+    willThrow(new IllegalStateException("strike failed"))
+        .given(recordTrainerStrikePort)
+        .recordStrike(
+            9L,
+            TrainerStrikeEvent.REASON_REJECT,
+            RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+            "123");
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.REJECTED);
+    assertThat(captor.getValue().getEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    then(recordTrainerStrikePort)
+        .should()
+        .recordStrike(
+            9L,
+            TrainerStrikeEvent.REASON_REJECT,
+            RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+            "123");
+  }
+
+  @Test
   @DisplayName(
       "confirmed terminal actions persist the submitted on-chain tx hash, not the intent id")
   void afterExecutionConfirmed_terminalAction_persistsSubmittedTxHash() throws Exception {

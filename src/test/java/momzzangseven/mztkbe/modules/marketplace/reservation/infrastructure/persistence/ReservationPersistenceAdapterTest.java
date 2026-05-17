@@ -162,6 +162,26 @@ class ReservationPersistenceAdapterTest {
 
   @Test
   @DisplayName(
+      "reservePreparing inserts once and duplicate calls return the existing idempotency row")
+  void reservePreparingInsertsOnceAndReturnsExistingOnDuplicate() {
+    LocalDateTime firstExpiresAt = LocalDateTime.of(2026, 5, 16, 10, 0);
+
+    var first = idempotencyAdapter.reservePreparing(1L, "reserve-key", "payload-a", firstExpiresAt);
+    var duplicate =
+        idempotencyAdapter.reservePreparing(
+            1L, "reserve-key", "payload-b", firstExpiresAt.plusMinutes(5));
+
+    assertThat(first.created()).isTrue();
+    assertThat(duplicate.created()).isFalse();
+    assertThat(duplicate.idempotency().getId()).isEqualTo(first.idempotency().getId());
+    assertThat(duplicate.idempotency().getPayloadHash()).isEqualTo("payload-a");
+    assertThat(duplicate.idempotency().getStatus())
+        .isEqualTo(ReservationCreateIdempotencyStatus.PREPARING);
+    assertThat(duplicate.idempotency().getExpiresAt()).isEqualTo(firstExpiresAt);
+  }
+
+  @Test
+  @DisplayName(
       "cleanup protection queries protect reservation, create idempotency, and unbound pending refs")
   void cleanupProtectionQueriesReturnProtectedPublicIds() {
     Long slotId = saveSlot();

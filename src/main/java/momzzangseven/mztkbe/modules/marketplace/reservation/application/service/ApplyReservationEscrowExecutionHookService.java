@@ -165,11 +165,19 @@ public class ApplyReservationEscrowExecutionHookService
         || recordTrainerStrikePort == null) {
       return;
     }
-    recordTrainerStrikePort.recordStrike(
-        reservation.getTrainerId(),
-        TrainerStrikeEvent.REASON_REJECT,
-        RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
-        String.valueOf(reservation.getId()));
+    try {
+      recordTrainerStrikePort.recordStrike(
+          reservation.getTrainerId(),
+          TrainerStrikeEvent.REASON_REJECT,
+          RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+          String.valueOf(reservation.getId()));
+    } catch (RuntimeException e) {
+      log.warn(
+          "Failed to record trainer reject strike after confirmed hook: id={}, trainerId={}",
+          reservation.getId(),
+          reservation.getTrainerId(),
+          e);
+    }
   }
 
   private Reservation applyPurchaseConfirmed(

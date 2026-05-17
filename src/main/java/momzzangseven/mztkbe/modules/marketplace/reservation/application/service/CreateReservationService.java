@@ -154,6 +154,12 @@ public class CreateReservationService implements CreateReservationUseCase {
         command.classId(),
         command.slotId());
 
+    CreateReservationResult replayResult =
+        runInTransaction(() -> handleExistingCreateBeforePrecheck(command));
+    if (replayResult != null) {
+      return replayResult;
+    }
+
     PurchaseSnapshot purchaseSnapshot =
         runInTransaction(() -> loadPurchaseSnapshotForPrecheck(command));
     precheckReservationPurchasePort.precheckPurchase(
@@ -402,6 +408,57 @@ public class CreateReservationService implements CreateReservationUseCase {
     return PhaseAResult.pending(saved, idempotency, prepareCommand);
   }
 
+  @Nullable
+  private CreateReservationResult handleExistingCreateBeforePrecheck(
+      CreateReservationCommand command) {
+    String keyHash = sha256Hex(createIdempotencyKey(command));
+    ReservationCreateIdempotency idempotency =
+        loadReservationCreateIdempotencyPort
+            .findByBuyerIdAndKeyHashWithLock(command.userId(), keyHash)
+            .orElse(null);
+    if (idempotency == null
+        || idempotency.getStatus() == ReservationCreateIdempotencyStatus.FAILED
+        || isExpired(idempotency.getExpiresAt())) {
+      return null;
+    }
+    if (idempotency.getReservationId() == null) {
+      String payloadHash = currentClassPayloadHash(command);
+      if (payloadHash != null && !payloadHash.equals(idempotency.getPayloadHash())) {
+        throw new BusinessException(
+            ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT,
+            "idempotency key was reused with a different marketplace reservation payload");
+      }
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "same marketplace reservation create request is still preparing");
+    }
+    Reservation reservation =
+        loadReservationPort
+            .findById(idempotency.getReservationId())
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
+                        "Reservation not found: " + idempotency.getReservationId()));
+    String payloadHash =
+        sha256Hex(
+            createPayload(command, reservation.getTrainerId(), reservation.getBookedPriceAmount()));
+    if (!payloadHash.equals(idempotency.getPayloadHash())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT,
+          "idempotency key was reused with a different marketplace reservation payload");
+    }
+    return replayCreateResult(command.userId(), idempotency, reservation);
+  }
+
+  @Nullable
+  private String currentClassPayloadHash(CreateReservationCommand command) {
+    return getClassInfoUseCase
+        .findById(command.classId())
+        .map(cls -> sha256Hex(createPayload(command, cls.getTrainerId(), cls.getPriceAmount())))
+        .orElse(null);
+  }
+
   private CreateReservationResult bindPurchasePhaseB(
       CreateReservationCommand command,
       PhaseAResult phaseA,
@@ -605,6 +662,11 @@ public class CreateReservationService implements CreateReservationUseCase {
                     new BusinessException(
                         ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
                         "Reservation not found: " + idempotency.getReservationId()));
+    return replayCreateResult(buyerId, idempotency, reservation);
+  }
+
+  private CreateReservationResult replayCreateResult(
+      Long buyerId, ReservationCreateIdempotency idempotency, Reservation reservation) {
     String intentId =
         idempotency.getCurrentExecutionIntentPublicId() != null
             ? idempotency.getCurrentExecutionIntentPublicId()

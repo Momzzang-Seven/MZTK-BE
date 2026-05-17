@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowResult;
@@ -342,6 +343,29 @@ class RecoverReservationEscrowServiceTest {
     then(replayConfirmedReservationExecutionPort)
         .should()
         .replayConfirmed("reject-intent-1", "MARKETPLACE_CLASS_CANCEL");
+    then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("current execution intent가 CONFIRMED여도 비참여자는 replay를 실행할 수 없다")
+  void recovery_currentConfirmedIntent_nonParticipantRejectedBeforeReplay() {
+    Reservation reservation =
+        reservation(ReservationStatus.PURCHASE_PENDING).toBuilder()
+            .currentExecutionIntentPublicId("intent-1")
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionStatePort.loadState("intent-1"))
+        .willReturn(state("MARKETPLACE_CLASS_PURCHASE", "CONFIRMED", "intent-1", BUYER_ID));
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, OTHER_USER_ID)))
+        .isInstanceOf(MarketplaceUnauthorizedAccessException.class);
+
+    then(replayConfirmedReservationExecutionPort).shouldHaveNoInteractions();
+    then(loadReservationPort).should().findByIdWithLock(RESERVATION_ID);
+    then(loadReservationPort).shouldHaveNoMoreInteractions();
     then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }

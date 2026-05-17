@@ -435,6 +435,43 @@ class CreateReservationServiceTest {
     }
 
     @Test
+    @DisplayName("[CR-10B] 완료된 create idempotency replay는 외부 funding precheck 전에 반환한다")
+    void 완료된_idempotency_replay는_external_precheck를_건너뛴다() {
+      Reservation existingReservation =
+          replayReservation(ReservationStatus.PURCHASE_PENDING, "intent-existing");
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(
+              Optional.of(
+                  ReservationCreateIdempotency.builder()
+                      .buyerId(USER_ID)
+                      .payloadHash(expectedPayloadHash())
+                      .status(ReservationCreateIdempotencyStatus.COMPLETED)
+                      .reservationId(existingReservation.getId())
+                      .currentExecutionIntentPublicId("intent-existing")
+                      .responseSnapshotJson("{\"stale\":true}")
+                      .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+                      .build()));
+      given(loadReservationPort.findById(existingReservation.getId()))
+          .willReturn(Optional.of(existingReservation));
+      given(loadReservationExecutionWritePort.load(USER_ID, "intent-existing")).willReturn(web3());
+      org.mockito.BDDMockito.willThrow(
+              new BusinessException(
+                  ErrorCode.MARKETPLACE_INSUFFICIENT_TOKEN_BALANCE,
+                  "external precheck must not run for completed replay"))
+          .given(precheckReservationPurchasePort)
+          .precheckPurchase(any());
+
+      CreateReservationResult result = sut.execute(command);
+
+      assertThat(result.reservationId()).isEqualTo(existingReservation.getId());
+      assertThat(result.web3()).isNotNull();
+      assertThat(result.web3().existing()).isTrue();
+      then(precheckReservationPurchasePort).shouldHaveNoInteractions();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+      then(saveReservationPort).shouldHaveNoInteractions();
+    }
+
+    @Test
     @DisplayName("[CR-12] BOUND create idempotency replay도 저장 스냅샷 대신 현재 execution intent를 재조회한다")
     void bound_idempotency_replay도_execution_intent를_재조회한다() {
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
@@ -489,6 +526,7 @@ class CreateReservationServiceTest {
                       .isEqualTo(ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT.getCode()));
 
       then(saveReservationPort).shouldHaveNoInteractions();
+      then(precheckReservationPurchasePort).shouldHaveNoInteractions();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
 
@@ -779,6 +817,7 @@ class CreateReservationServiceTest {
                   assertThat(((BusinessException) ex).getCode())
                       .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+      then(precheckReservationPurchasePort).shouldHaveNoInteractions();
     }
   }
 
