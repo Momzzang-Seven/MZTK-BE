@@ -42,8 +42,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST controller for user-facing reservation endpoints. Moved to classes sub-module per user
- * request.
+ * REST controller for user-facing reservation endpoints.
  *
  * <ul>
  *   <li>GET /marketplace/classes/{classId}/reservation-info — 4-week availability (public)

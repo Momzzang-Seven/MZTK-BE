@@ -99,7 +99,7 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
     Transaction tx = Transaction.createEthCallTransaction(escrowAddress, escrowAddress, data);
     EthCall response =
         requireSuccess(
-            callWithFallback(web3j -> web3j.ethCall(tx, DefaultBlockParameterName.PENDING).send()),
+            callWithFallback(web3j -> web3j.ethCall(tx, DefaultBlockParameterName.LATEST).send()),
             operation);
     if (response.isReverted()) {
       throw new Web3InvalidInputException(operation + " reverted: " + response.getRevertReason());

@@ -31,6 +31,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
@@ -38,6 +39,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,7 @@ class RecoverReservationEscrowServiceTest {
   private static final Long RESERVATION_ID = 10L;
   private static final Long BUYER_ID = 1L;
   private static final Long TRAINER_ID = 2L;
+  private static final Long OTHER_USER_ID = 999L;
   private static final String ORDER_KEY = "0x" + "0".repeat(63) + "1";
 
   @Mock private LoadReservationPort loadReservationPort;
@@ -66,6 +69,7 @@ class RecoverReservationEscrowServiceTest {
   @Mock private LoadReservationWalletPort loadReservationWalletPort;
   @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
+  @Mock private RecordTrainerStrikePort recordTrainerStrikePort;
 
   private RecoverReservationEscrowService sut;
 
@@ -83,6 +87,7 @@ class RecoverReservationEscrowServiceTest {
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
             loadReservationEscrowOrderPort,
+            recordTrainerStrikePort,
             FIXED_CLOCK);
     org.mockito.Mockito.lenient()
         .when(saveReservationPort.save(any()))
@@ -253,6 +258,31 @@ class RecoverReservationEscrowServiceTest {
                     .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
 
     then(saveReservationPort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("deadline 이후 cancel pending recovery는 비소유자 요청에서 refund available 저장 전에 거부한다")
+  void expiredCancelPending_nonOwnerRecovery_rejectsBeforeMutatingReservation() {
+    Reservation reservation =
+        reservation(ReservationStatus.CANCEL_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
+            .contractDeadlineEpochSeconds(FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond())
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+            .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
+            .pendingAttemptToken("cancel-token")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, OTHER_USER_ID)))
+        .isInstanceOf(RuntimeException.class);
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(loadReservationEscrowOrderPort).shouldHaveNoInteractions();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 
@@ -460,6 +490,77 @@ class RecoverReservationEscrowServiceTest {
     then(saveReservationPort).shouldHaveNoInteractions();
     then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
     then(loadReservationEscrowOrderPort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("unbound DEADLINE_REFUND_PENDING recovery는 pending token을 교체하지 않고 conflict로 막는다")
+  void unboundDeadlineRefundPending_recoveryActiveConflict() {
+    Reservation reservation =
+        reservation(ReservationStatus.DEADLINE_REFUND_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUND_PENDING)
+            .contractDeadlineEpochSeconds(FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond())
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+            .pendingAction(ReservationEscrowAction.DEADLINE_REFUND)
+            .pendingAttemptToken("refund-token")
+            .currentExecutionIntentPublicId(null)
+            .priorStatus(ReservationStatus.DEADLINE_REFUND_AVAILABLE)
+            .priorEscrowStatus(ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE)
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(
+            order(
+                ReservationEscrowOrderView.STATE_CREATED,
+                FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond()));
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+    then(loadReservationEscrowOrderPort).should().getOrder(ORDER_KEY);
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("trainer reject recovery chain CANCELLED sync는 REJECTED와 strike를 함께 기록한다")
+  void trainerRejectRecovery_cancelledOrder_recordsStrike() {
+    Reservation reservation =
+        reservation(ReservationStatus.REJECT_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.REJECT_PENDING)
+            .contractDeadlineEpochSeconds(FIXED_CLOCK.instant().plusSeconds(600).getEpochSecond())
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+            .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+            .pendingAttemptToken("reject-token")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(
+            order(
+                ReservationEscrowOrderView.STATE_CANCELLED,
+                FIXED_CLOCK.instant().plusSeconds(600).getEpochSecond()));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, TRAINER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+    then(recordTrainerStrikePort)
+        .should()
+        .recordStrike(
+            TRAINER_ID,
+            TrainerStrikeEvent.REASON_REJECT,
+            RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+            String.valueOf(RESERVATION_ID));
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 

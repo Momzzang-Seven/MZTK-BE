@@ -27,12 +27,14 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
@@ -59,6 +61,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   private final ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
+  @Nullable private final RecordTrainerStrikePort recordTrainerStrikePort;
   private final Clock clock;
   private TransactionOperations transactionOperations;
 
@@ -73,6 +76,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       @Nullable LoadReservationExecutionStatePort loadReservationExecutionStatePort,
       @Nullable ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
       @Nullable LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      @Nullable RecordTrainerStrikePort recordTrainerStrikePort,
       Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.saveReservationPort = saveReservationPort;
@@ -108,6 +112,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
         loadReservationEscrowOrderPort == null
             ? DisabledReservationWeb3PortFactory.escrowOrder()
             : loadReservationEscrowOrderPort;
+    this.recordTrainerStrikePort = recordTrainerStrikePort;
     this.clock = clock;
   }
 
@@ -178,6 +183,11 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     if (!reservation.isOwnedByUser(command.userId())) {
       throw new MarketplaceUnauthorizedAccessException();
     }
+    if (isUnboundDeadlineRefundPending(reservation)) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "Deadline refund preparation is already in progress");
+    }
 
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
@@ -214,6 +224,11 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       ClaimExpiredRefundReservationCommand command, Reservation reservation) {
     if (!reservation.isOwnedByUser(command.userId())) {
       throw new MarketplaceUnauthorizedAccessException();
+    }
+    if (isUnboundDeadlineRefundPending(reservation)) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "Deadline refund preparation is already in progress");
     }
 
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
@@ -321,6 +336,11 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
   private ChainSyncResult syncCreatedChainOrder(
       Reservation reservation, ReservationEscrowOrderView order, LocalDateTime deadlineAt) {
+    if (isUnboundDeadlineRefundPending(reservation)) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "Deadline refund preparation is already in progress");
+    }
     if (deadlineAt == null || !LocalDateTime.now(clock).isAfter(deadlineAt)) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
@@ -369,7 +389,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   }
 
   private ChainSyncResult stopWith(Reservation reservation) {
-    return ChainSyncResult.stop(saveReservationPort.save(reservation));
+    Reservation saved = saveReservationPort.save(reservation);
+    recordTrainerRejectStrikeIfNeeded(saved);
+    return ChainSyncResult.stop(saved);
   }
 
   private LocalDateTime deadlineAt(Long epochSeconds) {
@@ -385,6 +407,22 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
             current.getCurrentExecutionIntentPublicId(),
             expected.getCurrentExecutionIntentPublicId())
         && equalsNullable(current.getPendingAttemptToken(), expected.getPendingAttemptToken());
+  }
+
+  private boolean isUnboundDeadlineRefundPending(Reservation reservation) {
+    return reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING
+        && reservation.getCurrentExecutionIntentPublicId() == null;
+  }
+
+  private void recordTrainerRejectStrikeIfNeeded(Reservation reservation) {
+    if (reservation.getStatus() != ReservationStatus.REJECTED || recordTrainerStrikePort == null) {
+      return;
+    }
+    recordTrainerStrikePort.recordStrike(
+        reservation.getTrainerId(),
+        TrainerStrikeEvent.REASON_REJECT,
+        RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+        String.valueOf(reservation.getId()));
   }
 
   @Nullable

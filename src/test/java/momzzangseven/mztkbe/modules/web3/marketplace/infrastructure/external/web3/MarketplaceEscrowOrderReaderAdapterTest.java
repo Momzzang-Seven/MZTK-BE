@@ -100,7 +100,7 @@ class MarketplaceEscrowOrderReaderAdapterTest {
     when(request.send()).thenReturn(response);
     doReturn(request)
         .when(mainWeb3j)
-        .ethCall(any(Transaction.class), eq(DefaultBlockParameterName.PENDING));
+        .ethCall(any(Transaction.class), eq(DefaultBlockParameterName.LATEST));
   }
 
   private String encodeReturn(Type<?> value) {

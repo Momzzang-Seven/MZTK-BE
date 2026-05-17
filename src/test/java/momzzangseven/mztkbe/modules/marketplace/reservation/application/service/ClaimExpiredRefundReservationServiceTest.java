@@ -32,17 +32,21 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -71,6 +75,7 @@ class ClaimExpiredRefundReservationServiceTest {
   @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   @Mock private ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
+  @Mock private RecordTrainerStrikePort recordTrainerStrikePort;
 
   private ClaimExpiredRefundReservationService sut;
 
@@ -88,6 +93,7 @@ class ClaimExpiredRefundReservationServiceTest {
             loadReservationExecutionStatePort,
             replayConfirmedReservationExecutionPort,
             loadReservationEscrowOrderPort,
+            recordTrainerStrikePort,
             FIXED_CLOCK);
     org.mockito.Mockito.lenient()
         .when(loadReservationEscrowOrderPort.getOrder(any()))
@@ -399,6 +405,153 @@ class ClaimExpiredRefundReservationServiceTest {
       assertThat(result.web3()).isNull();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
+
+    @Test
+    @DisplayName("[DR-01J] direct claim 전에 chain order가 CREATED이면 새 refund intent를 준비한다")
+    void direct_claim_chain_created이면_refund_intent_준비() {
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      Reservation reservation = refundAvailableReservation();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation));
+      org.mockito.Mockito.doReturn(order(ReservationEscrowOrderView.STATE_CREATED))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18));
+      given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("intent-1");
+      then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+      "2000, SETTLED, SETTLED",
+      "4000, AUTO_SETTLED, SETTLED",
+      "5000, TIMEOUT_CANCELLED, REFUNDED"
+    })
+    @DisplayName("[DR-01K] direct claim chain terminal state는 새 intent 없이 로컬 terminal 상태로 동기화한다")
+    void direct_claim_chain_terminal_state이면_새_intent없이_동기화(
+        int chainState, ReservationStatus expectedStatus, ReservationEscrowStatus expectedEscrow) {
+      Reservation reservation = refundAvailableReservation();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willReturn(Optional.of(reservation));
+      org.mockito.Mockito.doReturn(order(chainState))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+      given(saveReservationPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(expectedStatus);
+      assertThat(result.escrowStatus()).isEqualTo(expectedEscrow.name());
+      assertThat(result.web3()).isNull();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName(
+        "[DR-01L] direct claim chain CANCELLED가 buyer cancel 증거를 가지면 USER_CANCELLED로 동기화한다")
+    void direct_claim_chain_cancelled_buyerCancel이면_userCancelled_동기화() {
+      Reservation reservation =
+          pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
+              .status(ReservationStatus.CANCEL_PENDING)
+              .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
+              .pendingAttemptToken("cancel-token")
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willReturn(Optional.of(reservation));
+      org.mockito.Mockito.doReturn(order(ReservationEscrowOrderView.STATE_CANCELLED))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+      given(saveReservationPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
+      then(recordTrainerStrikePort).shouldHaveNoInteractions();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName(
+        "[DR-01I] direct claim chain CANCELLED가 trainer reject 증거를 가지면 REJECTED와 strike를 동기화한다")
+    void direct_claim_chain_cancelled_trainerReject이면_strike_기록() {
+      Reservation reservation =
+          pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
+              .status(ReservationStatus.REJECT_PENDING)
+              .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+              .pendingAttemptToken("reject-token")
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willReturn(Optional.of(reservation));
+      org.mockito.Mockito.doReturn(order(ReservationEscrowOrderView.STATE_CANCELLED))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+      given(saveReservationPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+      then(recordTrainerStrikePort)
+          .should()
+          .recordStrike(
+              TRAINER_ID,
+              TrainerStrikeEvent.REASON_REJECT,
+              RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+              String.valueOf(RESERVATION_ID));
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[DR-01M] direct claim chain unknown state는 새 실패 intent 없이 sync-required로 막는다")
+    void direct_claim_chain_unknown_state이면_sync_required() {
+      Reservation reservation = refundAvailableReservation();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willReturn(Optional.of(reservation));
+      org.mockito.Mockito.doReturn(order(9999))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+
+      assertThatThrownBy(
+              () -> sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED.getCode()));
+
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
   }
 
   @Nested
@@ -525,6 +678,31 @@ class ClaimExpiredRefundReservationServiceTest {
                   assertThat(((BusinessException) ex).getCode())
                       .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
 
+      then(saveReservationPort).shouldHaveNoInteractions();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[DR-04D] unbound deadline refund pending은 pending token을 교체하지 않고 conflict로 막는다")
+    void unbound_deadline_refund_pending이면_conflict() {
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(
+              Optional.of(
+                  refundAvailableReservation().toBuilder()
+                      .status(ReservationStatus.DEADLINE_REFUND_PENDING)
+                      .pendingAttemptToken("pending-token")
+                      .currentExecutionIntentPublicId(null)
+                      .build()));
+
+      assertThatThrownBy(
+              () -> sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+      then(loadReservationEscrowOrderPort).shouldHaveNoInteractions();
       then(saveReservationPort).shouldHaveNoInteractions();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
