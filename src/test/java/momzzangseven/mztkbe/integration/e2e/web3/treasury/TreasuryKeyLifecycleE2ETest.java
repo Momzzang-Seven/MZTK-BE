@@ -192,6 +192,16 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
             + " web3_treasury_provision_audits ORDER BY id DESC LIMIT 1");
   }
 
+  /**
+   * Counts {@code describe(...)} invocations recorded on the shared describe-port spy. Used by
+   * cache-bypass regression guards to assert that {@code describeFresh} reached the shared port.
+   */
+  private long sharedDescribeInvocationCount() {
+    return org.mockito.Mockito.mockingDetails(sharedKmsKeyDescribePort).getInvocations().stream()
+        .filter(i -> "describe".equals(i.getMethod().getName()))
+        .count();
+  }
+
   // ---------------------------------------------------------------------------
   // Happy-path provision stubs
   // ---------------------------------------------------------------------------
@@ -1437,11 +1447,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       int updateAliasBefore = countKmsAuditRows("KMS_UPDATE_ALIAS", true);
       int disableBefore = countKmsAuditRows("KMS_DISABLE", true);
       int scheduleBefore = countKmsAuditRows("KMS_SCHEDULE_DELETION", true);
-      int sharedDescribeCallsBefore =
-          org.mockito.Mockito.mockingDetails(sharedKmsKeyDescribePort).getInvocations().stream()
-              .filter(i -> "describe".equals(i.getMethod().getName()))
-              .mapToInt(i -> 1)
-              .sum();
+      long sharedDescribeCallsBefore = sharedDescribeInvocationCount();
       clearInvocations(kmsKeyLifecyclePort);
 
       // 7) Re-provision with the same raw key + address. Path: addressMatches=true →
@@ -1477,11 +1483,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       // code would have called the cached treasury describe path which short-circuits on the
       // cache hit and never reaches the shared port — leaving the call count unchanged. The
       // bug-fix wires describeFresh through this exact spy.
-      int sharedDescribeCallsAfter =
-          org.mockito.Mockito.mockingDetails(sharedKmsKeyDescribePort).getInvocations().stream()
-              .filter(i -> "describe".equals(i.getMethod().getName()))
-              .mapToInt(i -> 1)
-              .sum();
+      long sharedDescribeCallsAfter = sharedDescribeInvocationCount();
       assertThat(sharedDescribeCallsAfter)
           .as("describeFresh must reach the shared port even when the cache holds a stale value")
           .isGreaterThan(sharedDescribeCallsBefore);
