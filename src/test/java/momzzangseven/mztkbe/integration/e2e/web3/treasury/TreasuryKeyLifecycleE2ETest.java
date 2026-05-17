@@ -1033,6 +1033,10 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
     private momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ReplaceKmsKeyUseCase
         replaceKmsKeyUseCase;
 
+    @Autowired
+    private momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableKmsKeyUseCase
+        disableKmsKeyUseCase;
+
     @Test
     @DisplayName(
         "[E-MOM444-8] R5 — enableKey 실패 후 재 provision 으로 회복 (DB ACTIVE / KMS DISABLED →"
@@ -1147,6 +1151,61 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       // the only invocations on the mock — assert each happened exactly once via the orphan path.
       verify(kmsKeyLifecyclePort, times(1)).disableKey(k0);
       verify(kmsKeyLifecyclePort, times(1)).scheduleKeyDeletion(eq(k0), eq(7));
+    }
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-10] R7 — reverse-order Disable/Reactivate race 의 stale Disable 이벤트가"
+            + " DB.status=ACTIVE 인 row 에 도달하면 CAS skip + KMS_DISABLE_SKIPPED audit, KMS"
+            + " disableKey 미호출 (DB ACTIVE / KMS ENABLED drift 방지)")
+    void staleDisableEvent_skipsViaCasGate_andDoesNotRevertKmsState() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // 1) C0 FreshProvision — mint K0, DB row ACTIVE, KMS ENABLED.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k0 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      // 2) Disable wallet — DB DISABLED, AFTER_COMMIT disableKey(K0) → KMS DISABLED.
+      assertThat(disableWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(kmsFake.keyState(k0)).isEqualTo(KmsKeyState.DISABLED);
+
+      // 3) Re-provision same key (C5 ReEnableSameKey) — DB ACTIVE, AFTER_COMMIT enableKey(K0)
+      //    → KMS ENABLED. This puts the slot in the exact state the reverse-order race produces:
+      //    DB ACTIVE / KMS ENABLED, ready to be corrupted by a delayed Disable handler.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      Map<String, Object> rowBefore = walletRow(REWARD_ALIAS);
+      assertThat((String) rowBefore.get("status")).isEqualTo("ACTIVE");
+      assertThat((String) rowBefore.get("kms_key_id")).isEqualTo(k0);
+      assertThat(kmsFake.keyState(k0)).isEqualTo(KmsKeyState.ENABLED);
+
+      int skipBefore = countKmsAuditRows("KMS_DISABLE_SKIPPED", true);
+      int disableBefore = countKmsAuditRows("KMS_DISABLE", true);
+
+      // Isolate post-clear invocations so verify(disableKey, never()) reflects ONLY the stale call.
+      clearInvocations(kmsKeyLifecyclePort);
+
+      // 4) Manually invoke the in-port with a stale Disable(K0) command — as if the original
+      //    step-2 Disable AFTER_COMMIT handler fired late, AFTER C5 already flipped the row back
+      //    to ACTIVE. R7 CAS gate must detect STATUS_MISMATCH and skip.
+      disableKmsKeyUseCase.execute(
+          new momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableKmsKeyCommand(
+              REWARD_ALIAS, k0, DERIVED_ADDRESS, 1L));
+
+      // DB / KMS state must be unchanged — no drift.
+      Map<String, Object> rowAfter = walletRow(REWARD_ALIAS);
+      assertThat((String) rowAfter.get("status")).isEqualTo("ACTIVE");
+      assertThat((String) rowAfter.get("kms_key_id")).isEqualTo(k0);
+      assertThat(kmsFake.keyState(k0)).isEqualTo(KmsKeyState.ENABLED);
+
+      // KMS disableKey was NOT called by the stale handler.
+      verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
+
+      // Exactly one new KMS_DISABLE_SKIPPED audit row; no new KMS_DISABLE row.
+      assertThat(countKmsAuditRows("KMS_DISABLE_SKIPPED", true)).isEqualTo(skipBefore + 1);
+      assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(disableBefore);
+      assertThat(countKmsAuditRows("KMS_DISABLE_SKIPPED", false)).isZero();
     }
   }
 
