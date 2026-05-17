@@ -8,6 +8,11 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableKms
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import org.springframework.stereotype.Service;
 
+/**
+ * AFTER_COMMIT KMS orchestration for Disable. Thin wrapper over {@code disableKey} + audit; no
+ * stale-event CAS is required (see {@link DisableKmsKeyUseCase} Javadoc for the rationale and the
+ * R5 self-heal that covers the reverse-order Disable/Reactivate race).
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor

@@ -8,6 +8,11 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ScheduleKm
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import org.springframework.stereotype.Service;
 
+/**
+ * AFTER_COMMIT KMS orchestration for Archive. Thin wrapper over {@code scheduleKeyDeletion} +
+ * audit; no stale-event CAS is required because {@code ARCHIVED} is terminal and the call's intent
+ * is pinned to a specific {@code kmsKeyId} (see {@link ScheduleKmsKeyDeletionUseCase} Javadoc).
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
