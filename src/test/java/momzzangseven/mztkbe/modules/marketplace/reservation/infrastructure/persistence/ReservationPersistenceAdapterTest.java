@@ -109,6 +109,15 @@ class ReservationPersistenceAdapterTest {
     int count = reservationAdapter.countActiveReservationsBySlotIdAndDate(slotId, date);
 
     assertThat(count).isEqualTo(3);
+    assertThat(reservationAdapter.countActiveReservationsBySlotIdAndDateWithLock(slotId, date))
+        .isEqualTo(3);
+    assertThat(reservationAdapter.countActiveReservationsBySlotId(slotId)).isEqualTo(3);
+    assertThat(reservationAdapter.countActiveReservationsBySlotIds(List.of(slotId)))
+        .containsEntry(slotId, 3);
+    assertThat(
+            reservationAdapter.countActiveReservationsBySlotIdAndDateRange(
+                slotId, date.minusDays(1), date.plusDays(1)))
+        .containsEntry(date, 3);
   }
 
   @Test

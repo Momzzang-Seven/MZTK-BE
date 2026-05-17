@@ -19,8 +19,13 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reserva
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +46,14 @@ public class ApplyReservationEscrowExecutionHookService
   @Nullable private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   @Nullable private final LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
   @Nullable private final SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
+  @Nullable private TransactionOperations nonTransactionalOperations;
+
+  @Autowired
+  void setTransactionManager(PlatformTransactionManager transactionManager) {
+    TransactionTemplate template = new TransactionTemplate(transactionManager);
+    template.setPropagationBehavior(TransactionDefinition.PROPAGATION_NOT_SUPPORTED);
+    this.nonTransactionalOperations = template;
+  }
 
   @Override
   public void afterExecutionConfirmed(ReservationEscrowExecutionConfirmedCommand command) {
@@ -206,19 +219,12 @@ public class ApplyReservationEscrowExecutionHookService
               order.deadlineEpochSeconds(),
               deadlineAt);
       case ReservationEscrowOrderView.STATE_CANCELLED ->
-          TRAINER.equals(command.actorType())
-              ? reservation.syncChainOutcome(
-                  ReservationStatus.REJECTED,
-                  ReservationEscrowStatus.REFUNDED,
-                  command.txHash(),
-                  order.deadlineEpochSeconds(),
-                  deadlineAt)
-              : reservation.syncChainOutcome(
-                  ReservationStatus.USER_CANCELLED,
-                  ReservationEscrowStatus.REFUNDED,
-                  command.txHash(),
-                  order.deadlineEpochSeconds(),
-                  deadlineAt);
+          reservation.syncChainOutcome(
+              ReservationStatus.MANUAL_SYNC_REQUIRED,
+              ReservationEscrowStatus.MANUAL_SYNC_REQUIRED,
+              command.txHash(),
+              order.deadlineEpochSeconds(),
+              deadlineAt);
       case ReservationEscrowOrderView.STATE_ADMIN_SETTLED ->
           reservation.syncChainOutcome(
               ReservationStatus.AUTO_SETTLED,
@@ -252,7 +258,9 @@ public class ApplyReservationEscrowExecutionHookService
       return ChainOrderLookup.notLoaded();
     }
     try {
-      return ChainOrderLookup.loaded(loadReservationEscrowOrderPort.getOrder(command.orderKey()));
+      return runWithoutTransaction(
+          () ->
+              ChainOrderLookup.loaded(loadReservationEscrowOrderPort.getOrder(command.orderKey())));
     } catch (RuntimeException e) {
       log.warn(
           "Failed to load marketplace chain order before reservation hook lock: reservationId={}, orderKey={}",
@@ -261,6 +269,13 @@ public class ApplyReservationEscrowExecutionHookService
           e);
       return ChainOrderLookup.failed(e);
     }
+  }
+
+  private <T> T runWithoutTransaction(java.util.function.Supplier<T> supplier) {
+    if (nonTransactionalOperations == null) {
+      return supplier.get();
+    }
+    return nonTransactionalOperations.execute(status -> supplier.get());
   }
 
   private void markPurchaseCreateIdempotencyFailedIfNeeded(

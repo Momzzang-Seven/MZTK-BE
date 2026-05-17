@@ -47,6 +47,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -198,6 +200,37 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     then(saveReservationPort).should().save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
     assertThat(captor.getValue().getContractDeadlineEpochSeconds()).isEqualTo(1_900_000_000L);
+  }
+
+  @ParameterizedTest(name = "state={0} -> status={1}, escrowStatus={2}")
+  @CsvSource({
+    "2000, SETTLED, SETTLED",
+    "3000, MANUAL_SYNC_REQUIRED, MANUAL_SYNC_REQUIRED",
+    "4000, AUTO_SETTLED, SETTLED",
+    "6000, DEADLINE_REFUNDED, DEADLINE_REFUNDED"
+  })
+  @DisplayName("confirmed purchase terminal chain state syncs to the matching local outcome")
+  void afterExecutionConfirmed_purchaseTerminalChainState_syncsLocalOutcome(
+      int chainState,
+      ReservationStatus expectedStatus,
+      ReservationEscrowStatus expectedEscrowStatus)
+      throws Exception {
+    Reservation reservation = purchasePreparing("purchase-token");
+    ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
+        .willReturn(Optional.of(reservation.bindPurchaseIntent("intent-1")));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(chainState, 1_900_000_000L));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(expectedStatus);
+    assertThat(captor.getValue().getEscrowStatus()).isEqualTo(expectedEscrowStatus);
+    assertThat(captor.getValue().getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(captor.getValue().getPendingAction()).isNull();
+    assertThat(captor.getValue().getPendingAttemptToken()).isNull();
   }
 
   @Test
