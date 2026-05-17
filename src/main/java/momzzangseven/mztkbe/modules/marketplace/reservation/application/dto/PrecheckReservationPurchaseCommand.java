@@ -13,7 +13,11 @@ public record PrecheckReservationPurchaseCommand(
     LocalDate reservationDate,
     LocalTime reservationTime,
     BigInteger signedAmount,
-    Integer bookedPriceAmountKrw) {
+    Integer bookedPriceAmountKrw,
+    String buyerWalletAddress,
+    String trainerWalletAddress,
+    String tokenAddress,
+    BigInteger priceBaseUnits) {
 
   public PrecheckReservationPurchaseCommand {
     requirePositive(buyerUserId, "buyerUserId");
@@ -32,11 +36,23 @@ public record PrecheckReservationPurchaseCommand(
     if (bookedPriceAmountKrw == null || bookedPriceAmountKrw <= 0) {
       throw new IllegalArgumentException("bookedPriceAmountKrw must be positive");
     }
+    requireText(buyerWalletAddress, "buyerWalletAddress");
+    requireText(trainerWalletAddress, "trainerWalletAddress");
+    requireText(tokenAddress, "tokenAddress");
+    if (priceBaseUnits == null || priceBaseUnits.signum() <= 0) {
+      throw new IllegalArgumentException("priceBaseUnits must be positive");
+    }
   }
 
   private static void requirePositive(Long value, String fieldName) {
     if (value == null || value <= 0) {
       throw new IllegalArgumentException(fieldName + " must be positive");
+    }
+  }
+
+  private static void requireText(String value, String fieldName) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(fieldName + " is required");
     }
   }
 }

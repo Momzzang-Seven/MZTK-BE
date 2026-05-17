@@ -236,65 +236,21 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         signableIntent.getUnsignedTxSnapshot().expectedNonce(),
         signedTransaction.rawTransaction(),
         signedTransaction.txHash());
-    executionIntentPersistencePort.update(signableIntent.markSigned(created.transactionId(), now));
     audit(
         created.transactionId(),
         ExecutionAuditEventType.SIGN,
         null,
         java.util.Map.of("mode", intent.getMode().name(), "internal", true));
-
-    ExecutionTransactionGatewayPort.BroadcastResult broadcast =
-        executionTransactionGatewayPort.broadcast(signedTransaction.rawTransaction());
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.BROADCAST,
-        broadcast.rpcAlias(),
-        broadcastDetail(broadcast));
-
-    if (broadcast.success()) {
-      String txHash =
-          broadcast.txHash() == null || broadcast.txHash().isBlank()
-              ? signedTransaction.txHash()
-              : broadcast.txHash();
-      executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
-      ExecutionIntent pendingIntent =
-          executionIntentPersistencePort.update(
-              signableIntent.markPendingOnchain(
-                  created.transactionId(), LocalDateTime.now(appClock)));
-      ExecutionActionHookRunner.afterTransactionSubmitted(
-          runAfterCommitPort,
-          actionHandler,
-          pendingIntent,
-          actionPlan,
-          ExecutionTransactionStatus.PENDING);
-      return new ExecuteInternalExecutionIntentResult(
-          true,
-          false,
-          intent.getPublicId(),
-          ExecutionIntentStatus.PENDING_ONCHAIN,
-          created.transactionId(),
-          ExecutionTransactionStatus.PENDING,
-          txHash);
-    }
-
-    String failureReason =
-        broadcast.failureReason() == null || broadcast.failureReason().isBlank()
-            ? BROADCAST_FAILED
-            : broadcast.failureReason();
-    executionTransactionGatewayPort.scheduleRetry(
-        created.transactionId(),
-        failureReason,
-        LocalDateTime.now(appClock)
-            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     ExecutionIntent signedIntent =
         executionIntentPersistencePort.update(
             signableIntent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    ExecutionActionHookRunner.afterTransactionSubmitted(
-        runAfterCommitPort,
-        actionHandler,
+    scheduleBroadcastAfterCommit(
         signedIntent,
-        actionPlan,
-        ExecutionTransactionStatus.SIGNED);
+        created.transactionId(),
+        signedTransaction.rawTransaction(),
+        signedTransaction.txHash(),
+        actionHandler,
+        actionPlan);
     return new ExecuteInternalExecutionIntentResult(
         true,
         false,
@@ -303,6 +259,85 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         created.transactionId(),
         ExecutionTransactionStatus.SIGNED,
         signedTransaction.txHash());
+  }
+
+  private void scheduleBroadcastAfterCommit(
+      ExecutionIntent signedIntent,
+      Long transactionId,
+      String rawTx,
+      String fallbackTxHash,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan) {
+    runAfterCommitPort.runAfterCommitWithoutTransaction(
+        () -> {
+          ExecutionTransactionGatewayPort.BroadcastResult broadcast =
+              executionTransactionGatewayPort.broadcast(rawTx);
+          runAfterCommitPort.runAfterCommit(
+              () ->
+                  persistBroadcastOutcome(
+                      signedIntent.getPublicId(),
+                      transactionId,
+                      fallbackTxHash,
+                      broadcast,
+                      actionHandler,
+                      actionPlan));
+        });
+  }
+
+  private void persistBroadcastOutcome(
+      String executionIntentId,
+      Long transactionId,
+      String fallbackTxHash,
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan) {
+    audit(
+        transactionId,
+        ExecutionAuditEventType.BROADCAST,
+        broadcast.rpcAlias(),
+        broadcastDetail(broadcast));
+    ExecutionIntent current =
+        executionIntentPersistencePort.findByPublicIdForUpdate(executionIntentId).orElse(null);
+    if (current == null
+        || current.getSubmittedTxId() == null
+        || !current.getSubmittedTxId().equals(transactionId)
+        || current.getStatus() != ExecutionIntentStatus.SIGNED) {
+      log.warn(
+          "Skipping internal broadcast outcome for stale execution intent: intentId={}, txId={}",
+          executionIntentId,
+          transactionId);
+      return;
+    }
+
+    if (broadcast.success()) {
+      String txHash =
+          broadcast.txHash() == null || broadcast.txHash().isBlank()
+              ? fallbackTxHash
+              : broadcast.txHash();
+      executionTransactionGatewayPort.markPending(transactionId, txHash);
+      ExecutionIntent pendingIntent =
+          executionIntentPersistencePort.update(
+              current.markPendingOnchain(transactionId, LocalDateTime.now(appClock)));
+      ExecutionActionHookRunner.afterTransactionSubmitted(
+          runAfterCommitPort,
+          actionHandler,
+          pendingIntent,
+          actionPlan,
+          ExecutionTransactionStatus.PENDING);
+      return;
+    }
+
+    String failureReason =
+        broadcast.failureReason() == null || broadcast.failureReason().isBlank()
+            ? BROADCAST_FAILED
+            : broadcast.failureReason();
+    executionTransactionGatewayPort.scheduleRetry(
+        transactionId,
+        failureReason,
+        LocalDateTime.now(appClock)
+            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
+    ExecutionActionHookRunner.afterTransactionSubmitted(
+        runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
   }
 
   private ExecutionIntent rebindReservedNonce(ExecutionIntent intent, long reservedNonce) {

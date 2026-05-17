@@ -6,8 +6,8 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceEscrowOrderPort;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceEscrowOrderView;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowOrderResult;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.GetMarketplaceEscrowOrderUseCase;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ReservationEscrowOrderAdapter implements LoadReservationEscrowOrderPort {
 
-  private final ObjectProvider<LoadMarketplaceEscrowOrderPort> loadMarketplaceEscrowOrderPort;
+  private final ObjectProvider<GetMarketplaceEscrowOrderUseCase> getMarketplaceEscrowOrderUseCase;
 
   @Override
   public ReservationEscrowOrderView getOrder(String orderKey) {
@@ -31,15 +31,15 @@ public class ReservationEscrowOrderAdapter implements LoadReservationEscrowOrder
     return delegate().getOrders(orderKeys.stream().toList()).stream().map(this::toView).toList();
   }
 
-  private LoadMarketplaceEscrowOrderPort delegate() {
-    LoadMarketplaceEscrowOrderPort delegate = loadMarketplaceEscrowOrderPort.getIfAvailable();
+  private GetMarketplaceEscrowOrderUseCase delegate() {
+    GetMarketplaceEscrowOrderUseCase delegate = getMarketplaceEscrowOrderUseCase.getIfAvailable();
     if (delegate == null) {
       throw new MarketplaceWeb3DisabledException();
     }
     return delegate;
   }
 
-  private ReservationEscrowOrderView toView(MarketplaceEscrowOrderView order) {
+  private ReservationEscrowOrderView toView(MarketplaceEscrowOrderResult order) {
     return new ReservationEscrowOrderView(
         order.orderKey(),
         order.price().toString(),

@@ -308,67 +308,22 @@ public class TransactionalExecuteExecutionIntentDelegate
 
     executionTransactionGatewayPort.markSigned(
         created.transactionId(), sponsorNonce, signedPayload.rawTx(), signedPayload.txHash());
-    executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
     audit(
         created.transactionId(),
         ExecutionAuditEventType.AUTHORIZATION,
         null,
         java.util.Map.of("mode", intent.getMode().name()));
-
-    ExecutionTransactionGatewayPort.BroadcastResult broadcast =
-        executionTransactionGatewayPort.broadcast(signedPayload.rawTx());
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.BROADCAST,
-        broadcast.rpcAlias(),
-        broadcastDetail(broadcast));
-
-    if (broadcast.success()) {
-      String txHash =
-          broadcast.txHash() == null || broadcast.txHash().isBlank()
-              ? signedPayload.txHash()
-              : broadcast.txHash();
-      executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
-      ExecutionIntent pendingIntent =
-          executionIntentPersistencePort.update(
-              intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
-      moveReservedSponsorExposureToConsumed(
-          intent.getRequesterUserId(),
-          intent.resolveSponsorUsageDateKst(),
-          intent.getReservedSponsorCostWei());
-      ExecutionActionHookRunner.afterTransactionSubmitted(
-          runAfterCommitPort,
-          actionHandler,
-          pendingIntent,
-          actionPlan,
-          ExecutionTransactionStatus.PENDING);
-      return new ExecuteExecutionIntentResult(
-          intent.getPublicId(),
-          ExecutionIntentStatus.PENDING_ONCHAIN,
-          created.transactionId(),
-          ExecutionTransactionStatus.PENDING,
-          txHash);
-    }
-
-    String reason =
-        broadcast.failureReason() == null || broadcast.failureReason().isBlank()
-            ? BROADCAST_FAILED
-            : broadcast.failureReason();
-    executionTransactionGatewayPort.scheduleRetry(
-        created.transactionId(),
-        reason,
-        LocalDateTime.now(appClock)
-            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     ExecutionIntent signedIntent =
         executionIntentPersistencePort.update(
             intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    ExecutionActionHookRunner.afterTransactionSubmitted(
-        runAfterCommitPort,
-        actionHandler,
+    scheduleBroadcastAfterCommit(
         signedIntent,
+        created.transactionId(),
+        signedPayload.rawTx(),
+        signedPayload.txHash(),
+        actionHandler,
         actionPlan,
-        ExecutionTransactionStatus.SIGNED);
+        true);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
@@ -432,43 +387,103 @@ public class TransactionalExecuteExecutionIntentDelegate
         intent.getUnsignedTxSnapshot().expectedNonce(),
         decoded.rawTransaction(),
         decoded.txHash());
-    executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
     audit(
         created.transactionId(),
         ExecutionAuditEventType.SIGN,
         null,
         java.util.Map.of("mode", intent.getMode().name()));
-
-    ExecutionTransactionGatewayPort.BroadcastResult broadcast =
-        executionTransactionGatewayPort.broadcast(decoded.rawTransaction());
-    audit(
+    ExecutionIntent signedIntent =
+        executionIntentPersistencePort.update(
+            intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    scheduleBroadcastAfterCommit(
+        signedIntent,
         created.transactionId(),
+        decoded.rawTransaction(),
+        decoded.txHash(),
+        actionHandler,
+        actionPlan,
+        false);
+    return new ExecuteExecutionIntentResult(
+        intent.getPublicId(),
+        ExecutionIntentStatus.SIGNED,
+        created.transactionId(),
+        ExecutionTransactionStatus.SIGNED,
+        decoded.txHash());
+  }
+
+  private void scheduleBroadcastAfterCommit(
+      ExecutionIntent signedIntent,
+      Long transactionId,
+      String rawTx,
+      String fallbackTxHash,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan,
+      boolean consumeSponsorExposureOnSuccess) {
+    runAfterCommitPort.runAfterCommitWithoutTransaction(
+        () -> {
+          ExecutionTransactionGatewayPort.BroadcastResult broadcast =
+              executionTransactionGatewayPort.broadcast(rawTx);
+          runAfterCommitPort.runAfterCommit(
+              () ->
+                  persistBroadcastOutcome(
+                      signedIntent.getPublicId(),
+                      transactionId,
+                      fallbackTxHash,
+                      broadcast,
+                      actionHandler,
+                      actionPlan,
+                      consumeSponsorExposureOnSuccess));
+        });
+  }
+
+  private void persistBroadcastOutcome(
+      String executionIntentId,
+      Long transactionId,
+      String fallbackTxHash,
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan,
+      boolean consumeSponsorExposureOnSuccess) {
+    audit(
+        transactionId,
         ExecutionAuditEventType.BROADCAST,
         broadcast.rpcAlias(),
         broadcastDetail(broadcast));
+    ExecutionIntent current =
+        executionIntentPersistencePort.findByPublicIdForUpdate(executionIntentId).orElse(null);
+    if (current == null
+        || current.getSubmittedTxId() == null
+        || !current.getSubmittedTxId().equals(transactionId)
+        || current.getStatus() != ExecutionIntentStatus.SIGNED) {
+      log.warn(
+          "Skipping broadcast outcome for stale execution intent: intentId={}, txId={}",
+          executionIntentId,
+          transactionId);
+      return;
+    }
 
     if (broadcast.success()) {
       String txHash =
           broadcast.txHash() == null || broadcast.txHash().isBlank()
-              ? decoded.txHash()
+              ? fallbackTxHash
               : broadcast.txHash();
-      executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
+      executionTransactionGatewayPort.markPending(transactionId, txHash);
       ExecutionIntent pendingIntent =
           executionIntentPersistencePort.update(
-              intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
+              current.markPendingOnchain(transactionId, LocalDateTime.now(appClock)));
+      if (consumeSponsorExposureOnSuccess) {
+        moveReservedSponsorExposureToConsumed(
+            current.getRequesterUserId(),
+            current.resolveSponsorUsageDateKst(),
+            current.getReservedSponsorCostWei());
+      }
       ExecutionActionHookRunner.afterTransactionSubmitted(
           runAfterCommitPort,
           actionHandler,
           pendingIntent,
           actionPlan,
           ExecutionTransactionStatus.PENDING);
-      return new ExecuteExecutionIntentResult(
-          intent.getPublicId(),
-          ExecutionIntentStatus.PENDING_ONCHAIN,
-          created.transactionId(),
-          ExecutionTransactionStatus.PENDING,
-          txHash);
+      return;
     }
 
     String reason =
@@ -476,25 +491,12 @@ public class TransactionalExecuteExecutionIntentDelegate
             ? BROADCAST_FAILED
             : broadcast.failureReason();
     executionTransactionGatewayPort.scheduleRetry(
-        created.transactionId(),
+        transactionId,
         reason,
         LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
-    ExecutionIntent signedIntent =
-        executionIntentPersistencePort.update(
-            intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
     ExecutionActionHookRunner.afterTransactionSubmitted(
-        runAfterCommitPort,
-        actionHandler,
-        signedIntent,
-        actionPlan,
-        ExecutionTransactionStatus.SIGNED);
-    return new ExecuteExecutionIntentResult(
-        intent.getPublicId(),
-        ExecutionIntentStatus.SIGNED,
-        created.transactionId(),
-        ExecutionTransactionStatus.SIGNED,
-        decoded.txHash());
+        runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
   }
 
   private void releaseSponsorExposure(

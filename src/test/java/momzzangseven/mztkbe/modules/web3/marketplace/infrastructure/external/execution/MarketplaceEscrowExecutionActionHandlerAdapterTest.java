@@ -15,11 +15,14 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApplyReservationEscrowExecutionHookService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
@@ -37,8 +40,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceT
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceEscrowOrderPort;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceEscrowOrderView;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceActorType;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAllowanceStrategy;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
@@ -62,7 +63,7 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private RecordTrainerStrikePort recordTrainerStrikePort;
-  @Mock private LoadMarketplaceEscrowOrderPort loadMarketplaceEscrowOrderPort;
+  @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   @Mock private LoadExecutionTransactionPort loadExecutionTransactionPort;
   @Mock private LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
   @Mock private SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
@@ -75,14 +76,15 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     sut =
         new MarketplaceEscrowExecutionActionHandlerAdapter(
             objectMapper,
-            loadReservationPort,
-            saveReservationPort,
-            Clock.fixed(Instant.parse("2026-05-16T00:00:00Z"), ZoneOffset.UTC));
-    sut.setRecordTrainerStrikePort(recordTrainerStrikePort);
-    sut.setLoadMarketplaceEscrowOrderPort(loadMarketplaceEscrowOrderPort);
+            new ApplyReservationEscrowExecutionHookService(
+                loadReservationPort,
+                saveReservationPort,
+                Clock.fixed(Instant.parse("2026-05-16T00:00:00Z"), ZoneOffset.UTC),
+                recordTrainerStrikePort,
+                loadReservationEscrowOrderPort,
+                loadReservationCreateIdempotencyPort,
+                saveReservationCreateIdempotencyPort));
     sut.setLoadExecutionTransactionPort(loadExecutionTransactionPort);
-    sut.setReservationCreateIdempotencyPorts(
-        loadReservationCreateIdempotencyPort, saveReservationCreateIdempotencyPort);
   }
 
   @Test
@@ -143,8 +145,8 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
     given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
         .willReturn(Optional.of(reservation.bindPurchaseIntent("intent-1")));
-    given(loadMarketplaceEscrowOrderPort.getOrder(ORDER_KEY))
-        .willReturn(order(MarketplaceEscrowOrderView.STATE_CREATED, 1_900_000_000L));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, 1_900_000_000L));
 
     sut.afterExecutionConfirmed(intent, null);
 
@@ -152,8 +154,8 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     then(saveReservationPort).should().save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.PENDING);
     assertThat(captor.getValue().getContractDeadlineEpochSeconds()).isEqualTo(1_900_000_000L);
-    InOrder inOrder = Mockito.inOrder(loadMarketplaceEscrowOrderPort, loadReservationPort);
-    inOrder.verify(loadMarketplaceEscrowOrderPort).getOrder(ORDER_KEY);
+    InOrder inOrder = Mockito.inOrder(loadReservationEscrowOrderPort, loadReservationPort);
+    inOrder.verify(loadReservationEscrowOrderPort).getOrder(ORDER_KEY);
     inOrder.verify(loadReservationPort).findByCurrentExecutionIntentPublicIdWithLock("intent-1");
   }
 
@@ -164,15 +166,15 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     Reservation reservation = purchasePreparing("purchase-token").bindPurchaseIntent("intent-1");
     ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
     willThrow(new IllegalStateException("rpc unavailable"))
-        .given(loadMarketplaceEscrowOrderPort)
+        .given(loadReservationEscrowOrderPort)
         .getOrder(ORDER_KEY);
     given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
         .willReturn(Optional.of(reservation));
 
     sut.afterExecutionConfirmed(intent, null);
 
-    InOrder inOrder = Mockito.inOrder(loadMarketplaceEscrowOrderPort, loadReservationPort);
-    inOrder.verify(loadMarketplaceEscrowOrderPort).getOrder(ORDER_KEY);
+    InOrder inOrder = Mockito.inOrder(loadReservationEscrowOrderPort, loadReservationPort);
+    inOrder.verify(loadReservationEscrowOrderPort).getOrder(ORDER_KEY);
     inOrder.verify(loadReservationPort).findByCurrentExecutionIntentPublicIdWithLock("intent-1");
     ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
     then(saveReservationPort).should().save(captor.capture());
@@ -187,8 +189,8 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
     given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
         .willReturn(Optional.of(reservation.bindPurchaseIntent("intent-1")));
-    given(loadMarketplaceEscrowOrderPort.getOrder(ORDER_KEY))
-        .willReturn(order(MarketplaceEscrowOrderView.STATE_ADMIN_REFUNDED, 1_900_000_000L));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_ADMIN_REFUNDED, 1_900_000_000L));
 
     sut.afterExecutionConfirmed(intent, null);
 
@@ -206,14 +208,14 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
     given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
         .willReturn(Optional.of(reservation.bindPurchaseIntent("intent-1")));
-    given(loadMarketplaceEscrowOrderPort.getOrder(ORDER_KEY))
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
         .willReturn(
-            new MarketplaceEscrowOrderView(
+            new ReservationEscrowOrderView(
                 ORDER_KEY,
-                BigInteger.ZERO,
+                "0",
                 "0x0000000000000000000000000000000000000000",
                 0L,
-                MarketplaceEscrowOrderView.STATE_ABSENT,
+                ReservationEscrowOrderView.STATE_ABSENT,
                 "0x0000000000000000000000000000000000000000",
                 "0x0000000000000000000000000000000000000000"));
 
@@ -503,10 +505,10 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
         "0x" + "a".repeat(130));
   }
 
-  private MarketplaceEscrowOrderView order(int state, long deadlineEpochSeconds) {
-    return new MarketplaceEscrowOrderView(
+  private ReservationEscrowOrderView order(int state, long deadlineEpochSeconds) {
+    return new ReservationEscrowOrderView(
         ORDER_KEY,
-        BigInteger.valueOf(50_000),
+        "50000",
         "0x3333333333333333333333333333333333333333",
         deadlineEpochSeconds,
         state,

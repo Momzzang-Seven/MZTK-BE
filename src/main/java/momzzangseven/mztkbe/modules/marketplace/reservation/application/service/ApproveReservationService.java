@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -28,6 +29,7 @@ public class ApproveReservationService implements ApproveReservationUseCase {
 
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
+  private final Clock clock;
 
   @Override
   @Transactional
@@ -67,6 +69,8 @@ public class ApproveReservationService implements ApproveReservationUseCase {
           ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
           "Cannot approve reservation while legacy escrow dispatch is unresolved");
     }
+    ReservationDeadlineActionGuard.requireUserActionBeforeContractDeadline(
+        reservation, clock, "approve");
 
     Reservation approved = reservation.approve();
     Reservation saved = saveReservationPort.save(approved);

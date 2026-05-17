@@ -6,8 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -16,12 +20,14 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Appr
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -32,11 +38,20 @@ class ApproveReservationServiceTest {
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
 
-  @InjectMocks private ApproveReservationService sut;
+  private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
+  private static final Instant FIXED_NOW = Instant.parse("2025-06-01T03:00:00Z");
+  private static final Clock FIXED_CLOCK = Clock.fixed(FIXED_NOW, ZONE);
+
+  private ApproveReservationService sut;
 
   private static final Long RESERVATION_ID = 1L;
   private static final Long TRAINER_ID = 100L;
   private static final Long OTHER_TRAINER_ID = 999L;
+
+  @BeforeEach
+  void setUp() {
+    sut = new ApproveReservationService(loadReservationPort, saveReservationPort, FIXED_CLOCK);
+  }
 
   private Reservation pendingReservation() {
     return Reservation.builder()
@@ -48,6 +63,8 @@ class ApproveReservationServiceTest {
         .reservationTime(LocalTime.of(10, 0))
         .durationMinutes(60)
         .status(ReservationStatus.PENDING)
+        .escrowStatus(ReservationEscrowStatus.LOCKED)
+        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
         .orderId("order-1")
         .version(0L)
         .build();
@@ -112,6 +129,26 @@ class ApproveReservationServiceTest {
               ex ->
                   assertThat(((BusinessException) ex).getCode())
                       .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS.getCode()));
+    }
+
+    @Test
+    @DisplayName("[AP-04] contract deadline 이후에는 승인할 수 없다")
+    void contract_deadline_이후_승인_차단() {
+      Reservation expired =
+          pendingReservation().toBuilder()
+              .contractDeadlineAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE).minusMinutes(1))
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(expired));
+
+      assertThatThrownBy(
+              () -> sut.execute(new ApproveReservationCommand(RESERVATION_ID, TRAINER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
+
+      then(saveReservationPort).shouldHaveNoInteractions();
     }
   }
 }

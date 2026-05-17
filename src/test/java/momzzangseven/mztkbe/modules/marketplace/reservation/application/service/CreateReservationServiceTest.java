@@ -153,6 +153,21 @@ class CreateReservationServiceTest {
                         invocation.getArgument(2, String.class),
                         invocation.getArgument(3, LocalDateTime.class)),
                     true));
+    given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+        .willReturn(Optional.empty());
+    given(loadReservationPort.findActiveByBuyerAndSlotDateTimeWithLock(any(), any(), any(), any()))
+        .willReturn(Optional.empty());
+    given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
+        .willReturn(0);
+    given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+    given(loadReservationWalletPort.loadActiveWalletAddress(USER_ID))
+        .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+    given(loadReservationWalletPort.loadActiveWalletAddress(TRAINER_ID))
+        .willReturn(Optional.of("0x2222222222222222222222222222222222222222"));
+    given(loadReservationEscrowPaymentConfigPort.load())
+        .willReturn(
+            new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
   }
 
   @Nested

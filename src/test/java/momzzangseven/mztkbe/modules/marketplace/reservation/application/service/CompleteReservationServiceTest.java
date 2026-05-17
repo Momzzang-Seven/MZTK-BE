@@ -246,7 +246,26 @@ class CompleteReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[CM-05] Phase B 바인딩 실패 시 signable intent를 취소하고 APPROVED로 롤백한다")
+    @DisplayName("[CM-05] contract deadline 이후에는 완료 intent 생성을 차단한다")
+    void contract_deadline_이후_완료_차단() {
+      Reservation expired =
+          approvedPastReservation().toBuilder()
+              .contractDeadlineAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE).minusMinutes(1))
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(expired));
+
+      assertThatThrownBy(() -> sut.execute(new CompleteReservationCommand(RESERVATION_ID, USER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
+
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[CM-06] Phase B 바인딩 실패 시 signable intent를 취소하고 APPROVED로 롤백한다")
     void phase_b_바인딩_실패_보상() {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
@@ -292,7 +311,7 @@ class CompleteReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[CM-06] Phase B 보상에서 intent 취소가 불가하면 pending 상태를 즉시 롤백하지 않는다")
+    @DisplayName("[CM-07] Phase B 보상에서 intent 취소가 불가하면 pending 상태를 즉시 롤백하지 않는다")
     void phase_b_보상_취소_불가_시_즉시_롤백하지_않음() {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
@@ -327,7 +346,7 @@ class CompleteReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[CM-07] legacy dispatch 예약은 사용자 EIP-7702 완료 준비로 진입할 수 없다")
+    @DisplayName("[CM-08] legacy dispatch 예약은 사용자 EIP-7702 완료 준비로 진입할 수 없다")
     void legacy_dispatch_예약_완료_차단() {
       Reservation legacy =
           approvedPastReservation().toBuilder()

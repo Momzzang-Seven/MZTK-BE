@@ -9,9 +9,6 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
@@ -20,6 +17,8 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.Marketplace
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceUserExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceActiveWalletPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceEip7702DraftContextPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigPreimage;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.SignMarketplaceServerSigPort;
@@ -31,8 +30,7 @@ import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecut
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.utils.Numeric;
@@ -40,14 +38,15 @@ import org.web3j.utils.Numeric;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
+@ConditionalOnBean({
+  LoadMarketplaceActiveWalletPort.class,
+  LoadMarketplaceEip7702DraftContextPort.class
+})
 public class MarketplaceUserExecutionDraftBuilderAdapter
     implements BuildMarketplaceUserExecutionDraftPort {
 
-  private final GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;
-  private final Eip7702ChainPort eip7702ChainPort;
-  private final Eip7702AuthorizationPort eip7702AuthorizationPort;
-  private final Eip7702Properties eip7702Properties;
-  private final Web3CoreProperties web3CoreProperties;
+  private final LoadMarketplaceActiveWalletPort loadMarketplaceActiveWalletPort;
+  private final LoadMarketplaceEip7702DraftContextPort loadMarketplaceEip7702DraftContextPort;
   private final MarketplaceEscrowProperties marketplaceEscrowProperties;
   private final BuildMarketplaceEscrowCallDataPort buildMarketplaceEscrowCallDataPort;
   private final SignMarketplaceServerSigPort signMarketplaceServerSigPort;
@@ -110,7 +109,7 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
                 ? null
                 : Numeric.toHexString(signature.signatureBytes()));
 
-    LocalDateTime expiresAt = expiresAt(signature.signingInstant(), signature);
+    LocalDateTime expiresAt = expiresAt(context, signature);
     return new MarketplaceExecutionDraft(
         MarketplaceExecutionResourceType.ORDER,
         request.resourceId(),
@@ -158,18 +157,13 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
           "approve-batch marketplace purchase is not enabled for this draft builder");
     }
 
-    String delegateTarget =
-        EvmAddress.of(eip7702Properties.getDelegation().getBatchImplAddress()).value();
-    long authorityNonce =
-        eip7702ChainPort.loadPendingAccountNonce(authorityAddress).longValueExact();
-    String authorizationPayloadHash =
-        eip7702AuthorizationPort.buildSigningHashHex(
-            web3CoreProperties.getChainId(), delegateTarget, BigInteger.valueOf(authorityNonce));
+    var eip7702Context = loadMarketplaceEip7702DraftContextPort.load(authorityAddress);
     return new DraftContext(
         authorityAddress,
-        authorityNonce,
-        delegateTarget,
-        authorizationPayloadHash,
+        eip7702Context.authorityNonce(),
+        eip7702Context.delegateTarget(),
+        eip7702Context.authorizationPayloadHash(),
+        eip7702Context.authorizationTtlSeconds(),
         appClock.instant());
   }
 
@@ -239,9 +233,10 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
     };
   }
 
-  private LocalDateTime expiresAt(Instant signingInstant, ServerSignature signature) {
-    Instant authExpires =
-        signingInstant.plusSeconds(eip7702Properties.getAuthorization().getTtlSeconds());
+  private LocalDateTime expiresAt(DraftContext context, ServerSignature signature) {
+    Instant signingInstant =
+        signature.signingInstant() == null ? context.signingInstant() : signature.signingInstant();
+    Instant authExpires = signingInstant.plusSeconds(context.authorizationTtlSeconds());
     Instant effectiveExpires = authExpires;
     if (signature.expiresAtEpochSeconds() != null) {
       Instant sigExpires = Instant.ofEpochSecond(signature.expiresAtEpochSeconds());
@@ -251,8 +246,8 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
   }
 
   private String resolveActiveWalletAddress(Long userId) {
-    return getActiveWalletAddressUseCase
-        .execute(userId)
+    return loadMarketplaceActiveWalletPort
+        .loadActiveWalletAddress(userId)
         .map(address -> EvmAddress.of(address).value())
         .orElseThrow(() -> new WalletNotConnectedException(userId));
   }
@@ -262,6 +257,7 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
       Long authorityNonce,
       String delegateTarget,
       String authorizationPayloadHash,
+      long authorizationTtlSeconds,
       Instant signingInstant) {}
 
   private record ServerSignature(

@@ -1,12 +1,14 @@
 package momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config;
 
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.GetMarketplaceEscrowOrderUseCase;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.PrecheckMarketplacePurchaseUseCase;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.PrepareMarketplaceUserExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceUserExecutionDraftPort;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceActiveWalletPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceEscrowOrderPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplacePurchaseConfigPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.PrecheckMarketplacePurchaseFundingPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.SubmitMarketplaceExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.service.GetMarketplaceEscrowOrderService;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.service.PrecheckMarketplacePurchaseService;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.service.PrepareMarketplaceUserExecutionService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -20,18 +22,14 @@ public class MarketplaceExecutionServiceConfig {
 
   @Bean
   @ConditionalOnBean({
-    LoadMarketplaceActiveWalletPort.class,
     LoadMarketplacePurchaseConfigPort.class,
     PrecheckMarketplacePurchaseFundingPort.class
   })
   PrecheckMarketplacePurchaseUseCase precheckMarketplacePurchaseUseCase(
-      LoadMarketplaceActiveWalletPort loadMarketplaceActiveWalletPort,
       LoadMarketplacePurchaseConfigPort loadMarketplacePurchaseConfigPort,
       PrecheckMarketplacePurchaseFundingPort precheckMarketplacePurchaseFundingPort) {
     return new PrecheckMarketplacePurchaseService(
-        loadMarketplaceActiveWalletPort,
-        loadMarketplacePurchaseConfigPort,
-        precheckMarketplacePurchaseFundingPort);
+        loadMarketplacePurchaseConfigPort, precheckMarketplacePurchaseFundingPort);
   }
 
   @Bean
@@ -43,5 +41,12 @@ public class MarketplaceExecutionServiceConfig {
       BuildMarketplaceUserExecutionDraftPort buildDraftPort,
       SubmitMarketplaceExecutionDraftPort submitDraftPort) {
     return new PrepareMarketplaceUserExecutionService(buildDraftPort, submitDraftPort);
+  }
+
+  @Bean
+  @ConditionalOnBean(LoadMarketplaceEscrowOrderPort.class)
+  GetMarketplaceEscrowOrderUseCase getMarketplaceEscrowOrderUseCase(
+      LoadMarketplaceEscrowOrderPort loadMarketplaceEscrowOrderPort) {
+    return new GetMarketplaceEscrowOrderService(loadMarketplaceEscrowOrderPort);
   }
 }

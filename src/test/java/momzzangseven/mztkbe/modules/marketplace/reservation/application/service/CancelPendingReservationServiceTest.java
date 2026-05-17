@@ -6,9 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -28,11 +31,11 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reserva
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,12 +52,29 @@ class CancelPendingReservationServiceTest {
   @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   @Mock private ApplicationEventPublisher eventPublisher;
 
-  @InjectMocks private CancelPendingReservationService sut;
+  private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
+  private static final Instant FIXED_NOW = Instant.parse("2025-06-01T03:00:00Z");
+  private static final Clock FIXED_CLOCK = Clock.fixed(FIXED_NOW, ZONE);
+
+  private CancelPendingReservationService sut;
 
   private static final Long RESERVATION_ID = 1L;
   private static final Long USER_ID = 50L;
   private static final Long OTHER_USER_ID = 999L;
   private static final String ORDER_ID = "123e4567-e89b-12d3-a456-426614174000";
+
+  @BeforeEach
+  void setUp() {
+    sut =
+        new CancelPendingReservationService(
+            loadReservationPort,
+            saveReservationPort,
+            prepareReservationEscrowExecutionPort,
+            cancelReservationEscrowExecutionPort,
+            loadReservationWalletPort,
+            loadReservationEscrowPaymentConfigPort,
+            FIXED_CLOCK);
+  }
 
   private Reservation pendingReservation() {
     return Reservation.builder()
@@ -263,7 +283,27 @@ class CancelPendingReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[CP-07] legacy dispatch 예약은 사용자 EIP-7702 취소 준비로 진입할 수 없다")
+    @DisplayName("[CP-07] contract deadline 이후에는 취소 intent 생성을 차단한다")
+    void contract_deadline_이후_취소_차단() {
+      Reservation expired =
+          pendingReservation().toBuilder()
+              .contractDeadlineAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE).minusMinutes(1))
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(expired));
+
+      assertThatThrownBy(
+              () -> sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
+
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[CP-08] legacy dispatch 예약은 사용자 EIP-7702 취소 준비로 진입할 수 없다")
     void legacy_dispatch_예약_취소_차단() {
       Reservation legacy =
           pendingReservation().toBuilder()

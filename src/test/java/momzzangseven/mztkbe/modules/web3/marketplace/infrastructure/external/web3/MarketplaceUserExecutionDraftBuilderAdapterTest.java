@@ -17,12 +17,11 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceEscrowCallDataPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceActiveWalletPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceEip7702DraftContextPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigPreimage;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.SignMarketplaceServerSigPort;
@@ -30,8 +29,6 @@ import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceActorT
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAllowanceStrategy;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,9 +53,8 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   private static final Instant CONTEXT_INSTANT = Instant.ofEpochSecond(900);
   private static final Instant SIGNING_INSTANT = Instant.ofEpochSecond(1_000);
 
-  @Mock private GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;
-  @Mock private Eip7702ChainPort eip7702ChainPort;
-  @Mock private Eip7702AuthorizationPort eip7702AuthorizationPort;
+  @Mock private LoadMarketplaceActiveWalletPort loadMarketplaceActiveWalletPort;
+  @Mock private LoadMarketplaceEip7702DraftContextPort loadMarketplaceEip7702DraftContextPort;
   @Mock private BuildMarketplaceEscrowCallDataPort buildMarketplaceEscrowCallDataPort;
   @Mock private SignMarketplaceServerSigPort signMarketplaceServerSigPort;
 
@@ -70,20 +66,10 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
     marketplaceEscrowProperties.setMarketplaceContractAddress(ESCROW);
     marketplaceEscrowProperties.setSigValidityDuration(900);
 
-    Eip7702Properties eip7702Properties = new Eip7702Properties();
-    eip7702Properties.getDelegation().setBatchImplAddress(DELEGATE);
-    eip7702Properties.getAuthorization().setTtlSeconds(300);
-
-    Web3CoreProperties web3CoreProperties = new Web3CoreProperties();
-    web3CoreProperties.setChainId(10L);
-
     sut =
         new MarketplaceUserExecutionDraftBuilderAdapter(
-            getActiveWalletAddressUseCase,
-            eip7702ChainPort,
-            eip7702AuthorizationPort,
-            eip7702Properties,
-            web3CoreProperties,
+            loadMarketplaceActiveWalletPort,
+            loadMarketplaceEip7702DraftContextPort,
             marketplaceEscrowProperties,
             buildMarketplaceEscrowCallDataPort,
             signMarketplaceServerSigPort,
@@ -94,10 +80,9 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   @Test
   @DisplayName("purchase draft는 signer의 signingInstant로 expiresAt을 계산하고 EIP-7702 전용 draft를 만든다")
   void build_purchase_usesSigningInstantForExpiresAt() {
-    given(getActiveWalletAddressUseCase.execute(10L)).willReturn(Optional.of(BUYER));
-    given(eip7702ChainPort.loadPendingAccountNonce(BUYER)).willReturn(BigInteger.valueOf(7));
-    given(eip7702AuthorizationPort.buildSigningHashHex(10L, DELEGATE, BigInteger.valueOf(7)))
-        .willReturn("0xauthorizationHash");
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
+        .willReturn(Optional.of(BUYER));
+    givenDraftContext();
     given(signMarketplaceServerSigPort.sign(any()))
         .willReturn(new MarketplaceServerSigResult(1_000L, SIGNATURE, SIGNING_INSTANT));
     given(
@@ -144,10 +129,9 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   @Test
   @DisplayName("deadline refund draft는 서버 signature 없이 context signingInstant 기반으로 만료를 계산한다")
   void build_deadlineRefund_omitsServerSignature() {
-    given(getActiveWalletAddressUseCase.execute(10L)).willReturn(Optional.of(BUYER));
-    given(eip7702ChainPort.loadPendingAccountNonce(BUYER)).willReturn(BigInteger.valueOf(7));
-    given(eip7702AuthorizationPort.buildSigningHashHex(10L, DELEGATE, BigInteger.valueOf(7)))
-        .willReturn("0xauthorizationHash");
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
+        .willReturn(Optional.of(BUYER));
+    givenDraftContext();
     given(
             buildMarketplaceEscrowCallDataPort.encode(
                 any(), any(), any(), any(), any(), any(), any()))
@@ -177,7 +161,8 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   @Test
   @DisplayName("approve-batch purchase는 별도 UX/정책이 없으므로 draft builder에서 명시적으로 차단한다")
   void build_approveBatchPurchase_isBlocked() {
-    given(getActiveWalletAddressUseCase.execute(10L)).willReturn(Optional.of(BUYER));
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
+        .willReturn(Optional.of(BUYER));
 
     assertThatThrownBy(() -> sut.build(request(MarketplaceAllowanceStrategy.APPROVE_BATCH)))
         .isInstanceOf(BusinessException.class)
@@ -190,10 +175,9 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   @Test
   @DisplayName("payload hash는 signedAt/signature/callData 같은 volatile calldata material을 제외한다")
   void build_payloadHash_excludesVolatileSignatureAndCallData() {
-    given(getActiveWalletAddressUseCase.execute(10L)).willReturn(Optional.of(BUYER));
-    given(eip7702ChainPort.loadPendingAccountNonce(BUYER)).willReturn(BigInteger.valueOf(7));
-    given(eip7702AuthorizationPort.buildSigningHashHex(10L, DELEGATE, BigInteger.valueOf(7)))
-        .willReturn("0xauthorizationHash");
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
+        .willReturn(Optional.of(BUYER));
+    givenDraftContext();
     given(signMarketplaceServerSigPort.sign(any()))
         .willReturn(new MarketplaceServerSigResult(1_000L, signature((byte) 1), SIGNING_INSTANT))
         .willReturn(
@@ -218,6 +202,13 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
 
   private MarketplaceEscrowExecutionRequest request(MarketplaceAllowanceStrategy strategy) {
     return request(MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, strategy);
+  }
+
+  private void givenDraftContext() {
+    given(loadMarketplaceEip7702DraftContextPort.load(BUYER))
+        .willReturn(
+            new LoadMarketplaceEip7702DraftContextPort.MarketplaceEip7702DraftContext(
+                10L, DELEGATE, 7L, "0xauthorizationHash", 300L));
   }
 
   private MarketplaceEscrowExecutionRequest request(

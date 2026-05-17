@@ -6,9 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -27,11 +30,11 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reserva
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -48,12 +51,29 @@ class RejectReservationServiceTest {
   @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   @Mock private ApplicationEventPublisher eventPublisher;
 
-  @InjectMocks private RejectReservationService sut;
+  private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
+  private static final Instant FIXED_NOW = Instant.parse("2025-06-01T03:00:00Z");
+  private static final Clock FIXED_CLOCK = Clock.fixed(FIXED_NOW, ZONE);
+
+  private RejectReservationService sut;
 
   private static final Long RESERVATION_ID = 1L;
   private static final Long TRAINER_ID = 100L;
   private static final Long OTHER_TRAINER_ID = 999L;
   private static final String ORDER_ID = "123e4567-e89b-12d3-a456-426614174000";
+
+  @BeforeEach
+  void setUp() {
+    sut =
+        new RejectReservationService(
+            loadReservationPort,
+            saveReservationPort,
+            prepareReservationEscrowExecutionPort,
+            cancelReservationEscrowExecutionPort,
+            loadReservationWalletPort,
+            loadReservationEscrowPaymentConfigPort,
+            FIXED_CLOCK);
+  }
 
   private Reservation pendingReservation() {
     return Reservation.builder()
@@ -233,7 +253,27 @@ class RejectReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[RJ-05] legacy dispatch 예약은 사용자 EIP-7702 반려 준비로 진입할 수 없다")
+    @DisplayName("[RJ-05] contract deadline 이후에는 반려 intent 생성을 차단한다")
+    void contract_deadline_이후_반려_차단() {
+      Reservation expired =
+          pendingReservation().toBuilder()
+              .contractDeadlineAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE).minusMinutes(1))
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(expired));
+
+      assertThatThrownBy(
+              () -> sut.execute(new RejectReservationCommand(RESERVATION_ID, TRAINER_ID, "일정 불가")))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
+
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[RJ-06] legacy dispatch 예약은 사용자 EIP-7702 반려 준비로 진입할 수 없다")
     void legacy_dispatch_예약_반려_차단() {
       Reservation legacy =
           pendingReservation().toBuilder()

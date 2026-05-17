@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
 import java.util.Locale;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +50,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
   private final CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   private final LoadReservationWalletPort loadReservationWalletPort;
   private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
+  private final Clock clock;
   private TransactionOperations transactionOperations;
 
   @Autowired
@@ -58,7 +60,8 @@ public class CancelPendingReservationService implements CancelPendingReservation
       @Nullable PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
       @Nullable CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
       @Nullable LoadReservationWalletPort loadReservationWalletPort,
-      @Nullable LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort) {
+      @Nullable LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
+      Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.saveReservationPort = saveReservationPort;
     this.prepareReservationEscrowExecutionPort =
@@ -77,6 +80,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
         loadReservationEscrowPaymentConfigPort == null
             ? DisabledReservationWeb3PortFactory.paymentConfig()
             : loadReservationEscrowPaymentConfigPort;
+    this.clock = clock;
   }
 
   @Autowired
@@ -96,7 +100,8 @@ public class CancelPendingReservationService implements CancelPendingReservation
         userId -> java.util.Optional.of("0x1111111111111111111111111111111111111111"),
         () ->
             new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
-                "0x3333333333333333333333333333333333333333", 18));
+                "0x3333333333333333333333333333333333333333", 18),
+        Clock.systemDefaultZone());
   }
 
   @Override
@@ -157,6 +162,8 @@ public class CancelPendingReservationService implements CancelPendingReservation
           "Cannot cancel reservation in status: " + reservation.getStatus());
     }
     validateUserEscrowLocked(reservation, "cancel");
+    ReservationDeadlineActionGuard.requireUserActionBeforeContractDeadline(
+        reservation, clock, "cancel");
 
     Reservation pending =
         saveReservationPort.save(reservation.beginCancelPending(UUID.randomUUID().toString()));

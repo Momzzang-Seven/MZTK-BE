@@ -27,6 +27,10 @@ public class ReservationPurchasePrecheckAdapter implements PrecheckReservationPu
             command.classId(),
             command.slotId(),
             command.signedAmount(),
-            command.bookedPriceAmountKrw()));
+            command.bookedPriceAmountKrw(),
+            command.buyerWalletAddress(),
+            command.trainerWalletAddress(),
+            command.tokenAddress(),
+            command.priceBaseUnits()));
   }
 }

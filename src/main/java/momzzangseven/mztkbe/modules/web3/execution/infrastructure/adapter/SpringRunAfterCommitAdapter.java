@@ -14,6 +14,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class SpringRunAfterCommitAdapter implements RunAfterCommitPort {
 
   private final TransactionTemplate transactionTemplate;
+  private final ThreadLocal<Boolean> runningAfterCommitCallback =
+      ThreadLocal.withInitial(() -> false);
 
   public SpringRunAfterCommitAdapter(PlatformTransactionManager transactionManager) {
     this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -22,12 +24,12 @@ public class SpringRunAfterCommitAdapter implements RunAfterCommitPort {
 
   @Override
   public void runAfterCommit(Runnable action) {
-    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+    if (canRegisterAfterCommitCallback()) {
       TransactionSynchronizationManager.registerSynchronization(
           new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-              runInNewTransaction(action);
+              runAfterCommitCallback(() -> runInNewTransaction(action));
             }
           });
       return;
@@ -36,11 +38,50 @@ public class SpringRunAfterCommitAdapter implements RunAfterCommitPort {
     runInNewTransaction(action);
   }
 
+  @Override
+  public void runAfterCommitWithoutTransaction(Runnable action) {
+    if (canRegisterAfterCommitCallback()) {
+      TransactionSynchronizationManager.registerSynchronization(
+          new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+              runAfterCommitCallback(() -> runWithoutTransaction(action));
+            }
+          });
+      return;
+    }
+
+    runWithoutTransaction(action);
+  }
+
+  private boolean canRegisterAfterCommitCallback() {
+    return TransactionSynchronizationManager.isSynchronizationActive()
+        && !Boolean.TRUE.equals(runningAfterCommitCallback.get());
+  }
+
+  private void runAfterCommitCallback(Runnable action) {
+    Boolean previous = runningAfterCommitCallback.get();
+    runningAfterCommitCallback.set(true);
+    try {
+      action.run();
+    } finally {
+      runningAfterCommitCallback.set(previous);
+    }
+  }
+
   private void runInNewTransaction(Runnable action) {
     try {
       transactionTemplate.executeWithoutResult(status -> action.run());
     } catch (RuntimeException exception) {
       log.error("failed to run after-commit action in a new transaction", exception);
+    }
+  }
+
+  private void runWithoutTransaction(Runnable action) {
+    try {
+      action.run();
+    } catch (RuntimeException exception) {
+      log.error("failed to run after-commit action", exception);
     }
   }
 }

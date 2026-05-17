@@ -152,19 +152,24 @@ public class CreateReservationService implements CreateReservationUseCase {
         command.classId(),
         command.slotId());
 
-    CreateLocalContext precheckContext = runInTransaction(() -> loadValidatedLocalContext(command));
+    PurchaseSnapshot purchaseSnapshot =
+        runInTransaction(() -> loadPurchaseSnapshotForPrecheck(command));
     precheckReservationPurchasePort.precheckPurchase(
         new PrecheckReservationPurchaseCommand(
             command.userId(),
-            precheckContext.cls().getTrainerId(),
+            purchaseSnapshot.cls().getTrainerId(),
             command.classId(),
-            precheckContext.slot().getId(),
+            purchaseSnapshot.slot().getId(),
             command.reservationDate(),
             command.reservationTime(),
             command.signedAmount(),
-            precheckContext.cls().getPriceAmount()));
+            purchaseSnapshot.cls().getPriceAmount(),
+            purchaseSnapshot.buyerWalletAddress(),
+            purchaseSnapshot.trainerWalletAddress(),
+            purchaseSnapshot.tokenAddress(),
+            purchaseSnapshot.priceBaseUnits()));
 
-    PhaseAResult phaseA = runInTransaction(() -> preparePurchasePhaseA(command));
+    PhaseAResult phaseA = runInTransaction(() -> preparePurchasePhaseA(command, purchaseSnapshot));
     if (phaseA.replayResult() != null) {
       return phaseA.replayResult();
     }
@@ -242,8 +247,32 @@ public class CreateReservationService implements CreateReservationUseCase {
     return new CreateLocalContext(slot, cls);
   }
 
-  private PhaseAResult preparePurchasePhaseA(CreateReservationCommand command) {
+  private PurchaseSnapshot loadPurchaseSnapshotForPrecheck(CreateReservationCommand command) {
     CreateLocalContext context = loadValidatedLocalContext(command);
+    var paymentConfig = loadReservationEscrowPaymentConfigPort.load();
+    BigInteger priceBaseUnits = validateSignedPrice(paymentConfig, command, context.cls());
+    String buyerWallet = loadActiveWalletOrThrow(command.userId());
+    String trainerWallet = loadActiveWalletOrThrow(context.cls().getTrainerId());
+    Instant expectedDeadlineInstant =
+        clock.instant().plusSeconds(paymentConfig.defaultDeadlineDurationSeconds());
+    LocalDateTime expectedDeadlineAt =
+        LocalDateTime.ofInstant(expectedDeadlineInstant, clock.getZone());
+    validateCompletionWindowFits(command, context.cls(), expectedDeadlineAt);
+    return new PurchaseSnapshot(
+        context.slot(),
+        context.cls(),
+        buyerWallet,
+        trainerWallet,
+        paymentConfig.tokenAddress(),
+        priceBaseUnits,
+        expectedDeadlineInstant,
+        expectedDeadlineAt);
+  }
+
+  private PhaseAResult preparePurchasePhaseA(
+      CreateReservationCommand command, PurchaseSnapshot purchaseSnapshot) {
+    CreateLocalContext context = loadValidatedLocalContext(command);
+    validatePurchaseSnapshotStillCurrent(command, purchaseSnapshot, context);
     ClassSlot slot = context.slot();
     MarketplaceClass cls = context.cls();
 
@@ -314,22 +343,6 @@ public class CreateReservationService implements CreateReservationUseCase {
     // 7. Generate orderId and persist a local hold before creating the shared execution intent.
     String orderId = UUID.randomUUID().toString();
     String orderKey = orderKeyFromUuid(orderId);
-    var paymentConfig = loadReservationEscrowPaymentConfigPort.load();
-    BigInteger priceBaseUnits = validateSignedPrice(paymentConfig, command, cls);
-    String buyerWallet = loadActiveWalletOrThrow(command.userId());
-    String trainerWallet = loadActiveWalletOrThrow(cls.getTrainerId());
-    Instant expectedDeadlineInstant =
-        clock.instant().plusSeconds(paymentConfig.defaultDeadlineDurationSeconds());
-    LocalDateTime expectedDeadlineAt =
-        LocalDateTime.ofInstant(expectedDeadlineInstant, clock.getZone());
-    if (LocalDateTime.of(command.reservationDate(), command.reservationTime())
-        .plusMinutes(cls.getDurationMinutes())
-        .plusHours(24)
-        .isAfter(expectedDeadlineAt)) {
-      throw new BusinessException(
-          ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
-          "Reservation completion window does not fit before the marketplace escrow deadline");
-    }
     Reservation reservation =
         Reservation.createPending(
             command.userId(),
@@ -351,12 +364,12 @@ public class CreateReservationService implements CreateReservationUseCase {
             payloadHash,
             LocalDateTime.now(clock).plusMinutes(10),
             orderKey,
-            buyerWallet,
-            trainerWallet,
-            paymentConfig.tokenAddress(),
-            priceBaseUnits.toString(),
-            expectedDeadlineInstant.getEpochSecond(),
-            expectedDeadlineAt,
+            purchaseSnapshot.buyerWalletAddress(),
+            purchaseSnapshot.trainerWalletAddress(),
+            purchaseSnapshot.tokenAddress(),
+            purchaseSnapshot.priceBaseUnits().toString(),
+            purchaseSnapshot.expectedDeadlineInstant().getEpochSecond(),
+            purchaseSnapshot.expectedDeadlineAt(),
             purchaseAttemptToken);
     Reservation saved = saveReservationPort.save(preparing);
     PrepareReservationEscrowCommand prepareCommand =
@@ -446,6 +459,40 @@ public class CreateReservationService implements CreateReservationUseCase {
       return paymentConfig.priceBaseUnits(command.signedAmount(), cls.getPriceAmount());
     } catch (IllegalArgumentException e) {
       throw new BusinessException(ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH, e.getMessage());
+    }
+  }
+
+  private void validateCompletionWindowFits(
+      CreateReservationCommand command, MarketplaceClass cls, LocalDateTime expectedDeadlineAt) {
+    if (LocalDateTime.of(command.reservationDate(), command.reservationTime())
+        .plusMinutes(cls.getDurationMinutes())
+        .plusHours(24)
+        .isAfter(expectedDeadlineAt)) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
+          "Reservation completion window does not fit before the marketplace escrow deadline");
+    }
+  }
+
+  private void validatePurchaseSnapshotStillCurrent(
+      CreateReservationCommand command,
+      PurchaseSnapshot purchaseSnapshot,
+      CreateLocalContext currentContext) {
+    MarketplaceClass currentClass = currentContext.cls();
+    if (!purchaseSnapshot.cls().getTrainerId().equals(currentClass.getTrainerId())
+        || purchaseSnapshot.cls().getPriceAmount() != currentClass.getPriceAmount()
+        || purchaseSnapshot.cls().getDurationMinutes() != currentClass.getDurationMinutes()) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "marketplace class changed after purchase precheck");
+    }
+    String currentBuyerWallet = loadActiveWalletOrThrow(command.userId());
+    String currentTrainerWallet = loadActiveWalletOrThrow(currentClass.getTrainerId());
+    if (!purchaseSnapshot.buyerWalletAddress().equalsIgnoreCase(currentBuyerWallet)
+        || !purchaseSnapshot.trainerWalletAddress().equalsIgnoreCase(currentTrainerWallet)) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_SWITCH_WALLET_REQUIRED,
+          "active wallet changed after marketplace purchase precheck");
     }
   }
 
@@ -631,6 +678,16 @@ public class CreateReservationService implements CreateReservationUseCase {
   }
 
   private record CreateLocalContext(ClassSlot slot, MarketplaceClass cls) {}
+
+  private record PurchaseSnapshot(
+      ClassSlot slot,
+      MarketplaceClass cls,
+      String buyerWalletAddress,
+      String trainerWalletAddress,
+      String tokenAddress,
+      BigInteger priceBaseUnits,
+      Instant expectedDeadlineInstant,
+      LocalDateTime expectedDeadlineAt) {}
 
   private record PhaseAResult(
       Reservation reservation,

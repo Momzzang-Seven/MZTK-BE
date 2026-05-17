@@ -2,11 +2,9 @@ package momzzangseven.mztkbe.modules.web3.marketplace.application.service;
 
 import java.math.BigInteger;
 import momzzangseven.mztkbe.global.error.ErrorCode;
-import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.PrecheckMarketplacePurchaseCommand;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.PrecheckMarketplacePurchaseUseCase;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceActiveWalletPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplacePurchaseConfigPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.PrecheckMarketplacePurchaseFundingPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
@@ -16,15 +14,12 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
  */
 public class PrecheckMarketplacePurchaseService implements PrecheckMarketplacePurchaseUseCase {
 
-  private final LoadMarketplaceActiveWalletPort loadMarketplaceActiveWalletPort;
   private final LoadMarketplacePurchaseConfigPort loadMarketplacePurchaseConfigPort;
   private final PrecheckMarketplacePurchaseFundingPort precheckMarketplacePurchaseFundingPort;
 
   public PrecheckMarketplacePurchaseService(
-      LoadMarketplaceActiveWalletPort loadMarketplaceActiveWalletPort,
       LoadMarketplacePurchaseConfigPort loadMarketplacePurchaseConfigPort,
       PrecheckMarketplacePurchaseFundingPort precheckMarketplacePurchaseFundingPort) {
-    this.loadMarketplaceActiveWalletPort = loadMarketplaceActiveWalletPort;
     this.loadMarketplacePurchaseConfigPort = loadMarketplacePurchaseConfigPort;
     this.precheckMarketplacePurchaseFundingPort = precheckMarketplacePurchaseFundingPort;
   }
@@ -37,8 +32,8 @@ public class PrecheckMarketplacePurchaseService implements PrecheckMarketplacePu
           "buyer cannot purchase own marketplace class",
           false);
     }
-    String buyerWallet = activeWallet(command.buyerUserId());
-    String trainerWallet = activeWallet(command.trainerUserId());
+    String buyerWallet = EvmAddress.of(command.buyerWalletAddress()).value();
+    String trainerWallet = EvmAddress.of(command.trainerWalletAddress()).value();
     if (buyerWallet.equals(trainerWallet)) {
       throw new Web3TransferException(
           ErrorCode.MARKETPLACE_CANNOT_BUY_OWN_CLASS,
@@ -49,7 +44,8 @@ public class PrecheckMarketplacePurchaseService implements PrecheckMarketplacePu
     BigInteger expectedPriceBaseUnits =
         BigInteger.valueOf(command.bookedPriceAmountKrw())
             .multiply(BigInteger.TEN.pow(config.decimals()));
-    if (!command.signedAmount().equals(expectedPriceBaseUnits)) {
+    if (!command.signedAmount().equals(expectedPriceBaseUnits)
+        || !command.priceBaseUnits().equals(expectedPriceBaseUnits)) {
       throw new Web3TransferException(
           ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
           "signed amount does not match marketplace class price token base units",
@@ -60,14 +56,7 @@ public class PrecheckMarketplacePurchaseService implements PrecheckMarketplacePu
             buyerWallet,
             trainerWallet,
             config.escrowContractAddress(),
-            config.tokenAddress(),
+            EvmAddress.of(command.tokenAddress()).value(),
             expectedPriceBaseUnits));
-  }
-
-  private String activeWallet(Long userId) {
-    return loadMarketplaceActiveWalletPort
-        .loadActiveWalletAddress(userId)
-        .map(address -> EvmAddress.of(address).value())
-        .orElseThrow(() -> new WalletNotConnectedException(userId));
   }
 }
