@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -12,9 +13,11 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Clai
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ClaimExpiredRefundReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
@@ -34,12 +37,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundReservationUseCase {
 
+  private static final Set<String> RETRYABLE_TERMINAL_STATUSES =
+      Set.of("FAILED_ONCHAIN", "EXPIRED", "CANCELED", "NONCE_STALE");
+
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
   private final CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   private final LoadReservationWalletPort loadReservationWalletPort;
   private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
+  private final LoadReservationExecutionWritePort loadReservationExecutionWritePort;
   private final Clock clock;
   private TransactionOperations transactionOperations;
 
@@ -50,6 +57,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       @Nullable CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
       @Nullable LoadReservationWalletPort loadReservationWalletPort,
       @Nullable LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
+      @Nullable LoadReservationExecutionWritePort loadReservationExecutionWritePort,
       Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.saveReservationPort = saveReservationPort;
@@ -69,6 +77,10 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
         loadReservationEscrowPaymentConfigPort == null
             ? DisabledReservationWeb3PortFactory.paymentConfig()
             : loadReservationEscrowPaymentConfigPort;
+    this.loadReservationExecutionWritePort =
+        loadReservationExecutionWritePort == null
+            ? DisabledReservationWeb3PortFactory.executionWrite()
+            : loadReservationExecutionWritePort;
     this.clock = clock;
   }
 
@@ -81,7 +93,11 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
   @Override
   public ClaimExpiredRefundReservationResult execute(ClaimExpiredRefundReservationCommand command) {
-    PendingPreparation phaseA = runInTransaction(() -> beginDeadlineRefund(command));
+    BeginDeadlineRefundResult beginResult = runInTransaction(() -> beginDeadlineRefund(command));
+    if (beginResult.existingWeb3() != null) {
+      return result(beginResult.reservation(), beginResult.existingWeb3());
+    }
+    PendingPreparation phaseA = beginResult.pendingPreparation();
     PrepareReservationEscrowResult prepared;
     try {
       prepared =
@@ -109,11 +125,11 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
         saved.getId(),
         command.userId(),
         prepared.web3().executionIntent().id());
-    return new ClaimExpiredRefundReservationResult(
-        saved.getId(), saved.getStatus(), saved.getEffectiveEscrowStatus().name(), prepared.web3());
+    return result(saved, prepared.web3());
   }
 
-  private PendingPreparation beginDeadlineRefund(ClaimExpiredRefundReservationCommand command) {
+  private BeginDeadlineRefundResult beginDeadlineRefund(
+      ClaimExpiredRefundReservationCommand command) {
     Reservation reservation =
         loadReservationPort
             .findByIdWithLock(command.reservationId())
@@ -127,11 +143,29 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       throw new MarketplaceUnauthorizedAccessException();
     }
 
+    ReservationExecutionWriteView current = loadCurrentExecutionIfPresent(command, reservation);
+    if (current != null
+        && !RETRYABLE_TERMINAL_STATUSES.contains(current.executionIntent().status())) {
+      return BeginDeadlineRefundResult.existing(reservation, current);
+    }
+
     Reservation refundable = ensureRefundAvailable(reservation);
     Reservation pending =
         saveReservationPort.save(
             refundable.beginDeadlineRefundPending(UUID.randomUUID().toString()));
-    return new PendingPreparation(pending, commandFor(pending, command.userId()));
+    return BeginDeadlineRefundResult.pending(
+        new PendingPreparation(pending, commandFor(pending, command.userId())));
+  }
+
+  @Nullable
+  private ReservationExecutionWriteView loadCurrentExecutionIfPresent(
+      ClaimExpiredRefundReservationCommand command, Reservation reservation) {
+    if (reservation.getCurrentExecutionIntentPublicId() == null) {
+      return null;
+    }
+    return loadReservationExecutionWritePort
+        .load(command.userId(), reservation.getCurrentExecutionIntentPublicId())
+        .asExistingForOrder(ensureOrderKey(reservation));
   }
 
   private Reservation bindPendingExecution(
@@ -210,6 +244,15 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       return supplier.get();
     }
     return transactionOperations.execute(status -> supplier.get());
+  }
+
+  private ClaimExpiredRefundReservationResult result(
+      Reservation reservation, ReservationExecutionWriteView web3) {
+    return new ClaimExpiredRefundReservationResult(
+        reservation.getId(),
+        reservation.getStatus(),
+        reservation.getEffectiveEscrowStatus().name(),
+        web3);
   }
 
   private Reservation ensureRefundAvailable(Reservation reservation) {
@@ -308,4 +351,20 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
   private record PendingPreparation(
       Reservation reservation, PrepareReservationEscrowCommand prepareCommand) {}
+
+  private record BeginDeadlineRefundResult(
+      Reservation reservation,
+      ReservationExecutionWriteView existingWeb3,
+      PendingPreparation pendingPreparation) {
+
+    static BeginDeadlineRefundResult existing(
+        Reservation reservation, ReservationExecutionWriteView existingWeb3) {
+      return new BeginDeadlineRefundResult(reservation, existingWeb3, null);
+    }
+
+    static BeginDeadlineRefundResult pending(PendingPreparation pendingPreparation) {
+      return new BeginDeadlineRefundResult(
+          pendingPreparation.reservation(), null, pendingPreparation);
+    }
+  }
 }

@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Prep
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
@@ -59,6 +60,7 @@ class ClaimExpiredRefundReservationServiceTest {
   @Mock private CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   @Mock private LoadReservationWalletPort loadReservationWalletPort;
   @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
+  @Mock private LoadReservationExecutionWritePort loadReservationExecutionWritePort;
 
   private ClaimExpiredRefundReservationService sut;
 
@@ -72,6 +74,7 @@ class ClaimExpiredRefundReservationServiceTest {
             cancelReservationEscrowExecutionPort,
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
+            loadReservationExecutionWritePort,
             FIXED_CLOCK);
   }
 
@@ -108,6 +111,75 @@ class ClaimExpiredRefundReservationServiceTest {
       assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
       assertThat(result.web3()).isNotNull();
       assertThat(result.web3().actionType()).isEqualTo("MARKETPLACE_CLASS_EXPIRED_REFUND");
+    }
+
+    @Test
+    @DisplayName("[DR-01C] 기존 cancel/reject intent가 진행 중이면 pointer를 지우지 않고 기존 intent를 반환한다")
+    void 기존_current_intent가_진행중이면_기존_intent_반환() {
+      Reservation reservation =
+          pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
+              .status(ReservationStatus.CANCEL_PENDING)
+              .currentExecutionIntentPublicId("cancel-intent-1")
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation));
+      given(loadReservationExecutionWritePort.load(BUYER_ID, "cancel-intent-1"))
+          .willReturn(web3("MARKETPLACE_CLASS_CANCEL", "AWAITING_SIGNATURE", "cancel-intent-1"));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+      assertThat(result.web3()).isNotNull();
+      assertThat(result.web3().existing()).isTrue();
+      assertThat(result.web3().executionIntent().id()).isEqualTo("cancel-intent-1");
+      then(saveReservationPort).shouldHaveNoInteractions();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[DR-01D] 기존 current intent가 retryable terminal이면 deadline refund intent를 준비한다")
+    void 기존_current_intent가_retryable_terminal이면_refund_intent_준비() {
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      Reservation reservation =
+          pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
+              .status(ReservationStatus.CANCEL_PENDING)
+              .currentExecutionIntentPublicId("cancel-intent-1")
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationExecutionWritePort.load(BUYER_ID, "cancel-intent-1"))
+          .willReturn(web3("MARKETPLACE_CLASS_CANCEL", "FAILED_ONCHAIN", "cancel-intent-1"));
+      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18));
+      given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+          .willReturn(
+              new PrepareReservationEscrowResult(
+                  web3(
+                      "MARKETPLACE_CLASS_EXPIRED_REFUND",
+                      "AWAITING_SIGNATURE",
+                      "refund-intent-1")));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(result.web3()).isNotNull();
+      assertThat(latestSaved.get().getCurrentExecutionIntentPublicId())
+          .isEqualTo("refund-intent-1");
+      then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
     }
 
     @ParameterizedTest
@@ -361,12 +433,17 @@ class ClaimExpiredRefundReservationServiceTest {
   }
 
   private ReservationExecutionWriteView web3() {
+    return web3("MARKETPLACE_CLASS_EXPIRED_REFUND", "AWAITING_SIGNATURE", "intent-1");
+  }
+
+  private ReservationExecutionWriteView web3(
+      String actionType, String intentStatus, String intentId) {
     return new ReservationExecutionWriteView(
         new ReservationExecutionWriteView.Resource("ORDER", "1", "PENDING_EXECUTION"),
-        "MARKETPLACE_CLASS_EXPIRED_REFUND",
+        actionType,
         "0x" + "0".repeat(63) + "1",
         new ReservationExecutionWriteView.ExecutionIntent(
-            "intent-1", "AWAITING_SIGNATURE", LocalDateTime.now(FIXED_CLOCK).plusMinutes(5), 300L),
+            intentId, intentStatus, LocalDateTime.now(FIXED_CLOCK).plusMinutes(5), 300L),
         new ReservationExecutionWriteView.Execution("EIP7702", 1),
         null,
         null,

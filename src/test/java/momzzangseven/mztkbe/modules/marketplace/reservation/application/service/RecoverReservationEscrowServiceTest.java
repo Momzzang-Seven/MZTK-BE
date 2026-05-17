@@ -224,8 +224,8 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
-  @DisplayName("deadline 이후 trainer reject recovery는 refund required로 전환하고 reject intent를 만들지 않는다")
-  void expired_rejectPending_recovery_marksDeadlineRefundRequired() {
+  @DisplayName("deadline 이후 trainer reject recovery는 저장 전에 refund required로 거부한다")
+  void expired_rejectPending_recovery_rejectsBeforeMutatingReservation() {
     long deadlineEpochSeconds = FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond();
     Reservation reservation =
         reservation(ReservationStatus.REJECT_PENDING).toBuilder()
@@ -237,17 +237,8 @@ class RecoverReservationEscrowServiceTest {
             .priorStatus(ReservationStatus.PENDING)
             .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
             .build();
-    AtomicReference<Reservation> latestSaved = new AtomicReference<>(reservation);
-    given(saveReservationPort.save(any()))
-        .willAnswer(
-            invocation -> {
-              Reservation saved = invocation.getArgument(0, Reservation.class);
-              latestSaved.set(saved);
-              return saved;
-            });
     given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
-        .willReturn(Optional.of(reservation))
-        .willAnswer(invocation -> Optional.of(latestSaved.get()));
+        .willReturn(Optional.of(reservation));
 
     assertThatThrownBy(
             () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, TRAINER_ID)))
@@ -257,8 +248,7 @@ class RecoverReservationEscrowServiceTest {
                 assertThat(((BusinessException) ex).getCode())
                     .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
 
-    assertThat(latestSaved.get().getStatus())
-        .isEqualTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+    then(saveReservationPort).shouldHaveNoInteractions();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 

@@ -467,6 +467,32 @@ class CreateReservationServiceTest {
     }
 
     @Test
+    @DisplayName("[CR-12B] 같은 idempotency key가 다른 payload로 재사용되면 conflict를 반환한다")
+    void 같은_idempotency_key_다른_payload_재사용은_conflict() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(
+              Optional.of(
+                  ReservationCreateIdempotency.builder()
+                      .buyerId(USER_ID)
+                      .payloadHash("0x" + "f".repeat(64))
+                      .status(ReservationCreateIdempotencyStatus.PREPARING)
+                      .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+                      .build()));
+
+      assertThatThrownBy(() -> sut.execute(command))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT.getCode()));
+
+      then(saveReservationPort).shouldHaveNoInteractions();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
     @DisplayName("[CR-11] 같은 idempotency key 동시 생성 loser는 winner row를 재조회해 deterministic replay한다")
     void 동시_생성_loser는_winner를_재조회한다() {
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));

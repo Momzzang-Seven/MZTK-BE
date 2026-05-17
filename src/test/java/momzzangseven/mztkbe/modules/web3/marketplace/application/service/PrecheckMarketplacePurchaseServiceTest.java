@@ -119,6 +119,27 @@ class PrecheckMarketplacePurchaseServiceTest {
     then(precheckMarketplacePurchaseFundingPort).shouldHaveNoInteractions();
   }
 
+  @Test
+  @DisplayName("signed amount는 맞지만 priceBaseUnits snapshot이 다르면 funding precheck 전에 차단한다")
+  void precheck_blocks_price_base_units_mismatch_even_when_signed_amount_matches() {
+    given(loadMarketplacePurchaseConfigPort.loadPurchaseConfig())
+        .willReturn(
+            new LoadMarketplacePurchaseConfigPort.MarketplacePurchaseConfig(ESCROW, TOKEN, 18));
+
+    assertThatThrownBy(
+            () ->
+                sut.precheck(
+                    command(
+                        10L, 20L, PRICE_BASE_UNITS, PRICE_BASE_UNITS.add(BigInteger.ONE), 50_000)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH.getCode()));
+
+    then(precheckMarketplacePurchaseFundingPort).shouldHaveNoInteractions();
+  }
+
   private PrecheckMarketplacePurchaseCommand command(
       Long buyerUserId, Long trainerUserId, BigInteger signedAmount, Integer bookedPriceAmountKrw) {
     return command(
@@ -134,6 +155,40 @@ class PrecheckMarketplacePurchaseServiceTest {
       Long buyerUserId,
       Long trainerUserId,
       BigInteger signedAmount,
+      BigInteger priceBaseUnits,
+      Integer bookedPriceAmountKrw) {
+    return command(
+        buyerUserId,
+        trainerUserId,
+        signedAmount,
+        priceBaseUnits,
+        bookedPriceAmountKrw,
+        BUYER_WALLET,
+        TRAINER_WALLET);
+  }
+
+  private PrecheckMarketplacePurchaseCommand command(
+      Long buyerUserId,
+      Long trainerUserId,
+      BigInteger signedAmount,
+      Integer bookedPriceAmountKrw,
+      String buyerWalletAddress,
+      String trainerWalletAddress) {
+    return command(
+        buyerUserId,
+        trainerUserId,
+        signedAmount,
+        signedAmount,
+        bookedPriceAmountKrw,
+        buyerWalletAddress,
+        trainerWalletAddress);
+  }
+
+  private PrecheckMarketplacePurchaseCommand command(
+      Long buyerUserId,
+      Long trainerUserId,
+      BigInteger signedAmount,
+      BigInteger priceBaseUnits,
       Integer bookedPriceAmountKrw,
       String buyerWalletAddress,
       String trainerWalletAddress) {
@@ -147,6 +202,6 @@ class PrecheckMarketplacePurchaseServiceTest {
         buyerWalletAddress,
         trainerWalletAddress,
         TOKEN,
-        signedAmount);
+        priceBaseUnits);
   }
 }

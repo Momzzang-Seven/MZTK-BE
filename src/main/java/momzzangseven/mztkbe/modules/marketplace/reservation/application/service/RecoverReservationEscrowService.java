@@ -135,9 +135,9 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     if (shouldForceDeadlineRefund(reservation, flow)) {
       RecoveryFlow expiredFlow = flow;
       Reservation expiredReservation = reservation;
+      requireBuyerOwnedRefundRecovery(expiredFlow, command.requesterId(), expiredReservation);
       reservation = runInTransaction(() -> forceDeadlineRefundAvailable(expiredReservation));
       flow = resolveFlow(reservation);
-      requireBuyerOwnedRefundRecovery(expiredFlow, command.requesterId(), reservation);
     }
     validateActor(reservation, command.requesterId(), flow);
 
@@ -150,9 +150,9 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     if (shouldForceDeadlineRefund(reservation, flow)) {
       RecoveryFlow expiredFlow = flow;
       Reservation expiredReservation = reservation;
+      requireBuyerOwnedRefundRecovery(expiredFlow, command.requesterId(), expiredReservation);
       reservation = runInTransaction(() -> forceDeadlineRefundAvailable(expiredReservation));
       flow = resolveFlow(reservation);
-      requireBuyerOwnedRefundRecovery(expiredFlow, command.requesterId(), reservation);
     }
     validateActor(reservation, command.requesterId(), flow);
 
