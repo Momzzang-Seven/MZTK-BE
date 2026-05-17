@@ -207,12 +207,22 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
    *       re-enable) committed but AFTER_COMMIT {@code enableKey} failed — DB is ACTIVE while the
    *       KMS key is DISABLED. Re-publish {@code TreasuryWalletReactivatedEvent} so the handler
    *       retries {@code enableKey} under the CAS gate. No mint.
-   *   <li>{@code aliasState=PENDING_DELETION && targetIdMatches} (PR #177 concern-2): DB/KMS sync
-   *       drift — issuing {@code updateAlias} would hit {@code KMSInvalidStateException}. Delegate
-   *       to {@link #replaceKey} with {@code disposeOldKey=false} so the dying key is left alone.
-   *   <li>else (alias-drift / ghost-alias): re-publish the provisioned event in alias-repair mode
-   *       so the AFTER_COMMIT handler restores the alias to the row's kmsKeyId via {@code
-   *       updateAlias}. (PR #177 R3.)
+   *   <li>{@code isDying(aliasState) && targetIdMatches} (PR #177 R10, widened from concern-2):
+   *       DB/KMS sync drift — alias still targets the row's kmsKeyId but that key is dying ({@code
+   *       PENDING_DELETION}, {@code PENDING_IMPORT}, or {@code UNAVAILABLE}). Issuing {@code
+   *       updateAlias} would hit {@code KMSInvalidStateException} and {@code BindKmsAliasService}
+   *       cannot auto-repair {@code PENDING_IMPORT}. Delegate to {@link #replaceKey} with {@code
+   *       disposeOldKey=false} so the dying key is left alone. Symmetric to the C6 ({@link
+   *       #handleExistingDisabledRow}) dying-row branch (R8) via the shared {@link
+   *       #isDying(KmsKeyState)} helper.
+   *   <li>{@code !targetIdMatches && isDying(rowKeyState)} (PR #177 R10): alias points elsewhere
+   *       but the row's own kmsKeyId is dying. A fresh probe ({@link
+   *       DescribeKmsKeyPort#describeFresh(String)}, bypassing the signing-path cache) detects this
+   *       and routes to {@link #replaceKey}, preventing a non-signable key from being cemented via
+   *       alias repair.
+   *   <li>else (alias-drift / ghost-alias with healthy row key): re-publish the provisioned event
+   *       in alias-repair mode so the AFTER_COMMIT handler restores the alias to the row's kmsKeyId
+   *       via {@code updateAlias}. (PR #177 R3.)
    * </ul>
    */
   private ProvisionTreasuryKeyResult handleExistingProvisionedRow(
@@ -266,12 +276,30 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       return ProvisionTreasuryKeyResult.from(existing, role);
     }
 
-    if (aliasState == KmsKeyState.PENDING_DELETION && targetIdMatches) {
+    if (targetIdMatches && isDying(aliasState)) {
       log.warn(
-          "Recovering DB/KMS sync drift via fresh key (alias={}, pendingDeletionKmsKeyId={})",
+          "Recovering DB/KMS sync drift via fresh key on ACTIVE row (alias={}, rowKmsKeyId={},"
+              + " aliasState={}, aliasTarget={})",
           existing.getWalletAlias(),
-          existing.getKmsKeyId());
+          existing.getKmsKeyId(),
+          aliasState,
+          aliasInfo.targetKmsKeyId());
       return replaceKey(command, role, existing, derivedAddress, false, failureAuditWritten);
+    }
+
+    if (!targetIdMatches) {
+      KmsKeyState rowKeyState = describeKmsKeyPort.describeFresh(existing.getKmsKeyId());
+      if (isDying(rowKeyState)) {
+        log.warn(
+            "Recovering ACTIVE row with dying row key via fresh key (alias={}, rowKmsKeyId={},"
+                + " rowKeyState={}, aliasState={}, aliasTarget={})",
+            existing.getWalletAlias(),
+            existing.getKmsKeyId(),
+            rowKeyState,
+            aliasState,
+            aliasInfo.targetKmsKeyId());
+        return replaceKey(command, role, existing, derivedAddress, false, failureAuditWritten);
+      }
     }
 
     log.warn(
@@ -336,12 +364,7 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
             ? aliasInfo.state()
             : describeKmsKeyPort.describeFresh(existing.getKmsKeyId());
 
-    boolean rowKeyDying =
-        rowKeyState == KmsKeyState.PENDING_DELETION
-            || rowKeyState == KmsKeyState.PENDING_IMPORT
-            || rowKeyState == KmsKeyState.UNAVAILABLE;
-
-    if (rowKeyDying) {
+    if (isDying(rowKeyState)) {
       log.warn(
           "Recovering DB/KMS sync drift via fresh key on DISABLED row (alias={},"
               + " rowKmsKeyId={}, rowKeyState={}, aliasState={}, aliasTarget={})",
@@ -530,6 +553,17 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
           false,
           ex.getClass().getSimpleName());
     }
+  }
+
+  /**
+   * States classified as "dying" — KMS key is unsignable or non-recoverable through alias repair
+   * and must be replaced rather than mutated in place. Drives both C4 ({@link
+   * #handleExistingProvisionedRow}) and C6 ({@link #handleExistingDisabledRow}) replaceKey routing.
+   */
+  private static boolean isDying(KmsKeyState state) {
+    return state == KmsKeyState.PENDING_DELETION
+        || state == KmsKeyState.PENDING_IMPORT
+        || state == KmsKeyState.UNAVAILABLE;
   }
 
   private static byte[] decodePrivateKey(String rawPrivateKey) {
