@@ -155,6 +155,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
     ChainSyncResult chainSync = syncChainStateBeforePrepare(reservation, flow);
     if (chainSync.stop()) {
+      recordTrainerRejectStrikeIfNeeded(chainSync.reservation());
       return result(chainSync.reservation(), null);
     }
     reservation = chainSync.reservation();
@@ -177,6 +178,12 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     ReservationExecutionStateView state =
         loadReservationExecutionStatePort.loadState(
             reservation.getCurrentExecutionIntentPublicId());
+    if (isConfirmed(state.status())) {
+      replayConfirmedReservationExecutionPort.replayConfirmed(
+          state.executionIntentId(), state.actionType());
+      Reservation latest = loadReservationPort.findById(reservation.getId()).orElse(reservation);
+      return CurrentIntentResolution.stop(result(latest, null));
+    }
     if (shouldForceDeadlineRefund(reservation, flow)
         && reservation.isOwnedByUser(command.requesterId())) {
       if (isRetryableTerminal(state.status())) {
@@ -337,12 +344,16 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   }
 
   private ChainSyncResult stopWith(Reservation reservation) {
-    Reservation saved = saveReservationPort.save(reservation);
-    recordTrainerRejectStrikeIfNeeded(saved);
-    return ChainSyncResult.stop(saved);
+    return ChainSyncResult.stop(saveReservationPort.save(reservation));
   }
 
   private ReservationStatus cancelledStatus(Reservation reservation) {
+    if (reservation.getStatus() == ReservationStatus.REJECTED) {
+      return ReservationStatus.REJECTED;
+    }
+    if (reservation.getStatus() == ReservationStatus.USER_CANCELLED) {
+      return ReservationStatus.USER_CANCELLED;
+    }
     return reservation.getPendingAction() == ReservationEscrowAction.TRAINER_REJECT
             || reservation.getStatus() == ReservationStatus.REJECT_PENDING
         ? ReservationStatus.REJECTED
@@ -353,7 +364,9 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     return reservation.getPendingAction() == ReservationEscrowAction.BUYER_CANCEL
         || reservation.getPendingAction() == ReservationEscrowAction.TRAINER_REJECT
         || reservation.getStatus() == ReservationStatus.CANCEL_PENDING
-        || reservation.getStatus() == ReservationStatus.REJECT_PENDING;
+        || reservation.getStatus() == ReservationStatus.REJECT_PENDING
+        || reservation.getStatus() == ReservationStatus.USER_CANCELLED
+        || reservation.getStatus() == ReservationStatus.REJECTED;
   }
 
   private Reservation syncCancelledChainOutcome(
@@ -595,6 +608,10 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     return RETRYABLE_TERMINAL_STATUSES.contains(status);
   }
 
+  private boolean isConfirmed(String status) {
+    return "CONFIRMED".equals(status);
+  }
+
   private void requireBuyerOwnedRefundRecovery(
       RecoveryFlow expiredFlow, Long requesterId, Reservation reservation) {
     if (reservation.isOwnedByUser(requesterId)) {
@@ -626,11 +643,19 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     if (reservation.getStatus() != ReservationStatus.REJECTED || recordTrainerStrikePort == null) {
       return;
     }
-    recordTrainerStrikePort.recordStrike(
-        reservation.getTrainerId(),
-        TrainerStrikeEvent.REASON_REJECT,
-        RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
-        String.valueOf(reservation.getId()));
+    try {
+      recordTrainerStrikePort.recordStrike(
+          reservation.getTrainerId(),
+          TrainerStrikeEvent.REASON_REJECT,
+          RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+          String.valueOf(reservation.getId()));
+    } catch (RuntimeException e) {
+      log.warn(
+          "Failed to record trainer reject strike after reservation chain sync: id={}, trainerId={}",
+          reservation.getId(),
+          reservation.getTrainerId(),
+          e);
+    }
   }
 
   private Reservation forceDeadlineRefundAvailable(Reservation expected) {

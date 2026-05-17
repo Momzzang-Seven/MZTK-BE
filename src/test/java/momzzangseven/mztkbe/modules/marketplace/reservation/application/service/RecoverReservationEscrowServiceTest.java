@@ -300,18 +300,49 @@ class RecoverReservationEscrowServiceTest {
         .willReturn(Optional.of(reservation));
     given(loadReservationExecutionStatePort.loadState("intent-1"))
         .willReturn(state("MARKETPLACE_CLASS_PURCHASE", "CONFIRMED", "intent-1", BUYER_ID));
-    given(loadReservationExecutionWritePort.load(BUYER_ID, "intent-1"))
-        .willReturn(web3("MARKETPLACE_CLASS_PURCHASE", "CONFIRMED"));
     given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(repaired));
 
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
     assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
-    assertThat(result.web3()).isNotNull();
+    assertThat(result.web3()).isNull();
     then(replayConfirmedReservationExecutionPort)
         .should()
         .replayConfirmed("intent-1", "MARKETPLACE_CLASS_PURCHASE");
+    then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("trainer-owned confirmed reject intent는 buyer recover에서도 replay로 수렴한다")
+  void recovery_trainerOwnedConfirmedRejectIntent_replaysForBuyerRecovery() {
+    Reservation reservation =
+        reservation(ReservationStatus.REJECT_PENDING).toBuilder()
+            .currentExecutionIntentPublicId("reject-intent-1")
+            .build();
+    Reservation repaired =
+        reservation.syncChainOutcome(
+            ReservationStatus.REJECTED,
+            ReservationEscrowStatus.REFUNDED,
+            "reject-tx",
+            reservation.getContractDeadlineEpochSeconds(),
+            reservation.getContractDeadlineAt());
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionStatePort.loadState("reject-intent-1"))
+        .willReturn(state("MARKETPLACE_CLASS_CANCEL", "CONFIRMED", "reject-intent-1", TRAINER_ID));
+    given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(repaired));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+    assertThat(result.web3()).isNull();
+    then(replayConfirmedReservationExecutionPort)
+        .should()
+        .replayConfirmed("reject-intent-1", "MARKETPLACE_CLASS_CANCEL");
+    then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 
@@ -561,6 +592,42 @@ class RecoverReservationEscrowServiceTest {
             TrainerStrikeEvent.REASON_REJECT,
             RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
             String.valueOf(RESERVATION_ID));
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("trainer reject recovery chain sync 후 strike 실패는 reservation 결과를 깨지 않는다")
+  void trainerRejectRecovery_cancelledOrder_strikeFailureDoesNotFailSync() {
+    Reservation reservation =
+        reservation(ReservationStatus.REJECT_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.REJECT_PENDING)
+            .contractDeadlineEpochSeconds(FIXED_CLOCK.instant().plusSeconds(600).getEpochSecond())
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+            .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+            .pendingAttemptToken("reject-token")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(
+            order(
+                ReservationEscrowOrderView.STATE_CANCELLED,
+                FIXED_CLOCK.instant().plusSeconds(600).getEpochSecond()));
+    org.mockito.Mockito.doThrow(new IllegalStateException("strike failed"))
+        .when(recordTrainerStrikePort)
+        .recordStrike(
+            TRAINER_ID,
+            TrainerStrikeEvent.REASON_REJECT,
+            RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+            String.valueOf(RESERVATION_ID));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, TRAINER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 

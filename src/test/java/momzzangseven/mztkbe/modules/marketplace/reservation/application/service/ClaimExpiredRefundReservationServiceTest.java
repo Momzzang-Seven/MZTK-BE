@@ -178,17 +178,50 @@ class ClaimExpiredRefundReservationServiceTest {
       given(loadReservationExecutionStatePort.loadState("refund-intent-1"))
           .willReturn(
               state("MARKETPLACE_CLASS_EXPIRED_REFUND", "CONFIRMED", "refund-intent-1", BUYER_ID));
-      given(loadReservationExecutionWritePort.load(BUYER_ID, "refund-intent-1"))
-          .willReturn(web3("MARKETPLACE_CLASS_EXPIRED_REFUND", "CONFIRMED", "refund-intent-1"));
       given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(repaired));
 
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
       assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+      assertThat(result.web3()).isNull();
       then(replayConfirmedReservationExecutionPort)
           .should()
           .replayConfirmed("refund-intent-1", "MARKETPLACE_CLASS_EXPIRED_REFUND");
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[DR-01N] trainer reject intent가 CONFIRMED이면 buyer claim도 replay로 수렴한다")
+    void trainer_reject_confirmed이면_buyer_claim도_replay한다() {
+      Reservation reservation =
+          pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
+              .status(ReservationStatus.REJECT_PENDING)
+              .currentExecutionIntentPublicId("reject-intent-1")
+              .build();
+      Reservation repaired =
+          reservation.syncChainOutcome(
+              ReservationStatus.REJECTED,
+              ReservationEscrowStatus.REFUNDED,
+              "reject-tx",
+              reservation.getContractDeadlineEpochSeconds(),
+              reservation.getContractDeadlineAt());
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation));
+      given(loadReservationExecutionStatePort.loadState("reject-intent-1"))
+          .willReturn(
+              state("MARKETPLACE_CLASS_CANCEL", "CONFIRMED", "reject-intent-1", TRAINER_ID));
+      given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(repaired));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+      assertThat(result.web3()).isNull();
+      then(replayConfirmedReservationExecutionPort)
+          .should()
+          .replayConfirmed("reject-intent-1", "MARKETPLACE_CLASS_CANCEL");
+      then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
 
@@ -499,6 +532,30 @@ class ClaimExpiredRefundReservationServiceTest {
     }
 
     @Test
+    @DisplayName("[DR-01O] 이미 USER_CANCELLED이면 chain CANCELLED sync가 terminal 상태를 유지한다")
+    void direct_claim_chain_cancelled_이미_userCancelled이면_terminal_유지() {
+      Reservation reservation =
+          pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+              .cancelByUser("cancel-tx");
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willReturn(Optional.of(reservation));
+      org.mockito.Mockito.doReturn(order(ReservationEscrowOrderView.STATE_CANCELLED))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+      given(saveReservationPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
+      assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED.name());
+      then(recordTrainerStrikePort).shouldHaveNoInteractions();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
     @DisplayName(
         "[DR-01I] direct claim chain CANCELLED가 trainer reject 증거를 가지면 REJECTED와 strike를 동기화한다")
     void direct_claim_chain_cancelled_trainerReject이면_strike_기록() {
@@ -528,6 +585,38 @@ class ClaimExpiredRefundReservationServiceTest {
               TrainerStrikeEvent.REASON_REJECT,
               RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
               String.valueOf(RESERVATION_ID));
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[DR-01P] chain reject sync 후 strike 기록 실패는 reservation 결과를 깨지 않는다")
+    void direct_claim_chain_reject_sync_strike_실패는_결과를_깨지_않음() {
+      Reservation reservation =
+          pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
+              .status(ReservationStatus.REJECT_PENDING)
+              .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+              .pendingAttemptToken("reject-token")
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willReturn(Optional.of(reservation));
+      org.mockito.Mockito.doReturn(order(ReservationEscrowOrderView.STATE_CANCELLED))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+      given(saveReservationPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+      org.mockito.Mockito.doThrow(new IllegalStateException("strike failed"))
+          .when(recordTrainerStrikePort)
+          .recordStrike(
+              TRAINER_ID,
+              TrainerStrikeEvent.REASON_REJECT,
+              RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+              String.valueOf(RESERVATION_ID));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
 

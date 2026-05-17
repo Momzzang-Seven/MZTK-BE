@@ -126,15 +126,22 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   @Override
   public ClaimExpiredRefundReservationResult execute(ClaimExpiredRefundReservationCommand command) {
     DeadlineRefundInspection inspected = runInTransaction(() -> inspectDeadlineRefund(command));
+    if (inspected.confirmedState() != null) {
+      return replayConfirmedState(inspected.reservation(), inspected.confirmedState());
+    }
     if (inspected.existingWeb3() != null) {
       return replayConfirmedIfNeeded(inspected.reservation(), inspected.existingWeb3());
     }
     ChainSyncResult chainSync = syncChainStateBeforeClaim(inspected.reservation());
     if (chainSync.stop()) {
+      recordTrainerRejectStrikeIfNeeded(chainSync.reservation());
       return result(chainSync.reservation(), null);
     }
     BeginDeadlineRefundResult beginResult =
         runInTransaction(() -> beginDeadlineRefund(command, chainSync.reservation()));
+    if (beginResult.confirmedState() != null) {
+      return replayConfirmedState(beginResult.reservation(), beginResult.confirmedState());
+    }
     if (beginResult.existingWeb3() != null) {
       return replayConfirmedIfNeeded(beginResult.reservation(), beginResult.existingWeb3());
     }
@@ -191,6 +198,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
+      if (isConfirmed(currentState.status())) {
+        return DeadlineRefundInspection.confirmed(reservation, currentState);
+      }
       if (command.userId().equals(currentState.requesterUserId())) {
         return DeadlineRefundInspection.existing(
             reservation, loadOwnedCurrentExecution(command, reservation));
@@ -233,6 +243,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
+      if (isConfirmed(currentState.status())) {
+        return BeginDeadlineRefundResult.confirmed(reservation, currentState);
+      }
       if (command.userId().equals(currentState.requesterUserId())) {
         return BeginDeadlineRefundResult.existing(
             reservation, loadOwnedCurrentExecution(command, reservation));
@@ -248,6 +261,14 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
             refundable.beginDeadlineRefundPending(UUID.randomUUID().toString()));
     return BeginDeadlineRefundResult.pending(
         new PendingPreparation(pending, commandFor(pending, command.userId())));
+  }
+
+  private ClaimExpiredRefundReservationResult replayConfirmedState(
+      Reservation reservation, ReservationExecutionStateView state) {
+    replayConfirmedReservationExecutionPort.replayConfirmed(
+        state.executionIntentId(), state.actionType());
+    Reservation latest = loadReservationPort.findById(reservation.getId()).orElse(reservation);
+    return result(latest, null);
   }
 
   private ClaimExpiredRefundReservationResult replayConfirmedIfNeeded(
@@ -375,6 +396,12 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   }
 
   private ReservationStatus cancelledStatus(Reservation reservation) {
+    if (reservation.getStatus() == ReservationStatus.REJECTED) {
+      return ReservationStatus.REJECTED;
+    }
+    if (reservation.getStatus() == ReservationStatus.USER_CANCELLED) {
+      return ReservationStatus.USER_CANCELLED;
+    }
     return reservation.getPendingAction() == ReservationEscrowAction.TRAINER_REJECT
             || reservation.getStatus() == ReservationStatus.REJECT_PENDING
         ? ReservationStatus.REJECTED
@@ -385,13 +412,13 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     return reservation.getPendingAction() == ReservationEscrowAction.BUYER_CANCEL
         || reservation.getPendingAction() == ReservationEscrowAction.TRAINER_REJECT
         || reservation.getStatus() == ReservationStatus.CANCEL_PENDING
-        || reservation.getStatus() == ReservationStatus.REJECT_PENDING;
+        || reservation.getStatus() == ReservationStatus.REJECT_PENDING
+        || reservation.getStatus() == ReservationStatus.USER_CANCELLED
+        || reservation.getStatus() == ReservationStatus.REJECTED;
   }
 
   private ChainSyncResult stopWith(Reservation reservation) {
-    Reservation saved = saveReservationPort.save(reservation);
-    recordTrainerRejectStrikeIfNeeded(saved);
-    return ChainSyncResult.stop(saved);
+    return ChainSyncResult.stop(saveReservationPort.save(reservation));
   }
 
   private LocalDateTime deadlineAt(Long epochSeconds) {
@@ -418,11 +445,19 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     if (reservation.getStatus() != ReservationStatus.REJECTED || recordTrainerStrikePort == null) {
       return;
     }
-    recordTrainerStrikePort.recordStrike(
-        reservation.getTrainerId(),
-        TrainerStrikeEvent.REASON_REJECT,
-        RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
-        String.valueOf(reservation.getId()));
+    try {
+      recordTrainerStrikePort.recordStrike(
+          reservation.getTrainerId(),
+          TrainerStrikeEvent.REASON_REJECT,
+          RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_REJECT,
+          String.valueOf(reservation.getId()));
+    } catch (RuntimeException e) {
+      log.warn(
+          "Failed to record trainer reject strike after reservation chain sync: id={}, trainerId={}",
+          reservation.getId(),
+          reservation.getTrainerId(),
+          e);
+    }
   }
 
   @Nullable
@@ -533,6 +568,10 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     return RETRYABLE_TERMINAL_STATUSES.contains(status);
   }
 
+  private boolean isConfirmed(String status) {
+    return "CONFIRMED".equals(status);
+  }
+
   private Reservation ensureRefundAvailable(
       Reservation reservation, boolean currentIntentRetryableTerminal) {
     if (reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING) {
@@ -635,15 +674,22 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       Reservation reservation, PrepareReservationEscrowCommand prepareCommand) {}
 
   private record DeadlineRefundInspection(
-      Reservation reservation, ReservationExecutionWriteView existingWeb3) {
+      Reservation reservation,
+      ReservationExecutionWriteView existingWeb3,
+      ReservationExecutionStateView confirmedState) {
 
     static DeadlineRefundInspection ready(Reservation reservation) {
-      return new DeadlineRefundInspection(reservation, null);
+      return new DeadlineRefundInspection(reservation, null, null);
     }
 
     static DeadlineRefundInspection existing(
         Reservation reservation, ReservationExecutionWriteView existingWeb3) {
-      return new DeadlineRefundInspection(reservation, existingWeb3);
+      return new DeadlineRefundInspection(reservation, existingWeb3, null);
+    }
+
+    static DeadlineRefundInspection confirmed(
+        Reservation reservation, ReservationExecutionStateView confirmedState) {
+      return new DeadlineRefundInspection(reservation, null, confirmedState);
     }
   }
 
@@ -661,16 +707,22 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   private record BeginDeadlineRefundResult(
       Reservation reservation,
       ReservationExecutionWriteView existingWeb3,
+      ReservationExecutionStateView confirmedState,
       PendingPreparation pendingPreparation) {
 
     static BeginDeadlineRefundResult existing(
         Reservation reservation, ReservationExecutionWriteView existingWeb3) {
-      return new BeginDeadlineRefundResult(reservation, existingWeb3, null);
+      return new BeginDeadlineRefundResult(reservation, existingWeb3, null, null);
+    }
+
+    static BeginDeadlineRefundResult confirmed(
+        Reservation reservation, ReservationExecutionStateView confirmedState) {
+      return new BeginDeadlineRefundResult(reservation, null, confirmedState, null);
     }
 
     static BeginDeadlineRefundResult pending(PendingPreparation pendingPreparation) {
       return new BeginDeadlineRefundResult(
-          pendingPreparation.reservation(), null, pendingPreparation);
+          pendingPreparation.reservation(), null, null, pendingPreparation);
     }
   }
 }
