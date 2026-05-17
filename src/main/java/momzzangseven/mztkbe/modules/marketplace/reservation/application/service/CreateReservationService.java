@@ -48,7 +48,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.web3j.utils.Numeric;
 
 /**
  * Service that creates a new reservation via EIP-7702 escrow.
@@ -662,11 +661,22 @@ public class CreateReservationService implements CreateReservationUseCase {
 
   private String sha256Hex(String value) {
     try {
-      return Numeric.toHexString(
-          MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+      return "0x"
+          + toHex(
+              MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
     } catch (Exception e) {
       throw new IllegalStateException("failed to hash marketplace reservation create input", e);
     }
+  }
+
+  private String toHex(byte[] bytes) {
+    char[] chars = new char[bytes.length * 2];
+    for (int i = 0; i < bytes.length; i++) {
+      int value = bytes[i] & 0xff;
+      chars[i * 2] = Character.forDigit(value >>> 4, 16);
+      chars[i * 2 + 1] = Character.forDigit(value & 0x0f, 16);
+    }
+    return new String(chars);
   }
 
   private String orderKeyFromUuid(String orderId) {

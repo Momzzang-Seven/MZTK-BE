@@ -262,6 +262,28 @@ class ClaimExpiredRefundReservationServiceTest {
     }
 
     @Test
+    @DisplayName("[DR-04B] 이미 deadline refund intent가 pending이면 중복 claim을 active conflict로 막는다")
+    void 이미_deadline_refund_pending이면_중복_claim_차단() {
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(
+              Optional.of(
+                  refundAvailableReservation().toBuilder()
+                      .status(ReservationStatus.DEADLINE_REFUND_PENDING)
+                      .build()));
+
+      assertThatThrownBy(
+              () -> sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+      then(saveReservationPort).shouldHaveNoInteractions();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
     @DisplayName("[DR-05] Phase B 보상에서 intent 취소가 불가하면 pending 상태를 즉시 롤백하지 않는다")
     void phase_b_보상_취소_불가_시_즉시_롤백하지_않음() {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();

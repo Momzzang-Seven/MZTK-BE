@@ -5,8 +5,6 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentCleanupView;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCleanupViewUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionCleanupIntent;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceExecutionCleanupIntentPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
@@ -22,12 +20,12 @@ import org.springframework.stereotype.Component;
 public class MarketplaceExecutionCleanupIntentAdapter
     implements LoadMarketplaceExecutionCleanupIntentPort {
 
-  private static final Set<ExecutionActionType> MARKETPLACE_USER_ACTIONS =
+  private static final Set<String> MARKETPLACE_USER_ACTIONS =
       Set.of(
-          ExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
-          ExecutionActionType.MARKETPLACE_CLASS_CANCEL,
-          ExecutionActionType.MARKETPLACE_CLASS_CONFIRM,
-          ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND);
+          "MARKETPLACE_CLASS_PURCHASE",
+          "MARKETPLACE_CLASS_CANCEL",
+          "MARKETPLACE_CLASS_CONFIRM",
+          "MARKETPLACE_CLASS_EXPIRED_REFUND");
 
   private final GetExecutionIntentCleanupViewUseCase getExecutionIntentCleanupViewUseCase;
 
@@ -47,7 +45,7 @@ public class MarketplaceExecutionCleanupIntentAdapter
   }
 
   private boolean isMarketplaceUserOrder(ExecutionIntentCleanupView view) {
-    return view.resourceType() == ExecutionResourceType.ORDER
-        && MARKETPLACE_USER_ACTIONS.contains(view.actionType());
+    return "ORDER".equals(view.resourceType().name())
+        && MARKETPLACE_USER_ACTIONS.contains(view.actionType().name());
   }
 }

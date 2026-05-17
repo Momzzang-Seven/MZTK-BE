@@ -290,6 +290,90 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
+  @DisplayName("deadline이 지났어도 current intent가 진행 중이면 refund 전환 전에 기존 intent를 반환한다")
+  void expiredCancelPending_currentAwaitingSignature_returnsExistingIntentWithoutClearingPending() {
+    Reservation reservation =
+        reservation(ReservationStatus.CANCEL_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
+            .contractDeadlineEpochSeconds(FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond())
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+            .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
+            .pendingAttemptToken("cancel-token")
+            .currentExecutionIntentPublicId("cancel-intent-1")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionWritePort.load(BUYER_ID, "cancel-intent-1"))
+        .willReturn(web3("MARKETPLACE_CLASS_CANCEL", "AWAITING_SIGNATURE"));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+    assertThat(result.web3()).isNotNull();
+    assertThat(result.web3().existing()).isTrue();
+    assertThat(result.web3().executionIntent().status()).isEqualTo("AWAITING_SIGNATURE");
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(loadReservationEscrowOrderPort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    then(replayConfirmedReservationExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("deadline이 지난 current intent가 retryable terminal이면 refund-only recovery로 전환한다")
+  void expiredCancelPending_currentFailedOnchain_preparesDeadlineRefundIntent() {
+    long deadlineEpochSeconds = FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond();
+    Reservation reservation =
+        reservation(ReservationStatus.CANCEL_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
+            .contractDeadlineEpochSeconds(deadlineEpochSeconds)
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+            .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
+            .pendingAttemptToken("cancel-token")
+            .currentExecutionIntentPublicId("cancel-intent-1")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    AtomicReference<Reservation> latestSaved = new AtomicReference<>(reservation);
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0, Reservation.class);
+              latestSaved.set(saved);
+              return saved;
+            });
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()));
+    given(loadReservationExecutionWritePort.load(BUYER_ID, "cancel-intent-1"))
+        .willReturn(web3("MARKETPLACE_CLASS_CANCEL", "FAILED_ONCHAIN", "cancel-intent-1"));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, deadlineEpochSeconds));
+    given(loadReservationEscrowPaymentConfigPort.load())
+        .willReturn(
+            new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+    given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+        .willReturn(
+            new PrepareReservationEscrowResult(
+                web3("MARKETPLACE_CLASS_EXPIRED_REFUND", "AWAITING_SIGNATURE", "refund-intent-1")));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(result.web3()).isNotNull();
+    assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("refund-intent-1");
+    then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoMoreInteractions();
+    then(replayConfirmedReservationExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
   @DisplayName(
       "deadline refund recovery 전에 order가 DEADLINE_REFUNDED이면 새 refund intent 없이 DEADLINE_REFUNDED로 동기화한다")
   void deadlineRefund_recovery_syncs_deadlineRefunded_order_without_new_intent() {
@@ -332,6 +416,36 @@ class RecoverReservationEscrowServiceTest {
     then(saveReservationPort).should().save(reservationCaptor.capture());
     assertThat(reservationCaptor.getValue().getCurrentExecutionIntentPublicId())
         .isEqualTo("intent-1");
+  }
+
+  @Test
+  @DisplayName("non-purchase recovery에서 order가 없으면 새 intent 대신 sync required로 중단한다")
+  void nonPurchase_recovery_absentOrder_throwsDeadlineSyncRequired() {
+    Reservation reservation =
+        reservation(ReservationStatus.CANCEL_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+            .contractDeadlineEpochSeconds(FIXED_CLOCK.instant().plusSeconds(600).getEpochSecond())
+            .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
+            .pendingAttemptToken("cancel-token")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_ABSENT, 0L));
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED.getCode()));
+
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 
   @Test
@@ -423,13 +537,18 @@ class RecoverReservationEscrowServiceTest {
   }
 
   private ReservationExecutionWriteView web3(String actionType, String intentStatus) {
+    return web3(actionType, intentStatus, "intent-1");
+  }
+
+  private ReservationExecutionWriteView web3(
+      String actionType, String intentStatus, String intentId) {
     return new ReservationExecutionWriteView(
         new ReservationExecutionWriteView.Resource(
             "ORDER", String.valueOf(RESERVATION_ID), "PENDING"),
         actionType,
         ORDER_KEY,
         new ReservationExecutionWriteView.ExecutionIntent(
-            "intent-1", intentStatus, LocalDateTime.now(FIXED_CLOCK).plusMinutes(5), 300L),
+            intentId, intentStatus, LocalDateTime.now(FIXED_CLOCK).plusMinutes(5), 300L),
         new ReservationExecutionWriteView.Execution("EIP7702", 1),
         null,
         null,

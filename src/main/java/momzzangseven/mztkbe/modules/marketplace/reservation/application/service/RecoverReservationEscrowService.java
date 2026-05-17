@@ -122,6 +122,16 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
                                 ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
                                 "Reservation not found: " + command.reservationId())));
     RecoveryFlow flow = resolveFlow(reservation);
+    if (reservation.getCurrentExecutionIntentPublicId() != null) {
+      validateActor(reservation, command.requesterId(), flow);
+      CurrentIntentResolution currentIntentResolution =
+          resolveCurrentExecution(command, reservation);
+      if (currentIntentResolution.stop()) {
+        return currentIntentResolution.result();
+      }
+      reservation = currentIntentResolution.reservation();
+      flow = resolveFlow(reservation);
+    }
     if (shouldForceDeadlineRefund(reservation, flow)) {
       RecoveryFlow expiredFlow = flow;
       Reservation expiredReservation = reservation;
@@ -130,23 +140,6 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
       requireBuyerOwnedRefundRecovery(expiredFlow, command.requesterId(), reservation);
     }
     validateActor(reservation, command.requesterId(), flow);
-
-    if (reservation.getCurrentExecutionIntentPublicId() != null) {
-      ReservationExecutionWriteView current =
-          loadReservationExecutionWritePort
-              .load(command.requesterId(), reservation.getCurrentExecutionIntentPublicId())
-              .asExistingForOrder(reservation.getOrderKey());
-      String intentStatus = current.executionIntent().status();
-      if ("CONFIRMED".equals(intentStatus)) {
-        replayConfirmedReservationExecutionPort.replayConfirmed(
-            current.executionIntent().id(), current.actionType());
-        Reservation latest = loadReservationPort.findById(reservation.getId()).orElse(reservation);
-        return result(latest, current);
-      }
-      if (!RETRYABLE_TERMINAL_STATUSES.contains(intentStatus)) {
-        return result(reservation, current);
-      }
-    }
 
     ChainSyncResult chainSync = syncChainStateBeforePrepare(reservation, flow);
     if (chainSync.stop()) {
@@ -164,6 +157,25 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     validateActor(reservation, command.requesterId(), flow);
 
     return prepareRecovery(command.requesterId(), reservation, flow);
+  }
+
+  private CurrentIntentResolution resolveCurrentExecution(
+      RecoverReservationEscrowCommand command, Reservation reservation) {
+    ReservationExecutionWriteView current =
+        loadReservationExecutionWritePort
+            .load(command.requesterId(), reservation.getCurrentExecutionIntentPublicId())
+            .asExistingForOrder(reservation.getOrderKey());
+    String intentStatus = current.executionIntent().status();
+    if ("CONFIRMED".equals(intentStatus)) {
+      replayConfirmedReservationExecutionPort.replayConfirmed(
+          current.executionIntent().id(), current.actionType());
+      Reservation latest = loadReservationPort.findById(reservation.getId()).orElse(reservation);
+      return CurrentIntentResolution.stop(result(latest, current));
+    }
+    if (!RETRYABLE_TERMINAL_STATUSES.contains(intentStatus)) {
+      return CurrentIntentResolution.stop(result(reservation, current));
+    }
+    return CurrentIntentResolution.continueWith(reservation);
   }
 
   private ChainSyncResult syncChainStateBeforePrepare(Reservation reservation, RecoveryFlow flow) {
@@ -662,6 +674,18 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
     static ChainSyncResult stop(Reservation reservation) {
       return new ChainSyncResult(reservation, true);
+    }
+  }
+
+  private record CurrentIntentResolution(
+      Reservation reservation, RecoverReservationEscrowResult result, boolean stop) {
+
+    static CurrentIntentResolution continueWith(Reservation reservation) {
+      return new CurrentIntentResolution(reservation, null, false);
+    }
+
+    static CurrentIntentResolution stop(RecoverReservationEscrowResult result) {
+      return new CurrentIntentResolution(null, result, true);
     }
   }
 }
