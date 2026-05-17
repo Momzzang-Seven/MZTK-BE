@@ -162,9 +162,12 @@ public enum ReservationStatus {
               || next == PAYMENT_FAILED
               || next == DEADLINE_RECOVERY_REQUIRED
               || next == DEADLINE_SYNC_REQUIRED;
-      case CANCEL_PENDING -> next == USER_CANCELLED || next == PENDING;
-      case REJECT_PENDING -> next == REJECTED || next == PENDING;
-      case CONFIRM_PENDING -> next == SETTLED || next == APPROVED;
+      case CANCEL_PENDING ->
+          next == USER_CANCELLED || next == PENDING || next == DEADLINE_REFUND_AVAILABLE;
+      case REJECT_PENDING ->
+          next == REJECTED || next == PENDING || next == DEADLINE_REFUND_AVAILABLE;
+      case CONFIRM_PENDING ->
+          next == SETTLED || next == APPROVED || next == DEADLINE_REFUND_AVAILABLE;
       case DEADLINE_REFUND_AVAILABLE -> next == DEADLINE_REFUND_PENDING;
       case DEADLINE_REFUND_PENDING ->
           next == DEADLINE_REFUNDED || next == DEADLINE_REFUND_AVAILABLE;

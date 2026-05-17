@@ -150,5 +150,49 @@ class ApproveReservationServiceTest {
 
       then(saveReservationPort).shouldHaveNoInteractions();
     }
+
+    @Test
+    @DisplayName("[AP-05] 생성 후 72시간이 지난 PENDING 예약은 승인할 수 없다")
+    void timeout_window_이후_승인_차단() {
+      Reservation timedOut =
+          pendingReservation().toBuilder()
+              .createdAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE).minusHours(72))
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(timedOut));
+
+      assertThatThrownBy(
+              () -> sut.execute(new ApproveReservationCommand(RESERVATION_ID, TRAINER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS.getCode()));
+
+      then(saveReservationPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[AP-06] 세션 시작 1시간 이내 PENDING 예약은 승인할 수 없다")
+    void session_guard_window_승인_차단() {
+      LocalDateTime sessionStart = LocalDateTime.ofInstant(FIXED_NOW, ZONE).plusMinutes(30);
+      Reservation withinSessionGuard =
+          pendingReservation().toBuilder()
+              .reservationDate(sessionStart.toLocalDate())
+              .reservationTime(sessionStart.toLocalTime())
+              .createdAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE))
+              .build();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(withinSessionGuard));
+
+      assertThatThrownBy(
+              () -> sut.execute(new ApproveReservationCommand(RESERVATION_ID, TRAINER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS.getCode()));
+
+      then(saveReservationPort).shouldHaveNoInteractions();
+    }
   }
 }

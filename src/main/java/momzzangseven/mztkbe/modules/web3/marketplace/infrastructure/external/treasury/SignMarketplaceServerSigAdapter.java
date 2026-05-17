@@ -3,38 +3,61 @@ package momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.external.tr
 import java.time.Clock;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
-import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletNotProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigPreimage;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.SignMarketplaceServerSigPort;
-import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignDigestCommand;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignDigestResult;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignDigestUseCase;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletByRoleUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 @ConditionalOnAnyExecutionEnabled
 public class SignMarketplaceServerSigAdapter implements SignMarketplaceServerSigPort {
 
-  private final MarketplaceEscrowProperties marketplaceEscrowProperties;
-  private final Web3CoreProperties web3CoreProperties;
   private final Clock appClock;
   private final SignDigestUseCase signDigestUseCase;
   private final LoadTreasuryWalletByRoleUseCase loadTreasuryWalletByRoleUseCase;
   private final MarketplaceTypedDataDigestBuilder typedDataDigestBuilder;
+  private final long chainId;
+  private final String marketplaceContractAddress;
+  private final String marketplaceEip712DomainName;
+  private final String marketplaceEip712DomainVersion;
+  private final int signedAtSkewSeconds;
   private final AtomicReference<DomainSeparatorCache> domainSeparatorCache =
       new AtomicReference<>();
+
+  public SignMarketplaceServerSigAdapter(
+      Clock appClock,
+      SignDigestUseCase signDigestUseCase,
+      LoadTreasuryWalletByRoleUseCase loadTreasuryWalletByRoleUseCase,
+      MarketplaceTypedDataDigestBuilder typedDataDigestBuilder,
+      @Value("${web3.chain-id}") long chainId,
+      @Value("${web3.escrow.marketplace-contract-address}") String marketplaceContractAddress,
+      @Value("${web3.escrow.marketplace-eip712-domain-name:MarketplaceEscrow}")
+          String marketplaceEip712DomainName,
+      @Value("${web3.escrow.marketplace-eip712-domain-version:1}")
+          String marketplaceEip712DomainVersion,
+      @Value("${web3.escrow.signed-at-skew-seconds:0}") int signedAtSkewSeconds) {
+    this.appClock = appClock;
+    this.signDigestUseCase = signDigestUseCase;
+    this.loadTreasuryWalletByRoleUseCase = loadTreasuryWalletByRoleUseCase;
+    this.typedDataDigestBuilder = typedDataDigestBuilder;
+    this.chainId = chainId;
+    this.marketplaceContractAddress = marketplaceContractAddress;
+    this.marketplaceEip712DomainName = marketplaceEip712DomainName;
+    this.marketplaceEip712DomainVersion = marketplaceEip712DomainVersion;
+    this.signedAtSkewSeconds = signedAtSkewSeconds;
+  }
 
   @Override
   public MarketplaceServerSigResult sign(MarketplaceServerSigPreimage preimage) {
@@ -55,8 +78,7 @@ public class SignMarketplaceServerSigAdapter implements SignMarketplaceServerSig
     }
     String normalizedWalletAddress = EvmAddress.of(signer.walletAddress()).value();
     Instant signingInstant = appClock.instant();
-    long signedAt =
-        signingInstant.getEpochSecond() - marketplaceEscrowProperties.getSignedAtSkewSeconds();
+    long signedAt = signingInstant.getEpochSecond() - signedAtSkewSeconds;
     byte[] digest =
         typedDataDigestBuilder.buildDigest(preimage, signedAt, resolveDomainSeparator());
 
@@ -67,11 +89,9 @@ public class SignMarketplaceServerSigAdapter implements SignMarketplaceServerSig
   }
 
   private byte[] resolveDomainSeparator() {
-    long chainId = web3CoreProperties.getChainId();
-    String verifyingContract =
-        EvmAddress.of(marketplaceEscrowProperties.getMarketplaceContractAddress()).value();
-    String domainName = marketplaceEscrowProperties.getMarketplaceEip712DomainName();
-    String domainVersion = marketplaceEscrowProperties.getMarketplaceEip712DomainVersion();
+    String verifyingContract = EvmAddress.of(marketplaceContractAddress).value();
+    String domainName = marketplaceEip712DomainName;
+    String domainVersion = marketplaceEip712DomainVersion;
     DomainSeparatorCacheKey key =
         new DomainSeparatorCacheKey(chainId, verifyingContract, domainName, domainVersion);
 

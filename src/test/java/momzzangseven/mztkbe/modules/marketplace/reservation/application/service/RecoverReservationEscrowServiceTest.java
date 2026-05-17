@@ -32,6 +32,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -154,6 +155,53 @@ class RecoverReservationEscrowServiceTest {
     assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED.name());
     assertThat(result.web3()).isNull();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName(
+      "deadline 이후 cancel pending recovery는 기존 cancel intent 대신 deadline refund intent를 준비한다")
+  void expired_cancelPending_recovery_forcesDeadlineRefund() {
+    long deadlineEpochSeconds = FIXED_CLOCK.instant().getEpochSecond();
+    Reservation reservation =
+        reservation(ReservationStatus.CANCEL_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
+            .currentExecutionIntentPublicId("old-cancel-intent")
+            .contractDeadlineEpochSeconds(deadlineEpochSeconds)
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK))
+            .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
+            .pendingAttemptToken("cancel-token")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    AtomicReference<Reservation> latestSaved = new AtomicReference<>(reservation);
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0, Reservation.class);
+              latestSaved.set(saved);
+              return saved;
+            });
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willReturn(Optional.of(reservation))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, deadlineEpochSeconds));
+    given(loadReservationEscrowPaymentConfigPort.load())
+        .willReturn(
+            new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+    given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+        .willReturn(new PrepareReservationEscrowResult(web3()));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(result.web3()).isNotNull();
+    then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoMoreInteractions();
   }
 
   @Test

@@ -109,7 +109,7 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
                 ? null
                 : Numeric.toHexString(signature.signatureBytes()));
 
-    LocalDateTime expiresAt = expiresAt(context, signature);
+    LocalDateTime expiresAt = expiresAt(context, signature, request);
     return new MarketplaceExecutionDraft(
         MarketplaceExecutionResourceType.ORDER,
         request.resourceId(),
@@ -233,7 +233,8 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
     };
   }
 
-  private LocalDateTime expiresAt(DraftContext context, ServerSignature signature) {
+  private LocalDateTime expiresAt(
+      DraftContext context, ServerSignature signature, MarketplaceEscrowExecutionRequest request) {
     Instant signingInstant =
         signature.signingInstant() == null ? context.signingInstant() : signature.signingInstant();
     Instant authExpires = signingInstant.plusSeconds(context.authorizationTtlSeconds());
@@ -242,7 +243,22 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
       Instant sigExpires = Instant.ofEpochSecond(signature.expiresAtEpochSeconds());
       effectiveExpires = sigExpires.isBefore(authExpires) ? sigExpires : authExpires;
     }
+    Instant contractDeadline = contractDeadlineExpiry(request);
+    if (contractDeadline != null && contractDeadline.isBefore(effectiveExpires)) {
+      effectiveExpires = contractDeadline;
+    }
     return LocalDateTime.ofInstant(effectiveExpires, appClock.getZone());
+  }
+
+  private Instant contractDeadlineExpiry(MarketplaceEscrowExecutionRequest request) {
+    if (request.actionType() == MarketplaceExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND) {
+      return null;
+    }
+    Long deadlineEpochSeconds =
+        request.contractDeadlineEpochSeconds() == null
+            ? request.expectedContractDeadlineEpochSeconds()
+            : request.contractDeadlineEpochSeconds();
+    return deadlineEpochSeconds == null ? null : Instant.ofEpochSecond(deadlineEpochSeconds);
   }
 
   private String resolveActiveWalletAddress(Long userId) {

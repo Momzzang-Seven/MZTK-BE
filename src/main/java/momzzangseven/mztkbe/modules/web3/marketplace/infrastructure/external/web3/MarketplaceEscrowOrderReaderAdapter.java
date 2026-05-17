@@ -5,15 +5,13 @@ import jakarta.annotation.PreDestroy;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Locale;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceEscrowOrderPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceEscrowOrderView;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdCodec;
-import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.datatypes.Address;
@@ -32,21 +30,26 @@ import org.web3j.protocol.core.methods.response.EthCall;
 import org.web3j.protocol.http.HttpService;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 @ConditionalOnAnyExecutionEnabled
 public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscrowOrderPort {
 
-  private final Web3CoreProperties web3CoreProperties;
-  private final MarketplaceEscrowProperties marketplaceEscrowProperties;
+  @Value("${web3.rpc.main}")
+  private String mainRpcUrl;
+
+  @Value("${web3.rpc.sub}")
+  private String subRpcUrl;
+
+  @Value("${web3.escrow.marketplace-contract-address}")
+  private String marketplaceContractAddress;
 
   private Web3j mainWeb3j;
   private Web3j subWeb3j;
 
   @PostConstruct
   void init() {
-    mainWeb3j = Web3j.build(new HttpService(web3CoreProperties.getRpc().getMain()));
-    subWeb3j = Web3j.build(new HttpService(web3CoreProperties.getRpc().getSub()));
+    mainWeb3j = Web3j.build(new HttpService(mainRpcUrl));
+    subWeb3j = Web3j.build(new HttpService(subRpcUrl));
   }
 
   @PreDestroy
@@ -91,7 +94,7 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
   }
 
   private String callAndReadValue(Function function, String operation) {
-    String escrowAddress = marketplaceEscrowProperties.getMarketplaceContractAddress();
+    String escrowAddress = marketplaceContractAddress;
     String data = FunctionEncoder.encode(function);
     Transaction tx = Transaction.createEthCallTransaction(escrowAddress, escrowAddress, data);
     EthCall response =

@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -26,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ApproveReservationService implements ApproveReservationUseCase {
+
+  private static final long APPROVE_TIMEOUT_HOURS = 72L;
+  private static final long SESSION_START_GUARD_HOURS = 1L;
 
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
@@ -71,6 +75,7 @@ public class ApproveReservationService implements ApproveReservationUseCase {
     }
     ReservationDeadlineActionGuard.requireUserActionBeforeContractDeadline(
         reservation, clock, "approve");
+    requireBeforeAutoCancelWindow(reservation);
 
     Reservation approved = reservation.approve();
     Reservation saved = saveReservationPort.save(approved);
@@ -80,5 +85,22 @@ public class ApproveReservationService implements ApproveReservationUseCase {
         saved.getId(),
         command.authenticatedTrainerId());
     return new ApproveReservationResult(saved.getId(), saved.getStatus());
+  }
+
+  private void requireBeforeAutoCancelWindow(Reservation reservation) {
+    LocalDateTime now = LocalDateTime.now(clock);
+    if (reservation.getCreatedAt() != null
+        && !reservation.getCreatedAt().isAfter(now.minusHours(APPROVE_TIMEOUT_HOURS))) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Cannot approve reservation after the trainer approval timeout window");
+    }
+    LocalDateTime sessionStartAt =
+        LocalDateTime.of(reservation.getReservationDate(), reservation.getReservationTime());
+    if (!sessionStartAt.isAfter(now.plusHours(SESSION_START_GUARD_HOURS))) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Cannot approve reservation within the auto-cancel session guard window");
+    }
   }
 }

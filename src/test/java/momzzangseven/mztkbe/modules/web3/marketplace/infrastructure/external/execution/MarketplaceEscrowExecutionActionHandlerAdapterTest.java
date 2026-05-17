@@ -324,6 +324,69 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  @DisplayName(
+      "confirmed deadline refund marks reservation DEADLINE_REFUNDED and clears pending state")
+  void afterExecutionConfirmed_deadlineRefund_marksDeadlineRefunded() throws Exception {
+    String txHash = "0x" + "3".repeat(64);
+    Reservation reservation = deadlineRefundPending();
+    MarketplaceEscrowExecutionPayload payload =
+        payload(
+            "refund-token",
+            MarketplaceExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND,
+            MarketplaceActorType.BUYER);
+    ExecutionIntent intent =
+        intent("intent-refund", ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND, payload)
+            .toBuilder()
+            .submittedTxId(57L)
+            .build();
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-refund"))
+        .willReturn(Optional.of(reservation));
+    given(loadExecutionTransactionPort.findById(57L))
+        .willReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    57L, ExecutionTransactionStatus.SUCCEEDED, txHash)));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+    assertThat(captor.getValue().getEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.DEADLINE_REFUNDED);
+    assertThat(captor.getValue().getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(captor.getValue().getPendingAction()).isNull();
+    assertThat(captor.getValue().getPendingAttemptToken()).isNull();
+    assertThat(captor.getValue().getTxHash()).isEqualTo(txHash);
+  }
+
+  @Test
+  @DisplayName("terminated non-purchase marketplace intent rolls reservation back to prior state")
+  void afterExecutionTerminated_nonPurchase_rollsBackToPriorState() throws Exception {
+    Reservation reservation = cancelPending();
+    MarketplaceEscrowExecutionPayload payload =
+        payload(
+            "cancel-token",
+            MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+            MarketplaceActorType.BUYER);
+    ExecutionIntent intent =
+        intent("intent-cancel", ExecutionActionType.MARKETPLACE_CLASS_CANCEL, payload);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-cancel"))
+        .willReturn(Optional.of(reservation));
+
+    sut.afterExecutionTerminated(intent, null, ExecutionIntentStatus.FAILED_ONCHAIN, "REVERTED");
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(captor.getValue().getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(captor.getValue().getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(captor.getValue().getPendingAction()).isNull();
+    assertThat(captor.getValue().getPendingAttemptToken()).isNull();
+    then(saveReservationCreateIdempotencyPort).shouldHaveNoInteractions();
+  }
+
+  @Test
   @DisplayName("confirmed replay repairs tx hash when the local outcome was already applied")
   void afterExecutionConfirmed_alreadyApplied_repairTxHash() throws Exception {
     String txHash = "0x" + "2".repeat(64);
@@ -538,5 +601,40 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
         .build()
         .beginRejectPending("reject-token", "일정 불가")
         .bindPendingExecutionIntent("intent-reject");
+  }
+
+  private Reservation cancelPending() {
+    return baseLockedReservation()
+        .beginCancelPending("cancel-token")
+        .bindPendingExecutionIntent("intent-cancel");
+  }
+
+  private Reservation deadlineRefundPending() {
+    return baseLockedReservation()
+        .markDeadlineRefundAvailable(1_800_000_000L, LocalDateTime.of(2027, 1, 15, 8, 0))
+        .beginDeadlineRefundPending("refund-token")
+        .bindPendingExecutionIntent("intent-refund");
+  }
+
+  private Reservation baseLockedReservation() {
+    return Reservation.createPending(
+            7L,
+            9L,
+            11L,
+            LocalDate.of(2026, 5, 20),
+            LocalTime.of(10, 0),
+            60,
+            null,
+            ORDER_ID,
+            null,
+            50_000,
+            "PT")
+        .toBuilder()
+        .id(123L)
+        .version(0L)
+        .orderKey(ORDER_KEY)
+        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+        .escrowStatus(ReservationEscrowStatus.LOCKED)
+        .build();
   }
 }

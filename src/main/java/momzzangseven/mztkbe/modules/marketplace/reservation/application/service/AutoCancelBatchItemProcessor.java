@@ -9,10 +9,18 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Per-item transaction processor for the auto-cancel batch job.
@@ -36,11 +44,21 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AutoCancelBatchItemProcessor {
 
+  private static final String PENDING_TX_HASH = "ESCROW_DISPATCH_PENDING";
+
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
   private final RecordTrainerStrikePort recordTrainerStrikePort;
   private final Clock clock;
+  private TransactionOperations postCommitTransactionOperations;
+
+  @Autowired
+  void setTransactionManager(PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    this.postCommitTransactionOperations = transactionTemplate;
+  }
 
   /**
    * Processes a single auto-cancel item in its own isolated transaction.
@@ -51,9 +69,9 @@ public class AutoCancelBatchItemProcessor {
    * be visible — the stale PENDING status would bypass the guard and trigger a duplicate on-chain
    * refund (double-compensation).
    *
-   * <p>Order: re-fetch with lock → validate status → persist TIMEOUT_CANCELLED → submit adminRefund
-   * on-chain → update txHash → record TIMEOUT strike. On failure: the individual transaction rolls
-   * back; the caller catches and logs.
+   * <p>Order: re-fetch with lock → validate status → persist TIMEOUT_CANCELLED + strike → commit →
+   * submit adminRefund on-chain → update txHash in a new short transaction. This prevents
+   * successful on-chain refund from being rolled back locally by a commit failure.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void process(Reservation staleReservation) {
@@ -85,23 +103,84 @@ public class AutoCancelBatchItemProcessor {
     }
 
     // 1. Persist status first — DB is the source of truth.
-    Reservation cancelled = reservation.timeoutCancel("ESCROW_DISPATCH_PENDING");
+    Reservation cancelled = reservation.timeoutCancel(PENDING_TX_HASH);
     saveReservationPort.save(cancelled);
 
-    // 2. Submit on-chain refund — after DB save in REQUIRES_NEW.
-    String refundTxHash = submitEscrowTransactionPort.submitAdminRefund(reservation.getOrderId());
-
-    // 3. Write back the real txHash.
-    Reservation withTxHash = cancelled.updateTxHash(refundTxHash);
-    saveReservationPort.save(withTxHash);
-
-    // 4. Record trainer strike.
     recordTrainerStrikePort.recordStrike(
         reservation.getTrainerId(), TrainerStrikeEvent.REASON_TIMEOUT);
 
+    runAfterCommit(
+        () ->
+            submitAdminRefundAndWriteBack(
+                reservation.getId(), reservation.getOrderId(), reservation.getTrainerId()));
+
     log.info(
-        "AutoCancel processed: reservationId={}, trainerId={}",
+        "AutoCancel committed local timeout state: reservationId={}, trainerId={}",
         reservation.getId(),
         reservation.getTrainerId());
+  }
+
+  private void submitAdminRefundAndWriteBack(Long reservationId, String orderId, Long trainerId) {
+    String refundTxHash;
+    try {
+      refundTxHash = submitEscrowTransactionPort.submitAdminRefund(orderId);
+    } catch (RuntimeException e) {
+      log.error(
+          "AutoCancel adminRefund failed after local commit: reservationId={}, trainerId={}",
+          reservationId,
+          trainerId,
+          e);
+      return;
+    }
+
+    runPostCommitTransaction(
+        () ->
+            loadReservationPort
+                .findByIdWithLock(reservationId)
+                .ifPresentOrElse(
+                    current -> writeBackRefundTxHash(current, refundTxHash),
+                    () ->
+                        log.warn(
+                            "AutoCancel txHash write-back skipped: reservation {} no longer exists",
+                            reservationId)));
+  }
+
+  private void writeBackRefundTxHash(Reservation current, String refundTxHash) {
+    if (current.getStatus() != ReservationStatus.TIMEOUT_CANCELLED
+        || !PENDING_TX_HASH.equals(current.getTxHash())) {
+      log.info(
+          "AutoCancel txHash write-back skipped: reservationId={}, status={}, txHash={}",
+          current.getId(),
+          current.getStatus(),
+          current.getTxHash());
+      return;
+    }
+    saveReservationPort.save(current.updateTxHash(refundTxHash));
+    log.info(
+        "AutoCancel on-chain refund recorded: reservationId={}, txHash={}",
+        current.getId(),
+        refundTxHash);
+  }
+
+  private void runAfterCommit(Runnable action) {
+    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+      action.run();
+      return;
+    }
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            action.run();
+          }
+        });
+  }
+
+  private void runPostCommitTransaction(Runnable action) {
+    if (postCommitTransactionOperations == null) {
+      action.run();
+      return;
+    }
+    postCommitTransactionOperations.executeWithoutResult(status -> action.run());
   }
 }

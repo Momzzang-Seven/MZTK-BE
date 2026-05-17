@@ -11,9 +11,11 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -31,6 +33,7 @@ class ReservationChainReadRepairServiceTest {
   private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
   private static final Clock CLOCK = Clock.fixed(Instant.parse("2025-06-01T03:00:00Z"), ZONE);
 
+  @Mock private LoadReservationPort loadReservationPort;
   @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   @Mock private SaveReservationPort saveReservationPort;
 
@@ -49,9 +52,11 @@ class ReservationChainReadRepairServiceTest {
                 confirmedOrder(second.getOrderKey(), deadline)));
     given(saveReservationPort.save(any()))
         .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+    given(loadReservationPort.findByIdWithLock(first.getId())).willReturn(Optional.of(first));
+    given(loadReservationPort.findByIdWithLock(second.getId())).willReturn(Optional.of(second));
     ReservationChainReadRepairService sut =
         new ReservationChainReadRepairService(
-            loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
 
     List<Reservation> repaired = sut.repairBatch(List.of(first, second));
 
@@ -78,9 +83,11 @@ class ReservationChainReadRepairServiceTest {
         .willReturn(List.of(createdOrder(reservation.getOrderKey(), unsafeDeadline)));
     given(saveReservationPort.save(any()))
         .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+    given(loadReservationPort.findByIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(reservation));
     ReservationChainReadRepairService sut =
         new ReservationChainReadRepairService(
-            loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
 
     List<Reservation> repaired = sut.repairBatch(List.of(reservation));
 
@@ -107,9 +114,12 @@ class ReservationChainReadRepairServiceTest {
                     ReservationEscrowOrderView.STATE_DEADLINE_REFUNDED)));
     given(saveReservationPort.save(any()))
         .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+    given(loadReservationPort.findByIdWithLock(cancelled.getId()))
+        .willReturn(Optional.of(cancelled));
+    given(loadReservationPort.findByIdWithLock(refunded.getId())).willReturn(Optional.of(refunded));
     ReservationChainReadRepairService sut =
         new ReservationChainReadRepairService(
-            loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
 
     List<Reservation> repaired = sut.repairBatch(List.of(cancelled, refunded));
 
@@ -126,7 +136,7 @@ class ReservationChainReadRepairServiceTest {
         .willThrow(new MarketplaceWeb3DisabledException());
     ReservationChainReadRepairService sut =
         new ReservationChainReadRepairService(
-            loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
 
     List<Reservation> repaired = sut.repairBatch(List.of(reservation));
 
@@ -143,9 +153,11 @@ class ReservationChainReadRepairServiceTest {
         .willReturn(createdOrder(reservation.getOrderKey(), deadline));
     given(saveReservationPort.save(any()))
         .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+    given(loadReservationPort.findByIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(reservation));
     ReservationChainReadRepairService sut =
         new ReservationChainReadRepairService(
-            loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
 
     Reservation repaired = sut.repairOne(reservation);
 

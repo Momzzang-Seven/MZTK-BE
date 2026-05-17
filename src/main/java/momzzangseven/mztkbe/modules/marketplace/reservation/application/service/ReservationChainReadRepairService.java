@@ -15,28 +15,36 @@ import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledExce
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Service
 public class ReservationChainReadRepairService implements RepairReservationChainReadUseCase {
 
+  private final LoadReservationPort loadReservationPort;
   private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   private final SaveReservationPort saveReservationPort;
   private final Clock clock;
+  private TransactionOperations transactionOperations;
 
   public ReservationChainReadRepairService(
+      LoadReservationPort loadReservationPort,
       @Nullable LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
       SaveReservationPort saveReservationPort,
       Clock clock) {
+    this.loadReservationPort = loadReservationPort;
     this.loadReservationEscrowOrderPort =
         loadReservationEscrowOrderPort == null
             ? DisabledReservationWeb3PortFactory.escrowOrder()
@@ -45,8 +53,14 @@ public class ReservationChainReadRepairService implements RepairReservationChain
     this.clock = clock;
   }
 
+  @Autowired
+  void setTransactionManager(PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    this.transactionOperations = transactionTemplate;
+  }
+
   @Override
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Reservation repairOne(Reservation reservation) {
     if (!needsChainRepair(reservation)) {
       return reservation;
@@ -61,7 +75,6 @@ public class ReservationChainReadRepairService implements RepairReservationChain
   }
 
   @Override
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public List<Reservation> repairBatch(List<Reservation> reservations) {
     List<Reservation> candidates = reservations.stream().filter(this::needsChainRepair).toList();
     if (candidates.isEmpty()) {
@@ -111,6 +124,19 @@ public class ReservationChainReadRepairService implements RepairReservationChain
     if (order == null || order.isAbsent()) {
       return reservation;
     }
+    return runInTransaction(
+        () -> {
+          Reservation current =
+              loadReservationPort.findByIdWithLock(reservation.getId()).orElse(reservation);
+          if (!needsChainRepair(current)) {
+            return current;
+          }
+          return repairLockedFromOrder(current, order);
+        });
+  }
+
+  private Reservation repairLockedFromOrder(
+      Reservation reservation, ReservationEscrowOrderView order) {
     LocalDateTime deadlineAt = deadlineAt(order.deadlineEpochSeconds());
     Reservation repaired =
         switch (order.state()) {
@@ -164,6 +190,13 @@ public class ReservationChainReadRepairService implements RepairReservationChain
         repaired.getStatus(),
         order.state());
     return saveReservationPort.save(repaired);
+  }
+
+  private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
+    if (transactionOperations == null) {
+      return supplier.get();
+    }
+    return transactionOperations.execute(status -> supplier.get());
   }
 
   private Reservation repairCreatedOrder(

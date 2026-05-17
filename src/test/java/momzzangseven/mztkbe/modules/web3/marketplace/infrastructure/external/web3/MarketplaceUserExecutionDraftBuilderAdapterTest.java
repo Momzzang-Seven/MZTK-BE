@@ -159,6 +159,29 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   }
 
   @Test
+  @DisplayName("cancel/confirm 계열 draft 만료는 contract deadline보다 늦게 노출되지 않는다")
+  void build_capsExpiresAtToContractDeadline() {
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
+        .willReturn(Optional.of(BUYER));
+    givenDraftContext();
+    given(signMarketplaceServerSigPort.sign(any()))
+        .willReturn(new MarketplaceServerSigResult(1_000L, SIGNATURE, SIGNING_INSTANT));
+    given(
+            buildMarketplaceEscrowCallDataPort.encode(
+                any(), any(), any(), any(), any(), anyLong(), any()))
+        .willReturn("0xcancel");
+
+    MarketplaceExecutionDraft draft =
+        sut.build(
+            request(
+                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+                MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
+                1_100L));
+
+    assertThat(draft.expiresAt()).isEqualTo(LocalDateTime.ofEpochSecond(1_100, 0, ZoneOffset.UTC));
+  }
+
+  @Test
   @DisplayName("approve-batch purchase는 별도 UX/정책이 없으므로 draft builder에서 명시적으로 차단한다")
   void build_approveBatchPurchase_isBlocked() {
     given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
@@ -213,6 +236,13 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
 
   private MarketplaceEscrowExecutionRequest request(
       MarketplaceExecutionActionType actionType, MarketplaceAllowanceStrategy strategy) {
+    return request(actionType, strategy, 1_800L);
+  }
+
+  private MarketplaceEscrowExecutionRequest request(
+      MarketplaceExecutionActionType actionType,
+      MarketplaceAllowanceStrategy strategy,
+      Long contractDeadlineEpochSeconds) {
     return new MarketplaceEscrowExecutionRequest(
         actionType,
         123L,
@@ -235,8 +265,8 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
         strategy,
         50_000,
         LocalDateTime.of(2026, 5, 20, 11, 0),
-        1_800L,
-        1_800L,
+        contractDeadlineEpochSeconds,
+        contractDeadlineEpochSeconds,
         "attempt-token",
         "PENDING");
   }

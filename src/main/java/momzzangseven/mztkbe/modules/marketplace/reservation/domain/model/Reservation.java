@@ -688,7 +688,7 @@ public class Reservation {
     if (getEffectiveEscrowFlow().isUserEip7702() || status.isSchedulerInvisibleUserState()) {
       return false;
     }
-    if (contractDeadlineAt != null && now.isAfter(contractDeadlineAt)) {
+    if (contractDeadlineAt != null && !now.isBefore(contractDeadlineAt)) {
       return false;
     }
     return true;

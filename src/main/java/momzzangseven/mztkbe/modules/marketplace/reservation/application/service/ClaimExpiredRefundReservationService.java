@@ -223,7 +223,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
           ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
           "Contract deadline is not available for this reservation");
     }
-    if (!LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt())) {
+    if (LocalDateTime.now(clock).isBefore(reservation.getContractDeadlineAt())) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
           "Deadline refund is only available after the contract deadline");

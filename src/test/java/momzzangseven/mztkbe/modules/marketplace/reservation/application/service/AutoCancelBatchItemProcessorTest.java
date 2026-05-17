@@ -2,7 +2,9 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
@@ -25,6 +27,8 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class AutoCancelBatchItemProcessorTest {
@@ -62,13 +66,18 @@ class AutoCancelBatchItemProcessorTest {
     given(fresh.getStatus()).willReturn(ReservationStatus.PENDING);
     given(fresh.isLegacySchedulerEligibleAt(any())).willReturn(true);
 
-    given(loadReservationPort.findByIdWithLock(reservationId)).willReturn(Optional.of(fresh));
-
     // DB-first: timeoutCancel called with sentinel hash
     Reservation cancelledWithSentinel = org.mockito.Mockito.mock(Reservation.class);
+    given(cancelledWithSentinel.getId()).willReturn(reservationId);
+    given(cancelledWithSentinel.getStatus()).willReturn(ReservationStatus.TIMEOUT_CANCELLED);
+    given(cancelledWithSentinel.getTxHash())
+        .willReturn(EscrowDispatchEventListener.PENDING_TX_HASH);
     given(fresh.timeoutCancel(EscrowDispatchEventListener.PENDING_TX_HASH))
         .willReturn(cancelledWithSentinel);
     given(saveReservationPort.save(cancelledWithSentinel)).willReturn(cancelledWithSentinel);
+    given(loadReservationPort.findByIdWithLock(reservationId))
+        .willReturn(Optional.of(fresh))
+        .willReturn(Optional.of(cancelledWithSentinel));
 
     // Escrow called after DB save
     String realTxHash = "0xhash";
@@ -80,10 +89,22 @@ class AutoCancelBatchItemProcessorTest {
     given(saveReservationPort.save(cancelledWithRealTxHash)).willReturn(cancelledWithRealTxHash);
 
     // Act
-    sut.process(stale);
+    TransactionSynchronizationManager.initSynchronization();
+    try {
+      sut.process(stale);
+
+      // External mutation is deferred until the local DB transaction commits.
+      then(submitEscrowTransactionPort).shouldHaveNoInteractions();
+      for (TransactionSynchronization synchronization :
+          TransactionSynchronizationManager.getSynchronizations()) {
+        synchronization.afterCommit();
+      }
+    } finally {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
 
     // Assert — re-fetch with lock, then DB save before escrow call
-    verify(loadReservationPort).findByIdWithLock(reservationId);
+    verify(loadReservationPort, times(2)).findByIdWithLock(reservationId);
 
     InOrder order = inOrder(saveReservationPort, submitEscrowTransactionPort);
     order.verify(saveReservationPort).save(cancelledWithSentinel);

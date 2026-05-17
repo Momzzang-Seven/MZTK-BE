@@ -9,9 +9,16 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Per-item transaction processor for the auto-settle batch job.
@@ -33,10 +40,20 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AutoSettleBatchItemProcessor {
 
+  private static final String PENDING_TX_HASH = "ESCROW_DISPATCH_PENDING";
+
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
   private final Clock clock;
+  private TransactionOperations postCommitTransactionOperations;
+
+  @Autowired
+  void setTransactionManager(PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    this.postCommitTransactionOperations = transactionTemplate;
+  }
 
   /**
    * Settles a single approved reservation in its own isolated transaction.
@@ -46,9 +63,9 @@ public class AutoSettleBatchItemProcessor {
    * change (e.g. user cancellation) committed between the batch read and this process() call would
    * not be visible, potentially triggering a duplicate on-chain settle.
    *
-   * <p>Order: re-fetch with lock → validate status → persist AUTO_SETTLED → submit adminSettle
-   * on-chain → update txHash. On failure: the individual transaction rolls back; the caller catches
-   * and logs.
+   * <p>Order: re-fetch with lock → validate status → persist AUTO_SETTLED → commit → submit
+   * adminSettle on-chain → update txHash in a new short transaction. This prevents successful
+   * on-chain settlement from being rolled back locally by a commit failure.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void process(Reservation staleReservation) {
@@ -78,19 +95,76 @@ public class AutoSettleBatchItemProcessor {
     }
 
     // 1. Persist status first.
-    Reservation settled = reservation.autoSettle("ESCROW_DISPATCH_PENDING");
+    Reservation settled = reservation.autoSettle(PENDING_TX_HASH);
     saveReservationPort.save(settled);
 
-    // 2. Submit on-chain settle — after DB save in REQUIRES_NEW.
-    String settleTxHash = submitEscrowTransactionPort.submitAdminSettle(reservation.getOrderId());
-
-    // 3. Write back the real txHash.
-    Reservation withTxHash = settled.updateTxHash(settleTxHash);
-    saveReservationPort.save(withTxHash);
+    runAfterCommit(
+        () -> submitAdminSettleAndWriteBack(reservation.getId(), reservation.getOrderId()));
 
     log.info(
-        "AutoSettle processed: reservationId={}, trainerId={}",
+        "AutoSettle committed local settle state: reservationId={}, trainerId={}",
         reservation.getId(),
         reservation.getTrainerId());
+  }
+
+  private void submitAdminSettleAndWriteBack(Long reservationId, String orderId) {
+    String settleTxHash;
+    try {
+      settleTxHash = submitEscrowTransactionPort.submitAdminSettle(orderId);
+    } catch (RuntimeException e) {
+      log.error(
+          "AutoSettle adminSettle failed after local commit: reservationId={}", reservationId, e);
+      return;
+    }
+
+    runPostCommitTransaction(
+        () ->
+            loadReservationPort
+                .findByIdWithLock(reservationId)
+                .ifPresentOrElse(
+                    current -> writeBackSettleTxHash(current, settleTxHash),
+                    () ->
+                        log.warn(
+                            "AutoSettle txHash write-back skipped: reservation {} no longer exists",
+                            reservationId)));
+  }
+
+  private void writeBackSettleTxHash(Reservation current, String settleTxHash) {
+    if (current.getStatus() != ReservationStatus.AUTO_SETTLED
+        || !PENDING_TX_HASH.equals(current.getTxHash())) {
+      log.info(
+          "AutoSettle txHash write-back skipped: reservationId={}, status={}, txHash={}",
+          current.getId(),
+          current.getStatus(),
+          current.getTxHash());
+      return;
+    }
+    saveReservationPort.save(current.updateTxHash(settleTxHash));
+    log.info(
+        "AutoSettle on-chain settle recorded: reservationId={}, txHash={}",
+        current.getId(),
+        settleTxHash);
+  }
+
+  private void runAfterCommit(Runnable action) {
+    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+      action.run();
+      return;
+    }
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            action.run();
+          }
+        });
+  }
+
+  private void runPostCommitTransaction(Runnable action) {
+    if (postCommitTransactionOperations == null) {
+      action.run();
+      return;
+    }
+    postCommitTransactionOperations.executeWithoutResult(status -> action.run());
   }
 }

@@ -119,6 +119,11 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
                                 ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
                                 "Reservation not found: " + command.reservationId())));
     RecoveryFlow flow = resolveFlow(reservation);
+    if (shouldForceDeadlineRefund(reservation, flow)) {
+      Reservation expiredReservation = reservation;
+      reservation = runInTransaction(() -> forceDeadlineRefundAvailable(expiredReservation));
+      flow = resolveFlow(reservation);
+    }
     validateActor(reservation, command.requesterId(), flow);
 
     if (reservation.getCurrentExecutionIntentPublicId() != null) {
@@ -144,6 +149,11 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     }
     reservation = chainSync.reservation();
     flow = resolveFlow(reservation);
+    if (shouldForceDeadlineRefund(reservation, flow)) {
+      Reservation expiredReservation = reservation;
+      reservation = runInTransaction(() -> forceDeadlineRefundAvailable(expiredReservation));
+      flow = resolveFlow(reservation);
+    }
     validateActor(reservation, command.requesterId(), flow);
 
     return prepareRecovery(command.requesterId(), reservation, flow);
@@ -229,7 +239,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
       return stopWith(synced);
     }
     if (flow.action() == RecoveryAction.DEADLINE_REFUND) {
-      if (deadlineAt == null || !LocalDateTime.now(clock).isAfter(deadlineAt)) {
+      if (deadlineAt == null || LocalDateTime.now(clock).isBefore(deadlineAt)) {
         throw new BusinessException(
             ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
             "Deadline refund is not yet available on the escrow contract");
@@ -390,7 +400,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
             ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
             "Contract deadline is not available for this reservation");
       }
-      if (!LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt())) {
+      if (LocalDateTime.now(clock).isBefore(reservation.getContractDeadlineAt())) {
         throw new BusinessException(
             ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
             "Deadline refund is only available after the contract deadline");
@@ -442,7 +452,31 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
   private boolean expired(Reservation reservation) {
     return reservation.getContractDeadlineAt() != null
-        && LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt());
+        && !LocalDateTime.now(clock).isBefore(reservation.getContractDeadlineAt());
+  }
+
+  private boolean shouldForceDeadlineRefund(Reservation reservation, RecoveryFlow flow) {
+    return expired(reservation)
+        && switch (flow.action()) {
+          case BUYER_CANCEL, TRAINER_REJECT, BUYER_CONFIRM -> true;
+          default -> false;
+        };
+  }
+
+  private Reservation forceDeadlineRefundAvailable(Reservation expected) {
+    Reservation current =
+        loadReservationPort
+            .findByIdWithLock(expected.getId())
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
+                        "Reservation not found: " + expected.getId()));
+    RecoveryFlow flow = resolveFlow(current);
+    if (!shouldForceDeadlineRefund(current, flow)) {
+      return current;
+    }
+    return saveReservationPort.save(current.markDeadlineRefundAvailable());
   }
 
   private void validateActor(Reservation reservation, Long requesterId, RecoveryFlow flow) {

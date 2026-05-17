@@ -12,11 +12,9 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigPreimage;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigResult;
-import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignDigestCommand;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignDigestResult;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignDigestUseCase;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletByRoleUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
@@ -54,23 +52,17 @@ class SignMarketplaceServerSigAdapterTest {
 
   @BeforeEach
   void setUp() {
-    MarketplaceEscrowProperties escrowProperties = new MarketplaceEscrowProperties();
-    escrowProperties.setMarketplaceContractAddress(ESCROW);
-    escrowProperties.setMarketplaceEip712DomainName("MarketplaceEscrow");
-    escrowProperties.setMarketplaceEip712DomainVersion("1");
-    escrowProperties.setSignedAtSkewSeconds(7);
-
-    Web3CoreProperties web3CoreProperties = new Web3CoreProperties();
-    web3CoreProperties.setChainId(10L);
-
     sut =
         new SignMarketplaceServerSigAdapter(
-            escrowProperties,
-            web3CoreProperties,
             Clock.fixed(Instant.ofEpochSecond(1_007), ZoneOffset.UTC),
             signDigestUseCase,
             loadTreasuryWalletByRoleUseCase,
-            new MarketplaceTypedDataDigestBuilder());
+            new MarketplaceTypedDataDigestBuilder(),
+            10L,
+            ESCROW,
+            "MarketplaceEscrow",
+            "1",
+            7);
   }
 
   @Test

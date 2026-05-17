@@ -16,7 +16,7 @@ final class ReservationDeadlineActionGuard {
       return;
     }
     if (reservation.getContractDeadlineAt() != null
-        && LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt())) {
+        && !LocalDateTime.now(clock).isBefore(reservation.getContractDeadlineAt())) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED,
           "Contract deadline expired; only deadline refund is allowed for marketplace " + action);

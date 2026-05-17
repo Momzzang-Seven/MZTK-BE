@@ -13,8 +13,6 @@ import java.math.BigInteger;
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceEscrowOrderView;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdCodec;
-import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -49,16 +47,10 @@ class MarketplaceEscrowOrderReaderAdapterTest {
 
   @BeforeEach
   void setUp() {
-    Web3CoreProperties coreProperties = new Web3CoreProperties();
-    coreProperties.getRpc().setMain("http://localhost:8545");
-    coreProperties.getRpc().setSub("http://localhost:8546");
-
-    MarketplaceEscrowProperties escrowProperties = new MarketplaceEscrowProperties();
-    escrowProperties.setMarketplaceContractAddress(ESCROW);
-
-    adapter = new MarketplaceEscrowOrderReaderAdapter(coreProperties, escrowProperties);
+    adapter = new MarketplaceEscrowOrderReaderAdapter();
     mainWeb3j = mock(Web3j.class);
     subWeb3j = mock(Web3j.class);
+    ReflectionTestUtils.setField(adapter, "marketplaceContractAddress", ESCROW);
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
     ReflectionTestUtils.setField(adapter, "subWeb3j", subWeb3j);
   }
