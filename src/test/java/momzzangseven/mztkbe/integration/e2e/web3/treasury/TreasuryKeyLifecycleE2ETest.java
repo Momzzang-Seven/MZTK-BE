@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeKmsKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
@@ -100,6 +101,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
   @Autowired private InMemoryKmsKeyLifecycleFake kmsFake;
   @MockitoBean private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   @MockitoBean private SignDigestPort signDigestPort;
+  @MockitoSpyBean private DescribeKmsKeyPort describeKmsKeyPort;
 
   private String adminToken;
 
@@ -734,6 +736,119 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       // AFTER_COMMIT handler 에서 alias 를 row 의 kmsKeyId 로 재바인딩.
       verify(kmsKeyLifecyclePort).updateAlias(REWARD_ALIAS, previousKmsId);
     }
+
+    @Test
+    @DisplayName(
+        "[E-17c] DISABLED row + alias=PENDING_DELETION+match → replaceKey(disposeOldKey=false) 로 drift 사전 차단 (PR #177 R8)")
+    void disabledRowWithPendingDeletionAlias_routesToReplaceKey() throws Exception {
+      // Pre-seed K1 in kmsFake as PENDING_DELETION (alias also points to K1).
+      String k1 = "k1-e17c";
+      kmsFake.useFixedKeyIdForNextCreate(k1);
+      kmsKeyLifecyclePort.createKey();
+      kmsKeyLifecyclePort.createAlias(REWARD_ALIAS, k1);
+      kmsKeyLifecyclePort.scheduleKeyDeletion(k1, 7);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_DELETION);
+
+      // Pre-seed DB row DISABLED/K1.
+      jdbcTemplate.update(
+          "INSERT INTO web3_treasury_wallets"
+              + " (wallet_alias, kms_key_id, treasury_address, status, key_origin,"
+              + " disabled_at, created_at, updated_at)"
+              + " VALUES (?, ?, ?, 'DISABLED', 'IMPORTED', NOW(), NOW(), NOW())",
+          REWARD_ALIAS,
+          k1,
+          DERIVED_ADDRESS);
+
+      // Mint output for the next createKey (the R8 replaceKey branch).
+      String k2 = "k2-e17c";
+      kmsFake.useFixedKeyIdForNextCreate(k2);
+      when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+          .thenReturn(new byte[] {3});
+      when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+          .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
+
+      // Isolate post-clear invocations from the fake setup above.
+      clearInvocations(kmsKeyLifecyclePort);
+
+      ResponseEntity<String> res = provision();
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode data = objectMapper.readTree(res.getBody());
+      assertThat(data.at("/data/kmsKeyId").asText()).isEqualTo(k2);
+
+      Map<String, Object> row = walletRow(REWARD_ALIAS);
+      assertThat((String) row.get("kms_key_id")).isEqualTo(k2);
+      assertThat((String) row.get("status")).isEqualTo("ACTIVE");
+
+      // R8 replaceKey branch: mint runs, but disposeOldKey=false so the dying K1 is untouched.
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
+      verify(kmsKeyLifecyclePort, never()).disableKey(k1);
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(eq(k1), anyInt());
+      verify(kmsKeyLifecyclePort).updateAlias(REWARD_ALIAS, k2);
+
+      // K1 state in the KMS fake must remain PENDING_DELETION — no drift.
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k2);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_DELETION);
+      assertThat(kmsFake.keyState(k2)).isEqualTo(KmsKeyState.ENABLED);
+
+      // targetIdMatches=true → the row-key describe RPC must not fire.
+      verify(describeKmsKeyPort, never()).describe(anyString());
+    }
+
+    @Test
+    @DisplayName(
+        "[E-17d] DISABLED row + alias drift + K1 살아있음 → reEnable + alias-repair 동시 처리 (PR #177 R8)")
+    void disabledRowWithAliasDriftAndAliveRowKey_publishesBothEvents() throws Exception {
+      // Pre-seed fake: K_other ENABLED + alias→K_other; K1 DISABLED (row's key).
+      String kOther = "k-other-e17d";
+      String k1 = "k1-e17d";
+      kmsFake.useFixedKeyIdForNextCreate(kOther);
+      kmsKeyLifecyclePort.createKey();
+      kmsKeyLifecyclePort.createAlias(REWARD_ALIAS, kOther);
+      kmsFake.useFixedKeyIdForNextCreate(k1);
+      kmsKeyLifecyclePort.createKey();
+      kmsKeyLifecyclePort.disableKey(k1);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.DISABLED);
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(kOther);
+
+      // Pre-seed DB row DISABLED/K1.
+      jdbcTemplate.update(
+          "INSERT INTO web3_treasury_wallets"
+              + " (wallet_alias, kms_key_id, treasury_address, status, key_origin,"
+              + " disabled_at, created_at, updated_at)"
+              + " VALUES (?, ?, ?, 'DISABLED', 'IMPORTED', NOW(), NOW(), NOW())",
+          REWARD_ALIAS,
+          k1,
+          DERIVED_ADDRESS);
+
+      // R8 takes the alias-mismatch-and-alive branch: describeKmsKey(K1) classifies K1 as alive.
+      doReturn(KmsKeyState.DISABLED).when(describeKmsKeyPort).describe(k1);
+
+      clearInvocations(kmsKeyLifecyclePort);
+
+      ResponseEntity<String> res = provision();
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode data = objectMapper.readTree(res.getBody());
+      assertThat(data.at("/data/kmsKeyId").asText()).isEqualTo(k1);
+
+      Map<String, Object> row = walletRow(REWARD_ALIAS);
+      assertThat((String) row.get("kms_key_id")).isEqualTo(k1);
+      assertThat((String) row.get("status")).isEqualTo("ACTIVE");
+
+      // R8 alias-mismatch+alive: no mint.
+      verify(kmsKeyLifecyclePort, never()).createKey();
+      // Reactivated handler → enableKey(K1) brings K1 to ENABLED.
+      verify(kmsKeyLifecyclePort).enableKey(k1);
+      // Provisioned(aliasRepair=true) handler → createAlias throws AlreadyExists → updateAlias.
+      verify(kmsKeyLifecyclePort).updateAlias(REWARD_ALIAS, k1);
+
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k1);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.ENABLED);
+
+      assertThat(countKmsAuditRows("KMS_ENABLE", true)).isGreaterThanOrEqualTo(1);
+      assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isGreaterThanOrEqualTo(1);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1206,6 +1321,66 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       assertThat(countKmsAuditRows("KMS_DISABLE_SKIPPED", true)).isEqualTo(skipBefore + 1);
       assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(disableBefore);
       assertThat(countKmsAuditRows("KMS_DISABLE_SKIPPED", false)).isZero();
+    }
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-11] R8 — DISABLED row + row key가 외부 개입으로 PENDING_DELETION → re-provision 이"
+            + " replaceKey(disposeOldKey=false) 로 fresh key 교체, 죽어가는 K1 은 손대지 않음 (drift 사전 차단)")
+    void r8_disabledRowWithExternallyPendingDeletionKey_routesToReplaceKey() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // 1) C0 FreshProvision — mint K0, DB ACTIVE, KMS ENABLED.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k0 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      // 2) Disable wallet — DB DISABLED, AFTER_COMMIT disableKey(K0) → KMS DISABLED.
+      assertThat(disableWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(kmsFake.keyState(k0)).isEqualTo(KmsKeyState.DISABLED);
+
+      // 3) Simulate external operator intervention: K0 driven to PENDING_DELETION outside the app.
+      //    Bypass the spy by mutating the fake directly so the call isn't recorded against the
+      //    Mockito invocation history.
+      kmsFake.scheduleKeyDeletion(k0, 7);
+      assertThat(kmsFake.keyState(k0)).isEqualTo(KmsKeyState.PENDING_DELETION);
+      // alias still points to K0 — disable does not touch the alias.
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k0);
+
+      int updateAliasBefore = countKmsAuditRows("KMS_UPDATE_ALIAS", true);
+      int disableBefore = countKmsAuditRows("KMS_DISABLE", true);
+      int scheduleBefore = countKmsAuditRows("KMS_SCHEDULE_DELETION", true);
+      clearInvocations(kmsKeyLifecyclePort);
+
+      // 4) Re-provision with the same key+address. Pre-R8 this would have committed DB ACTIVE/K0
+      //    then thrown KMSInvalidStateException on the AFTER_COMMIT enableKey. R8 detects K0 is
+      //    dying via aliasInfo.state() (targetIdMatches=true) and routes to replaceKey.
+      ResponseEntity<String> reRes = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(reRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> finalRow = walletRow(REWARD_ALIAS);
+      String k1 = (String) finalRow.get("kms_key_id");
+      assertThat(k1).isNotEqualTo(k0);
+      assertThat((String) finalRow.get("status")).isEqualTo("ACTIVE");
+
+      // R8 replaceKey branch fired: createKey ran, alias retargeted to K1.
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k1);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.ENABLED);
+      assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(updateAliasBefore + 1);
+
+      // disposeOldKey=false — the dying K0 must not be re-disabled or re-scheduled.
+      verify(kmsKeyLifecyclePort, never()).disableKey(k0);
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(eq(k0), anyInt());
+      assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(disableBefore);
+      assertThat(countKmsAuditRows("KMS_SCHEDULE_DELETION", true)).isEqualTo(scheduleBefore);
+      assertThat(kmsFake.keyState(k0)).isEqualTo(KmsKeyState.PENDING_DELETION);
+
+      // targetIdMatches=true so the row-key describe RPC isn't issued.
+      verify(describeKmsKeyPort, never()).describe(anyString());
+
+      // enableKey on K0 was never called — drift impossible.
+      verify(kmsKeyLifecyclePort, never()).enableKey(k0);
     }
   }
 
