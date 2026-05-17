@@ -8,7 +8,7 @@
  *   [P-11] Legacy row mismatch                     — service B4
  *
  * Group C (AFTER_COMMIT KMS branches via TreasuryWalletProvisionedKmsHandler):
- *   [P-12] alias bound to foreign ENABLED key      — handler B10  (KMS_CREATE_ALIAS audit fail)
+ *   [P-12] alias bound to foreign ENABLED key      — handler enabledDrift (KMS_UPDATE_ALIAS 복구)
  *   [P-13] alias bound to ghost PENDING_DELETION   — handler B11  (KMS_UPDATE_ALIAS audit success)
  *   [P-9]  Service alias-repair (DB row + alias UNAVAILABLE) — service B6 + handler success
  *
@@ -511,15 +511,15 @@ test.describe("Treasury Provision API — Group B & C", () => {
   // Group C
   // ──────────────────────────────────────────────────────────────────────────
 
-  test("[P-12] AFTER_COMMIT — alias 가 다른 ENABLED 키 점유 → 200 + KMS_CREATE_ALIAS audit fail (B10)", async () => {
+  test("[P-12] AFTER_COMMIT — alias 가 다른 ENABLED 키 점유(drift) → 200 + KMS_UPDATE_ALIAS 복구 (enabledDrift)", async () => {
     await fullCleanup();
 
-    // K_FOREIGN: 외부 점유 키 (default symmetric, ENABLED)
+    // K_FOREIGN: alias 가 가리키는 외부 ENABLED 키 (ECC_SECG_P256K1/SIGN_VERIFY — UpdateAlias same-usage 통과)
     const kForeign = kmsCreateKey(`mztk-e2e-foreign-${randomSuffix()}`);
     kmsCreateAlias(REWARD_ALIAS, kForeign);
 
     const res = await provision(api);
-    expect(res.status(), "[P-12] HTTP — handler 가 swallow 하므로 200").toBe(200);
+    expect(res.status(), "[P-12] HTTP 200").toBe(200);
     const body = await res.json();
     expect(body.status).toBe("SUCCESS");
     const newKey: string = body.data.kmsKeyId;
@@ -536,19 +536,21 @@ test.describe("Treasury Provision API — Group B & C", () => {
     const provisionAudit = await getLatestProvisionAudit(ENV.TREASURY_E2E_EXPECTED_ADDRESS);
     expect(provisionAudit?.success).toBe(true);
 
-    // KMS audit: KMS_CREATE_ALIAS success=false (KmsAliasAlreadyExistsException)
+    // MOM-444 enabledDrift: createAlias 는 AlreadyExists 로 실패하지만 BindKmsAliasService 는
+    // fall-through 가 아닌 drift-recovery 분기로 들어가 CREATE_ALIAS audit 은 기록하지 않고
+    // UpdateAlias 로 alias 를 newKey 로 옮긴다 (DB 가 source of truth).
     const createAudits = await getKmsAudits(REWARD_ALIAS, "KMS_CREATE_ALIAS");
-    expect(createAudits.length).toBe(1);
-    expect(createAudits[0].success).toBe(false);
-    expect(createAudits[0].failure_reason).toContain("AlreadyExists");
+    expect(createAudits.length, "[P-12] drift recovery 분기는 CREATE_ALIAS audit 미기록").toBe(0);
 
-    // ENABLED 외부 점유라 UPDATE_ALIAS 는 시도되지 않음
     const updateAudits = await getKmsAudits(REWARD_ALIAS, "KMS_UPDATE_ALIAS");
-    expect(updateAudits.length, "[P-12] UPDATE 시도 없음").toBe(0);
+    expect(updateAudits.length, "[P-12] enabledDrift → UpdateAlias 1건").toBe(1);
+    expect(updateAudits[0].success).toBe(true);
 
-    // KMS: alias 는 여전히 K_FOREIGN
+    // KMS: alias 가 새 키로 재바인딩됨
     const aliasInfo = kmsDescribeAlias(REWARD_ALIAS);
-    expect(aliasInfo?.keyId).toBe(kForeign);
+    expect(aliasInfo, "[P-12] alias 존재").not.toBeNull();
+    expect(aliasInfo!.keyId).toBe(newKey);
+    expect(aliasInfo!.state).toBe("Enabled");
   });
 
   test("[P-13] AFTER_COMMIT — alias 가 ghost(PENDING_DELETION) 가리킴 → KMS_UPDATE_ALIAS 복구 (B11)", async () => {
