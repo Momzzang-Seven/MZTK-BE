@@ -12,12 +12,12 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExec
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummaryResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTypeCode;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnBean(GetLatestExecutionIntentSummaryUseCase.class)
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class ReservationExecutionResumeAdapter implements LoadReservationExecutionResumePort {
 
   private final GetLatestExecutionIntentSummaryUseCase getLatestExecutionIntentSummaryUseCase;

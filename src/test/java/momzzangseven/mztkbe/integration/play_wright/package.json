@@ -4,6 +4,7 @@
   "description": "Playwright E2E tests for MZTK-BE external OAuth integrations",
   "scripts": {
     "test": "playwright test",
+    "test:mom313": "playwright test marketplace/marketplace.spec.ts --grep \"MOM-313-LIVE\"",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
     "test:report": "playwright show-report"

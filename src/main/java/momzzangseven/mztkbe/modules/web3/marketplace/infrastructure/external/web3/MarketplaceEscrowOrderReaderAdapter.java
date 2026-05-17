@@ -19,10 +19,13 @@ import org.web3j.abi.FunctionReturnDecoder;
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.DynamicArray;
-import org.web3j.abi.datatypes.DynamicStruct;
 import org.web3j.abi.datatypes.Function;
+import org.web3j.abi.datatypes.StaticStruct;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Bytes32;
+import org.web3j.abi.datatypes.generated.Uint16;
+import org.web3j.abi.datatypes.generated.Uint256;
+import org.web3j.abi.datatypes.generated.Uint48;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.Response;
@@ -62,12 +65,12 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
   public MarketplaceEscrowOrderView getOrder(String orderKey) {
     Function function =
         new Function(
-            "getOrder", List.of(bytes32(orderKey)), List.of(new TypeReference<DynamicStruct>() {}));
+            "getOrder", List.of(bytes32(orderKey)), List.of(new TypeReference<ClassOrder>() {}));
     List<Type> decoded = callAndDecode(function, "getOrder");
     if (decoded.isEmpty()) {
       throw new Web3InvalidInputException("getOrder returned no data");
     }
-    return toOrder(orderKey, (DynamicStruct) decoded.get(0));
+    return toOrder(orderKey, (StaticStruct) decoded.get(0));
   }
 
   @Override
@@ -77,14 +80,14 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
         new Function(
             "getOrders",
             List.of(new DynamicArray<>(Bytes32.class, ids)),
-            List.of(new TypeReference<DynamicArray<DynamicStruct>>() {}));
+            List.of(new TypeReference<DynamicArray<ClassOrder>>() {}));
     List<Type> decoded = callAndDecode(function, "getOrders");
     if (decoded.isEmpty()) {
       return List.of();
     }
     @SuppressWarnings("unchecked")
-    DynamicArray<DynamicStruct> orders = (DynamicArray<DynamicStruct>) decoded.get(0);
-    List<DynamicStruct> values = orders.getValue();
+    DynamicArray<ClassOrder> orders = (DynamicArray<ClassOrder>) decoded.get(0);
+    List<? extends StaticStruct> values = orders.getValue();
     return java.util.stream.IntStream.range(0, values.size())
         .mapToObj(index -> toOrder(orderKeys.get(index), values.get(index)))
         .toList();
@@ -108,7 +111,7 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
     return FunctionReturnDecoder.decode(response.getValue(), function.getOutputParameters());
   }
 
-  private MarketplaceEscrowOrderView toOrder(String requestedOrderKey, DynamicStruct struct) {
+  private MarketplaceEscrowOrderView toOrder(String requestedOrderKey, StaticStruct struct) {
     List<Type> values = struct.getValue();
     return new MarketplaceEscrowOrderView(
         requestedOrderKey,
@@ -206,5 +209,18 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
   @FunctionalInterface
   private interface RpcRequest<T extends Response<?>> {
     T invoke(Web3j web3j) throws Exception;
+  }
+
+  public static class ClassOrder extends StaticStruct {
+    public ClassOrder(
+        Bytes32 orderId,
+        Uint256 price,
+        Address token,
+        Uint48 deadline,
+        Uint16 state,
+        Address buyer,
+        Address trainer) {
+      super(orderId, price, token, deadline, state, buyer, trainer);
+    }
   }
 }
