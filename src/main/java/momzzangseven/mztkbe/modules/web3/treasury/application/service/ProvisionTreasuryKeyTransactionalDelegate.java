@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInf
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.KmsAuditAction;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeKmsKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
@@ -62,6 +63,7 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
   private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
   private final KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   private final SignDigestPort signDigestPort;
+  private final DescribeKmsKeyPort describeKmsKeyPort;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
   private final KmsAuditRecorder kmsAuditRecorder;
   private final ApplicationEventPublisher applicationEventPublisher;
@@ -112,7 +114,8 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
           return handleExistingProvisionedRow(
               command, existing, derivedAddress, role, failureAuditWritten, isRaceRetry);
         case DISABLED:
-          return reEnableSameKey(command, existing, role);
+          return handleExistingDisabledRow(
+              command, existing, derivedAddress, role, failureAuditWritten);
         case ARCHIVED:
           return replaceKey(command, role, existing, derivedAddress, false, failureAuditWritten);
         default:
@@ -286,6 +289,95 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
             command.operatorUserId(),
             true));
     return ProvisionTreasuryKeyResult.from(existing, role);
+  }
+
+  /**
+   * C5 (ReEnableSameKey) dispatch (PR #177 R8). Calls {@code describeAlias} (+ optionally {@code
+   * describe} on the row's kmsKeyId) read-only under the lock so the decision between normal
+   * re-enable, {@code PENDING_DELETION} recovery, and alias-repair is race-free. Symmetric to
+   * {@link #handleExistingProvisionedRow}.
+   *
+   * <p>Branches by the row's {@link KmsKeyState} first (so a dying key is never reEnabled — that
+   * would hit {@code KMSInvalidStateException} in the AFTER_COMMIT enableKey), then by alias {@code
+   * targetIdMatches}:
+   *
+   * <ul>
+   *   <li>{@code rowKeyState ∈ {PENDING_DELETION, PENDING_IMPORT, UNAVAILABLE}}: delegate to {@link
+   *       #replaceKey} with {@code disposeOldKey=false} so the dying key is left alone. Mirrors the
+   *       C4 {@code PENDING_DELETION+match} branch.
+   *   <li>{@code rowKeyState ∈ {ENABLED, DISABLED} && targetIdMatches}: standard C5 — alias points
+   *       at the row's kmsKeyId; flip DB to ACTIVE and let the AFTER_COMMIT {@code enableKey}
+   *       idempotently bring KMS to ENABLED.
+   *   <li>{@code rowKeyState ∈ {ENABLED, DISABLED} && !targetIdMatches}: alias-drift / ghost-alias
+   *       — row → ACTIVE, publish BOTH {@link TreasuryWalletReactivatedEvent} (enableKey) AND
+   *       {@link TreasuryWalletProvisionedEvent} with {@code aliasRepairMode=true} (alias
+   *       bind/update). The two AFTER_COMMIT handlers run independently and converge.
+   * </ul>
+   *
+   * <p>The extra {@link DescribeKmsKeyPort#describe(String)} RPC is issued only on the mismatch
+   * path; when {@code targetIdMatches=true}, {@code aliasInfo.state()} is already the row key's
+   * state.
+   */
+  private ProvisionTreasuryKeyResult handleExistingDisabledRow(
+      ProvisionTreasuryKeyCommand command,
+      TreasuryWallet existing,
+      String derivedAddress,
+      TreasuryRole role,
+      AtomicBoolean failureAuditWritten) {
+
+    AliasTargetInfo aliasInfo = kmsKeyLifecyclePort.describeAlias(existing.getWalletAlias());
+    boolean targetIdMatches =
+        aliasInfo.targetKmsKeyId() != null
+            && existing.getKmsKeyId().equals(aliasInfo.targetKmsKeyId());
+
+    KmsKeyState rowKeyState =
+        targetIdMatches ? aliasInfo.state() : describeKmsKeyPort.describe(existing.getKmsKeyId());
+
+    boolean rowKeyDying =
+        rowKeyState == KmsKeyState.PENDING_DELETION
+            || rowKeyState == KmsKeyState.PENDING_IMPORT
+            || rowKeyState == KmsKeyState.UNAVAILABLE;
+
+    if (rowKeyDying) {
+      log.warn(
+          "Recovering DB/KMS sync drift via fresh key on DISABLED row (alias={},"
+              + " rowKmsKeyId={}, rowKeyState={}, aliasState={}, aliasTarget={})",
+          existing.getWalletAlias(),
+          existing.getKmsKeyId(),
+          rowKeyState,
+          aliasInfo.state(),
+          aliasInfo.targetKmsKeyId());
+      return replaceKey(command, role, existing, derivedAddress, false, failureAuditWritten);
+    }
+
+    if (targetIdMatches) {
+      return reEnableSameKey(command, existing, role);
+    }
+
+    log.warn(
+        "Re-enabling DISABLED row with alias-repair (alias={}, rowKmsKeyId={}, rowKeyState={},"
+            + " aliasState={}, aliasTarget={})",
+        existing.getWalletAlias(),
+        existing.getKmsKeyId(),
+        rowKeyState,
+        aliasInfo.state(),
+        aliasInfo.targetKmsKeyId());
+    TreasuryWallet reactivated = TreasuryWallet.reEnable(existing, clock);
+    TreasuryWallet saved = saveTreasuryWalletPort.save(reactivated);
+    applicationEventPublisher.publishEvent(
+        new TreasuryWalletReactivatedEvent(
+            existing.getWalletAlias(),
+            existing.getKmsKeyId(),
+            existing.getWalletAddress(),
+            command.operatorUserId()));
+    applicationEventPublisher.publishEvent(
+        new TreasuryWalletProvisionedEvent(
+            existing.getWalletAlias(),
+            existing.getKmsKeyId(),
+            existing.getWalletAddress(),
+            command.operatorUserId(),
+            true));
+    return ProvisionTreasuryKeyResult.from(saved, role);
   }
 
   /**

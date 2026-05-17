@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicBoolean;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.KmsAuditAction;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeKmsKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
@@ -45,6 +46,7 @@ class ProvisionTreasuryKeyTransactionalDelegateCleanupSyncTest {
   @Mock private KmsKeyLifecyclePort kmsKeyLifecyclePort;
   @Mock private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   @Mock private SignDigestPort signDigestPort;
+  @Mock private DescribeKmsKeyPort describeKmsKeyPort;
   @Mock private TreasuryAuditRecorder treasuryAuditRecorder;
   @Mock private KmsAuditRecorder kmsAuditRecorder;
   @Mock private ApplicationEventPublisher applicationEventPublisher;
@@ -63,6 +65,7 @@ class ProvisionTreasuryKeyTransactionalDelegateCleanupSyncTest {
             kmsKeyLifecyclePort,
             kmsKeyMaterialWrapperPort,
             signDigestPort,
+            describeKmsKeyPort,
             treasuryAuditRecorder,
             kmsAuditRecorder,
             applicationEventPublisher,
