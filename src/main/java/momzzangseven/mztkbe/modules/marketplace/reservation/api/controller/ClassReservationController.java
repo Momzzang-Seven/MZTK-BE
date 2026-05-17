@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.marketplace.classes.api.controller;
+package momzzangseven.mztkbe.modules.marketplace.reservation.api.controller;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;

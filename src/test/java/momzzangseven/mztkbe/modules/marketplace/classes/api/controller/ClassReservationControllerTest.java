@@ -51,7 +51,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /**
  * Controller contract tests for {@link
- * momzzangseven.mztkbe.modules.marketplace.classes.api.controller.ClassReservationController}.
+ * momzzangseven.mztkbe.modules.marketplace.reservation.api.controller.ClassReservationController}.
  *
  * <p>Covers all 6 endpoints: reservation-info, my-list, detail, create, cancel, complete. Verifies
  * authentication enforcement, bean-validation constraints, and response structure.

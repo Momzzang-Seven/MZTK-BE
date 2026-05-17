@@ -17,20 +17,25 @@ import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -64,6 +69,8 @@ class ClaimExpiredRefundReservationServiceTest {
   @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   @Mock private LoadReservationExecutionWritePort loadReservationExecutionWritePort;
   @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  @Mock private ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
+  @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
 
   private ClaimExpiredRefundReservationService sut;
 
@@ -79,7 +86,12 @@ class ClaimExpiredRefundReservationServiceTest {
             loadReservationEscrowPaymentConfigPort,
             loadReservationExecutionWritePort,
             loadReservationExecutionStatePort,
+            replayConfirmedReservationExecutionPort,
+            loadReservationEscrowOrderPort,
             FIXED_CLOCK);
+    org.mockito.Mockito.lenient()
+        .when(loadReservationEscrowOrderPort.getOrder(any()))
+        .thenThrow(new MarketplaceWeb3DisabledException());
   }
 
   @Nested
@@ -90,9 +102,11 @@ class ClaimExpiredRefundReservationServiceTest {
     @DisplayName("[DR-01] 환불 가능 예약은 DEADLINE_REFUND_PENDING 및 Web3 실행 정보를 반환")
     void 환불_가능_예약_준비_성공() {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      Reservation reservation = refundAvailableReservation();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
-          .willReturn(Optional.of(refundAvailableReservation()))
-          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+          .willReturn(Optional.of(reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation));
       given(saveReservationPort.save(any()))
           .willAnswer(
               invocation -> {
@@ -145,6 +159,34 @@ class ClaimExpiredRefundReservationServiceTest {
     }
 
     @Test
+    @DisplayName("[DR-01G] 기존 deadline refund intent가 CONFIRMED이면 replay 후 최신 상태를 반환한다")
+    void 기존_deadline_refund_intent가_confirmed이면_replay_후_최신_상태_반환() {
+      Reservation reservation =
+          refundAvailableReservation().toBuilder()
+              .status(ReservationStatus.DEADLINE_REFUND_PENDING)
+              .currentExecutionIntentPublicId("refund-intent-1")
+              .build();
+      Reservation repaired = reservation.markDeadlineRefunded("refund-tx");
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation));
+      given(loadReservationExecutionStatePort.loadState("refund-intent-1"))
+          .willReturn(
+              state("MARKETPLACE_CLASS_EXPIRED_REFUND", "CONFIRMED", "refund-intent-1", BUYER_ID));
+      given(loadReservationExecutionWritePort.load(BUYER_ID, "refund-intent-1"))
+          .willReturn(web3("MARKETPLACE_CLASS_EXPIRED_REFUND", "CONFIRMED", "refund-intent-1"));
+      given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(repaired));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+      then(replayConfirmedReservationExecutionPort)
+          .should()
+          .replayConfirmed("refund-intent-1", "MARKETPLACE_CLASS_EXPIRED_REFUND");
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
     @DisplayName("[DR-01D] 기존 current intent가 retryable terminal이면 deadline refund intent를 준비한다")
     void 기존_current_intent가_retryable_terminal이면_refund_intent_준비() {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();
@@ -155,7 +197,8 @@ class ClaimExpiredRefundReservationServiceTest {
               .build();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(reservation))
-          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+          .willAnswer(invocation -> savedOr(latestSaved, reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation));
       given(saveReservationPort.save(any()))
           .willAnswer(
               invocation -> {
@@ -203,7 +246,8 @@ class ClaimExpiredRefundReservationServiceTest {
               .build();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(reservation))
-          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+          .willAnswer(invocation -> savedOr(latestSaved, reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation));
       given(saveReservationPort.save(any()))
           .willAnswer(
               invocation -> {
@@ -249,7 +293,8 @@ class ClaimExpiredRefundReservationServiceTest {
               .build();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(reservation))
-          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+          .willAnswer(invocation -> savedOr(latestSaved, reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation));
       given(saveReservationPort.save(any()))
           .willAnswer(
               invocation -> {
@@ -294,13 +339,14 @@ class ClaimExpiredRefundReservationServiceTest {
     @DisplayName("[DR-01B] 만료된 PENDING/APPROVED 예약은 refund available 전환 후 pending intent를 준비한다")
     void 만료된_예약은_refund_available_전환_후_pending_intent_준비(ReservationStatus status) {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      Reservation reservation =
+          pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
+              .status(status)
+              .build();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
-          .willReturn(
-              Optional.of(
-                  pendingReservation(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1)).toBuilder()
-                      .status(status)
-                      .build()))
-          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+          .willReturn(Optional.of(reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation));
       given(saveReservationPort.save(any()))
           .willAnswer(
               invocation -> {
@@ -330,6 +376,28 @@ class ClaimExpiredRefundReservationServiceTest {
       assertThat(captor.getAllValues().get(2).getStatus())
           .isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
       then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
+    }
+
+    @Test
+    @DisplayName("[DR-01H] direct claim 전에 chain order가 DEADLINE_REFUNDED이면 새 intent 없이 로컬을 동기화한다")
+    void direct_claim_chain_deadlineRefunded이면_새_intent없이_동기화() {
+      Reservation reservation = refundAvailableReservation();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willReturn(Optional.of(reservation));
+      org.mockito.Mockito.doReturn(order(ReservationEscrowOrderView.STATE_DEADLINE_REFUNDED))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+      given(saveReservationPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+      assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.DEADLINE_REFUNDED.name());
+      assertThat(result.web3()).isNull();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
   }
 
@@ -393,6 +461,7 @@ class ClaimExpiredRefundReservationServiceTest {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(refundAvailableReservation()))
+          .willAnswer(invocation -> savedOr(latestSaved, refundAvailableReservation()))
           .willAnswer(
               invocation -> {
                 Reservation current = latestSaved.get();
@@ -461,11 +530,34 @@ class ClaimExpiredRefundReservationServiceTest {
     }
 
     @Test
+    @DisplayName("[DR-04C] direct claim 전에 chain order가 없으면 새 실패 intent를 만들지 않는다")
+    void direct_claim_chain_order_absent이면_sync_required() {
+      Reservation reservation = refundAvailableReservation();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(reservation))
+          .willReturn(Optional.of(reservation));
+      org.mockito.Mockito.doReturn(order(ReservationEscrowOrderView.STATE_ABSENT))
+          .when(loadReservationEscrowOrderPort)
+          .getOrder(any());
+
+      assertThatThrownBy(
+              () -> sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED.getCode()));
+
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+    }
+
+    @Test
     @DisplayName("[DR-05] Phase B 보상에서 intent 취소가 불가하면 pending 상태를 즉시 롤백하지 않는다")
     void phase_b_보상_취소_불가_시_즉시_롤백하지_않음() {
       AtomicReference<Reservation> latestSaved = new AtomicReference<>();
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(refundAvailableReservation()))
+          .willAnswer(invocation -> savedOr(latestSaved, refundAvailableReservation()))
           .willAnswer(
               invocation -> {
                 Reservation current = latestSaved.get();
@@ -560,5 +652,24 @@ class ClaimExpiredRefundReservationServiceTest {
   private ReservationExecutionStateView state(
       String actionType, String intentStatus, String intentId, Long requesterUserId) {
     return new ReservationExecutionStateView(intentId, intentStatus, actionType, requesterUserId);
+  }
+
+  private Optional<Reservation> savedOr(
+      AtomicReference<Reservation> latestSaved, Reservation fallback) {
+    Reservation latest = latestSaved.get();
+    return Optional.of(latest == null ? fallback : latest);
+  }
+
+  private ReservationEscrowOrderView order(int state) {
+    return new ReservationEscrowOrderView(
+        "0x" + "0".repeat(63) + "1",
+        "50000000000000000000000",
+        "0x3333333333333333333333333333333333333333",
+        FIXED_NOW.minusSeconds(60).getEpochSecond(),
+        state,
+        state == ReservationEscrowOrderView.STATE_ABSENT
+            ? "0x0000000000000000000000000000000000000000"
+            : "0x1111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222");
   }
 }

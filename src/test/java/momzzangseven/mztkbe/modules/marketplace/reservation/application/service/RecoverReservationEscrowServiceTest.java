@@ -483,6 +483,51 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
+  @DisplayName("deadline refund recovery에서 prepare 실패 시 신규 pending 전환을 available 상태로 롤백한다")
+  void deadlineRefund_recovery_prepareFailure_rollsBackNewPendingTransition() {
+    long deadlineEpochSeconds = FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond();
+    Reservation reservation =
+        reservation(ReservationStatus.DEADLINE_REFUND_AVAILABLE).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE)
+            .contractDeadlineEpochSeconds(deadlineEpochSeconds)
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+            .build();
+    AtomicReference<Reservation> latestSaved = new AtomicReference<>(reservation);
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0, Reservation.class);
+              latestSaved.set(saved);
+              return saved;
+            });
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, deadlineEpochSeconds));
+    given(loadReservationEscrowPaymentConfigPort.load())
+        .willReturn(
+            new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+    given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+        .willThrow(new BusinessException(ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED));
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED.getCode()));
+
+    assertThat(latestSaved.get().getStatus())
+        .isEqualTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+    assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isNull();
+    then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
+  }
+
+  @Test
   @DisplayName("purchase recovery에서 order가 없으면 같은 orderKey로 새 signable intent를 준비한다")
   void purchase_recovery_recreates_intent_when_order_absent() {
     Reservation reservation = reservation(ReservationStatus.PURCHASE_PENDING);

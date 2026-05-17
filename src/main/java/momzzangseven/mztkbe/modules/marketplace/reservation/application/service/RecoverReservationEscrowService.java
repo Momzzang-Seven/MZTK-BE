@@ -371,27 +371,39 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
   private RecoverReservationEscrowResult prepareRecovery(
       Long requesterId, Reservation reservation, RecoveryFlow flow) {
-    Reservation current = runInTransaction(() -> ensurePreparedLocalState(reservation, flow));
-    PrepareReservationEscrowResult prepared =
-        switch (flow.action()) {
-          case PURCHASE ->
-              prepareReservationEscrowExecutionPort.preparePurchase(
-                  commandFor(current, "BUYER", requesterId, current.getTrainerId(), "PENDING"));
-          case BUYER_CANCEL ->
-              prepareReservationEscrowExecutionPort.prepareCancel(
-                  commandFor(
-                      current, "BUYER", requesterId, current.getTrainerId(), "USER_CANCELLED"));
-          case TRAINER_REJECT ->
-              prepareReservationEscrowExecutionPort.prepareCancel(
-                  commandFor(current, "TRAINER", requesterId, current.getUserId(), "REJECTED"));
-          case BUYER_CONFIRM ->
-              prepareReservationEscrowExecutionPort.prepareConfirm(
-                  commandFor(current, "BUYER", requesterId, current.getTrainerId(), "SETTLED"));
-          case DEADLINE_REFUND ->
-              prepareReservationEscrowExecutionPort.prepareDeadlineRefund(
-                  commandFor(
-                      current, "BUYER", requesterId, current.getTrainerId(), "DEADLINE_REFUNDED"));
-        };
+    PreparedLocalState localState =
+        runInTransaction(() -> ensurePreparedLocalState(reservation, flow));
+    Reservation current = localState.reservation();
+    PrepareReservationEscrowResult prepared;
+    try {
+      prepared =
+          switch (flow.action()) {
+            case PURCHASE ->
+                prepareReservationEscrowExecutionPort.preparePurchase(
+                    commandFor(current, "BUYER", requesterId, current.getTrainerId(), "PENDING"));
+            case BUYER_CANCEL ->
+                prepareReservationEscrowExecutionPort.prepareCancel(
+                    commandFor(
+                        current, "BUYER", requesterId, current.getTrainerId(), "USER_CANCELLED"));
+            case TRAINER_REJECT ->
+                prepareReservationEscrowExecutionPort.prepareCancel(
+                    commandFor(current, "TRAINER", requesterId, current.getUserId(), "REJECTED"));
+            case BUYER_CONFIRM ->
+                prepareReservationEscrowExecutionPort.prepareConfirm(
+                    commandFor(current, "BUYER", requesterId, current.getTrainerId(), "SETTLED"));
+            case DEADLINE_REFUND ->
+                prepareReservationEscrowExecutionPort.prepareDeadlineRefund(
+                    commandFor(
+                        current,
+                        "BUYER",
+                        requesterId,
+                        current.getTrainerId(),
+                        "DEADLINE_REFUNDED"));
+          };
+    } catch (RuntimeException e) {
+      rollbackPrepareFailure(localState, flow, e);
+      throw e;
+    }
     Reservation saved;
     try {
       saved = runInTransaction(() -> bindPreparedRecovery(current, flow, prepared));
@@ -482,12 +494,20 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
         });
   }
 
-  private Reservation ensurePreparedLocalState(Reservation reservation, RecoveryFlow flow) {
+  private void rollbackPrepareFailure(
+      PreparedLocalState localState, RecoveryFlow flow, RuntimeException cause) {
+    if (!localState.newPendingTransition()) {
+      return;
+    }
+    rollbackRecoveredPending(localState.reservation(), flow, cause);
+  }
+
+  private PreparedLocalState ensurePreparedLocalState(Reservation reservation, RecoveryFlow flow) {
     if (flow.action() != RecoveryAction.DEADLINE_REFUND) {
-      return reservation;
+      return PreparedLocalState.unchanged(reservation);
     }
     if (reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING) {
-      return reservation;
+      return PreparedLocalState.unchanged(reservation);
     }
     if (reservation.getContractDeadlineAt() == null) {
       throw new BusinessException(
@@ -502,8 +522,9 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     if (reservation.getStatus() != ReservationStatus.DEADLINE_REFUND_AVAILABLE) {
       reservation = saveReservationPort.save(reservation.markDeadlineRefundAvailable());
     }
-    return saveReservationPort.save(
-        reservation.beginDeadlineRefundPending(UUID.randomUUID().toString()));
+    return PreparedLocalState.newPending(
+        saveReservationPort.save(
+            reservation.beginDeadlineRefundPending(UUID.randomUUID().toString())));
   }
 
   private Reservation bind(
@@ -723,6 +744,17 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
     static CurrentIntentResolution stop(RecoverReservationEscrowResult result) {
       return new CurrentIntentResolution(null, result, true);
+    }
+  }
+
+  private record PreparedLocalState(Reservation reservation, boolean newPendingTransition) {
+
+    static PreparedLocalState unchanged(Reservation reservation) {
+      return new PreparedLocalState(reservation, false);
+    }
+
+    static PreparedLocalState newPending(Reservation reservation) {
+      return new PreparedLocalState(reservation, true);
     }
   }
 }
