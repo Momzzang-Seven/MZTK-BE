@@ -276,6 +276,27 @@ class Eip7702Web3jAdapterTest {
   }
 
   @Test
+  void estimateGasWithAuthorization_comparesSponsorMaxAgainstFinalBufferedGasLimit()
+      throws Exception {
+    eip7702Properties.getSponsor().setMaxGasLimit(500_000L);
+
+    HttpService mainService = mock(HttpService.class);
+    HttpService subService = mock(HttpService.class);
+    EthEstimateGas mainResult = new EthEstimateGas();
+    mainResult.setResult("0x3d091"); // 250001 raw gas, 500002 after buffer.
+
+    when(mainService.send(any(Request.class), eq(EthEstimateGas.class))).thenReturn(mainResult);
+    injectHttpServices(mainService, subService);
+
+    assertThatThrownBy(
+            () ->
+                adapter.estimateGasWithAuthorization(
+                    ADDRESS, "0x" + "b".repeat(40), "0xdeadbeef", List.of(validAuthTuple())))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("estimated gas exceeds sponsor max gas limit");
+  }
+
+  @Test
   void estimateGasWithAuthorization_throws_whenBothMainAndSubHaveErrors() throws Exception {
     HttpService mainService = mock(HttpService.class);
     HttpService subService = mock(HttpService.class);

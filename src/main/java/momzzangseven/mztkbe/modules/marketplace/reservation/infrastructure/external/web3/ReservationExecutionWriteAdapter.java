@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayConfirm
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
+@ConditionalOnBean({GetExecutionIntentUseCase.class, ReplayConfirmedExecutionIntentUseCase.class})
 public class ReservationExecutionWriteAdapter
     implements LoadReservationExecutionWritePort, ReplayConfirmedReservationExecutionPort {
 

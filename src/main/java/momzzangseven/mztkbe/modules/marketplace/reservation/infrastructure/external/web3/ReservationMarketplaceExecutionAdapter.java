@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.Prepare
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceActorType;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAllowanceStrategy;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
+@ConditionalOnBean(PrepareMarketplaceUserExecutionUseCase.class)
 @RequiredArgsConstructor
 public class ReservationMarketplaceExecutionAdapter
     implements PrepareReservationEscrowExecutionPort {

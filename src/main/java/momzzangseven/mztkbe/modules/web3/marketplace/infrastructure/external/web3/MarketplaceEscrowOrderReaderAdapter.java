@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -15,13 +16,10 @@ import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.Conditiona
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
-import org.web3j.abi.FunctionReturnDecoder;
-import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.DynamicArray;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.StaticStruct;
-import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Bytes32;
 import org.web3j.abi.datatypes.generated.Uint16;
 import org.web3j.abi.datatypes.generated.Uint256;
@@ -64,13 +62,8 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
   @Override
   public MarketplaceEscrowOrderView getOrder(String orderKey) {
     Function function =
-        new Function(
-            "getOrder", List.of(bytes32(orderKey)), List.of(new TypeReference<ClassOrder>() {}));
-    List<Type> decoded = callAndDecode(function, "getOrder");
-    if (decoded.isEmpty()) {
-      throw new Web3InvalidInputException("getOrder returned no data");
-    }
-    return toOrder(orderKey, (StaticStruct) decoded.get(0));
+        new Function("getOrder", List.of(bytes32(orderKey)), java.util.Collections.emptyList());
+    return toOrder(orderKey, cleanHex(callAndReadValue(function, "getOrder")), 0);
   }
 
   @Override
@@ -80,16 +73,16 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
         new Function(
             "getOrders",
             List.of(new DynamicArray<>(Bytes32.class, ids)),
-            List.of(new TypeReference<DynamicArray<ClassOrder>>() {}));
-    List<Type> decoded = callAndDecode(function, "getOrders");
-    if (decoded.isEmpty()) {
-      return List.of();
+            java.util.Collections.emptyList());
+    String clean = cleanHex(callAndReadValue(function, "getOrders"));
+    int offsetSlot = bigInteger(slot(clean, 0)).intValueExact() / 32;
+    int orderCount = bigInteger(slot(clean, offsetSlot)).intValueExact();
+    if (orderCount != orderKeys.size()) {
+      throw new Web3InvalidInputException("getOrders returned mismatched order count");
     }
-    @SuppressWarnings("unchecked")
-    DynamicArray<ClassOrder> orders = (DynamicArray<ClassOrder>) decoded.get(0);
-    List<? extends StaticStruct> values = orders.getValue();
-    return java.util.stream.IntStream.range(0, values.size())
-        .mapToObj(index -> toOrder(orderKeys.get(index), values.get(index)))
+    int firstOrderSlot = offsetSlot + 1;
+    return java.util.stream.IntStream.range(0, orderCount)
+        .mapToObj(index -> toOrder(orderKeys.get(index), clean, firstOrderSlot + index * 7))
         .toList();
   }
 
@@ -97,7 +90,7 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
     return new Bytes32(MarketplaceEscrowIdCodec.orderKeyBytes(orderKey));
   }
 
-  private List<Type> callAndDecode(Function function, String operation) {
+  private String callAndReadValue(Function function, String operation) {
     String escrowAddress = marketplaceEscrowProperties.getMarketplaceContractAddress();
     String data = FunctionEncoder.encode(function);
     Transaction tx = Transaction.createEthCallTransaction(escrowAddress, escrowAddress, data);
@@ -108,27 +101,43 @@ public class MarketplaceEscrowOrderReaderAdapter implements LoadMarketplaceEscro
     if (response.isReverted()) {
       throw new Web3InvalidInputException(operation + " reverted: " + response.getRevertReason());
     }
-    return FunctionReturnDecoder.decode(response.getValue(), function.getOutputParameters());
+    return response.getValue();
   }
 
-  private MarketplaceEscrowOrderView toOrder(String requestedOrderKey, StaticStruct struct) {
-    List<Type> values = struct.getValue();
+  private MarketplaceEscrowOrderView toOrder(
+      String requestedOrderKey, String clean, int startSlot) {
     return new MarketplaceEscrowOrderView(
         requestedOrderKey,
-        bigInteger(values.get(1)),
-        address(values.get(2)),
-        bigInteger(values.get(3)).longValueExact(),
-        bigInteger(values.get(4)).intValueExact(),
-        address(values.get(5)),
-        address(values.get(6)));
+        bigInteger(slot(clean, startSlot + 1)),
+        address(slot(clean, startSlot + 2)),
+        bigInteger(slot(clean, startSlot + 3)).longValueExact(),
+        bigInteger(slot(clean, startSlot + 4)).intValueExact(),
+        address(slot(clean, startSlot + 5)),
+        address(slot(clean, startSlot + 6)));
   }
 
-  private BigInteger bigInteger(Type value) {
-    return (BigInteger) value.getValue();
+  private String cleanHex(String value) {
+    if (value == null || value.isBlank() || "0x".equals(value)) {
+      throw new Web3InvalidInputException("marketplace order reader returned no data");
+    }
+    return value.startsWith("0x") ? value.substring(2) : value;
   }
 
-  private String address(Type value) {
-    return ((Address) value).getValue();
+  private String slot(String clean, int index) {
+    int start = index * 64;
+    int end = start + 64;
+    if (index < 0 || clean.length() < end) {
+      throw new Web3InvalidInputException("marketplace order reader returned malformed data");
+    }
+    return clean.substring(start, end);
+  }
+
+  private BigInteger bigInteger(String slot) {
+    return new BigInteger(slot, 16);
+  }
+
+  private String address(String slot) {
+    return ("0x" + slot.substring(24)).toLowerCase(Locale.ROOT);
   }
 
   private <T extends Response<?>> T requireSuccess(RpcOutcome<T> outcome, String operation) {

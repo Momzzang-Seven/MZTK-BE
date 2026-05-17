@@ -51,6 +51,10 @@ const ENV = {
     process.env.WEB3_REWARD_TOKEN_CONTRACT_ADDRESS ??
     process.env.MZTK_TOKEN_CONTRACT_ADDRESS ??
     "",
+  MARKETPLACE_ESCROW_CONTRACT_ADDRESS:
+    process.env.MARKETPLACE_ESCROW_CONTRACT_ADDRESS ??
+    process.env.WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS ??
+    "",
   WEB3_REWARD_TOKEN_DECIMALS: Number.parseInt(
     process.env.WEB3_REWARD_TOKEN_DECIMALS ?? "18",
     10
@@ -85,7 +89,7 @@ const ENV = {
   MARKETPLACE_TEST_SIGNER_KMS_KEY_ID:
     process.env.MARKETPLACE_TEST_SIGNER_KMS_KEY_ID ?? "marketplace-signer-treasury",
   MARKETPLACE_TEST_MIN_BUYER_TOKEN_BALANCE: Number.parseInt(
-    process.env.MARKETPLACE_TEST_MIN_BUYER_TOKEN_BALANCE ?? "10",
+    process.env.MARKETPLACE_TEST_MIN_BUYER_TOKEN_BALANCE ?? "100000",
     10
   ),
 };
@@ -96,6 +100,8 @@ const provider =
   ENV.WEB3_RPC_URL === "" ? null : new ethers.JsonRpcProvider(ENV.WEB3_RPC_URL);
 const ERC20_ABI = [
   "function balanceOf(address account) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
   "function transfer(address to, uint256 amount) returns (bool)",
 ] as const;
 const db = new Pool({
@@ -166,10 +172,7 @@ function signRawDigest(wallet: ethers.Wallet, digest: string): string {
 }
 
 function tokenBaseUnits(amount: number): string {
-  return (
-    BigInt(amount) *
-    10n ** BigInt(ENV.WEB3_REWARD_TOKEN_DECIMALS)
-  ).toString();
+  return ethers.parseUnits(amount.toString(), ENV.WEB3_REWARD_TOKEN_DECIMALS).toString();
 }
 
 function sameAddress(left: string, right: string): boolean {
@@ -221,6 +224,26 @@ async function ensureSponsorTreasuryReady(): Promise<void> {
     ENV.MARKETPLACE_TEST_SIGNER_ADDRESS,
     "MARKETPLACE_TEST_SIGNER_ADDRESS env is required"
   ).toBeTruthy();
+  expect(
+    sameAddress(executionSponsor.address, ENV.MARKETPLACE_TEST_SIGNER_ADDRESS),
+    "marketplace execution sponsor and marketplace signer must use distinct treasury addresses"
+  ).toBe(false);
+  expect(
+    executionSponsor.kmsKeyId === ENV.MARKETPLACE_TEST_SIGNER_KMS_KEY_ID,
+    "marketplace execution sponsor and marketplace signer must use distinct KMS key ids"
+  ).toBe(false);
+  await db.query(
+    `delete from web3_treasury_wallets
+      where wallet_alias in ('sponsor-treasury', 'marketplace-signer-treasury')
+         or lower(treasury_address) in (lower($1), lower($2))
+         or kms_key_id in ($3, $4)`,
+    [
+      executionSponsor.address,
+      ENV.MARKETPLACE_TEST_SIGNER_ADDRESS,
+      executionSponsor.kmsKeyId,
+      ENV.MARKETPLACE_TEST_SIGNER_KMS_KEY_ID,
+    ]
+  );
   await db.query(
     `insert into web3_treasury_wallets (
          wallet_alias,
@@ -261,10 +284,14 @@ async function ensureSponsorTreasuryReady(): Promise<void> {
   );
 }
 
-async function ensureBuyerTokenBalance(wallet: ethers.Wallet, minimumTokenAmount: number) {
+async function ensureBuyerTokenFunding(wallet: ethers.Wallet, minimumTokenAmount: number) {
   if (provider == null || ENV.WEB3_REWARD_TOKEN_CONTRACT_ADDRESS === "") {
     return;
   }
+  expect(
+    ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS,
+    "MARKETPLACE_ESCROW_CONTRACT_ADDRESS or WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS is required"
+  ).toBeTruthy();
   const token = new ethers.Contract(
     ENV.WEB3_REWARD_TOKEN_CONTRACT_ADDRESS,
     ERC20_ABI,
@@ -272,20 +299,35 @@ async function ensureBuyerTokenBalance(wallet: ethers.Wallet, minimumTokenAmount
   );
   const minimum = BigInt(tokenBaseUnits(minimumTokenAmount));
   const current = (await token.balanceOf(wallet.address)) as bigint;
-  if (current >= minimum) {
+  if (current < minimum) {
+    expect(
+      ENV.MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY,
+      "MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY or SPONSOR_TREASURY_PRIVATE_KEY is required to top up the buyer token balance"
+    ).toBeTruthy();
+
+    const sponsorWallet = walletFromPrivateKey(ENV.MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY);
+    const tokenWithSponsor = token.connect(sponsorWallet) as ethers.Contract & {
+      transfer(to: string, amount: bigint): Promise<ethers.TransactionResponse>;
+    };
+    const transferTx = await tokenWithSponsor.transfer(wallet.address, minimum - current);
+    await transferTx.wait();
+  }
+
+  const allowance = (await token.allowance(
+    wallet.address,
+    ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS
+  )) as bigint;
+  if (allowance >= minimum) {
     return;
   }
-  expect(
-    ENV.MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY,
-    "MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY or SPONSOR_TREASURY_PRIVATE_KEY is required to top up the buyer token balance"
-  ).toBeTruthy();
-
-  const sponsorWallet = walletFromPrivateKey(ENV.MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY);
-  const tokenWithSigner = token.connect(sponsorWallet) as ethers.Contract & {
-    transfer(to: string, amount: bigint): Promise<ethers.TransactionResponse>;
+  const tokenWithBuyer = token.connect(wallet) as ethers.Contract & {
+    approve(spender: string, amount: bigint): Promise<ethers.TransactionResponse>;
   };
-  const transferTx = await tokenWithSigner.transfer(wallet.address, minimum - current);
-  await transferTx.wait();
+  const approveTx = await tokenWithBuyer.approve(
+    ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS,
+    ethers.MaxUint256
+  );
+  await approveTx.wait();
 }
 
 async function registerWallet(
@@ -1992,7 +2034,7 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
       userToken,
       ENV.MARKETPLACE_TEST_USER_PRIVATE_KEY
     );
-    await ensureBuyerTokenBalance(
+    await ensureBuyerTokenFunding(
       marketplaceUserWallet,
       ENV.MARKETPLACE_TEST_MIN_BUYER_TOKEN_BALANCE
     );
