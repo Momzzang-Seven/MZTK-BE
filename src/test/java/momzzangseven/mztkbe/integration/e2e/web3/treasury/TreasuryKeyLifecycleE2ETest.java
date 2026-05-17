@@ -1488,6 +1488,190 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
           .as("describeFresh must reach the shared port even when the cache holds a stale value")
           .isGreaterThan(sharedDescribeCallsBefore);
     }
+
+    // -------------------------------------------------------------------------
+    // R10 C4 dying-state symmetry — handleExistingProvisionedRow widens isDying
+    // to {PENDING_DELETION, PENDING_IMPORT, UNAVAILABLE} on both the alias-match
+    // and alias-mismatch (describeFresh) paths. Without this widening the
+    // PENDING_IMPORT / UNAVAILABLE cases fall through to the alias-repair event
+    // which TreasuryWalletProvisionedKmsHandler swallows on a non-signable row
+    // key, permanently entrenching DB-ACTIVE / KMS-non-signable drift.
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-12] R10 — ACTIVE row + alias matches row key + row key가 외부 개입으로"
+            + " PENDING_IMPORT → re-provision 이 replaceKey(disposeOldKey=false) 로 fresh key 교체,"
+            + " 죽어가는 K1 은 손대지 않음 (C4 alias-match dying-state symmetry)")
+    void r10_activeRowAliasMatchPendingImport_routesToReplaceKey() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // 1) C0 FreshProvision — mint K1, DB ACTIVE, KMS ENABLED, alias→K1.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k1 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k1);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.ENABLED);
+
+      // 2) Drive K1 to PENDING_IMPORT via the test-only setter. Alias still points to K1, so
+      //    targetIdMatches=true; aliasState=PENDING_IMPORT triggers the R10 dying-state branch.
+      kmsFake.forceKeyState(k1, KmsKeyState.PENDING_IMPORT);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_IMPORT);
+
+      int updateAliasBefore = countKmsAuditRows("KMS_UPDATE_ALIAS", true);
+      int disableBefore = countKmsAuditRows("KMS_DISABLE", true);
+      int scheduleBefore = countKmsAuditRows("KMS_SCHEDULE_DELETION", true);
+      clearInvocations(kmsKeyLifecyclePort);
+
+      // 3) Re-provision with the same raw key + address. Row is ACTIVE →
+      //    handleExistingProvisionedRow. describeAlias returns (PENDING_IMPORT, K1),
+      //    targetIdMatches=true, isDying(PENDING_IMPORT)=true (R10 widening) → replaceKey
+      //    branch with disposeOldKey=false. Mints K3, rebinds alias to K3, K1 untouched.
+      ResponseEntity<String> reRes = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(reRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> finalRow = walletRow(REWARD_ALIAS);
+      String k3 = (String) finalRow.get("kms_key_id");
+      assertThat(k3).isNotEqualTo(k1);
+      assertThat((String) finalRow.get("status")).isEqualTo("ACTIVE");
+
+      // replaceKey branch fired: createKey ran, alias retargeted to K3, K3 ENABLED.
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k3);
+      assertThat(kmsFake.keyState(k3)).isEqualTo(KmsKeyState.ENABLED);
+      // KMS_UPDATE_ALIAS audit emitted by ReplaceKmsKeyService.updateAliasOrThrow.
+      assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(updateAliasBefore + 1);
+
+      // disposeOldKey=false — the dying K1 must not be disabled / scheduled. K1 stays
+      // PENDING_IMPORT throughout (no audit rows added either).
+      verify(kmsKeyLifecyclePort, never()).disableKey(k1);
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(eq(k1), anyInt());
+      assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(disableBefore);
+      assertThat(countKmsAuditRows("KMS_SCHEDULE_DELETION", true)).isEqualTo(scheduleBefore);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_IMPORT);
+
+      // targetIdMatches=true so the row-key describeFresh RPC isn't issued on this branch.
+      verify(describeKmsKeyPort, never()).describeFresh(anyString());
+    }
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-13] R10 — ACTIVE row + alias mismatch + row key가 외부 개입으로 PENDING_IMPORT →"
+            + " describeFresh(rowKey) 가 PENDING_IMPORT 를 반환 → replaceKey 로 라우팅 (C4 mismatch"
+            + " describeFresh probe dying-state symmetry)")
+    void r10_activeRowAliasMismatchPendingImport_freshProbeRoutesToReplaceKey() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // 1) C0 FreshProvision — mint K1, DB ACTIVE, KMS ENABLED, alias→K1.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k1 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      // 2) Externally swap alias → K2 (alias-drift simulation, same technique as
+      //    [E-MOM444-stale-cache-recovery] above). Pre-mint K2 in the fake then stub
+      //    describeAlias on the spy to report the externally-rotated target. The fake's
+      //    aliasToKeyId map keeps K1 but production reads via describeAlias which is stubbed.
+      String k2 = "k2-r10-alias-mismatch";
+      kmsFake.useFixedKeyIdForNextCreate(k2);
+      kmsKeyLifecyclePort.createKey(); // mint K2 in fake → ENABLED
+      doReturn(new AliasTargetInfo(KmsKeyState.ENABLED, k2))
+          .when(kmsKeyLifecyclePort)
+          .describeAlias(REWARD_ALIAS);
+
+      // 3) Drive K1 to PENDING_IMPORT in the fake (assertion fixture). The E2E profile wires
+      //    LocalKmsKeyDescribeAdapter which always returns ENABLED, so additionally stub the
+      //    shared describe port to return PENDING_IMPORT on K1 — this is the channel
+      //    describeFresh(K1) flows through (DescribeKmsKeyService.executeFresh →
+      //    kmsKeyDescribePort.describe). Same pattern as [E-MOM444-stale-cache-recovery].
+      kmsFake.forceKeyState(k1, KmsKeyState.PENDING_IMPORT);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_IMPORT);
+      doReturn(KmsKeyState.PENDING_IMPORT).when(sharedKmsKeyDescribePort).describe(k1);
+
+      int updateAliasBefore = countKmsAuditRows("KMS_UPDATE_ALIAS", true);
+      int disableBefore = countKmsAuditRows("KMS_DISABLE", true);
+      int scheduleBefore = countKmsAuditRows("KMS_SCHEDULE_DELETION", true);
+      clearInvocations(kmsKeyLifecyclePort);
+
+      // 4) Re-provision. Row ACTIVE → handleExistingProvisionedRow. describeAlias returns
+      //    (ENABLED, K2), targetIdMatches=false (K1 != K2). R10 then issues describeFresh(K1)
+      //    which returns PENDING_IMPORT → isDying(rowKeyState)=true → replaceKey with
+      //    disposeOldKey=false. Mints K3, alias rebound to K3, K1 untouched.
+      ResponseEntity<String> reRes = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(reRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> finalRow = walletRow(REWARD_ALIAS);
+      String k3 = (String) finalRow.get("kms_key_id");
+      assertThat(k3).isNotEqualTo(k1);
+      assertThat(k3).isNotEqualTo(k2);
+      assertThat((String) finalRow.get("status")).isEqualTo("ACTIVE");
+
+      // replaceKey branch fired: createKey ran, alias retargeted to K3.
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k3);
+      assertThat(kmsFake.keyState(k3)).isEqualTo(KmsKeyState.ENABLED);
+      assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(updateAliasBefore + 1);
+
+      // describeFresh(K1) reached the row-key describe port (mismatch-branch probe).
+      verify(describeKmsKeyPort, times(1)).describeFresh(k1);
+
+      // disposeOldKey=false — K1 untouched, stays PENDING_IMPORT.
+      verify(kmsKeyLifecyclePort, never()).disableKey(k1);
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(eq(k1), anyInt());
+      assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(disableBefore);
+      assertThat(countKmsAuditRows("KMS_SCHEDULE_DELETION", true)).isEqualTo(scheduleBefore);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_IMPORT);
+    }
+
+    @Test
+    @DisplayName(
+        "[E-MOM444-14] R10 — ACTIVE row + alias matches row key + row key가 외부 개입으로 UNAVAILABLE →"
+            + " re-provision 이 replaceKey(disposeOldKey=false) 로 fresh key 교체, 죽어가는 K1 은 손대지 않음"
+            + " (C4 alias-match UNAVAILABLE symmetry)")
+    void r10_activeRowAliasMatchUnavailable_routesToReplaceKey() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // 1) C0 FreshProvision — mint K1, DB ACTIVE, KMS ENABLED, alias→K1.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k1 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k1);
+
+      // 2) Drive K1 to UNAVAILABLE. Alias still points to K1 so targetIdMatches=true; aliasState
+      //    becomes UNAVAILABLE which is dying under R10's widened isDying.
+      kmsFake.forceKeyState(k1, KmsKeyState.UNAVAILABLE);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.UNAVAILABLE);
+
+      int updateAliasBefore = countKmsAuditRows("KMS_UPDATE_ALIAS", true);
+      int disableBefore = countKmsAuditRows("KMS_DISABLE", true);
+      int scheduleBefore = countKmsAuditRows("KMS_SCHEDULE_DELETION", true);
+      clearInvocations(kmsKeyLifecyclePort);
+
+      // 3) Re-provision. handleExistingProvisionedRow: aliasState=UNAVAILABLE,
+      // targetIdMatches=true,
+      //    isDying(UNAVAILABLE)=true → replaceKey(disposeOldKey=false). Mints K3, alias→K3.
+      ResponseEntity<String> reRes = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
+      assertThat(reRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> finalRow = walletRow(REWARD_ALIAS);
+      String k3 = (String) finalRow.get("kms_key_id");
+      assertThat(k3).isNotEqualTo(k1);
+      assertThat((String) finalRow.get("status")).isEqualTo("ACTIVE");
+
+      verify(kmsKeyLifecyclePort, times(1)).createKey();
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(k3);
+      assertThat(kmsFake.keyState(k3)).isEqualTo(KmsKeyState.ENABLED);
+      assertThat(countKmsAuditRows("KMS_UPDATE_ALIAS", true)).isEqualTo(updateAliasBefore + 1);
+
+      // disposeOldKey=false — K1 untouched, stays UNAVAILABLE.
+      verify(kmsKeyLifecyclePort, never()).disableKey(k1);
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(eq(k1), anyInt());
+      assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(disableBefore);
+      assertThat(countKmsAuditRows("KMS_SCHEDULE_DELETION", true)).isEqualTo(scheduleBefore);
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.UNAVAILABLE);
+
+      // targetIdMatches=true: describeFresh probe not issued here.
+      verify(describeKmsKeyPort, never()).describeFresh(anyString());
+    }
   }
 
   // ---------------------------------------------------------------------------

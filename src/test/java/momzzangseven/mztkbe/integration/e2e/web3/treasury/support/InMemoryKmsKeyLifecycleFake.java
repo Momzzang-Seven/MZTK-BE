@@ -70,6 +70,16 @@ public final class InMemoryKmsKeyLifecycleFake implements KmsKeyLifecyclePort {
     this.nextCreateAliasFailure = failure;
   }
 
+  /**
+   * Test-only: inject an arbitrary {@link KmsKeyState} for an existing key id, bypassing the normal
+   * {@link #disableKey} / {@link #enableKey} / {@link #scheduleKeyDeletion} lifecycle. Required for
+   * simulating {@code PENDING_IMPORT} and {@code UNAVAILABLE} states which have no direct lifecycle
+   * entry point on the port.
+   */
+  public void forceKeyState(String keyId, KmsKeyState state) {
+    keyStates.put(keyId, state);
+  }
+
   // Register a one-shot latch the matching call awaits before proceeding.
   public void gateUpdateAliasFor(String alias, CountDownLatch gate) {
     updateAliasGates.put(alias, gate);
