@@ -18,11 +18,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>Playwright runs against a separately booted application process, so test code cannot call
  * {@link LocalEcSignerAdapter#registerKey(String, BigInteger)} directly. When KMS is disabled this
- * runner lets that process receive logical signer keys from an environment property:
- *
- * <pre>
- * WEB3_LOCAL_SIGNER_KEYS=sponsor-treasury=0x...
- * </pre>
+ * runner lets that process receive logical signer keys from the {@code web3.local-signer.keys}
+ * property. The value is a comma-separated list of logical KMS key ids mapped to private key hex
+ * values using an equals separator.
  *
  * <p>The bean is absent when {@code web3.kms.enabled=true}; production KMS-backed contexts never
  * accept plaintext key material through this path.
