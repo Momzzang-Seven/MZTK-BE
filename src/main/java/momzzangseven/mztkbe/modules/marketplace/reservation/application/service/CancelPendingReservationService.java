@@ -162,8 +162,6 @@ public class CancelPendingReservationService implements CancelPendingReservation
           "Cannot cancel reservation in status: " + reservation.getStatus());
     }
     validateUserEscrowLocked(reservation, "cancel");
-    ReservationDeadlineActionGuard.requireUserActionBeforeContractDeadline(
-        reservation, clock, "cancel");
 
     Reservation pending =
         saveReservationPort.save(reservation.beginCancelPending(UUID.randomUUID().toString()));

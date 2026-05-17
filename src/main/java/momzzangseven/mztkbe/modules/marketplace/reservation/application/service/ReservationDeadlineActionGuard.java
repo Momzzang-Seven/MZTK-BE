@@ -10,7 +10,7 @@ final class ReservationDeadlineActionGuard {
 
   private ReservationDeadlineActionGuard() {}
 
-  static void requireUserActionBeforeContractDeadline(
+  static void requireSettlementBeforeContractDeadline(
       Reservation reservation, Clock clock, String action) {
     if (!reservation.getEffectiveEscrowFlow().isUserEip7702()) {
       return;
@@ -19,7 +19,7 @@ final class ReservationDeadlineActionGuard {
         && !LocalDateTime.now(clock).isBefore(reservation.getContractDeadlineAt())) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED,
-          "Contract deadline expired; only deadline refund is allowed for marketplace " + action);
+          "Contract deadline expired; marketplace " + action + " is no longer allowed");
     }
   }
 }

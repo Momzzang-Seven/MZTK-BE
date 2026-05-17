@@ -283,23 +283,37 @@ class CancelPendingReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[CP-07] contract deadline 이후에는 취소 intent 생성을 차단한다")
-    void contract_deadline_이후_취소_차단() {
+    @DisplayName("[CP-07] contract deadline 이후에도 cancelClass 취소 intent 생성을 허용한다")
+    void contract_deadline_이후_취소_허용() {
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
       Reservation expired =
           pendingReservation().toBuilder()
               .contractDeadlineAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE).minusMinutes(1))
               .build();
-      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(expired));
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(expired))
+          .willAnswer(invocation -> Optional.ofNullable(latestSaved.get()));
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18));
+      given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
 
-      assertThatThrownBy(
-              () -> sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID)))
-          .isInstanceOf(BusinessException.class)
-          .satisfies(
-              ex ->
-                  assertThat(((BusinessException) ex).getCode())
-                      .isEqualTo(ErrorCode.MARKETPLACE_DEADLINE_REFUND_REQUIRED.getCode()));
+      CancelPendingReservationResult result =
+          sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID));
 
-      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+      assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+      then(prepareReservationEscrowExecutionPort).should().prepareCancel(any());
     }
 
     @Test

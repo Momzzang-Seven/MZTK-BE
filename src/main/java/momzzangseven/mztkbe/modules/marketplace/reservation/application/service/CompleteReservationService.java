@@ -178,7 +178,7 @@ public class CompleteReservationService implements CompleteReservationUseCase {
           "Cannot complete reservation in status: " + reservation.getStatus());
     }
     validateUserEscrowLocked(reservation, "complete");
-    ReservationDeadlineActionGuard.requireUserActionBeforeContractDeadline(
+    ReservationDeadlineActionGuard.requireSettlementBeforeContractDeadline(
         reservation, clock, "complete");
 
     LocalDateTime sessionEnd =

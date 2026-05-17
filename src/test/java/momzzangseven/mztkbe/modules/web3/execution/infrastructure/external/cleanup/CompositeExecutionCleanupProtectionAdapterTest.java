@@ -3,10 +3,14 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.clea
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentCleanupView;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCleanupViewUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.FilterMarketplaceExecutionCleanupCandidatesUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.FilterQnaExecutionCleanupCandidatesUseCase;
@@ -21,7 +25,7 @@ import org.springframework.beans.factory.ObjectProvider;
 @DisplayName("CompositeExecutionCleanupProtectionAdapter")
 class CompositeExecutionCleanupProtectionAdapterTest {
 
-  @Mock private GetExecutionIntentCleanupViewUseCase cleanupViewUseCase;
+  @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private FilterQnaExecutionCleanupCandidatesUseCase qnaProtection;
   @Mock private FilterMarketplaceExecutionCleanupCandidatesUseCase marketplaceProtection;
   @Mock private ObjectProvider<FilterQnaExecutionCleanupCandidatesUseCase> qnaProvider;
@@ -33,7 +37,7 @@ class CompositeExecutionCleanupProtectionAdapterTest {
   @DisplayName("QnA와 marketplace 후보를 각각 보호 필터로 라우팅하고 나머지 intent는 삭제 가능하게 둔다")
   void filterDeletableFinalizedIntentIds_routesFeatureSpecificCandidates() {
     List<Long> candidateIds = List.of(1L, 2L, 3L);
-    given(cleanupViewUseCase.getCleanupViewsByIds(candidateIds))
+    given(executionIntentPersistencePort.findAllByIdsForUpdate(candidateIds))
         .willReturn(
             List.of(
                 view(
@@ -55,19 +59,42 @@ class CompositeExecutionCleanupProtectionAdapterTest {
         .willReturn(List.of());
     CompositeExecutionCleanupProtectionAdapter adapter =
         new CompositeExecutionCleanupProtectionAdapter(
-            cleanupViewUseCase, qnaProvider, marketplaceProvider);
+            executionIntentPersistencePort, qnaProvider, marketplaceProvider);
 
     List<Long> result = adapter.filterDeletableFinalizedIntentIds(candidateIds);
 
     assertThat(result).containsExactly(1L, 3L);
   }
 
-  private ExecutionIntentCleanupView view(
+  private ExecutionIntent view(
       Long id,
       ExecutionResourceType resourceType,
       String resourceId,
       ExecutionActionType actionType) {
-    return new ExecutionIntentCleanupView(
-        id, "intent-" + id, resourceType, resourceId, actionType, 7L);
+    LocalDateTime now = LocalDateTime.of(2026, 5, 17, 10, 0);
+    return ExecutionIntent.builder()
+        .id(id)
+        .publicId("intent-" + id)
+        .rootIdempotencyKey("root-" + id)
+        .attemptNo(1)
+        .resourceType(resourceType)
+        .resourceId(resourceId)
+        .actionType(actionType)
+        .requesterUserId(7L)
+        .mode(ExecutionMode.EIP7702)
+        .status(ExecutionIntentStatus.CONFIRMED)
+        .payloadHash("payload-" + id)
+        .payloadSnapshotJson("{}")
+        .authorityAddress("0x1111111111111111111111111111111111111111")
+        .authorityNonce(1L)
+        .delegateTarget("0x2222222222222222222222222222222222222222")
+        .expiresAt(now.plusMinutes(5))
+        .authorizationPayloadHash("0xauthorization")
+        .executionDigest("0xdigest")
+        .reservedSponsorCostWei(java.math.BigInteger.ZERO)
+        .sponsorUsageDateKst(LocalDate.of(2026, 5, 17))
+        .createdAt(now)
+        .updatedAt(now)
+        .build();
   }
 }

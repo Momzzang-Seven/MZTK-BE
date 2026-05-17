@@ -73,7 +73,7 @@ public class ApproveReservationService implements ApproveReservationUseCase {
           ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
           "Cannot approve reservation while legacy escrow dispatch is unresolved");
     }
-    ReservationDeadlineActionGuard.requireUserActionBeforeContractDeadline(
+    ReservationDeadlineActionGuard.requireSettlementBeforeContractDeadline(
         reservation, clock, "approve");
     requireBeforeAutoCancelWindow(reservation);
 

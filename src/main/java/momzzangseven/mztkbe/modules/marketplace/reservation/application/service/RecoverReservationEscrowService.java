@@ -482,7 +482,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   private boolean shouldForceDeadlineRefund(Reservation reservation, RecoveryFlow flow) {
     return expired(reservation)
         && switch (flow.action()) {
-          case BUYER_CANCEL, TRAINER_REJECT, BUYER_CONFIRM -> true;
+          case BUYER_CONFIRM -> true;
           default -> false;
         };
   }

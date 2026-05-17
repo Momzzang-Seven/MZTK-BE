@@ -159,8 +159,6 @@ public class RejectReservationService implements RejectReservationUseCase {
           "Cannot reject reservation in status: " + reservation.getStatus());
     }
     validateUserEscrowLocked(reservation, "reject");
-    ReservationDeadlineActionGuard.requireUserActionBeforeContractDeadline(
-        reservation, clock, "reject");
 
     Reservation pending =
         saveReservationPort.save(

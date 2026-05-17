@@ -251,7 +251,7 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
   }
 
   private Instant contractDeadlineExpiry(MarketplaceEscrowExecutionRequest request) {
-    if (request.actionType() == MarketplaceExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND) {
+    if (request.actionType() != MarketplaceExecutionActionType.MARKETPLACE_CLASS_CONFIRM) {
       return null;
     }
     Long deadlineEpochSeconds =

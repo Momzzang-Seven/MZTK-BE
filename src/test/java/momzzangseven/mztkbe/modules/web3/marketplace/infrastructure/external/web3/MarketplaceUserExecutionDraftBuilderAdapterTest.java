@@ -159,8 +159,31 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   }
 
   @Test
-  @DisplayName("cancel/confirm 계열 draft 만료는 contract deadline보다 늦게 노출되지 않는다")
-  void build_capsExpiresAtToContractDeadline() {
+  @DisplayName("confirm draft 만료는 contract deadline보다 늦게 노출되지 않는다")
+  void build_confirmCapsExpiresAtToContractDeadline() {
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
+        .willReturn(Optional.of(BUYER));
+    givenDraftContext();
+    given(signMarketplaceServerSigPort.sign(any()))
+        .willReturn(new MarketplaceServerSigResult(1_000L, SIGNATURE, SIGNING_INSTANT));
+    given(
+            buildMarketplaceEscrowCallDataPort.encode(
+                any(), any(), any(), any(), any(), anyLong(), any()))
+        .willReturn("0xcancel");
+
+    MarketplaceExecutionDraft draft =
+        sut.build(
+            request(
+                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CONFIRM,
+                MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
+                1_100L));
+
+    assertThat(draft.expiresAt()).isEqualTo(LocalDateTime.ofEpochSecond(1_100, 0, ZoneOffset.UTC));
+  }
+
+  @Test
+  @DisplayName("cancel draft 만료는 contract deadline으로 cap하지 않는다")
+  void build_cancelDoesNotCapExpiresAtToContractDeadline() {
     given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
         .willReturn(Optional.of(BUYER));
     givenDraftContext();
@@ -178,7 +201,7 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
                 MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
                 1_100L));
 
-    assertThat(draft.expiresAt()).isEqualTo(LocalDateTime.ofEpochSecond(1_100, 0, ZoneOffset.UTC));
+    assertThat(draft.expiresAt()).isEqualTo(LocalDateTime.ofEpochSecond(1_300, 0, ZoneOffset.UTC));
   }
 
   @Test

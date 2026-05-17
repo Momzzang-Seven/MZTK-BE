@@ -6,14 +6,18 @@ import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.ClassSlotEntity;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionCleanupProtectionQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.ReservationCreateIdempotencyPersistenceAdapter;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.ReservationExecutionCleanupProtectionPersistenceAdapter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.ReservationPersistenceAdapter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationSlotDateLockJpaRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -25,12 +29,20 @@ import org.springframework.test.context.ActiveProfiles;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({ReservationPersistenceAdapter.class, ReservationCreateIdempotencyPersistenceAdapter.class})
+@Import({
+  ReservationPersistenceAdapter.class,
+  ReservationCreateIdempotencyPersistenceAdapter.class,
+  ReservationExecutionCleanupProtectionPersistenceAdapter.class
+})
 class ReservationPersistenceAdapterTest {
 
   @Autowired private EntityManager entityManager;
   @Autowired private ReservationPersistenceAdapter reservationAdapter;
   @Autowired private ReservationCreateIdempotencyPersistenceAdapter idempotencyAdapter;
+
+  @Autowired
+  private ReservationExecutionCleanupProtectionPersistenceAdapter cleanupProtectionAdapter;
+
   @Autowired private ReservationSlotDateLockJpaRepository slotDateLockRepository;
 
   @Test
@@ -137,6 +149,62 @@ class ReservationPersistenceAdapterTest {
     assertThat(loaded.getReservationId()).isEqualTo(10L);
     assertThat(loaded.getCurrentExecutionIntentPublicId())
         .isEqualTo("33333333-3333-3333-3333-333333333333");
+  }
+
+  @Test
+  @DisplayName(
+      "cleanup protection queries protect reservation, create idempotency, and unbound pending refs")
+  void cleanupProtectionQueriesReturnProtectedPublicIds() {
+    Long slotId = saveSlot();
+    Reservation current =
+        reservationAdapter.save(
+            Reservation.builder()
+                .userId(1L)
+                .trainerId(2L)
+                .slotId(slotId)
+                .reservationDate(LocalDate.of(2026, 5, 23))
+                .reservationTime(LocalTime.of(10, 0))
+                .durationMinutes(60)
+                .status(ReservationStatus.PENDING)
+                .escrowStatus(ReservationEscrowStatus.LOCKED)
+                .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+                .currentExecutionIntentPublicId("intent-current")
+                .build());
+    Reservation unbound =
+        reservationAdapter.save(
+            Reservation.builder()
+                .userId(3L)
+                .trainerId(2L)
+                .slotId(slotId)
+                .reservationDate(LocalDate.of(2026, 5, 24))
+                .reservationTime(LocalTime.of(10, 0))
+                .durationMinutes(60)
+                .status(ReservationStatus.CONFIRM_PENDING)
+                .escrowStatus(ReservationEscrowStatus.CONFIRM_PENDING)
+                .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+                .pendingAction(ReservationEscrowAction.BUYER_CONFIRM)
+                .build());
+    idempotencyAdapter.save(
+        ReservationCreateIdempotency.preparing(
+                1L, "key-cleanup", "payload-cleanup", LocalDateTime.of(2026, 5, 16, 10, 0))
+            .markBound(current.getId(), "intent-create", "{\"ok\":true}"));
+    entityManager.flush();
+    entityManager.clear();
+
+    List<String> protectedPublicIds =
+        cleanupProtectionAdapter.findProtectedExecutionIntentPublicIds(
+            List.of(
+                new ReservationExecutionCleanupProtectionQuery(
+                    "intent-current", String.valueOf(current.getId()), "MARKETPLACE_CLASS_CANCEL"),
+                new ReservationExecutionCleanupProtectionQuery(
+                    "intent-create", String.valueOf(current.getId()), "MARKETPLACE_CLASS_PURCHASE"),
+                new ReservationExecutionCleanupProtectionQuery(
+                    "intent-unbound", String.valueOf(unbound.getId()), "MARKETPLACE_CLASS_CONFIRM"),
+                new ReservationExecutionCleanupProtectionQuery(
+                    "intent-free", "999999", "MARKETPLACE_CLASS_CONFIRM")));
+
+    assertThat(protectedPublicIds)
+        .containsExactlyInAnyOrder("intent-current", "intent-create", "intent-unbound");
   }
 
   @Test

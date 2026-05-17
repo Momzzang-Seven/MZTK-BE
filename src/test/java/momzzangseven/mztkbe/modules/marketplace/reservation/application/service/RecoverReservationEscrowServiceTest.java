@@ -158,14 +158,12 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
-  @DisplayName(
-      "deadline 이후 cancel pending recovery는 기존 cancel intent 대신 deadline refund intent를 준비한다")
-  void expired_cancelPending_recovery_forcesDeadlineRefund() {
+  @DisplayName("deadline 이후 cancel pending recovery는 contract가 허용하는 cancel intent를 다시 준비한다")
+  void expired_cancelPending_recovery_preparesCancelIntent() {
     long deadlineEpochSeconds = FIXED_CLOCK.instant().getEpochSecond();
     Reservation reservation =
         reservation(ReservationStatus.CANCEL_PENDING).toBuilder()
             .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
-            .currentExecutionIntentPublicId("old-cancel-intent")
             .contractDeadlineEpochSeconds(deadlineEpochSeconds)
             .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK))
             .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
@@ -191,16 +189,16 @@ class RecoverReservationEscrowServiceTest {
         .willReturn(
             new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
                 "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
-    given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+    given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
         .willReturn(new PrepareReservationEscrowResult(web3()));
 
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
     assertThat(result.web3()).isNotNull();
     then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
-    then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
+    then(prepareReservationEscrowExecutionPort).should().prepareCancel(any());
     then(prepareReservationEscrowExecutionPort).shouldHaveNoMoreInteractions();
   }
 
