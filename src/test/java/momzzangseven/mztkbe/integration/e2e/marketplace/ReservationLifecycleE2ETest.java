@@ -16,6 +16,12 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
@@ -553,6 +559,58 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
       assertThat(parse(response).at("/code").asText()).isEqualTo("MARKETPLACE_017");
     }
+
+    @Test
+    @DisplayName("capacity=1 concurrent reservation requests allow only one hold")
+    void createReservation_capacityOneConcurrent_allowsOnlyOneReservation() throws Exception {
+      TestUser trainer = signupAndLogin("trainer-concurrent-cap");
+      trainer = promoteToTrainer(trainer);
+      long storeId = insertStore(trainer.userId());
+      long classId = insertClass(trainer.userId(), storeId, "Concurrent Cap PT", 10_000);
+      LocalDate sessionDate = nextWeekday(DayOfWeek.TUESDAY);
+      long slotId = insertSlot(classId, DayOfWeek.TUESDAY, LocalTime.of(13, 0), 1, 60);
+
+      TestUser user1 = signupAndLogin("user-cap-race-1");
+      TestUser user2 = signupAndLogin("user-cap-race-2");
+      CountDownLatch ready = new CountDownLatch(2);
+      CountDownLatch start = new CountDownLatch(1);
+      ExecutorService executor = Executors.newFixedThreadPool(2);
+
+      try {
+        Future<ResponseEntity<String>> first =
+            executor.submit(
+                concurrentCreateReservationTask(
+                    ready, start, user1, classId, slotId, sessionDate, "13:00:00", 10_000));
+        Future<ResponseEntity<String>> second =
+            executor.submit(
+                concurrentCreateReservationTask(
+                    ready, start, user2, classId, slotId, sessionDate, "13:00:00", 10_000));
+
+        assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+        start.countDown();
+
+        ResponseEntity<String> firstResponse = first.get(20, TimeUnit.SECONDS);
+        ResponseEntity<String> secondResponse = second.get(20, TimeUnit.SECONDS);
+
+        long successCount =
+            java.util.stream.Stream.of(firstResponse, secondResponse)
+                .filter(response -> response.getStatusCode() == HttpStatus.OK)
+                .count();
+        long conflictCount =
+            java.util.stream.Stream.of(firstResponse, secondResponse)
+                .filter(response -> response.getStatusCode() == HttpStatus.CONFLICT)
+                .count();
+
+        assertThat(successCount).isEqualTo(1);
+        assertThat(conflictCount).isEqualTo(1);
+        ResponseEntity<String> conflictResponse =
+            firstResponse.getStatusCode() == HttpStatus.CONFLICT ? firstResponse : secondResponse;
+        assertThat(parse(conflictResponse).at("/code").asText()).isEqualTo("MARKETPLACE_017");
+        assertThat(countReservationsByClass(classId)).isEqualTo(1);
+      } finally {
+        executor.shutdownNow();
+      }
+    }
   }
 
   // ===================================================================
@@ -897,6 +955,40 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     } catch (Exception e) {
       throw new IllegalStateException("Failed to parse reservationId: " + response.getBody(), e);
     }
+  }
+
+  private Callable<ResponseEntity<String>> concurrentCreateReservationTask(
+      CountDownLatch ready,
+      CountDownLatch start,
+      TestUser user,
+      long classId,
+      long slotId,
+      LocalDate date,
+      String time,
+      long amount) {
+    return () -> {
+      ready.countDown();
+      assertThat(start.await(5, TimeUnit.SECONDS)).isTrue();
+      return restTemplate.exchange(
+          baseUrl() + "/marketplace/classes/" + classId + "/reservations",
+          HttpMethod.POST,
+          new HttpEntity<>(
+              Map.of(
+                  "slotId",
+                  slotId,
+                  "reservationDate",
+                  date.toString(),
+                  "reservationTime",
+                  time,
+                  "signedAmount",
+                  tokenBaseUnits(amount),
+                  "delegationSignature",
+                  "0x" + "a".repeat(130),
+                  "executionSignature",
+                  "0x" + "b".repeat(130)),
+              bearerJsonHeaders(user.accessToken())),
+          String.class);
+    };
   }
 
   private void markPurchaseConfirmedForE2E(long reservationId) {

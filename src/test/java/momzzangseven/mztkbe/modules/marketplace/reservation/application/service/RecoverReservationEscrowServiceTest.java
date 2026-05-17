@@ -257,6 +257,7 @@ class RecoverReservationEscrowServiceTest {
     AtomicReference<Reservation> latestSaved = new AtomicReference<>();
     given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
         .willReturn(Optional.of(reservation))
+        .willReturn(Optional.of(reservation))
         .willReturn(Optional.of(changed))
         .willReturn(Optional.of(reservation));
     given(saveReservationPort.save(any()))

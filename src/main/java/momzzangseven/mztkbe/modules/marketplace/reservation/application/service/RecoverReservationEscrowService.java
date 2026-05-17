@@ -166,6 +166,22 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     } catch (MarketplaceWeb3DisabledException e) {
       return ChainSyncResult.continueWith(reservation);
     }
+    return runInTransaction(() -> syncLockedChainStateBeforePrepare(reservation, flow, order));
+  }
+
+  private ChainSyncResult syncLockedChainStateBeforePrepare(
+      Reservation expected, RecoveryFlow flow, ReservationEscrowOrderView order) {
+    Reservation reservation =
+        loadReservationPort
+            .findByIdWithLock(expected.getId())
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
+                        "Reservation not found: " + expected.getId()));
+    if (!sameRecoverySnapshot(reservation, expected)) {
+      return ChainSyncResult.continueWith(reservation);
+    }
     if (order == null || order.isAbsent()) {
       if (flow.action() == RecoveryAction.PURCHASE) {
         return ChainSyncResult.continueWith(reservation);
@@ -223,6 +239,14 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
               ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
               "Unsupported marketplace escrow order state: " + order.state());
     };
+  }
+
+  private boolean sameRecoverySnapshot(Reservation current, Reservation expected) {
+    return current.getStatus() == expected.getStatus()
+        && equalsNullable(
+            current.getCurrentExecutionIntentPublicId(),
+            expected.getCurrentExecutionIntentPublicId())
+        && equalsNullable(current.getPendingAttemptToken(), expected.getPendingAttemptToken());
   }
 
   private ChainSyncResult syncCreatedChainOrder(

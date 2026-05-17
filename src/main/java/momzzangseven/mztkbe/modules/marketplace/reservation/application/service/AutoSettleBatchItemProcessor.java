@@ -148,16 +148,24 @@ public class AutoSettleBatchItemProcessor {
 
   private void runAfterCommit(Runnable action) {
     if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-      action.run();
+      runAfterCommitSafely(action);
       return;
     }
     TransactionSynchronizationManager.registerSynchronization(
         new TransactionSynchronization() {
           @Override
           public void afterCommit() {
-            action.run();
+            runAfterCommitSafely(action);
           }
         });
+  }
+
+  private void runAfterCommitSafely(Runnable action) {
+    try {
+      action.run();
+    } catch (RuntimeException e) {
+      log.error("AutoSettle after-commit callback failed", e);
+    }
   }
 
   private void runPostCommitTransaction(Runnable action) {

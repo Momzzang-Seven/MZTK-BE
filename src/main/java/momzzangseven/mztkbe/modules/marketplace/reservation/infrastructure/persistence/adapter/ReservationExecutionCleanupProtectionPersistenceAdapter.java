@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.web3;
+package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter;
 
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
@@ -6,39 +6,38 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionCleanupProtectionQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCleanupProtectionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationCreateIdempotencyJpaRepository;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationJpaRepository;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionCleanupIntent;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.CheckMarketplaceReservationCleanupProtectionPort;
-import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "eip7702.cleanup.enabled"},
-    havingValue = "true")
-public class MarketplaceReservationCleanupProtectionAdapter
-    implements CheckMarketplaceReservationCleanupProtectionPort {
+public class ReservationExecutionCleanupProtectionPersistenceAdapter
+    implements LoadReservationExecutionCleanupProtectionPort {
+
+  private static final String PURCHASE = "MARKETPLACE_CLASS_PURCHASE";
+  private static final String CANCEL = "MARKETPLACE_CLASS_CANCEL";
+  private static final String CONFIRM = "MARKETPLACE_CLASS_CONFIRM";
+  private static final String EXPIRED_REFUND = "MARKETPLACE_CLASS_EXPIRED_REFUND";
 
   private final ReservationJpaRepository reservationJpaRepository;
   private final ReservationCreateIdempotencyJpaRepository createIdempotencyJpaRepository;
 
   @Override
   public List<String> findProtectedExecutionIntentPublicIds(
-      List<MarketplaceExecutionCleanupIntent> intents) {
+      List<ReservationExecutionCleanupProtectionQuery> intents) {
     if (intents == null || intents.isEmpty()) {
       return List.of();
     }
     Set<String> protectedPublicIds = new LinkedHashSet<>();
     List<String> publicIds =
         intents.stream()
-            .map(MarketplaceExecutionCleanupIntent::publicId)
+            .map(ReservationExecutionCleanupProtectionQuery::publicId)
             .filter(id -> id != null && !id.isBlank())
             .toList();
     if (!publicIds.isEmpty()) {
@@ -52,7 +51,7 @@ public class MarketplaceReservationCleanupProtectionAdapter
                   ReservationCreateIdempotencyStatus.BOUND)));
     }
 
-    for (MarketplaceExecutionCleanupIntent intent : intents) {
+    for (ReservationExecutionCleanupProtectionQuery intent : intents) {
       if (intent.publicId() == null
           || intent.publicId().isBlank()
           || protectedPublicIds.contains(intent.publicId())) {
@@ -65,37 +64,39 @@ public class MarketplaceReservationCleanupProtectionAdapter
     return List.copyOf(protectedPublicIds);
   }
 
-  private boolean hasUnboundPendingAction(MarketplaceExecutionCleanupIntent intent) {
+  private boolean hasUnboundPendingAction(ReservationExecutionCleanupProtectionQuery intent) {
+    Set<ReservationEscrowAction> actions = pendingActions(intent.actionType());
+    Set<ReservationStatus> statuses = pendingStatuses(intent.actionType());
+    if (actions.isEmpty() || statuses.isEmpty()) {
+      return false;
+    }
     return parseLong(intent.resourceId())
         .map(
             reservationId ->
-                reservationJpaRepository.countUnboundPendingAction(
-                        reservationId,
-                        pendingActions(intent.actionType()),
-                        pendingStatuses(intent.actionType()))
+                reservationJpaRepository.countUnboundPendingAction(reservationId, actions, statuses)
                     > 0)
         .orElse(false);
   }
 
-  private Set<ReservationEscrowAction> pendingActions(MarketplaceExecutionActionType actionType) {
+  private Set<ReservationEscrowAction> pendingActions(String actionType) {
     return switch (actionType) {
-      case MARKETPLACE_CLASS_PURCHASE -> EnumSet.of(ReservationEscrowAction.PURCHASE);
-      case MARKETPLACE_CLASS_CANCEL ->
+      case PURCHASE -> EnumSet.of(ReservationEscrowAction.PURCHASE);
+      case CANCEL ->
           EnumSet.of(ReservationEscrowAction.BUYER_CANCEL, ReservationEscrowAction.TRAINER_REJECT);
-      case MARKETPLACE_CLASS_CONFIRM -> EnumSet.of(ReservationEscrowAction.BUYER_CONFIRM);
-      case MARKETPLACE_CLASS_EXPIRED_REFUND -> EnumSet.of(ReservationEscrowAction.DEADLINE_REFUND);
+      case CONFIRM -> EnumSet.of(ReservationEscrowAction.BUYER_CONFIRM);
+      case EXPIRED_REFUND -> EnumSet.of(ReservationEscrowAction.DEADLINE_REFUND);
+      default -> EnumSet.noneOf(ReservationEscrowAction.class);
     };
   }
 
-  private Set<ReservationStatus> pendingStatuses(MarketplaceExecutionActionType actionType) {
+  private Set<ReservationStatus> pendingStatuses(String actionType) {
     return switch (actionType) {
-      case MARKETPLACE_CLASS_PURCHASE ->
+      case PURCHASE ->
           EnumSet.of(ReservationStatus.PURCHASE_PREPARING, ReservationStatus.PURCHASE_PENDING);
-      case MARKETPLACE_CLASS_CANCEL ->
-          EnumSet.of(ReservationStatus.CANCEL_PENDING, ReservationStatus.REJECT_PENDING);
-      case MARKETPLACE_CLASS_CONFIRM -> EnumSet.of(ReservationStatus.CONFIRM_PENDING);
-      case MARKETPLACE_CLASS_EXPIRED_REFUND ->
-          EnumSet.of(ReservationStatus.DEADLINE_REFUND_PENDING);
+      case CANCEL -> EnumSet.of(ReservationStatus.CANCEL_PENDING, ReservationStatus.REJECT_PENDING);
+      case CONFIRM -> EnumSet.of(ReservationStatus.CONFIRM_PENDING);
+      case EXPIRED_REFUND -> EnumSet.of(ReservationStatus.DEADLINE_REFUND_PENDING);
+      default -> EnumSet.noneOf(ReservationStatus.class);
     };
   }
 

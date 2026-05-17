@@ -104,6 +104,10 @@ const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
   "function transfer(address to, uint256 amount) returns (bool)",
 ] as const;
+const MARKETPLACE_ESCROW_ABI = [
+  "function defaultDeadlineDuration() view returns (uint48)",
+  "function getOrder(bytes32 orderId) view returns (tuple(bytes32 orderId,uint256 price,address token,uint48 deadline,uint16 state,address buyer,address trainer))",
+] as const;
 const db = new Pool({
   host: ENV.DB_HOST,
   port: ENV.DB_PORT,
@@ -501,6 +505,65 @@ async function moveReservationSessionToPast(reservationId: number): Promise<void
       where id = $1`,
     [reservationId]
   );
+}
+
+async function moveReservationDeadlineToPast(reservationId: number): Promise<void> {
+  await db.query(
+    `update class_reservations
+        set contract_deadline_epoch_seconds = floor(extract(epoch from now()))::bigint - 1,
+            contract_deadline_at = now() - interval '1 second',
+            updated_at = now()
+      where id = $1`,
+    [reservationId]
+  );
+}
+
+async function loadReservationOrderKey(reservationId: number): Promise<string> {
+  const result = await db.query(
+    "select order_key from class_reservations where id = $1",
+    [reservationId]
+  );
+  expect(result.rows[0]?.order_key, "reservation order_key is required").toBeTruthy();
+  return result.rows[0].order_key as string;
+}
+
+async function expireMarketplaceOrderDeadline(
+  orderKey: string
+): Promise<{ expired: boolean; reason?: string }> {
+  if (provider == null || ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS === "") {
+    return { expired: false, reason: "marketplace escrow RPC is not configured" };
+  }
+  const escrow = new ethers.Contract(
+    ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS,
+    MARKETPLACE_ESCROW_ABI,
+    provider
+  );
+  const order = await escrow.getOrder(orderKey);
+  const rawDeadline = order.deadline ?? order[3];
+  const deadline = BigInt(rawDeadline.toString());
+  const current = BigInt((await provider.getBlock("latest"))?.timestamp ?? 0);
+  if (current <= deadline) {
+    const secondsToAdvance = deadline - current + 2n;
+    if (secondsToAdvance > BigInt(Number.MAX_SAFE_INTEGER)) {
+      return { expired: false, reason: "deadline advance exceeds JavaScript safe integer" };
+    }
+    try {
+      await provider.send("evm_increaseTime", [Number(secondsToAdvance)]);
+      await provider.send("evm_mine", []);
+    } catch (error) {
+      return {
+        expired: false,
+        reason: `RPC does not support time travel: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+  const latest = BigInt((await provider.getBlock("latest"))?.timestamp ?? 0);
+  return {
+    expired: latest > deadline,
+    reason: latest > deadline ? undefined : "marketplace order deadline is still active",
+  };
 }
 
 async function waitForWalletRegistrationStatus(
@@ -2729,5 +2792,47 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
     );
     expect(found, "트레이너 목록에 예약이 없음").toBe(true);
     console.log(`[TC-RV-18] 트레이너 수강 신청 목록 조회 성공. reservationId=${reservationId}`);
+  });
+
+  test("MOM-313-LIVE-04: deadline refund intent는 DEADLINE_REFUNDED로 종료된다", async ({
+    request,
+  }) => {
+    test.setTimeout(300_000);
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "THURSDAY", "16:00:00", 1);
+    const reservationId = await createReservation(
+      request,
+      userToken,
+      classId,
+      slotId,
+      reservationDate,
+      reservationTime,
+      priceAmount
+    );
+
+    const orderKey = await loadReservationOrderKey(reservationId);
+    const expiry = await expireMarketplaceOrderDeadline(orderKey);
+    test.skip(!expiry.expired, expiry.reason ?? "deadline refund requires expired chain order");
+    await moveReservationDeadlineToPast(reservationId);
+
+    const refundRes = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations/${reservationId}/deadline-refund`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    expect(refundRes.status(), `deadline refund prepare failed: ${await refundRes.text()}`).toBe(
+      200
+    );
+    const refundBody = await refundRes.json();
+    expect(refundBody.data.status).toBe("DEADLINE_REFUND_PENDING");
+    expect(refundBody.data.web3.actionType).toBe("MARKETPLACE_CLASS_EXPIRED_REFUND");
+
+    await executeReservationIntent(
+      request,
+      userToken,
+      marketplaceUserWallet,
+      refundBody.data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForReservationStatus(request, userToken, reservationId, "DEADLINE_REFUNDED");
+    console.log(`[MOM-313-LIVE-04] deadline refund 성공. reservationId=${reservationId}`);
   });
 });

@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -112,6 +113,51 @@ class AutoCancelBatchItemProcessorTest {
     order.verify(saveReservationPort).save(cancelledWithRealTxHash);
 
     verify(recordTrainerStrikePort).recordStrike(trainerId, TrainerStrikeEvent.REASON_TIMEOUT);
+  }
+
+  @Test
+  @DisplayName("process - afterCommit write-back 실패는 콜백 밖으로 전파하지 않는다")
+  void process_afterCommitWriteBackFailure_isLoggedAndSwallowed() {
+    Reservation stale = org.mockito.Mockito.mock(Reservation.class);
+    Long reservationId = 4L;
+    given(stale.getId()).willReturn(reservationId);
+
+    Reservation fresh = org.mockito.Mockito.mock(Reservation.class);
+    String orderId = "order456";
+    given(fresh.getId()).willReturn(reservationId);
+    given(fresh.getOrderId()).willReturn(orderId);
+    given(fresh.getTrainerId()).willReturn(100L);
+    given(fresh.getStatus()).willReturn(ReservationStatus.PENDING);
+    given(fresh.isLegacySchedulerEligibleAt(any())).willReturn(true);
+
+    Reservation cancelledWithSentinel = org.mockito.Mockito.mock(Reservation.class);
+    given(cancelledWithSentinel.getStatus()).willReturn(ReservationStatus.TIMEOUT_CANCELLED);
+    given(cancelledWithSentinel.getTxHash())
+        .willReturn(EscrowDispatchEventListener.PENDING_TX_HASH);
+    given(fresh.timeoutCancel(EscrowDispatchEventListener.PENDING_TX_HASH))
+        .willReturn(cancelledWithSentinel);
+    given(saveReservationPort.save(cancelledWithSentinel)).willReturn(cancelledWithSentinel);
+    given(loadReservationPort.findByIdWithLock(reservationId))
+        .willReturn(Optional.of(fresh))
+        .willReturn(Optional.of(cancelledWithSentinel));
+    given(submitEscrowTransactionPort.submitAdminRefund(orderId)).willReturn("0xhash");
+    willThrow(new IllegalStateException("db down"))
+        .given(cancelledWithSentinel)
+        .updateTxHash("0xhash");
+
+    TransactionSynchronizationManager.initSynchronization();
+    try {
+      sut.process(stale);
+      for (TransactionSynchronization synchronization :
+          TransactionSynchronizationManager.getSynchronizations()) {
+        synchronization.afterCommit();
+      }
+    } finally {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
+
+    then(submitEscrowTransactionPort).should().submitAdminRefund(orderId);
+    then(saveReservationPort).should(times(1)).save(cancelledWithSentinel);
   }
 
   @Test

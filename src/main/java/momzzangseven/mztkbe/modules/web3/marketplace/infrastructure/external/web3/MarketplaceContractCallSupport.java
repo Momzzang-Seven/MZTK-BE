@@ -4,11 +4,10 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.math.BigInteger;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
@@ -26,20 +25,23 @@ import org.web3j.protocol.core.methods.response.EthCall;
 import org.web3j.protocol.http.HttpService;
 
 @Component
-@RequiredArgsConstructor
 @ConditionalOnAnyExecutionEnabled
 @Slf4j
 public class MarketplaceContractCallSupport {
 
-  private final Web3CoreProperties web3CoreProperties;
+  @Value("${web3.rpc.main}")
+  private String mainRpcUrl;
+
+  @Value("${web3.rpc.sub}")
+  private String subRpcUrl;
 
   private Web3j mainWeb3j;
   private Web3j subWeb3j;
 
   @PostConstruct
   void init() {
-    mainWeb3j = Web3j.build(new HttpService(web3CoreProperties.getRpc().getMain()));
-    subWeb3j = Web3j.build(new HttpService(web3CoreProperties.getRpc().getSub()));
+    mainWeb3j = Web3j.build(new HttpService(mainRpcUrl));
+    subWeb3j = Web3j.build(new HttpService(subRpcUrl));
   }
 
   @PreDestroy

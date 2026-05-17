@@ -14,7 +14,6 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -41,10 +40,7 @@ class MarketplaceContractCallSupportTest {
 
   @BeforeEach
   void setUp() {
-    Web3CoreProperties coreProperties = new Web3CoreProperties();
-    coreProperties.getRpc().setMain("http://localhost:8545");
-    coreProperties.getRpc().setSub("http://localhost:8546");
-    support = new MarketplaceContractCallSupport(coreProperties);
+    support = new MarketplaceContractCallSupport();
     mainWeb3j = mock(Web3j.class);
     subWeb3j = mock(Web3j.class);
     ReflectionTestUtils.setField(support, "mainWeb3j", mainWeb3j);
