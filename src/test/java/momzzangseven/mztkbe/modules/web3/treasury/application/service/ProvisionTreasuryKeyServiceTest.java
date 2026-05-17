@@ -47,6 +47,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.TransactionSystemException;
 import org.web3j.crypto.Credentials;
 
@@ -565,7 +566,7 @@ class ProvisionTreasuryKeyServiceTest {
               throw new TransactionSystemException("commit returned STATUS_UNKNOWN");
             })
         .when(spyDelegate)
-        .lockedCommit(any(), anyString(), any());
+        .lockedCommit(any(), anyString(), any(), eq(false));
     ProvisionTreasuryKeyService spyService =
         new ProvisionTreasuryKeyService(spyDelegate, treasuryAuditRecorder);
 
@@ -577,6 +578,99 @@ class ProvisionTreasuryKeyServiceTest {
     // The outer catch must not write a second audit row when the delegate has already audited.
     verify(treasuryAuditRecorder, never())
         .record(eq(1L), anyString(), eq(false), eq("TransactionSystemException"));
+  }
+
+  // ---------- PR #177 R6-C — fresh-INSERT race retry ----------
+
+  /**
+   * On {@link DataIntegrityViolationException} from the first {@code lockedCommit} the service must
+   * invoke {@code lockedCommit} again with {@code isRaceRetry=true} so {@code
+   * handleExistingProvisionedRow} short-circuits to {@link
+   * TreasuryWalletAlreadyProvisionedException}.
+   */
+  @Test
+  void executionService_onDIV_retriesWithRaceRetryFlag() {
+    ProvisionTreasuryKeyTransactionalDelegate spyDelegate = Mockito.spy(delegate);
+    Mockito.doThrow(new DataIntegrityViolationException("UNIQUE alias violation"))
+        .when(spyDelegate)
+        .lockedCommit(any(), anyString(), any(), eq(false));
+    Mockito.doAnswer(
+            inv -> {
+              AtomicBoolean retryFlag = inv.getArgument(2);
+              retryFlag.set(true);
+              throw new TreasuryWalletAlreadyProvisionedException(
+                  "treasury wallet fresh-INSERT race lost for alias 'reward-treasury'");
+            })
+        .when(spyDelegate)
+        .lockedCommit(any(), anyString(), any(), eq(true));
+
+    ProvisionTreasuryKeyService spyService =
+        new ProvisionTreasuryKeyService(spyDelegate, treasuryAuditRecorder);
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    assertThatThrownBy(() -> spyService.execute(command))
+        .isInstanceOf(TreasuryWalletAlreadyProvisionedException.class);
+
+    verify(spyDelegate, times(1)).lockedCommit(any(), anyString(), any(), eq(false));
+    verify(spyDelegate, times(1)).lockedCommit(any(), anyString(), any(), eq(true));
+    // The delegate's fast-path wrote the FRESH_PROVISION_RACE audit; outer catch must not
+    // double-record with the exception's class name.
+    verify(treasuryAuditRecorder, never())
+        .record(eq(1L), anyString(), eq(false), eq("TreasuryWalletAlreadyProvisionedException"));
+  }
+
+  /**
+   * If the race retry itself throws something the delegate did not audit (e.g. an unexpected
+   * RuntimeException), the outer catch must write the audit with the exception class name and
+   * re-throw.
+   */
+  @Test
+  void executionService_onDIV_retryThrowsUnexpected_escalatesWithAudit() {
+    ProvisionTreasuryKeyTransactionalDelegate spyDelegate = Mockito.spy(delegate);
+    Mockito.doThrow(new DataIntegrityViolationException("UNIQUE alias violation"))
+        .when(spyDelegate)
+        .lockedCommit(any(), anyString(), any(), eq(false));
+    Mockito.doThrow(new IllegalStateException("unexpected during retry"))
+        .when(spyDelegate)
+        .lockedCommit(any(), anyString(), any(), eq(true));
+
+    ProvisionTreasuryKeyService spyService =
+        new ProvisionTreasuryKeyService(spyDelegate, treasuryAuditRecorder);
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    assertThatThrownBy(() -> spyService.execute(command))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("unexpected during retry");
+
+    verify(treasuryAuditRecorder)
+        .record(eq(1L), eq(DERIVED_ADDRESS), eq(false), eq("IllegalStateException"));
+  }
+
+  /**
+   * Drive the delegate directly with an existing ACTIVE row + isRaceRetry=true and assert it does
+   * NOT call {@code describeAlias} and instead throws ALREADY_PROVISIONED with audit reason {@code
+   * FRESH_PROVISION_RACE}.
+   */
+  @Test
+  void delegateLockedCommit_raceRetryActiveRow_skipsDescribeAndThrows409() {
+    TreasuryWallet existing = legacyRow(DERIVED_ADDRESS, "kms-key-id", TreasuryWalletStatus.ACTIVE);
+    when(loadTreasuryWalletPort.loadByAliasForUpdate("reward-treasury"))
+        .thenReturn(Optional.of(existing));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(7L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+    AtomicBoolean failureAuditWritten = new AtomicBoolean(false);
+
+    assertThatThrownBy(
+            () -> delegate.lockedCommit(command, DERIVED_ADDRESS, failureAuditWritten, true))
+        .isInstanceOf(TreasuryWalletAlreadyProvisionedException.class);
+
+    assertThat(failureAuditWritten).isTrue();
+    verify(kmsKeyLifecyclePort, never()).describeAlias(anyString());
+    verify(treasuryAuditRecorder)
+        .record(eq(7L), eq(DERIVED_ADDRESS), eq(false), eq("FRESH_PROVISION_RACE"));
   }
 
   // ---------- helpers ----------

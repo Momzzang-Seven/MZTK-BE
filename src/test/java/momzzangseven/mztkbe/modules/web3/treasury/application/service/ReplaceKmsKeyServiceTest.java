@@ -3,7 +3,9 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -200,25 +202,31 @@ class ReplaceKmsKeyServiceTest {
     verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(anyString(), anyInt());
   }
 
+  /**
+   * Row in DISABLED but kmsKeyId matches the command — the replace intent (alias→newKey + dispose
+   * oldKey) is still valid because the alias must point to the current key regardless of status.
+   * Skipping {@code updateAlias} on STATUS_MISMATCH would orphan the alias on the old key when a
+   * concurrent disable lands between replace's commit and replace's AFTER_COMMIT handler.
+   */
   @Test
-  void staleSkip_statusMismatch_recordsAudit_skipsKms() {
+  void statusDisabledButKeyMatches_runsUpdateAlias_andDisposesOldKey() {
     when(loadTreasuryWalletPort.loadByAliasForUpdate(ALIAS))
         .thenReturn(Optional.of(wallet(NEW_KEY, TreasuryWalletStatus.DISABLED)));
 
-    service.execute(new ReplaceKmsKeyCommand(ALIAS, OLD_KEY, NEW_KEY, ADDRESS, OPERATOR_ID, false));
+    service.execute(new ReplaceKmsKeyCommand(ALIAS, OLD_KEY, NEW_KEY, ADDRESS, OPERATOR_ID, true));
 
-    verify(kmsAuditRecorder)
+    verify(kmsKeyLifecyclePort).updateAlias(ALIAS, NEW_KEY);
+    verify(kmsKeyLifecyclePort).disableKey(OLD_KEY);
+    verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq(OLD_KEY), anyInt());
+    verify(kmsAuditRecorder, never())
         .record(
-            eq(OPERATOR_ID),
-            eq(ALIAS),
-            eq(NEW_KEY),
-            eq(ADDRESS),
+            anyLong(),
+            anyString(),
+            anyString(),
+            anyString(),
             eq(KmsAuditAction.KMS_REPLACE_SKIPPED),
-            eq(true),
-            eq("STATUS_MISMATCH"));
-    verify(kmsKeyLifecyclePort, never()).updateAlias(anyString(), anyString());
-    verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
-    verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(anyString(), anyInt());
+            anyBoolean(),
+            anyString());
   }
 
   @Test

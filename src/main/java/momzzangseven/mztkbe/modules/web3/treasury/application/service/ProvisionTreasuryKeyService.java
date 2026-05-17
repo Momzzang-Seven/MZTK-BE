@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProvisionTreasuryKeyUseCase;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.Credentials;
 
@@ -62,7 +63,26 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
 
     AtomicBoolean failureAuditWritten = new AtomicBoolean(false);
     try {
-      return delegate.lockedCommit(command, derivedAddress, failureAuditWritten);
+      return delegate.lockedCommit(command, derivedAddress, failureAuditWritten, false);
+    } catch (DataIntegrityViolationException raceLoser) {
+      // PR #177 R6-C — fresh-INSERT race. The first lockedCommit lost the UNIQUE(alias) INSERT
+      // race; its rollback sync already disposed the orphan KMS key. Retry once with the
+      // race-retry flag so handleExistingProvisionedRow short-circuits to a deterministic 409
+      // ALREADY_PROVISIONED (TREASURY_004) instead of the generic DATA_INTEGRITY_VIOLATION
+      // mapping the GlobalExceptionHandler would otherwise apply.
+      log.warn(
+          "Fresh-provision race detected for alias={}, replaying as race-retry",
+          command.role().toAlias());
+      AtomicBoolean retryFailureAuditWritten = new AtomicBoolean(false);
+      try {
+        return delegate.lockedCommit(command, derivedAddress, retryFailureAuditWritten, true);
+      } catch (RuntimeException retryEx) {
+        if (retryFailureAuditWritten.compareAndSet(false, true)) {
+          treasuryAuditRecorder.record(
+              command.operatorUserId(), derivedAddress, false, retryEx.getClass().getSimpleName());
+        }
+        throw retryEx;
+      }
     } catch (RuntimeException e) {
       if (failureAuditWritten.compareAndSet(false, true)) {
         treasuryAuditRecorder.record(

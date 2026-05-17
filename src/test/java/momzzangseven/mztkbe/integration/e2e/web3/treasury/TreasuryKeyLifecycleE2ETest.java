@@ -5,6 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -17,6 +20,8 @@ import java.util.UUID;
 import momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
+import momzzangseven.mztkbe.integration.e2e.web3.treasury.support.InMemoryKmsKeyLifecycleFake;
+import momzzangseven.mztkbe.integration.e2e.web3.treasury.support.TreasuryE2EKmsFakeConfig;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
@@ -31,6 +36,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -39,6 +45,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.web3j.crypto.Credentials;
 
 /**
@@ -55,7 +62,14 @@ import org.web3j.crypto.Credentials;
 @TestPropertySource(
     properties = {
       "web3.reward-token.treasury.provisioning.enabled=true",
+      // Treasury concurrency tests (E-MOM444-6/7 + MS-2/3) launch 2 concurrent provisions, each
+      // opening an outer @Transactional plus several REQUIRES_NEW transactions (ReplaceKmsKey CAS
+      // + KmsAuditRecorder + TreasuryAuditRecorder) in its AFTER_COMMIT chain. The default pool
+      // size of 4 from application-integration.yml is exhausted under that fan-out and surfaces
+      // as silent AFTER_COMMIT handler failures (alias not re-bound, old key not disposed).
+      "spring.datasource.hikari.maximum-pool-size=10",
     })
+@Import(TreasuryE2EKmsFakeConfig.class)
 @DisplayName("[E2E] Treasury Key Lifecycle — Provision / Disable / Archive")
 class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
@@ -82,11 +96,17 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
-  @MockitoBean private KmsKeyLifecyclePort kmsKeyLifecyclePort;
+  @MockitoSpyBean private KmsKeyLifecyclePort kmsKeyLifecyclePort;
+  @Autowired private InMemoryKmsKeyLifecycleFake kmsFake;
   @MockitoBean private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   @MockitoBean private SignDigestPort signDigestPort;
 
   private String adminToken;
+
+  @BeforeEach
+  void resetKmsFake() {
+    kmsFake.reset();
+  }
 
   @BeforeEach
   void setUpAdmin() throws Exception {
@@ -171,9 +191,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
   // ---------------------------------------------------------------------------
 
   private void stubSuccessfulProvision() {
-    when(kmsKeyLifecyclePort.createKey()).thenReturn(MOCK_KMS_KEY_ID);
-    when(kmsKeyLifecyclePort.getParametersForImport(MOCK_KMS_KEY_ID))
-        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    kmsFake.useFixedKeyIdForNextCreate(MOCK_KMS_KEY_ID);
     when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
         .thenReturn(new byte[] {3});
     when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
@@ -181,16 +199,11 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
   }
 
   /**
-   * Stub the KMS mint chain to hand out a fresh kms-key-id per call. Use this when a test needs
+   * Configure the KMS fake to hand out a fresh kms-key-id per call. Use this when a test needs
    * multiple provision invocations (rotation, shared-wallet).
    */
   private void stubProvisionWithDynamicKeys() {
-    java.util.concurrent.atomic.AtomicInteger counter =
-        new java.util.concurrent.atomic.AtomicInteger();
-    when(kmsKeyLifecyclePort.createKey())
-        .thenAnswer(inv -> "e2e-kms-key-" + counter.incrementAndGet());
-    when(kmsKeyLifecyclePort.getParametersForImport(anyString()))
-        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    kmsFake.enableDynamicKeyMinting("e2e-kms-key-");
     when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
         .thenReturn(new byte[] {3});
     when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
@@ -540,7 +553,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
     @DisplayName(
         "[E-14] KMS createKey throws → 500 + cleanup 미호출 + audit FAILURE(RuntimeException)")
     void createKeyThrows_returns500AndCleanupNotCalled() {
-      when(kmsKeyLifecyclePort.createKey()).thenThrow(new RuntimeException("KMS unavailable"));
+      doThrow(new RuntimeException("KMS unavailable")).when(kmsKeyLifecyclePort).createKey();
 
       ResponseEntity<String> res = provision();
 
@@ -559,9 +572,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
     @DisplayName(
         "[E-15 / E-21] importKeyMaterial throws → 500 + cleanup(disableKey + scheduleKeyDeletion 7) + audit FAILURE 살아남음")
     void importKeyMaterialThrows_returns500AndCleansUpKey() {
-      when(kmsKeyLifecyclePort.createKey()).thenReturn(MOCK_KMS_KEY_ID);
-      when(kmsKeyLifecyclePort.getParametersForImport(MOCK_KMS_KEY_ID))
-          .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+      kmsFake.useFixedKeyIdForNextCreate(MOCK_KMS_KEY_ID);
       when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
           .thenReturn(new byte[] {3});
       doThrowOnImportKeyMaterial(new RuntimeException("import failed"));
@@ -584,9 +595,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
     @DisplayName(
         "[E-16] sanity sign SignatureRecoveryException → 500 + cleanup + audit FAILURE(SignatureRecoveryException)")
     void sanitySignThrows_returns500AndCleansUpKey() {
-      when(kmsKeyLifecyclePort.createKey()).thenReturn(MOCK_KMS_KEY_ID);
-      when(kmsKeyLifecyclePort.getParametersForImport(MOCK_KMS_KEY_ID))
-          .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+      kmsFake.useFixedKeyIdForNextCreate(MOCK_KMS_KEY_ID);
       when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
           .thenReturn(new byte[] {3});
       when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
@@ -609,9 +618,12 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       stubSuccessfulProvision();
       assertThat(provision().getStatusCode()).isEqualTo(HttpStatus.OK);
 
-      // alias points to the row's kmsKeyId in ENABLED state → C4 reject (no alias drift)
-      when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
-          .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, MOCK_KMS_KEY_ID));
+      // alias points to the row's kmsKeyId in ENABLED state → C4 reject (no alias drift).
+      // Fake already tracks this state (createAlias was invoked in AFTER_COMMIT), so no stubbing
+      // needed — verify via doReturn for explicitness in case AFTER_COMMIT timing surprises.
+      doReturn(new AliasTargetInfo(KmsKeyState.ENABLED, MOCK_KMS_KEY_ID))
+          .when(kmsKeyLifecyclePort)
+          .describeAlias(REWARD_ALIAS);
 
       ResponseEntity<String> res = provision();
 
@@ -630,7 +642,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
     /** Helper: configure importKeyMaterial mock to throw. */
     private void doThrowOnImportKeyMaterial(RuntimeException ex) {
-      org.mockito.Mockito.doThrow(ex)
+      doThrow(ex)
           .when(kmsKeyLifecyclePort)
           .importKeyMaterial(anyString(), any(byte[].class), any(byte[].class));
     }
@@ -661,8 +673,9 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       // PR #177 R5: DB.status=ACTIVE + alias=DISABLED + targetIdMatches 는 C5 reactivate 가
       // AFTER_COMMIT enableKey 단계에서 실패한 상황으로 본다. handleExistingProvisionedRow 는
       // mint 없이 TreasuryWalletReactivatedEvent 를 재발행하고, 핸들러가 enableKey 를 다시 시도한다.
-      when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
-          .thenReturn(new AliasTargetInfo(KmsKeyState.DISABLED, previousKmsId));
+      doReturn(new AliasTargetInfo(KmsKeyState.DISABLED, previousKmsId))
+          .when(kmsKeyLifecyclePort)
+          .describeAlias(REWARD_ALIAS);
 
       ResponseEntity<String> res = provision();
 
@@ -702,11 +715,11 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
 
       // PR #177 R3: alias 가 ENABLED 이지만 row 의 kmsKeyId 와 다른 key 를 가리키면 alias drift 로
       // 판단해 alias-repair 분기로 라우팅된다.
-      when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
-          .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, driftedKmsId));
+      doReturn(new AliasTargetInfo(KmsKeyState.ENABLED, driftedKmsId))
+          .when(kmsKeyLifecyclePort)
+          .describeAlias(REWARD_ALIAS);
       // BindKmsAlias 의 ghost-recovery 에서 사용될 createAlias / updateAlias 스텁
-      org.mockito.Mockito.doThrow(
-              new KmsAliasAlreadyExistsException("alias already bound", new RuntimeException()))
+      doThrow(new KmsAliasAlreadyExistsException("alias already bound", new RuntimeException()))
           .when(kmsKeyLifecyclePort)
           .createAlias(eq(REWARD_ALIAS), anyString());
 
@@ -737,7 +750,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
     void postCommitBindAliasFailure_doesNotRollBackWallet() throws Exception {
       stubSuccessfulProvision();
       // createAlias 만 RuntimeException
-      org.mockito.Mockito.doThrow(new RuntimeException("aws sdk error"))
+      doThrow(new RuntimeException("aws sdk error"))
           .when(kmsKeyLifecyclePort)
           .createAlias(eq(REWARD_ALIAS), anyString());
 
@@ -854,12 +867,21 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       assertThat(reprovisioned.getStatusCode()).isEqualTo(HttpStatus.OK);
 
       Map<String, Object> row = walletRow(REWARD_ALIAS);
-      assertThat((String) row.get("kms_key_id")).isNotEqualTo(firstKmsKeyId);
+      String newKmsKeyId = (String) row.get("kms_key_id");
+      assertThat(newKmsKeyId).isNotEqualTo(firstKmsKeyId);
       assertThat((String) row.get("status")).isEqualTo("ACTIVE");
 
       // No additional KMS_DISABLE / KMS_SCHEDULE_DELETION on old key from this re-provision
       assertThat(countKmsAuditRows("KMS_DISABLE", true)).isEqualTo(kmsDisableBefore);
       assertThat(countKmsAuditRows("KMS_SCHEDULE_DELETION", true)).isEqualTo(kmsScheduleBefore);
+
+      // PR #177 R6-B — alias / key-state assertions via the in-memory KMS fake.
+      // C6 = ReplaceKey(disposeOldKey=false): alias points to the new key, the new key is ENABLED.
+      assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(newKmsKeyId);
+      assertThat(kmsFake.keyState(newKmsKeyId)).isEqualTo(KmsKeyState.ENABLED);
+      // The old key was already PENDING_DELETION (archive ran scheduleKeyDeletion); C6 must leave
+      // it untouched — still PENDING_DELETION, never re-disabled or re-scheduled.
+      assertThat(kmsFake.keyState(firstKmsKeyId)).isEqualTo(KmsKeyState.PENDING_DELETION);
     }
 
     @Test
@@ -906,13 +928,24 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
         String finalAddr = (String) finalRow.get("treasury_address");
         assertThat(finalAddr)
             .isIn(DERIVED_ADDRESS_2.toLowerCase(), DERIVED_ADDRESS_3.toLowerCase());
+
+        // PR #177 R6-B — alias must point to the final DB key id even after two concurrent
+        // rotations. R1 in-port CAS gate is what prevents the earlier-rotation's stale
+        // AFTER_COMMIT handler from re-binding alias to a disposed key.
+        String finalKmsKeyId = (String) finalRow.get("kms_key_id");
+        assertThat(kmsFake.aliasTarget(REWARD_ALIAS))
+            .as("alias must converge to the final DB kms_key_id — no stale revert")
+            .isEqualTo(finalKmsKeyId);
+        assertThat(kmsFake.keyState(finalKmsKeyId)).isEqualTo(KmsKeyState.ENABLED);
       } finally {
         pool.shutdown();
       }
     }
 
     @Test
-    @DisplayName("[E-MOM444-7] 신규 alias 두 동시 provision — UNIQUE 위반으로 한쪽만 commit")
+    @DisplayName(
+        "[E-MOM444-7] 신규 alias 두 동시 provision — loser 는 race-retry 시 409 TREASURY_004"
+            + " (PR #177 R6-C), race 가 안 일어나면 alias-repair 200")
     void concurrentFreshProvision_resolvedByUniqueConstraint() throws Exception {
       stubProvisionWithDynamicKeys();
 
@@ -927,11 +960,61 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
         ResponseEntity<String> r1 = t1.get(15, java.util.concurrent.TimeUnit.SECONDS);
         ResponseEntity<String> r2 = t2.get(15, java.util.concurrent.TimeUnit.SECONDS);
 
-        // 0..1 success + 0..1 failure or 1+1 success (one was the loser's race resolution).
-        // The wallet row should exist exactly once.
+        // Outcome depends on JVM thread scheduling: if both reach loadByAliasForUpdate before
+        // either INSERT commits → real DIV race → R6-C retry → loser 409 TREASURY_004.
+        // If T2's lockedCommit runs entirely after T1's commit → C4 idempotent path → either
+        // 409 ALREADY_PROVISIONED (alias already bound by T1 AFTER_COMMIT) or 200 alias-repair
+        // (T1 AFTER_COMMIT bind hadn't fired yet). All three are valid; the invariants below
+        // are what matters.
+        assertThat(r1.getStatusCode()).isIn(HttpStatus.OK, HttpStatus.CONFLICT);
+        assertThat(r2.getStatusCode()).isIn(HttpStatus.OK, HttpStatus.CONFLICT);
+        assertThat(java.util.List.of(r1.getStatusCode(), r2.getStatusCode()))
+            .as("at least one winner")
+            .contains(HttpStatus.OK);
+
+        // Single row, ACTIVE — race-loser never created a second row.
         assertThat(countWalletRows()).isEqualTo(1);
         Map<String, Object> row = walletRow(REWARD_ALIAS);
         assertThat((String) row.get("status")).isEqualTo("ACTIVE");
+
+        // Alias bound to the surviving DB row's key.
+        String winnerKeyId = (String) row.get("kms_key_id");
+        assertThat(kmsFake.aliasTarget(REWARD_ALIAS)).isEqualTo(winnerKeyId);
+        assertThat(kmsFake.keyState(winnerKeyId)).isEqualTo(KmsKeyState.ENABLED);
+
+        // Loser-specific assertions, only when R6-C race-retry fired (HTTP 409 + TREASURY_004).
+        ResponseEntity<String> loser =
+            r1.getStatusCode() == HttpStatus.CONFLICT
+                ? r1
+                : (r2.getStatusCode() == HttpStatus.CONFLICT ? r2 : null);
+        boolean raceRetryFired = false;
+        if (loser != null) {
+          JsonNode loserBody = objectMapper.readTree(loser.getBody());
+          if ("TREASURY_004".equals(loserBody.at("/code").asText())) {
+            // Could be either R6-C race-retry OR C4 ENABLED+match — only count race-retry by
+            // the audit reason below.
+            Long raceAuditCount =
+                jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM web3_treasury_provision_audits"
+                        + " WHERE success = false AND failure_reason = 'FRESH_PROVISION_RACE'",
+                    Long.class);
+            raceRetryFired = raceAuditCount != null && raceAuditCount >= 1;
+          }
+        }
+
+        // If race-retry fired, the loser's mint produced an orphan key that the rollback sync
+        // disposed (disable + scheduleKeyDeletion → PENDING_DELETION). Non-race paths leave no
+        // orphan because no second mint happened.
+        for (String otherKey : kmsFake.allKeyIds()) {
+          if (!otherKey.equals(winnerKeyId)) {
+            assertThat(kmsFake.keyState(otherKey))
+                .as("orphan key '%s' must be disposed (race-retry path)", otherKey)
+                .isIn(KmsKeyState.DISABLED, KmsKeyState.PENDING_DELETION);
+            assertThat(raceRetryFired)
+                .as("orphan key exists → race-retry must have fired")
+                .isTrue();
+          }
+        }
       } finally {
         pool.shutdown();
       }
@@ -966,7 +1049,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       assertThat(disableWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
 
       // 3) Stub enableKey to throw on the FIRST call, succeed on subsequent calls.
-      org.mockito.Mockito.doThrow(new RuntimeException("simulated enableKey failure"))
+      doThrow(new RuntimeException("simulated enableKey failure"))
           .doNothing()
           .when(kmsKeyLifecyclePort)
           .enableKey(firstKmsKeyId);
@@ -983,8 +1066,9 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       //    Stub describeAlias to report DISABLED with matching kmsKeyId → R5 branch publishes
       //    TreasuryWalletReactivatedEvent → handler invokes EnableKmsKeyUseCase → CAS pass →
       //    enableKey now succeeds (per the chained stub above).
-      when(kmsKeyLifecyclePort.describeAlias(REWARD_ALIAS))
-          .thenReturn(new AliasTargetInfo(KmsKeyState.DISABLED, firstKmsKeyId));
+      doReturn(new AliasTargetInfo(KmsKeyState.DISABLED, firstKmsKeyId))
+          .when(kmsKeyLifecyclePort)
+          .describeAlias(REWARD_ALIAS);
       ResponseEntity<String> r5Res = provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS);
       assertThat(r5Res.getStatusCode()).isEqualTo(HttpStatus.OK);
 
@@ -1038,7 +1122,7 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       // Clear Mockito invocation history so verify(...) below reflects ONLY the stale execute.
       // (The K0→K1 rotation naturally called updateAlias("reward-treasury", k1) and disabled K0;
       // we want to assert behaviors of the stale handler specifically.)
-      org.mockito.Mockito.clearInvocations(kmsKeyLifecyclePort);
+      clearInvocations(kmsKeyLifecyclePort);
 
       // Manually invoke the in-port with a stale K0→K1 command (as if the K0→K1 handler
       // fired late, AFTER the K1→K2 rotation already advanced the row).
@@ -1063,6 +1147,189 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       // the only invocations on the mock — assert each happened exactly once via the orphan path.
       verify(kmsKeyLifecyclePort, times(1)).disableKey(k0);
       verify(kmsKeyLifecyclePort, times(1)).scheduleKeyDeletion(eq(k0), eq(7));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // [MOM-444 Step 3] Concurrency matrix — multi-step pipeline + concurrent ops
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Multi-step pipeline + concurrent-op scenarios that exercise the full DB → KMS chain end-to-end
+   * and verify the {@link #assertTreasuryInvariantsHold()} invariants (alias ↔ DB kms_key_id,
+   * status ↔ KMS state, non-current keys disposed). Built on the {@link
+   * InMemoryKmsKeyLifecycleFake} so KMS-side state is observable.
+   *
+   * <p>The latch-based stale-handler interleaving (originally planned as MS-4) is intentionally
+   * omitted here — synchronous {@code @TransactionalEventListener(AFTER_COMMIT)} + the {@code
+   * REQUIRES_NEW + loadByAliasForUpdate} row-lock-per-handler structure prevents the production
+   * race the gate would simulate. The R1 CAS gate is already covered directly by {@code
+   * [E-MOM444-9]} via a manual {@code ReplaceKmsKeyUseCase} invocation.
+   */
+  @Nested
+  @DisplayName("[MOM-444 Step 3] Concurrency matrix — pipeline + concurrent ops")
+  class Mom444Step3ConcurrencyMatrix {
+
+    @Test
+    @DisplayName("[E-MOM444-MS-1] provision → replace → replace → disable — 최종 상태 invariant")
+    void sequentialPipeline_finalState() throws Exception {
+      kmsFake.enableDynamicKeyMinting("e2e-kms-key-");
+
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k1 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX_2, DERIVED_ADDRESS_2).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k2 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX_3, DERIVED_ADDRESS_3).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      String k3 = (String) walletRow(REWARD_ALIAS).get("kms_key_id");
+
+      assertThat(disableWallet(REWARD_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      Map<String, Object> row = walletRow(REWARD_ALIAS);
+      assertThat((String) row.get("status")).isEqualTo("DISABLED");
+      assertThat((String) row.get("kms_key_id")).isEqualTo(k3);
+
+      // Final invariants
+      assertTreasuryInvariantsHold();
+
+      // Disposed key trail — both replaces dispose their predecessor; disable() only disables K3.
+      assertThat(kmsFake.keyState(k1)).isEqualTo(KmsKeyState.PENDING_DELETION);
+      assertThat(kmsFake.keyState(k2)).isEqualTo(KmsKeyState.PENDING_DELETION);
+      assertThat(kmsFake.keyState(k3)).isEqualTo(KmsKeyState.DISABLED);
+    }
+
+    @Test
+    @DisplayName("[E-MOM444-MS-2] 동시 rotation × 2 — alias 가 final DB key 로 수렴 (R1 CAS 효과)")
+    void concurrentRotation_twoReplaces_aliasConvergesToFinalDbKey() throws Exception {
+      kmsFake.enableDynamicKeyMinting("e2e-kms-key-");
+
+      // 초기 상태: K1 / ACTIVE / addr_1
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+
+      java.util.concurrent.ExecutorService pool =
+          java.util.concurrent.Executors.newFixedThreadPool(2);
+      try {
+        java.util.concurrent.Future<ResponseEntity<String>> f1 =
+            pool.submit(() -> provision("REWARD", PRIVATE_KEY_HEX_2, DERIVED_ADDRESS_2));
+        java.util.concurrent.Future<ResponseEntity<String>> f2 =
+            pool.submit(() -> provision("REWARD", PRIVATE_KEY_HEX_3, DERIVED_ADDRESS_3));
+        ResponseEntity<String> r1 = f1.get(15, java.util.concurrent.TimeUnit.SECONDS);
+        ResponseEntity<String> r2 = f2.get(15, java.util.concurrent.TimeUnit.SECONDS);
+
+        // 둘 다 lock-serialized 한 ACTIVE+address-mismatch → replaceKey 경로 → 200.
+        assertThat(r1.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(r2.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // R1 CAS 핵심 검증 — alias 가 final DB key 와 일치 (stale handler 가 alias 를 되돌리지 않음).
+        assertTreasuryInvariantsHold();
+
+        // ACTIVE 라면 두 rotation 중 마지막 lock holder 의 address 와 일치해야.
+        Map<String, Object> row = walletRow(REWARD_ALIAS);
+        assertThat((String) row.get("treasury_address"))
+            .isIn(DERIVED_ADDRESS_2.toLowerCase(), DERIVED_ADDRESS_3.toLowerCase());
+        assertThat((String) row.get("status")).isEqualTo("ACTIVE");
+      } finally {
+        pool.shutdown();
+      }
+    }
+
+    @Test
+    @DisplayName("[E-MOM444-MS-3] 동시 replace + disable — 최종 alias/key state 일관 (직렬화 순서 무관)")
+    void concurrentReplaceAndDisable_finalStateConsistent() throws Exception {
+      kmsFake.enableDynamicKeyMinting("e2e-kms-key-");
+
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK); // K1 / ACTIVE
+
+      java.util.concurrent.ExecutorService pool =
+          java.util.concurrent.Executors.newFixedThreadPool(2);
+      try {
+        java.util.concurrent.Future<ResponseEntity<String>> fReplace =
+            pool.submit(() -> provision("REWARD", PRIVATE_KEY_HEX_2, DERIVED_ADDRESS_2));
+        java.util.concurrent.Future<ResponseEntity<String>> fDisable =
+            pool.submit(() -> disableWallet(REWARD_ALIAS));
+        ResponseEntity<String> rReplace = fReplace.get(15, java.util.concurrent.TimeUnit.SECONDS);
+        ResponseEntity<String> rDisable = fDisable.get(15, java.util.concurrent.TimeUnit.SECONDS);
+
+        // Replace 는 항상 200 (어떤 상태에서 시작하든 replaceKey 경로 OK). Disable 은 ACTIVE 에서
+        // 시작 시 200, replaceKey 가 먼저 끝나 DISABLED 가 된 후 다시 disable 호출시 409 가능.
+        assertThat(rReplace.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(rDisable.getStatusCode())
+            .as("disable lock-order dependent: OK first, or 409 if replace landed first")
+            .isIn(HttpStatus.OK, HttpStatus.CONFLICT);
+
+        // 최종 invariant: alias=DB key, status↔KMS state, 비-current key disposed
+        assertTreasuryInvariantsHold();
+
+        // 가능한 종착 status 는 ACTIVE (replace 가 disable 이후 진입) 또는 DISABLED (disable 이 후행).
+        String finalStatus = (String) walletRow(REWARD_ALIAS).get("status");
+        assertThat(finalStatus).isIn("ACTIVE", "DISABLED");
+      } finally {
+        pool.shutdown();
+      }
+    }
+  }
+
+  /**
+   * Verify the three core treasury invariants after any sequence of operations:
+   *
+   * <ol>
+   *   <li>alias points to the DB row's {@code kms_key_id}
+   *   <li>the KMS key's state matches the DB row's status (ACTIVE↔ENABLED, DISABLED↔DISABLED,
+   *       ARCHIVED↔PENDING_DELETION)
+   *   <li>every other key the fake knows about is disposed (DISABLED or PENDING_DELETION)
+   * </ol>
+   */
+  private void assertTreasuryInvariantsHold() {
+    Map<String, Object> row = walletRow(REWARD_ALIAS);
+    String dbKeyId = (String) row.get("kms_key_id");
+    String dbStatus = (String) row.get("status");
+
+    java.util.List<Map<String, Object>> kmsAudits =
+        jdbcTemplate.queryForList(
+            "SELECT action_type, success, failure_reason, kms_key_id"
+                + " FROM web3_treasury_kms_audits ORDER BY id");
+    java.util.List<Map<String, Object>> provAudits =
+        jdbcTemplate.queryForList(
+            "SELECT success, failure_reason, treasury_address"
+                + " FROM web3_treasury_provision_audits ORDER BY id");
+    String snapshot =
+        String.format(
+            "%n[Treasury invariant snapshot]%n  db.kms_key_id=%s db.status=%s alias→%s%n"
+                + "  keyStates=%s%n  kmsAudits=%s%n  provAudits=%s",
+            dbKeyId,
+            dbStatus,
+            kmsFake.aliasTarget(REWARD_ALIAS),
+            kmsFake.allKeyIds().stream().map(k -> k + "=" + kmsFake.keyState(k)).sorted().toList(),
+            kmsAudits,
+            provAudits);
+
+    assertThat(kmsFake.aliasTarget(REWARD_ALIAS))
+        .as("Invariant I1 — alias must point to DB kms_key_id (no stale revert)" + snapshot)
+        .isEqualTo(dbKeyId);
+
+    KmsKeyState expectedState =
+        switch (dbStatus) {
+          case "ACTIVE" -> KmsKeyState.ENABLED;
+          case "DISABLED" -> KmsKeyState.DISABLED;
+          case "ARCHIVED" -> KmsKeyState.PENDING_DELETION;
+          default -> throw new AssertionError("Unsupported DB status: " + dbStatus);
+        };
+    assertThat(kmsFake.keyState(dbKeyId))
+        .as("Invariant I2 — KMS key state must match DB status (%s)%s", dbStatus, snapshot)
+        .isEqualTo(expectedState);
+
+    for (String otherKey : kmsFake.allKeyIds()) {
+      if (!otherKey.equals(dbKeyId)) {
+        assertThat(kmsFake.keyState(otherKey))
+            .as("Invariant I3 — non-current key '%s' must be disposed%s", otherKey, snapshot)
+            .isIn(KmsKeyState.DISABLED, KmsKeyState.PENDING_DELETION);
+      }
     }
   }
 }

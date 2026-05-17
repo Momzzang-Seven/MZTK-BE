@@ -74,12 +74,20 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
    * inner dispatch targets, or the registered rollback synchronizer) records a treasury_provision
    * audit failure row, it must set the flag so the outer service catch does not record a second row
    * with the bare exception class name.
+   *
+   * <p>{@code isRaceRetry} is the PR #177 R6-C marker: when true, the caller has already
+   * encountered a {@link org.springframework.dao.DataIntegrityViolationException} from a prior
+   * {@code freshProvision} INSERT racing with another thread that just committed the same alias.
+   * The second invocation enters {@link #handleExistingProvisionedRow} on the winner row and is
+   * short-circuited to {@link TreasuryWalletAlreadyProvisionedException} so the response is a
+   * deterministic 409 instead of leaking the generic {@code DataIntegrityViolationException}.
    */
   @Transactional
   public ProvisionTreasuryKeyResult lockedCommit(
       ProvisionTreasuryKeyCommand command,
       String derivedAddress,
-      AtomicBoolean failureAuditWritten) {
+      AtomicBoolean failureAuditWritten,
+      boolean isRaceRetry) {
 
     TreasuryRole role = command.role();
     String walletAlias = role.toAlias();
@@ -100,7 +108,7 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       switch (existing.getStatus()) {
         case ACTIVE:
           return handleExistingProvisionedRow(
-              command, existing, derivedAddress, role, failureAuditWritten);
+              command, existing, derivedAddress, role, failureAuditWritten, isRaceRetry);
         case DISABLED:
           return reEnableSameKey(command, existing, role);
         case ARCHIVED:
@@ -207,7 +215,23 @@ public class ProvisionTreasuryKeyTransactionalDelegate {
       TreasuryWallet existing,
       String derivedAddress,
       TreasuryRole role,
-      AtomicBoolean failureAuditWritten) {
+      AtomicBoolean failureAuditWritten,
+      boolean isRaceRetry) {
+
+    // PR #177 R6-C — fresh-INSERT race fast path. The first lockedCommit already lost the
+    // UNIQUE(alias) INSERT race against a concurrent winner; the orphan KMS key it minted has
+    // been disposed by the rollback sync. This retry only exists to return a deterministic 409
+    // instead of the generic DataIntegrityViolationException → DATA_INTEGRITY_VIOLATION mapping.
+    // Skip describeAlias entirely so the response does not depend on AFTER_COMMIT alias-bind
+    // timing.
+    if (isRaceRetry) {
+      treasuryAuditRecorder.record(
+          command.operatorUserId(), derivedAddress, false, "FRESH_PROVISION_RACE");
+      failureAuditWritten.set(true);
+      throw new TreasuryWalletAlreadyProvisionedException(
+          "treasury wallet fresh-INSERT race lost for alias '" + existing.getWalletAlias() + "'");
+    }
+
     AliasTargetInfo aliasInfo = kmsKeyLifecyclePort.describeAlias(existing.getWalletAlias());
     KmsKeyState aliasState = aliasInfo.state();
     boolean targetIdMatches =

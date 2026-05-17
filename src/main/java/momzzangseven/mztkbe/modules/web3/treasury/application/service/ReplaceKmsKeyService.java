@@ -9,7 +9,6 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ReplaceKms
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,12 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Idempotent on stale events: opens a fresh {@code REQUIRES_NEW} transaction, re-reads the
  * {@code treasury_wallets} row under {@code PESSIMISTIC_WRITE} (CAS-checks the current row), and
- * only invokes AWS KMS when the row still matches the command's expected state ({@code kmsKeyId ==
- * newKmsKeyId}, {@code status == ACTIVE}). On CAS miss, records a {@code KMS_REPLACE_SKIPPED} audit
- * row with a fine-grained reason ({@code ROW_MISSING} / {@code KEY_NULL} / {@code KEY_ID_MISMATCH}
- * / {@code STATUS_MISMATCH}) and returns without touching KMS. When the stale skip is observed and
- * the command's {@code oldKmsKeyId} is no longer the current DB key, a best-effort {@code
- * disableKey + scheduleKeyDeletion} pass is run on the orphan old key (idempotent and
+ * only invokes AWS KMS when the row's {@code kmsKeyId} still equals {@code newKmsKeyId}. The CAS
+ * intentionally does NOT check {@code status} — the replace intent (alias→newKey + dispose oldKey)
+ * remains correct even if a concurrent disable/archive moved the row to DISABLED/ARCHIVED, because
+ * the alias must still point to {@code row.kms_key_id}. Skipping {@code updateAlias} when the
+ * status changed would leave the alias bound to the old (about-to-be-disposed) key. On CAS miss,
+ * records a {@code KMS_REPLACE_SKIPPED} audit row with a fine-grained reason ({@code ROW_MISSING} /
+ * {@code KEY_NULL} / {@code KEY_ID_MISMATCH}) and returns without touching KMS. When the stale skip
+ * is observed and the command's {@code oldKmsKeyId} is no longer the current DB key, a best-effort
+ * {@code disableKey + scheduleKeyDeletion} pass is run on the orphan old key (idempotent and
  * swallow-on-throw, because no other handler will dispose it).
  *
  * <p>Each KMS call in the happy path is wrapped in independent try/catch. The audit row lands in
@@ -93,9 +95,9 @@ public class ReplaceKmsKeyService implements ReplaceKmsKeyUseCase {
     if (!command.newKmsKeyId().equals(current.getKmsKeyId())) {
       return "KEY_ID_MISMATCH";
     }
-    if (current.getStatus() != TreasuryWalletStatus.ACTIVE) {
-      return "STATUS_MISMATCH";
-    }
+    // Intentionally no status check — see class-level Javadoc. A row in DISABLED/ARCHIVED still
+    // needs its alias to point at the current kms_key_id; skipping updateAlias here would orphan
+    // the alias on the soon-to-be-disposed old key.
     return null;
   }
 
