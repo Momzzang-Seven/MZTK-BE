@@ -16,11 +16,13 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Prep
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
@@ -51,6 +53,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   private final PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
   private final CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   private final LoadReservationExecutionWritePort loadReservationExecutionWritePort;
+  private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   private final ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   private final LoadReservationWalletPort loadReservationWalletPort;
   private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
@@ -64,6 +67,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
       @Nullable PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
       @Nullable CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
       @Nullable LoadReservationExecutionWritePort loadReservationExecutionWritePort,
+      @Nullable LoadReservationExecutionStatePort loadReservationExecutionStatePort,
       @Nullable ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
       @Nullable LoadReservationWalletPort loadReservationWalletPort,
       @Nullable LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
@@ -83,6 +87,10 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
         loadReservationExecutionWritePort == null
             ? DisabledReservationWeb3PortFactory.executionWrite()
             : loadReservationExecutionWritePort;
+    this.loadReservationExecutionStatePort =
+        loadReservationExecutionStatePort == null
+            ? DisabledReservationWeb3PortFactory.executionState()
+            : loadReservationExecutionStatePort;
     this.replayConfirmedReservationExecutionPort =
         replayConfirmedReservationExecutionPort == null
             ? DisabledReservationWeb3PortFactory.confirmedReplay()
@@ -123,9 +131,8 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
                                 "Reservation not found: " + command.reservationId())));
     RecoveryFlow flow = resolveFlow(reservation);
     if (reservation.getCurrentExecutionIntentPublicId() != null) {
-      validateActor(reservation, command.requesterId(), flow);
       CurrentIntentResolution currentIntentResolution =
-          resolveCurrentExecution(command, reservation);
+          resolveCurrentExecution(command, reservation, flow);
       if (currentIntentResolution.stop()) {
         return currentIntentResolution.result();
       }
@@ -160,22 +167,48 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   }
 
   private CurrentIntentResolution resolveCurrentExecution(
+      RecoverReservationEscrowCommand command, Reservation reservation, RecoveryFlow flow) {
+    ReservationExecutionStateView state =
+        loadReservationExecutionStatePort.loadState(
+            reservation.getCurrentExecutionIntentPublicId());
+    if (shouldForceDeadlineRefund(reservation, flow)
+        && reservation.isOwnedByUser(command.requesterId())) {
+      if (isRetryableTerminal(state.status())) {
+        return CurrentIntentResolution.continueWith(reservation);
+      }
+      if (command.requesterId().equals(state.requesterUserId())) {
+        return resolveOwnedCurrentExecution(command, reservation);
+      }
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "another marketplace execution is still active for this reservation");
+    }
+
+    validateActor(reservation, command.requesterId(), flow);
+    if (isRetryableTerminal(state.status())) {
+      return CurrentIntentResolution.continueWith(reservation);
+    }
+    if (!command.requesterId().equals(state.requesterUserId())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "another marketplace execution owns this reservation action");
+    }
+    return resolveOwnedCurrentExecution(command, reservation);
+  }
+
+  private CurrentIntentResolution resolveOwnedCurrentExecution(
       RecoverReservationEscrowCommand command, Reservation reservation) {
     ReservationExecutionWriteView current =
         loadReservationExecutionWritePort
             .load(command.requesterId(), reservation.getCurrentExecutionIntentPublicId())
             .asExistingForOrder(reservation.getOrderKey());
-    String intentStatus = current.executionIntent().status();
-    if ("CONFIRMED".equals(intentStatus)) {
+    if ("CONFIRMED".equals(current.executionIntent().status())) {
       replayConfirmedReservationExecutionPort.replayConfirmed(
           current.executionIntent().id(), current.actionType());
       Reservation latest = loadReservationPort.findById(reservation.getId()).orElse(reservation);
       return CurrentIntentResolution.stop(result(latest, current));
     }
-    if (!RETRYABLE_TERMINAL_STATUSES.contains(intentStatus)) {
-      return CurrentIntentResolution.stop(result(reservation, current));
-    }
-    return CurrentIntentResolution.continueWith(reservation);
+    return CurrentIntentResolution.stop(result(reservation, current));
   }
 
   private ChainSyncResult syncChainStateBeforePrepare(Reservation reservation, RecoveryFlow flow) {
@@ -523,6 +556,10 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
           case BUYER_CANCEL, TRAINER_REJECT, BUYER_CONFIRM -> true;
           default -> false;
         };
+  }
+
+  private boolean isRetryableTerminal(String status) {
+    return RETRYABLE_TERMINAL_STATUSES.contains(status);
   }
 
   private void requireBuyerOwnedRefundRecovery(

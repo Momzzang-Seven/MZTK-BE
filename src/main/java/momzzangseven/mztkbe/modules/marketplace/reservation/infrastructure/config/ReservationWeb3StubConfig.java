@@ -5,6 +5,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Prep
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
@@ -61,6 +62,14 @@ public class ReservationWeb3StubConfig {
   @ConditionalOnMissingBean(LoadReservationExecutionWritePort.class)
   LoadReservationExecutionWritePort disabledLoadReservationExecutionWritePort() {
     return (requesterUserId, executionIntentId) -> {
+      throw new MarketplaceWeb3DisabledException();
+    };
+  }
+
+  @Bean
+  @ConditionalOnMissingBean(LoadReservationExecutionStatePort.class)
+  LoadReservationExecutionStatePort disabledLoadReservationExecutionStatePort() {
+    return executionIntentId -> {
       throw new MarketplaceWeb3DisabledException();
     };
   }

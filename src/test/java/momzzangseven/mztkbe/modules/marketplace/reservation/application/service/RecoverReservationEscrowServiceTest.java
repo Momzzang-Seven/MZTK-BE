@@ -21,10 +21,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Prep
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
@@ -59,6 +61,7 @@ class RecoverReservationEscrowServiceTest {
   @Mock private PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
   @Mock private CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   @Mock private LoadReservationExecutionWritePort loadReservationExecutionWritePort;
+  @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   @Mock private ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   @Mock private LoadReservationWalletPort loadReservationWalletPort;
   @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
@@ -75,6 +78,7 @@ class RecoverReservationEscrowServiceTest {
             prepareReservationEscrowExecutionPort,
             cancelReservationEscrowExecutionPort,
             loadReservationExecutionWritePort,
+            loadReservationExecutionStatePort,
             replayConfirmedReservationExecutionPort,
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
@@ -264,6 +268,8 @@ class RecoverReservationEscrowServiceTest {
             1_900_000_000L, LocalDateTime.of(2030, 3, 17, 17, 46, 40));
     given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
         .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionStatePort.loadState("intent-1"))
+        .willReturn(state("MARKETPLACE_CLASS_PURCHASE", "CONFIRMED", "intent-1", BUYER_ID));
     given(loadReservationExecutionWritePort.load(BUYER_ID, "intent-1"))
         .willReturn(web3("MARKETPLACE_CLASS_PURCHASE", "CONFIRMED"));
     given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(repaired));
@@ -295,6 +301,9 @@ class RecoverReservationEscrowServiceTest {
             .build();
     given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
         .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionStatePort.loadState("cancel-intent-1"))
+        .willReturn(
+            state("MARKETPLACE_CLASS_CANCEL", "AWAITING_SIGNATURE", "cancel-intent-1", BUYER_ID));
     given(loadReservationExecutionWritePort.load(BUYER_ID, "cancel-intent-1"))
         .willReturn(web3("MARKETPLACE_CLASS_CANCEL", "AWAITING_SIGNATURE"));
 
@@ -339,8 +348,9 @@ class RecoverReservationEscrowServiceTest {
         .willAnswer(invocation -> Optional.of(latestSaved.get()))
         .willAnswer(invocation -> Optional.of(latestSaved.get()))
         .willAnswer(invocation -> Optional.of(latestSaved.get()));
-    given(loadReservationExecutionWritePort.load(BUYER_ID, "cancel-intent-1"))
-        .willReturn(web3("MARKETPLACE_CLASS_CANCEL", "FAILED_ONCHAIN", "cancel-intent-1"));
+    given(loadReservationExecutionStatePort.loadState("cancel-intent-1"))
+        .willReturn(
+            state("MARKETPLACE_CLASS_CANCEL", "FAILED_ONCHAIN", "cancel-intent-1", BUYER_ID));
     given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
         .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, deadlineEpochSeconds));
     given(loadReservationEscrowPaymentConfigPort.load())
@@ -360,7 +370,97 @@ class RecoverReservationEscrowServiceTest {
     assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("refund-intent-1");
     then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
     then(prepareReservationEscrowExecutionPort).shouldHaveNoMoreInteractions();
+    then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
     then(replayConfirmedReservationExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName(
+      "expired REJECT_PENDING의 trainer-owned retryable intent는 buyer deadline refund recovery로 라우팅한다")
+  void expiredRejectPending_trainerOwnedRetryableTerminal_buyerRecoveryPreparesDeadlineRefund() {
+    long deadlineEpochSeconds = FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond();
+    Reservation reservation =
+        reservation(ReservationStatus.REJECT_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.REJECT_PENDING)
+            .contractDeadlineEpochSeconds(deadlineEpochSeconds)
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+            .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+            .pendingAttemptToken("reject-token")
+            .currentExecutionIntentPublicId("reject-intent-1")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    AtomicReference<Reservation> latestSaved = new AtomicReference<>(reservation);
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0, Reservation.class);
+              latestSaved.set(saved);
+              return saved;
+            });
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()));
+    given(loadReservationExecutionStatePort.loadState("reject-intent-1"))
+        .willReturn(
+            state("MARKETPLACE_CLASS_CANCEL", "FAILED_ONCHAIN", "reject-intent-1", TRAINER_ID));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, deadlineEpochSeconds));
+    given(loadReservationEscrowPaymentConfigPort.load())
+        .willReturn(
+            new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+    given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+        .willReturn(
+            new PrepareReservationEscrowResult(
+                web3("MARKETPLACE_CLASS_EXPIRED_REFUND", "AWAITING_SIGNATURE", "refund-intent-1")));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(result.web3()).isNotNull();
+    assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("refund-intent-1");
+    then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
+  }
+
+  @Test
+  @DisplayName(
+      "expired REJECT_PENDING의 trainer-owned active intent는 buyer recovery에서 pointer를 지우지 않고 conflict로 막는다")
+  void expiredRejectPending_trainerOwnedActiveIntent_buyerRecoveryActiveConflict() {
+    long deadlineEpochSeconds = FIXED_CLOCK.instant().minusSeconds(60).getEpochSecond();
+    Reservation reservation =
+        reservation(ReservationStatus.REJECT_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.REJECT_PENDING)
+            .contractDeadlineEpochSeconds(deadlineEpochSeconds)
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).minusMinutes(1))
+            .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+            .pendingAttemptToken("reject-token")
+            .currentExecutionIntentPublicId("reject-intent-1")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionStatePort.loadState("reject-intent-1"))
+        .willReturn(
+            state("MARKETPLACE_CLASS_CANCEL", "AWAITING_SIGNATURE", "reject-intent-1", TRAINER_ID));
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
+    then(loadReservationEscrowOrderPort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 
   @Test
@@ -545,5 +645,10 @@ class RecoverReservationEscrowServiceTest {
         false,
         null,
         null);
+  }
+
+  private ReservationExecutionStateView state(
+      String actionType, String intentStatus, String intentId, Long requesterUserId) {
+    return new ReservationExecutionStateView(intentId, intentStatus, actionType, requesterUserId);
   }
 }

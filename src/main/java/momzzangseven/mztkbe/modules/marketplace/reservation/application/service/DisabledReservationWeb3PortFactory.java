@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Prep
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
@@ -86,6 +87,12 @@ final class DisabledReservationWeb3PortFactory {
 
   static LoadReservationExecutionWritePort executionWrite() {
     return (requesterUserId, executionIntentId) -> {
+      throw new MarketplaceWeb3DisabledException();
+    };
+  }
+
+  static LoadReservationExecutionStatePort executionState() {
+    return executionIntentId -> {
       throw new MarketplaceWeb3DisabledException();
     };
   }

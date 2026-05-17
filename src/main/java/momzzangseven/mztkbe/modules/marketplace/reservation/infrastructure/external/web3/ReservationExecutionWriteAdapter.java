@@ -1,12 +1,17 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.web3;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateQuery;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayConfirmedExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentStateUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
@@ -18,11 +23,18 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
-@ConditionalOnBean({GetExecutionIntentUseCase.class, ReplayConfirmedExecutionIntentUseCase.class})
+@ConditionalOnBean({
+  GetExecutionIntentUseCase.class,
+  GetExecutionIntentStateUseCase.class,
+  ReplayConfirmedExecutionIntentUseCase.class
+})
 public class ReservationExecutionWriteAdapter
-    implements LoadReservationExecutionWritePort, ReplayConfirmedReservationExecutionPort {
+    implements LoadReservationExecutionWritePort,
+        LoadReservationExecutionStatePort,
+        ReplayConfirmedReservationExecutionPort {
 
   private final GetExecutionIntentUseCase getExecutionIntentUseCase;
+  private final GetExecutionIntentStateUseCase getExecutionIntentStateUseCase;
   private final ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase;
 
   @Override
@@ -30,6 +42,13 @@ public class ReservationExecutionWriteAdapter
     return toView(
         getExecutionIntentUseCase.execute(
             new GetExecutionIntentQuery(requesterUserId, executionIntentId)));
+  }
+
+  @Override
+  public ReservationExecutionStateView loadState(String executionIntentId) {
+    return toStateView(
+        getExecutionIntentStateUseCase.execute(
+            new GetExecutionIntentStateQuery(executionIntentId)));
   }
 
   @Override
@@ -57,6 +76,14 @@ public class ReservationExecutionWriteAdapter
         false,
         null,
         null);
+  }
+
+  private ReservationExecutionStateView toStateView(GetExecutionIntentStateResult result) {
+    return new ReservationExecutionStateView(
+        result.executionIntentId(),
+        result.executionIntentStatus().name(),
+        result.actionType().name(),
+        result.requesterUserId());
   }
 
   private ReservationExecutionWriteView.SignRequest toSignRequest(SignRequestBundle request) {

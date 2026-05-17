@@ -9,8 +9,11 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionInte
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateQuery;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCleanupViewUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentStateUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
@@ -31,7 +34,9 @@ import org.web3j.utils.Numeric;
  * transaction summary when available.
  */
 public class GetExecutionIntentService
-    implements GetExecutionIntentUseCase, GetExecutionIntentCleanupViewUseCase {
+    implements GetExecutionIntentUseCase,
+        GetExecutionIntentStateUseCase,
+        GetExecutionIntentCleanupViewUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
@@ -83,6 +88,29 @@ public class GetExecutionIntentService
         transactionView.transactionId(),
         transactionView.transactionStatus(),
         transactionView.txHash());
+  }
+
+  /**
+   * Loads minimal execution state without requester ownership checks.
+   *
+   * <p>This method is intentionally state-only: it does not expose sign requests or transaction
+   * material, and is used by feature recovery guards before deciding whether a stale local pointer
+   * may be replaced.
+   */
+  @Override
+  public GetExecutionIntentStateResult execute(GetExecutionIntentStateQuery query) {
+    ExecutionIntent intent =
+        executionIntentPersistencePort
+            .findByPublicId(query.executionIntentId())
+            .orElseThrow(
+                () ->
+                    new Web3InvalidInputException(
+                        "executionIntentId not found: " + query.executionIntentId()));
+    return new GetExecutionIntentStateResult(
+        intent.getPublicId(),
+        intent.getStatus(),
+        intent.getActionType(),
+        intent.getRequesterUserId());
   }
 
   @Override
