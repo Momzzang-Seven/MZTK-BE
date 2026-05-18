@@ -4,6 +4,8 @@ spring:
   ai:
     model:
       chat: none
+  application:
+    name: mztk-be
 
   datasource:
     url: ${DB_URL}
@@ -151,6 +153,9 @@ management:
   zipkin:
     tracing:
       endpoint: http://localhost:9411/api/v2/spans
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 jwt:
   secret: ${JWT_SECRET}
