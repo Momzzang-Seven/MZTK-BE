@@ -200,8 +200,7 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
 
   private static boolean matchesStatus(
       Reservation reservation, ReservationListStatusFilter status) {
-    return status == null
-        || reservation.getStatus() == ReservationListStatusFilterMapper.toStoredStatus(status);
+    return ReservationListStatusFilterMapper.matchesDisplayStatus(reservation, status);
   }
 
   private static CursorPageRequest nextRequestAfter(

@@ -196,8 +196,7 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
 
   private static boolean matchesStatus(
       Reservation reservation, ReservationListStatusFilter status) {
-    return status == null
-        || reservation.getStatus() == ReservationListStatusFilterMapper.toStoredStatus(status);
+    return ReservationListStatusFilterMapper.matchesDisplayStatus(reservation, status);
   }
 
   private static CursorPageRequest nextRequestAfter(

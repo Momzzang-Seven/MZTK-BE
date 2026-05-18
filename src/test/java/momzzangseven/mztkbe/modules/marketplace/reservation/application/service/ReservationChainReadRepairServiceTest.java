@@ -15,9 +15,14 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,11 +41,14 @@ class ReservationChainReadRepairServiceTest {
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   @Mock private SaveReservationPort saveReservationPort;
+  @Mock private LoadReservationEscrowPort loadReservationEscrowPort;
+  @Mock private SaveReservationEscrowPort saveReservationEscrowPort;
 
   private ReservationChainReadRepairService service() {
     ReservationChainReadRepairService service =
         new ReservationChainReadRepairService(
             loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    service.setEscrowProjectionPorts(loadReservationEscrowPort, saveReservationEscrowPort);
     service.setTransactionPort(ReservationTestTransactionPort.direct());
     return service;
   }
@@ -177,6 +185,46 @@ class ReservationChainReadRepairServiceTest {
 
     assertThat(repaired.getStatus()).isEqualTo(ReservationStatus.PENDING);
     then(loadReservationEscrowOrderPort).should().getOrder(reservation.getOrderKey());
+  }
+
+  @Test
+  @DisplayName("repairOne은 class_reservations와 escrow projection을 같은 repair 결과로 동기화한다")
+  void repairOne_syncsEscrowProjection() {
+    Reservation reservation = syncRequiredReservation(1L, "0x" + "0".repeat(63) + "1");
+    long deadline = Instant.parse("2025-06-10T03:00:00Z").getEpochSecond();
+    MarketplaceReservationEscrow escrow =
+        MarketplaceReservationEscrow.builder()
+            .id(99L)
+            .reservationId(reservation.getId())
+            .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+            .escrowStatus(ReservationEscrowStatus.DEADLINE_SYNC_REQUIRED)
+            .orderKey(reservation.getOrderKey())
+            .build();
+    given(loadReservationEscrowOrderPort.getOrder(reservation.getOrderKey()))
+        .willReturn(createdOrder(reservation.getOrderKey(), deadline));
+    given(saveReservationPort.save(any()))
+        .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
+    given(loadReservationPort.findByIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(escrow));
+    given(saveReservationEscrowPort.save(any()))
+        .willAnswer(invocation -> invocation.getArgument(0, MarketplaceReservationEscrow.class));
+    ReservationChainReadRepairService sut = service();
+
+    Reservation repaired = sut.repairOne(reservation);
+
+    assertThat(repaired.getStatus()).isEqualTo(ReservationStatus.PENDING);
+    ArgumentCaptor<MarketplaceReservationEscrow> escrowCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationEscrow.class);
+    then(saveReservationEscrowPort).should().save(escrowCaptor.capture());
+    assertThat(escrowCaptor.getValue().getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(escrowCaptor.getValue().getContractDeadlineEpochSeconds()).isEqualTo(deadline);
+    assertThat(escrowCaptor.getValue().getContractDeadlineAt())
+        .isEqualTo(repaired.getContractDeadlineAt());
+    assertThat(escrowCaptor.getValue().getLastChainState())
+        .isEqualTo(ReservationEscrowOrderView.STATE_CREATED);
+    assertThat(escrowCaptor.getValue().getLastChainSyncedAt()).isNotNull();
   }
 
   @Test

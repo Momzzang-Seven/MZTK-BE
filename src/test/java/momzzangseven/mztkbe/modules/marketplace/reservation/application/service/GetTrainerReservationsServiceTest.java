@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
@@ -29,6 +30,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -103,6 +105,54 @@ class GetTrainerReservationsServiceTest {
     assertThat(result.items()).hasSize(1);
     assertThat(result.items().get(0).status()).isEqualTo(ReservationDisplayStatus.APPROVED);
     assertThat(result.items().get(0).businessStatus()).isEqualTo(ReservationStatus.APPROVED);
+  }
+
+  @Test
+  @DisplayName("트레이너 예약 목록 조회 - PURCHASE_PREPARING 필터는 HOLDING 저장 row를 display status로 재필터링한다")
+  void execute_PurchasePreparingFilter_UsesHoldingQueryAndDisplayStatus() {
+    Reservation preparing =
+        sampleReservation(2L).toBuilder()
+            .id(11L)
+            .status(ReservationStatus.HOLDING)
+            .escrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
+            .build();
+    Reservation pending =
+        sampleReservation(2L).toBuilder()
+            .id(12L)
+            .status(ReservationStatus.HOLDING)
+            .escrowStatus(ReservationEscrowStatus.PURCHASE_PENDING)
+            .currentExecutionIntentPublicId("intent-1")
+            .build();
+    given(loadReservationPort.findByTrainerIdCursor(any(), any(), any()))
+        .willReturn(List.of(preparing, pending));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findById(2L)).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    CursorSlice<ReservationSummaryResult> result =
+        sut.execute(
+            new GetTrainerReservationsQuery(
+                2L,
+                ReservationListStatusFilter.PURCHASE_PREPARING,
+                CursorPageRequest.of(
+                    null,
+                    null,
+                    20,
+                    100,
+                    GetTrainerReservationsQuery.cursorScope(
+                        ReservationListStatusFilter.PURCHASE_PREPARING))));
+
+    assertThat(result.items())
+        .singleElement()
+        .satisfies(
+            item -> {
+              assertThat(item.reservationId()).isEqualTo(11L);
+              assertThat(item.status()).isEqualTo(ReservationDisplayStatus.PURCHASE_PREPARING);
+              assertThat(item.businessStatus()).isNull();
+            });
+    then(loadReservationPort)
+        .should()
+        .findByTrainerIdCursor(eq(2L), eq(ReservationStatus.HOLDING), any());
   }
 
   @Test

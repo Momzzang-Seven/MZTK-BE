@@ -392,12 +392,15 @@ public class ReservationApplicationServiceConfig {
   RepairReservationChainReadUseCase repairReservationChainReadUseCase(
       LoadReservationPort loadReservationPort,
       LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationEscrowPort saveReservationEscrowPort,
       SaveReservationPort saveReservationPort,
       RunReservationTransactionPort transactionPort,
       Clock clock) {
     ReservationChainReadRepairService service =
         new ReservationChainReadRepairService(
             loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, clock);
+    service.setEscrowProjectionPorts(loadReservationEscrowPort, saveReservationEscrowPort);
     service.setTransactionPort(transactionPort);
     return service;
   }

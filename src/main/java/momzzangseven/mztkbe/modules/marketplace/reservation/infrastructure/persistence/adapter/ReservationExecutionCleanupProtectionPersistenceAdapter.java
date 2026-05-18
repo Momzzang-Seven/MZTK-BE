@@ -190,7 +190,10 @@ public class ReservationExecutionCleanupProtectionPersistenceAdapter
   private Set<ReservationStatus> pendingStatuses(String actionType) {
     return switch (actionType) {
       case PURCHASE ->
-          EnumSet.of(ReservationStatus.PURCHASE_PREPARING, ReservationStatus.PURCHASE_PENDING);
+          EnumSet.of(
+              ReservationStatus.HOLDING,
+              ReservationStatus.PURCHASE_PREPARING,
+              ReservationStatus.PURCHASE_PENDING);
       case CANCEL -> EnumSet.of(ReservationStatus.CANCEL_PENDING, ReservationStatus.REJECT_PENDING);
       case CONFIRM -> EnumSet.of(ReservationStatus.CONFIRM_PENDING);
       case EXPIRED_REFUND -> EnumSet.of(ReservationStatus.DEADLINE_REFUND_PENDING);

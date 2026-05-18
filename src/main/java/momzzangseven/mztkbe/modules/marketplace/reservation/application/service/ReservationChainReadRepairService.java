@@ -15,9 +15,12 @@ import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledExce
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -29,6 +32,8 @@ public class ReservationChainReadRepairService implements RepairReservationChain
   private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   private final SaveReservationPort saveReservationPort;
   private final Clock clock;
+  private LoadReservationEscrowPort loadReservationEscrowPort;
+  private SaveReservationEscrowPort saveReservationEscrowPort;
   private RunReservationTransactionPort transactionPort;
 
   public ReservationChainReadRepairService(
@@ -45,6 +50,13 @@ public class ReservationChainReadRepairService implements RepairReservationChain
 
   public void setTransactionPort(RunReservationTransactionPort transactionPort) {
     this.transactionPort = java.util.Objects.requireNonNull(transactionPort);
+  }
+
+  public void setEscrowProjectionPorts(
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationEscrowPort saveReservationEscrowPort) {
+    this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.saveReservationEscrowPort = saveReservationEscrowPort;
   }
 
   @Override
@@ -188,7 +200,34 @@ public class ReservationChainReadRepairService implements RepairReservationChain
         reservation.getStatus(),
         repaired.getStatus(),
         order.state());
-    return saveReservationPort.save(repaired);
+    Reservation saved = saveReservationPort.save(repaired);
+    syncEscrowProjection(saved, order);
+    return saved;
+  }
+
+  private void syncEscrowProjection(Reservation reservation, ReservationEscrowOrderView order) {
+    if (loadReservationEscrowPort == null || saveReservationEscrowPort == null) {
+      return;
+    }
+    loadReservationEscrowPort
+        .findByReservationIdWithLock(reservation.getId())
+        .map(escrow -> updateEscrowProjection(escrow, reservation, order))
+        .ifPresent(saveReservationEscrowPort::save);
+  }
+
+  private MarketplaceReservationEscrow updateEscrowProjection(
+      MarketplaceReservationEscrow escrow,
+      Reservation reservation,
+      ReservationEscrowOrderView order) {
+    return escrow.toBuilder()
+        .escrowStatus(reservation.getEffectiveEscrowStatus())
+        .contractDeadlineEpochSeconds(reservation.getContractDeadlineEpochSeconds())
+        .contractDeadlineAt(reservation.getContractDeadlineAt())
+        .lastChainState(order.state())
+        .lastChainSyncedAt(LocalDateTime.now(clock))
+        .lastFailureCode(null)
+        .lastFailureMessage(null)
+        .build();
   }
 
   private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
