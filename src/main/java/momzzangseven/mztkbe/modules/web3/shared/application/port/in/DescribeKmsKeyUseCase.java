@@ -19,4 +19,17 @@ public interface DescribeKmsKeyUseCase {
    * @return {@link KmsKeyState} representing the key's current signability
    */
   KmsKeyState execute(String kmsKeyId);
+
+  /**
+   * Uncached describe for provisioning-recovery callers that must observe post-mutation state;
+   * signing-path callers must continue to use {@link #execute(String)}.
+   *
+   * <p>This method does NOT update or invalidate the cache. The next {@link #execute(String)} call
+   * may still observe pre-mutation state for up to the TTL. Invalidation-on-mutation is tracked
+   * separately.
+   *
+   * @param kmsKeyId fully-qualified KMS key id (or alias) that the caller wants to describe
+   * @return {@link KmsKeyState} representing the key's current signability, freshly fetched
+   */
+  KmsKeyState executeFresh(String kmsKeyId);
 }

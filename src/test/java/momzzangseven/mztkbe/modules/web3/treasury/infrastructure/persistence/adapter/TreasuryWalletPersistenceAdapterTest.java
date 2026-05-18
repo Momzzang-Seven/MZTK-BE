@@ -211,26 +211,28 @@ class TreasuryWalletPersistenceAdapterTest {
     assertThat(wallet.getKeyOrigin()).isEqualTo(TreasuryKeyOrigin.IMPORTED);
   }
 
-  // ----- existsAddressOwnedByOther -----
+  // ----- loadByAliasForUpdate -----
 
   @Test
-  void existsAddressOwnedByOther_throwsInvalidInput_whenAliasOrAddressBlank() {
-    assertThatThrownBy(() -> adapter.existsAddressOwnedByOther("", ADDRESS))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("walletAlias");
-    assertThatThrownBy(() -> adapter.existsAddressOwnedByOther(ALIAS, ""))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("walletAddress");
-  }
+  @org.junit.jupiter.api.DisplayName("loadByAliasForUpdate 가 findByWalletAliasForUpdate 를 경유한다")
+  void loadByAliasForUpdate_delegatesToRepository() {
+    Web3TreasuryWalletEntity entity =
+        Web3TreasuryWalletEntity.builder()
+            .id(1L)
+            .walletAlias(ALIAS)
+            .kmsKeyId("kms")
+            .treasuryAddress(ADDRESS)
+            .status("ACTIVE")
+            .keyOrigin("IMPORTED")
+            .createdAt(java.time.LocalDateTime.now())
+            .updatedAt(java.time.LocalDateTime.now())
+            .build();
+    when(repository.findByWalletAliasForUpdate(ALIAS)).thenReturn(Optional.of(entity));
 
-  @Test
-  void existsAddressOwnedByOther_delegatesToRepositoryAndReturnsResult() {
-    when(repository.existsByTreasuryAddressAndWalletAliasNot(ADDRESS, ALIAS)).thenReturn(true);
+    Optional<TreasuryWallet> result = adapter.loadByAliasForUpdate(ALIAS);
 
-    boolean exists = adapter.existsAddressOwnedByOther(ALIAS, ADDRESS);
-
-    assertThat(exists).isTrue();
-    verify(repository).existsByTreasuryAddressAndWalletAliasNot(ADDRESS, ALIAS);
+    assertThat(result).isPresent();
+    verify(repository).findByWalletAliasForUpdate(ALIAS);
   }
 
   // ----- helpers -----

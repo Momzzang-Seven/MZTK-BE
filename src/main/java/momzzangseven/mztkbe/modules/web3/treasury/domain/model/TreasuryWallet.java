@@ -75,24 +75,29 @@ public class TreasuryWallet {
   }
 
   /**
-   * Factory used by the provisioning service when the supplied {@code walletAlias} already has a
-   * row in the legacy schema (V055 rename) but no {@code kms_key_id} yet. Preserves the row
-   * identity ({@code id}, {@code walletAddress}, {@code createdAt}) and only mutates the KMS-side
-   * fields ({@code kmsKeyId}, {@code status}, {@code keyOrigin}, {@code updatedAt}).
+   * Factory used when {@code existing.kmsKeyId == null} (legacy row before KMS migration). Mints a
+   * fresh KMS key and binds it to the row, optionally overriding the stored {@code walletAddress}
+   * with the {@code derivedAddress} the operator just imported. Forces status to {@link
+   * TreasuryWalletStatus#ACTIVE} (allowing recovery from a legacy DISABLED/ARCHIVED state) and
+   * clears {@code disabledAt}.
    *
-   * <p>The address must already match because the legacy row's address was seeded from the same
-   * underlying private key the operator is now re-supplying — divergence indicates an operator
-   * mistake (wrong key) and is rejected by the caller before reaching this factory.
+   * <p>Per the MOM-444 non-cohort-v2 decision table, this factory covers cases C1/C2/C3 (legacy
+   * row, same address as derived) and C10/C11/C12 (legacy row, different address — derived value
+   * wins).
    *
-   * @param existing the legacy row loaded by alias; must have {@code kmsKeyId == null} and a
-   *     non-null {@code walletAddress}
-   * @param kmsKeyId fresh KMS key id produced by the provisioning flow
+   * @param existing legacy row with {@code kmsKeyId == null}
+   * @param newKmsKeyId fresh KMS key id produced by the pre-mint phase
+   * @param newWalletAddress {@code 0x}-prefixed address derived from the imported raw key (may
+   *     equal or differ from {@code existing.walletAddress})
    * @param clock clock for {@code updatedAt}
-   * @return a wallet ready to be {@code save()}d as an UPDATE of the same row
+   * @return a wallet ready to be {@code save()}d as an UPDATE
+   * @throws TreasuryWalletStateException if {@code existing.kmsKeyId} is already set
    */
-  public static TreasuryWallet backfill(TreasuryWallet existing, String kmsKeyId, Clock clock) {
+  public static TreasuryWallet backfill(
+      TreasuryWallet existing, String newKmsKeyId, String newWalletAddress, Clock clock) {
     Objects.requireNonNull(existing, "existing must not be null");
-    Objects.requireNonNull(kmsKeyId, "kmsKeyId must not be null");
+    Objects.requireNonNull(newKmsKeyId, "newKmsKeyId must not be null");
+    Objects.requireNonNull(newWalletAddress, "newWalletAddress must not be null");
     Objects.requireNonNull(clock, "clock must not be null");
     if (existing.kmsKeyId != null) {
       throw new TreasuryWalletStateException(
@@ -101,24 +106,87 @@ public class TreasuryWallet {
               + "' is already provisioned with kmsKeyId="
               + existing.kmsKeyId);
     }
-    if (existing.walletAddress == null || existing.walletAddress.isBlank()) {
-      throw new TreasuryWalletStateException(
-          "Treasury wallet '"
-              + existing.walletAlias
-              + "' has no walletAddress on file — cannot backfill");
-    }
-    if (existing.status != null && existing.status != TreasuryWalletStatus.ACTIVE) {
-      throw new TreasuryWalletStateException(
-          "Treasury wallet '"
-              + existing.walletAlias
-              + "' has status="
-              + existing.status
-              + " — only legacy rows with null/ACTIVE status can be backfilled");
-    }
     return existing.toBuilder()
-        .kmsKeyId(kmsKeyId)
+        .kmsKeyId(newKmsKeyId)
+        .walletAddress(newWalletAddress)
         .status(TreasuryWalletStatus.ACTIVE)
         .keyOrigin(TreasuryKeyOrigin.IMPORTED)
+        .disabledAt(null)
+        .updatedAt(LocalDateTime.now(clock))
+        .build();
+  }
+
+  /**
+   * Factory used by the ReplaceKey action (MOM-444). Overwrites the row's KMS key id and wallet
+   * address with freshly-imported values and forces the status back to {@link
+   * TreasuryWalletStatus#ACTIVE}, clearing {@code disabledAt}. Preserves identity columns ({@code
+   * id}, {@code walletAlias}, {@code createdAt}).
+   *
+   * <p>This is the path taken when the operator re-provisions an alias with a *different* raw
+   * private key (rotation, cases C7/C8/C9) or re-provisions an ARCHIVED alias with the same key
+   * (case C6 — old KMS key is already scheduled for deletion, the row gets a fresh key).
+   *
+   * @param existing the row to be replaced; must already carry a {@code kmsKeyId}
+   * @param newKmsKeyId fresh KMS key id produced by the pre-mint phase
+   * @param newWalletAddress {@code 0x}-prefixed address derived from the new raw private key
+   * @param clock clock for {@code updatedAt}
+   * @return a wallet ready to be {@code save()}d as an UPDATE
+   * @throws TreasuryWalletStateException if {@code existing.kmsKeyId} is null (use {@link
+   *     #backfill}) or if {@code newKmsKeyId} equals {@code existing.kmsKeyId}
+   */
+  public static TreasuryWallet replaceKey(
+      TreasuryWallet existing, String newKmsKeyId, String newWalletAddress, Clock clock) {
+    Objects.requireNonNull(existing, "existing must not be null");
+    Objects.requireNonNull(newKmsKeyId, "newKmsKeyId must not be null");
+    Objects.requireNonNull(newWalletAddress, "newWalletAddress must not be null");
+    Objects.requireNonNull(clock, "clock must not be null");
+    if (existing.kmsKeyId == null) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '"
+              + existing.walletAlias
+              + "' has no kmsKeyId — use backfill instead of replaceKey");
+    }
+    if (newKmsKeyId.equals(existing.kmsKeyId)) {
+      throw new TreasuryWalletStateException(
+          "replaceKey rejected — same kmsKeyId for alias '" + existing.walletAlias + "'");
+    }
+    return existing.toBuilder()
+        .kmsKeyId(newKmsKeyId)
+        .walletAddress(newWalletAddress)
+        .status(TreasuryWalletStatus.ACTIVE)
+        .keyOrigin(TreasuryKeyOrigin.IMPORTED)
+        .disabledAt(null)
+        .updatedAt(LocalDateTime.now(clock))
+        .build();
+  }
+
+  /**
+   * Factory used by the ReEnableSameKey action (MOM-444 / C5). Promotes a DISABLED row back to
+   * ACTIVE without swapping the KMS key. The KMS-side counterpart is a single {@code enableKey}
+   * call published via {@code TreasuryWalletReactivatedEvent}.
+   *
+   * @param existing must have {@code status == DISABLED} and {@code kmsKeyId != null}
+   * @param clock clock for {@code updatedAt}
+   * @return a wallet ready to be {@code save()}d as an UPDATE
+   * @throws TreasuryWalletStateException if status is not DISABLED or kmsKeyId is null
+   */
+  public static TreasuryWallet reEnable(TreasuryWallet existing, Clock clock) {
+    Objects.requireNonNull(existing, "existing must not be null");
+    Objects.requireNonNull(clock, "clock must not be null");
+    if (existing.kmsKeyId == null) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '" + existing.walletAlias + "' has no kmsKeyId — reEnable rejected");
+    }
+    if (existing.status != TreasuryWalletStatus.DISABLED) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '"
+              + existing.walletAlias
+              + "' cannot be re-enabled from status "
+              + existing.status);
+    }
+    return existing.toBuilder()
+        .status(TreasuryWalletStatus.ACTIVE)
+        .disabledAt(null)
         .updatedAt(LocalDateTime.now(clock))
         .build();
   }

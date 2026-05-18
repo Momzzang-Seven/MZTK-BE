@@ -115,6 +115,31 @@ class DescribeKmsKeyServiceTest {
       verify(port, times(1)).describe("key-A");
       verify(port, times(1)).describe("key-B");
     }
+
+    @Test
+    @DisplayName("[M-50] executeFresh — 캐시 우회 채널 (live port 값 반환 + 캐시 미오염)")
+    void executeFresh_bypassesCache_andExecuteKeepsCache() {
+      // given — port returns ENABLED on first call, DISABLED thereafter (state change between
+      // calls). Only two production-code invocations are expected: the first execute() cache-fill
+      // (ENABLED) and the executeFresh() bypass (DISABLED). The third execute() call is a cache
+      // hit and must NOT reach the port.
+      when(port.describe("k1"))
+          .thenReturn(KmsKeyState.ENABLED, KmsKeyState.DISABLED, KmsKeyState.DISABLED);
+
+      // when
+      KmsKeyState first = service.execute("k1"); // warm cache to ENABLED
+      KmsKeyState fresh = service.executeFresh("k1"); // bypass → DISABLED
+      KmsKeyState cached = service.execute("k1"); // still ENABLED (cache hit)
+
+      // then — both invariants hold in one scenario:
+      //   (1) executeFresh returns the live port value, bypassing the cache.
+      //   (2) execute continues to return the cached value after executeFresh — executeFresh
+      //       does not pollute the cache.
+      assertThat(first).isEqualTo(KmsKeyState.ENABLED);
+      assertThat(fresh).isEqualTo(KmsKeyState.DISABLED);
+      assertThat(cached).isEqualTo(KmsKeyState.ENABLED);
+      verify(port, times(2)).describe("k1");
+    }
   }
 
   @Nested

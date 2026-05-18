@@ -6,9 +6,16 @@ import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 /**
  * Read-side persistence port for the {@link TreasuryWallet} aggregate.
  *
- * <p>Used by services that need to fetch a wallet for state inspection (signability checks,
- * disable/archive transitions) or for collision detection during provisioning. Implementations
- * translate JPA entities into domain instances; callers never see the persistence model.
+ * <p>Two read variants are exposed:
+ *
+ * <ul>
+ *   <li>{@link #loadByAlias} — lock-free read for read-only paths (state inspection, signability
+ *       probe).
+ *   <li>{@link #loadByAliasForUpdate} — {@code PESSIMISTIC_WRITE} (SELECT … FOR UPDATE) lock for
+ *       write-path callers that must serialize concurrent provision attempts on the same alias.
+ *       Returns empty when the row does not exist; the caller relies on the {@code wallet_alias}
+ *       UNIQUE constraint to resolve fresh-INSERT races (MOM-444 §4.0.1).
+ * </ul>
  */
 public interface LoadTreasuryWalletPort {
 
@@ -19,14 +26,14 @@ public interface LoadTreasuryWalletPort {
   Optional<TreasuryWallet> loadByAlias(String walletAlias);
 
   /**
-   * Cross-row collision guard for provisioning: returns {@code true} if a wallet other than the one
-   * bound to {@code walletAlias} already owns {@code walletAddress}. The intent is to allow a
-   * caller to UPDATE the row matching {@code walletAlias} (backfill mode) without flagging the
-   * caller's own row as a conflict, while still detecting genuine address reuse across roles.
+   * Acquire a {@code PESSIMISTIC_WRITE} (SELECT … FOR UPDATE) lock on the wallet row bound to
+   * {@code walletAlias} and return its current snapshot. Used by the provisioning transaction to
+   * serialize concurrent operator calls for the same alias (MOM-444). Returns empty when the row
+   * does not exist yet — the caller proceeds to INSERT and the {@code wallet_alias} UNIQUE
+   * constraint resolves any race between two concurrent fresh-provision calls.
    *
-   * @param walletAlias canonical alias whose row is being provisioned / backfilled (excluded from
-   *     the conflict scan)
-   * @param walletAddress {@code 0x}-prefixed Ethereum address recovered from the imported key
+   * <p>MUST be invoked inside a write transaction. Calling it outside of {@code @Transactional} is
+   * a programming error (the lock would be released immediately upon connection return).
    */
-  boolean existsAddressOwnedByOther(String walletAlias, String walletAddress);
+  Optional<TreasuryWallet> loadByAliasForUpdate(String walletAlias);
 }

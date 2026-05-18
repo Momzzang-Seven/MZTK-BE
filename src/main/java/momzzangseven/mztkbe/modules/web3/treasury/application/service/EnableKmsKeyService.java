@@ -2,10 +2,9 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableKmsKeyCommand;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.EnableKmsKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.KmsAuditAction;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableKmsKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.EnableKmsKeyUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
@@ -15,21 +14,18 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * MOM-444 Disable AFTER_COMMIT KMS orchestration. Calls {@code KmsKeyLifecyclePort.disableKey} and
- * records the outcome to {@code web3_treasury_kms_audits} as a {@code KMS_DISABLE} row.
+ * MOM-444 ReEnableSameKey (C5) AFTER_COMMIT KMS orchestration. Calls {@code
+ * KmsKeyLifecyclePort.enableKey} and records the outcome to {@code web3_treasury_kms_audits} as a
+ * {@code KMS_ENABLE} row.
  *
  * <p>Idempotent on stale events: re-reads the {@code treasury_wallets} row under {@code
- * PESSIMISTIC_WRITE} lock; if the row's {@code (kmsKeyId, status=DISABLED)} no longer matches the
- * command, records a {@code KMS_DISABLE_SKIPPED} audit ({@code success=true}, reason ∈ {@code
- * {ROW_MISSING, KEY_ID_MISMATCH, STATUS_MISMATCH}}) and returns without invoking AWS KMS. This
- * symmetric CAS gate blocks the reverse-order Disable/Reactivate race in which a delayed Disable
- * handler would otherwise drift KMS to DISABLED while the row already sits ACTIVE after C5
- * reEnableSameKey.
+ * PESSIMISTIC_WRITE} lock; if the row's {@code (kmsKeyId, status=ACTIVE)} no longer matches the
+ * command, records a {@code KMS_ENABLE_SKIPPED} audit ({@code success=true}, reason ∈ {@code
+ * {ROW_MISSING, KEY_ID_MISMATCH, STATUS_MISMATCH}}) and returns without invoking AWS KMS.
  */
 @Service
-@Slf4j
 @RequiredArgsConstructor
-public class DisableKmsKeyService implements DisableKmsKeyUseCase {
+public class EnableKmsKeyService implements EnableKmsKeyUseCase {
 
   private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
   private final KmsAuditRecorder kmsAuditRecorder;
@@ -37,7 +33,7 @@ public class DisableKmsKeyService implements DisableKmsKeyUseCase {
 
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void execute(DisableKmsKeyCommand command) {
+  public void execute(EnableKmsKeyCommand command) {
     Optional<TreasuryWallet> currentOpt =
         loadTreasuryWalletPort.loadByAliasForUpdate(command.walletAlias());
 
@@ -48,20 +44,20 @@ public class DisableKmsKeyService implements DisableKmsKeyUseCase {
           command.walletAlias(),
           command.kmsKeyId(),
           command.walletAddress(),
-          KmsAuditAction.KMS_DISABLE_SKIPPED,
+          KmsAuditAction.KMS_ENABLE_SKIPPED,
           true,
           staleReason);
       return;
     }
 
     try {
-      kmsKeyLifecyclePort.disableKey(command.kmsKeyId());
+      kmsKeyLifecyclePort.enableKey(command.kmsKeyId());
       kmsAuditRecorder.record(
           command.operatorUserId(),
           command.walletAlias(),
           command.kmsKeyId(),
           command.walletAddress(),
-          KmsAuditAction.KMS_DISABLE,
+          KmsAuditAction.KMS_ENABLE,
           true,
           null);
     } catch (RuntimeException ex) {
@@ -70,7 +66,7 @@ public class DisableKmsKeyService implements DisableKmsKeyUseCase {
           command.walletAlias(),
           command.kmsKeyId(),
           command.walletAddress(),
-          KmsAuditAction.KMS_DISABLE,
+          KmsAuditAction.KMS_ENABLE,
           false,
           ex.getClass().getSimpleName());
       throw ex;
@@ -78,7 +74,7 @@ public class DisableKmsKeyService implements DisableKmsKeyUseCase {
   }
 
   private String detectStaleReason(
-      Optional<TreasuryWallet> currentOpt, DisableKmsKeyCommand command) {
+      Optional<TreasuryWallet> currentOpt, EnableKmsKeyCommand command) {
     if (currentOpt.isEmpty()) {
       return "ROW_MISSING";
     }
@@ -86,7 +82,7 @@ public class DisableKmsKeyService implements DisableKmsKeyUseCase {
     if (!command.kmsKeyId().equals(current.getKmsKeyId())) {
       return "KEY_ID_MISMATCH";
     }
-    if (current.getStatus() != TreasuryWalletStatus.DISABLED) {
+    if (current.getStatus() != TreasuryWalletStatus.ACTIVE) {
       return "STATUS_MISMATCH";
     }
     return null;
