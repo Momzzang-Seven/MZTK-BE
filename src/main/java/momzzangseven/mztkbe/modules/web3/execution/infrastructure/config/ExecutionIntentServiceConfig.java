@@ -52,9 +52,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
 @ConditionalOnExecutionModeEnabled
@@ -218,11 +215,8 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
-  CreateExecutionIntentUseCase createExecutionIntentUseCase(
-      CreateExecutionIntentService delegate, PlatformTransactionManager transactionManager) {
-    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-    return new TransactionalCreateExecutionIntentUseCase(delegate, transactionTemplate);
+  CreateExecutionIntentUseCase createExecutionIntentUseCase(CreateExecutionIntentService delegate) {
+    return delegate;
   }
 
   @Bean

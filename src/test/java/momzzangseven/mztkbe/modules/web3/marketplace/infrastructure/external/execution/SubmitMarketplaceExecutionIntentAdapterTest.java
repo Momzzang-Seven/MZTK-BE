@@ -1,7 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.external.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,6 +33,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 
 @ExtendWith(MockitoExtension.class)
 class SubmitMarketplaceExecutionIntentAdapterTest {
@@ -49,7 +55,8 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
   @Test
   void submit_mapsMarketplaceDraftToSharedExecutionCommandAndEip7702Result() {
     SubmitMarketplaceExecutionIntentAdapter adapter =
-        new SubmitMarketplaceExecutionIntentAdapter(createExecutionIntentUseCase);
+        new SubmitMarketplaceExecutionIntentAdapter(
+            createExecutionIntentUseCase, new NoOpTransactionManager());
     ArgumentCaptor<CreateExecutionIntentCommand> commandCaptor =
         ArgumentCaptor.forClass(CreateExecutionIntentCommand.class);
     MarketplaceExecutionDraft draft = eip7702Draft();
@@ -101,7 +108,8 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
   @Test
   void submit_mapsEip1559SignRequest() {
     SubmitMarketplaceExecutionIntentAdapter adapter =
-        new SubmitMarketplaceExecutionIntentAdapter(createExecutionIntentUseCase);
+        new SubmitMarketplaceExecutionIntentAdapter(
+            createExecutionIntentUseCase, new NoOpTransactionManager());
     when(createExecutionIntentUseCase.execute(any())).thenReturn(eip1559Result());
 
     MarketplaceExecutionIntentResult result = adapter.submit(eip1559Draft());
@@ -113,6 +121,35 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
     assertThat(result.signRequest().transaction().toAddress()).isEqualTo(ESCROW);
     assertThat(result.signRequest().transaction().data()).isEqualTo(CALLDATA);
     assertThat(result.signRequest().transaction().expectedNonce()).isEqualTo(9L);
+  }
+
+  @Test
+  void submit_retriesOnceWhenSharedRootAttemptUniqueRaceOccurs() {
+    SubmitMarketplaceExecutionIntentAdapter adapter =
+        new SubmitMarketplaceExecutionIntentAdapter(
+            createExecutionIntentUseCase, new NoOpTransactionManager());
+    MarketplaceExecutionDraft draft = eip7702Draft();
+    when(createExecutionIntentUseCase.execute(any()))
+        .thenThrow(new DataIntegrityViolationException("uk_web3_execution_intents_root_attempt"))
+        .thenReturn(eip7702Result(true));
+
+    MarketplaceExecutionIntentResult result = adapter.submit(draft);
+
+    assertThat(result.existing()).isTrue();
+    verify(createExecutionIntentUseCase, times(2)).execute(any());
+  }
+
+  @Test
+  void submit_doesNotRetryOtherDataIntegrityFailures() {
+    SubmitMarketplaceExecutionIntentAdapter adapter =
+        new SubmitMarketplaceExecutionIntentAdapter(
+            createExecutionIntentUseCase, new NoOpTransactionManager());
+    when(createExecutionIntentUseCase.execute(any()))
+        .thenThrow(new DataIntegrityViolationException("some_other_constraint"));
+
+    assertThatThrownBy(() -> adapter.submit(eip7702Draft()))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    verify(createExecutionIntentUseCase).execute(any());
   }
 
   private MarketplaceExecutionDraft eip7702Draft() {
@@ -212,5 +249,22 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
             new SignRequestBundle.TransactionSignRequest(
                 10L, AUTHORITY, ESCROW, "0x0", CALLDATA, 9L, "0x186a0", "0x3e8", "0x7d0", 9L)),
         false);
+  }
+
+  private static class NoOpTransactionManager extends AbstractPlatformTransactionManager {
+
+    @Override
+    protected Object doGetTransaction() {
+      return new Object();
+    }
+
+    @Override
+    protected void doBegin(Object transaction, TransactionDefinition definition) {}
+
+    @Override
+    protected void doCommit(DefaultTransactionStatus status) {}
+
+    @Override
+    protected void doRollback(DefaultTransactionStatus status) {}
   }
 }

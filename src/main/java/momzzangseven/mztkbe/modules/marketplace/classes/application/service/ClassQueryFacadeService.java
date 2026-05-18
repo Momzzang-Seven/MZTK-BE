@@ -120,13 +120,13 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
   }
 
   @Override
-  @Transactional(readOnly = true)
+  @Transactional
   public Optional<ClassSlot> findByIdWithLock(Long slotId) {
     return loadClassSlotPort.findByIdWithLock(slotId);
   }
 
   @Override
-  @Transactional(readOnly = true)
+  @Transactional
   public Optional<ClassSlotReservationProjection> findReservationProjectionByIdWithLock(
       Long slotId) {
     return loadClassSlotPort.findByIdWithLock(slotId).map(this::toReservationSlotProjection);
