@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationViewerActions;
@@ -50,9 +51,9 @@ public final class ReservationViewerActionPolicy {
   }
 
   private static boolean deadlineExpired(Reservation reservation, Clock clock) {
-    Clock effectiveClock = clock == null ? Clock.systemDefaultZone() : clock;
     return reservation.getContractDeadlineAt() != null
-        && LocalDateTime.now(effectiveClock).isAfter(reservation.getContractDeadlineAt());
+        && LocalDateTime.now(Objects.requireNonNull(clock, "clock"))
+            .isAfter(reservation.getContractDeadlineAt());
   }
 
   private static ReservationViewerActions fromActiveExecution(
