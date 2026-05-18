@@ -126,7 +126,10 @@ public class ReservationExecutionWriteAdapter
         result.executionIntentId(),
         result.executionIntentStatus().name(),
         result.actionType().name(),
-        result.requesterUserId());
+        result.requesterUserId(),
+        result.transactionId(),
+        result.transactionStatus() == null ? null : result.transactionStatus().name(),
+        result.txHash());
   }
 
   private ReservationExecutionWriteView.SignRequest toSignRequest(SignRequestBundle request) {

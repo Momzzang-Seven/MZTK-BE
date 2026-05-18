@@ -178,7 +178,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     ReservationExecutionStateView state =
         loadReservationExecutionStatePort.loadState(
             reservation.getCurrentExecutionIntentPublicId());
-    if (isConfirmed(state.status())) {
+    if (isConfirmedOutcome(state)) {
       validateParticipant(reservation, command.requesterId());
       replayConfirmedReservationExecutionPort.replayConfirmed(
           state.executionIntentId(), state.actionType());
@@ -611,6 +611,10 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
   private boolean isConfirmed(String status) {
     return "CONFIRMED".equals(status);
+  }
+
+  private boolean isConfirmedOutcome(ReservationExecutionStateView state) {
+    return isConfirmed(state.status()) || "SUCCEEDED".equals(state.transactionStatus());
   }
 
   private void requireBuyerOwnedRefundRecovery(

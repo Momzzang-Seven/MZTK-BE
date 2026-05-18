@@ -27,11 +27,15 @@ final class ReservationExecutionResumeViewer {
         participant
             && reservation.getCurrentExecutionIntentPublicId() != null
             && reservation.getCurrentExecutionIntentPublicId().equals(view.executionIntent().id())
-            && "CONFIRMED".equals(status);
+            && ("CONFIRMED".equals(status) || transactionSucceeded(view));
     return view.withViewer(
         viewerAction,
         owner && "AWAITING_SIGNATURE".equals(status),
         confirmedReplayAvailable || (owner && RECOVERABLE_STATUSES.contains(status)));
+  }
+
+  private static boolean transactionSucceeded(ReservationExecutionResumeView view) {
+    return view.transaction() != null && "SUCCEEDED".equals(view.transaction().status());
   }
 
   private static String viewerAction(Reservation reservation, String actionType) {

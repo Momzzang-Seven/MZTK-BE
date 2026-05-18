@@ -316,6 +316,40 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
+  @DisplayName("transaction이 SUCCEEDED인 current intent는 intent 상태가 pending이어도 replay repair를 실행한다")
+  void recovery_currentSucceededTransaction_replaysConfirmedRepairAndReturnsLatestReservation() {
+    Reservation reservation =
+        reservation(ReservationStatus.PURCHASE_PENDING).toBuilder()
+            .currentExecutionIntentPublicId("intent-1")
+            .build();
+    Reservation repaired =
+        reservation.markPurchaseConfirmedLocked(
+            1_900_000_000L, LocalDateTime.of(2030, 3, 17, 17, 46, 40));
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionStatePort.loadState("intent-1"))
+        .willReturn(
+            state(
+                "MARKETPLACE_CLASS_PURCHASE",
+                "PENDING_ONCHAIN",
+                "intent-1",
+                BUYER_ID,
+                "SUCCEEDED"));
+    given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(repaired));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(result.web3()).isNull();
+    then(replayConfirmedReservationExecutionPort)
+        .should()
+        .replayConfirmed("intent-1", "MARKETPLACE_CLASS_PURCHASE");
+    then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
   @DisplayName("trainer-owned confirmed reject intent는 buyer recover에서도 replay로 수렴한다")
   void recovery_trainerOwnedConfirmedRejectIntent_replaysForBuyerRecovery() {
     Reservation reservation =
@@ -887,5 +921,15 @@ class RecoverReservationEscrowServiceTest {
   private ReservationExecutionStateView state(
       String actionType, String intentStatus, String intentId, Long requesterUserId) {
     return new ReservationExecutionStateView(intentId, intentStatus, actionType, requesterUserId);
+  }
+
+  private ReservationExecutionStateView state(
+      String actionType,
+      String intentStatus,
+      String intentId,
+      Long requesterUserId,
+      String transactionStatus) {
+    return new ReservationExecutionStateView(
+        intentId, intentStatus, actionType, requesterUserId, 99L, transactionStatus, "0xhash");
   }
 }

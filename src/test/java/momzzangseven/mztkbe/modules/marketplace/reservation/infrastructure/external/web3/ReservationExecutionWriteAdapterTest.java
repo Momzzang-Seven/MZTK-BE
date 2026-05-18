@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateQuery;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentStateUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
@@ -18,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentS
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
@@ -67,6 +70,28 @@ class ReservationExecutionWriteAdapterTest {
             new ReservationExecutionWriteView.TokenMovement(
                 "0xtoken", "50000000000000000000", "BUYER", "0xbuyer", "ESCROW", "0xescrow"));
     assertThat(view.signRequest().submit().deadlineEpochSeconds()).isEqualTo(1_700_000_600L);
+  }
+
+  @Test
+  void loadState_mapsSubmittedTransactionSummary() {
+    when(getExecutionIntentStateUseCase.execute(
+            new GetExecutionIntentStateQuery("intent-public-1")))
+        .thenReturn(
+            new GetExecutionIntentStateResult(
+                "intent-public-1",
+                ExecutionIntentStatus.PENDING_ONCHAIN,
+                ExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
+                7L,
+                99L,
+                ExecutionTransactionStatus.SUCCEEDED,
+                "0xhash"));
+
+    var state = adapter.loadState("intent-public-1");
+
+    assertThat(state.status()).isEqualTo("PENDING_ONCHAIN");
+    assertThat(state.transactionId()).isEqualTo(99L);
+    assertThat(state.transactionStatus()).isEqualTo("SUCCEEDED");
+    assertThat(state.txHash()).isEqualTo("0xhash");
   }
 
   private GetExecutionIntentResult result(String payloadSnapshotJson) {

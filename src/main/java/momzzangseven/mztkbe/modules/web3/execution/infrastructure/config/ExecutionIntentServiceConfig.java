@@ -341,9 +341,14 @@ public class ExecutionIntentServiceConfig {
   @Bean
   ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      List<ExecutionActionHandlerPort> executionActionHandlerPorts) {
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      Clock appClock) {
     return new ReplayConfirmedExecutionIntentService(
-        executionIntentPersistencePort, executionActionHandlerPorts);
+        executionIntentPersistencePort,
+        loadExecutionTransactionPort,
+        executionActionHandlerPorts,
+        appClock);
   }
 
   private record TransactionalCreateExecutionIntentUseCase(

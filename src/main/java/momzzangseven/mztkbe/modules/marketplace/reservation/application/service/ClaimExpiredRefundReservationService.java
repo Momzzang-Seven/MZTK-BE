@@ -198,7 +198,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
-      if (isConfirmed(currentState.status())) {
+      if (isConfirmedOutcome(currentState)) {
         return DeadlineRefundInspection.confirmed(reservation, currentState);
       }
       if (command.userId().equals(currentState.requesterUserId())) {
@@ -243,7 +243,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
-      if (isConfirmed(currentState.status())) {
+      if (isConfirmedOutcome(currentState)) {
         return BeginDeadlineRefundResult.confirmed(reservation, currentState);
       }
       if (command.userId().equals(currentState.requesterUserId())) {
@@ -570,6 +570,10 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
   private boolean isConfirmed(String status) {
     return "CONFIRMED".equals(status);
+  }
+
+  private boolean isConfirmedOutcome(ReservationExecutionStateView state) {
+    return isConfirmed(state.status()) || "SUCCEEDED".equals(state.transactionStatus());
   }
 
   private Reservation ensureRefundAvailable(

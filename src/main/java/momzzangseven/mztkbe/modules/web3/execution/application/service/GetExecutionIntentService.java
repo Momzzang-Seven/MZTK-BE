@@ -106,11 +106,20 @@ public class GetExecutionIntentService
                 () ->
                     new Web3InvalidInputException(
                         "executionIntentId not found: " + query.executionIntentId()));
+    Optional<ExecutionTransactionSummary> transaction =
+        intent.getSubmittedTxId() == null
+            ? Optional.empty()
+            : loadExecutionTransactionPort.findById(intent.getSubmittedTxId());
+    ExecutionIntentViewMapper.ExecutionTransactionView transactionView =
+        ExecutionIntentViewMapper.toTransactionView(transaction);
     return new GetExecutionIntentStateResult(
         intent.getPublicId(),
         intent.getStatus(),
         intent.getActionType(),
-        intent.getRequesterUserId());
+        intent.getRequesterUserId(),
+        transactionView.transactionId(),
+        transactionView.transactionStatus(),
+        transactionView.txHash());
   }
 
   @Override
