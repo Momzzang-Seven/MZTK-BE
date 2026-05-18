@@ -203,6 +203,26 @@ public void handle(PostDeletedEvent event) {
 }
 ```
 
+#### Intentional exception — `REQUIRES_NEW` audit recorders
+
+`application/service` 안에서 "비즈니스 use case 가 아니라, `@Transactional(propagation = REQUIRES_NEW)`
+호출 entry point 자체가 목적인" thin recorder bean 은 `infrastructure/event` 에서 직접 주입해도 된다.
+별도의 `port/in` UseCase 를 끼우는 것이 다음 세 조건을 모두 충족할 때 indirection 만 늘리고
+아키텍처 의미는 동일하기 때문이다.
+
+1. 해당 클래스가 자체 비즈니스 로직 없이 `@Transactional(REQUIRES_NEW)` 호출 경계를 강제하기 위해
+   별 bean 으로 분리되어 있을 것 (Spring AOP self-invocation 회피가 분리의 유일한 이유).
+2. `application/service` 와 `infrastructure/event` 양쪽에서 동일 Spring proxy 를 호출해야 할 것
+   (양쪽 모두 fail-safe audit 기록의 caller).
+3. Recorder 의 모든 메서드가 `void` 또는 single-purpose 기록이고, 어떤 비즈니스 결과도 반환하지 않을 것.
+
+현재 이 예외에 해당하는 bean: `web3/treasury/application/service/TreasuryAuditRecorder`,
+`web3/treasury/application/service/KmsAuditRecorder`. 두 bean 모두 `REQUIRES_NEW` 전파를 강제하기
+위해 별 `@Component` 로 분리되어 있으며, `application/service` (예: `ProvisionTreasuryKeyService`
+의 catch 분기) 와 `infrastructure/event/TreasuryAuditEventHandler` 양쪽에서 호출된다. 새 audit
+recorder 를 추가할 때 위 세 조건을 만족하는 경우에만 본 예외를 적용하고, 아니면 일반 규칙대로
+`port/in` UseCase 인터페이스를 정의해야 한다.
+
 ### infrastructure/persistence
 
 | Sub-package | Rule |
