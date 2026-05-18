@@ -16,7 +16,9 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationListStatusFilter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
@@ -99,7 +101,8 @@ class GetTrainerReservationsServiceTest {
 
     // then
     assertThat(result.items()).hasSize(1);
-    assertThat(result.items().get(0).status()).isEqualTo(ReservationStatus.APPROVED);
+    assertThat(result.items().get(0).status()).isEqualTo(ReservationDisplayStatus.APPROVED);
+    assertThat(result.items().get(0).businessStatus()).isEqualTo(ReservationStatus.APPROVED);
   }
 
   @Test
@@ -123,7 +126,10 @@ class GetTrainerReservationsServiceTest {
         repairingSut.execute(new GetTrainerReservationsQuery(2L, null));
 
     assertThat(result.items()).hasSize(1);
-    assertThat(result.items().getFirst().status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+    assertThat(result.items().getFirst().status())
+        .isEqualTo(ReservationDisplayStatus.DEADLINE_REFUNDED);
+    assertThat(result.items().getFirst().businessStatus())
+        .isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
     then(repairUseCase).should().repairBatch(List.of(original));
   }
 
@@ -163,6 +169,9 @@ class GetTrainerReservationsServiceTest {
     assertThat(hydrated.transaction().id()).isEqualTo(77L);
     assertThat(hydrated.transaction().status()).isEqualTo("PENDING");
     assertThat(hydrated.transaction().txHash()).isEqualTo("0xtx");
+    assertThat(result.items().getFirst().viewerActions().viewerAction())
+        .isEqualTo("TRAINER_REJECT");
+    assertThat(result.items().getFirst().viewerActions().viewerCanReject()).isTrue();
     then(resumePort).should().loadLatestBatch(List.of(10L));
   }
 
@@ -219,7 +228,13 @@ class GetTrainerReservationsServiceTest {
         new GetTrainerReservationsService(
             loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
     CursorPageRequest pageRequest =
-        CursorPageRequest.of(null, 1, 20, 100, GetTrainerReservationsQuery.cursorScope(status));
+        CursorPageRequest.of(
+            null,
+            1,
+            20,
+            100,
+            GetTrainerReservationsQuery.cursorScope(
+                ReservationListStatusFilter.valueOf(status.name())));
     given(loadReservationPort.findByTrainerIdCursor(any(), any(), any()))
         .willReturn(List.of(first, second), List.of(third));
     given(repairUseCase.repairBatch(List.of(first, second)))
@@ -376,9 +391,11 @@ class GetTrainerReservationsServiceTest {
   @Test
   @DisplayName("트레이너 수강 신청 목록 조회 - status가 다른 두 cursorScope 값은 서로 달라야 한다")
   void cursorScope_DifferentStatuses_ProduceDifferentScopes() {
-    String allScope = GetTrainerReservationsQuery.cursorScope(null);
-    String approvedScope = GetTrainerReservationsQuery.cursorScope(ReservationStatus.APPROVED);
-    String pendingScope = GetTrainerReservationsQuery.cursorScope(ReservationStatus.PENDING);
+    String allScope = GetTrainerReservationsQuery.cursorScope((ReservationListStatusFilter) null);
+    String approvedScope =
+        GetTrainerReservationsQuery.cursorScope(ReservationListStatusFilter.APPROVED);
+    String pendingScope =
+        GetTrainerReservationsQuery.cursorScope(ReservationListStatusFilter.PENDING);
 
     assertThat(allScope).isNotEqualTo(approvedScope);
     assertThat(allScope).isNotEqualTo(pendingScope);

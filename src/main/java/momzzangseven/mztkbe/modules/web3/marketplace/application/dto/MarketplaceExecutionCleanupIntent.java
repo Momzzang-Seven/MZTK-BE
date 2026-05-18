@@ -8,4 +8,15 @@ public record MarketplaceExecutionCleanupIntent(
     String publicId,
     String resourceId,
     MarketplaceExecutionActionType actionType,
-    Long requesterUserId) {}
+    Long requesterUserId,
+    String payloadSnapshotJson) {
+
+  public MarketplaceExecutionCleanupIntent(
+      Long id,
+      String publicId,
+      String resourceId,
+      MarketplaceExecutionActionType actionType,
+      Long requesterUserId) {
+    this(id, publicId, resourceId, actionType, requesterUserId, null);
+  }
+}

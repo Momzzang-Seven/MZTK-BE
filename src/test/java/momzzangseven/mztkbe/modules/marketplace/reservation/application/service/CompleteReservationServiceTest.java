@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CompleteReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CompleteReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
@@ -86,6 +87,7 @@ class CompleteReservationServiceTest {
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
             FIXED_CLOCK);
+    sut.setTransactionPort(ReservationTestTransactionPort.direct());
   }
 
   /** APPROVED 예약, 수업 시간은 이미 과거(어제). */
@@ -157,7 +159,7 @@ class CompleteReservationServiceTest {
       CompleteReservationResult result =
           sut.execute(new CompleteReservationCommand(RESERVATION_ID, USER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.CONFIRM_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.CONFIRM_PENDING);
       assertThat(result.web3()).isNotNull();
       assertThat(result.web3().actionType()).isEqualTo("MARKETPLACE_CLASS_CONFIRM");
       then(eventPublisher).shouldHaveNoInteractions();

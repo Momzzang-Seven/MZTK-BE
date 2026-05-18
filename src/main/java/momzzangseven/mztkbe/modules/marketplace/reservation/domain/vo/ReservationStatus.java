@@ -9,6 +9,9 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo;
  */
 public enum ReservationStatus {
 
+  /** Local buyer/slot/date hold before purchase escrow is confirmed. */
+  HOLDING,
+
   /** User reservation complete; awaiting trainer approval. Funds deposited in escrow. */
   PENDING,
 
@@ -104,7 +107,8 @@ public enum ReservationStatus {
   /** Returns true when this status must not be processed by legacy scheduler/admin jobs. */
   public boolean isSchedulerInvisibleUserState() {
     return switch (this) {
-      case PURCHASE_PREPARING,
+      case HOLDING,
+              PURCHASE_PREPARING,
               PURCHASE_PENDING,
               CANCEL_PENDING,
               REJECT_PENDING,
@@ -135,11 +139,18 @@ public enum ReservationStatus {
    */
   public boolean canTransitionTo(ReservationStatus next) {
     return switch (this) {
+      case HOLDING ->
+          next == PENDING
+              || next == HOLD_EXPIRED
+              || next == PAYMENT_FAILED
+              || next == DEADLINE_RECOVERY_REQUIRED
+              || next == DEADLINE_SYNC_REQUIRED;
       case PENDING ->
           next == APPROVED
               || next == USER_CANCELLED
               || next == REJECTED
               || next == TIMEOUT_CANCELLED
+              || next == HOLDING
               || next == PURCHASE_PREPARING
               || next == CANCEL_PENDING
               || next == REJECT_PENDING

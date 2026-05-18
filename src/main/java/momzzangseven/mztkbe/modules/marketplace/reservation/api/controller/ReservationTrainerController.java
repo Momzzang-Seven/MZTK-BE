@@ -5,28 +5,34 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ApproveReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ApproveReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.GetReservationDetailRequestDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.GetTrainerReservationsRequestDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RecoverReservationEscrowRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RecoverReservationEscrowResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationCursorResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationDetailResponseDTO;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ApproveReservationCommand;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationListStatusFilter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApproveReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * REST controller for trainer-facing reservation endpoints.
@@ -54,38 +60,38 @@ public class ReservationTrainerController {
   @GetMapping
   public ResponseEntity<ApiResponse<ReservationCursorResponse>> getTrainerReservations(
       @AuthenticationPrincipal Long trainerId,
-      @RequestParam(required = false) ReservationStatus status,
+      @RequestParam(required = false) ReservationListStatusFilter status,
       @RequestParam(required = false) String cursor,
       @RequestParam(required = false) Integer size) {
     requireTrainerId(trainerId);
-    CursorPageRequest pageRequest =
-        CursorPageRequest.of(
-            cursor, size, 20, 100, GetTrainerReservationsQuery.cursorScope(status));
+    GetTrainerReservationsRequestDTO request =
+        new GetTrainerReservationsRequestDTO(status, cursor, size);
     return ResponseEntity.ok(
         ApiResponse.success(
             ReservationCursorResponse.from(
-                getTrainerReservationsUseCase.execute(
-                    new GetTrainerReservationsQuery(trainerId, status, pageRequest)))));
+                getTrainerReservationsUseCase.execute(request.toQuery(trainerId)))));
   }
 
   @GetMapping("/{id}")
   public ResponseEntity<ApiResponse<ReservationDetailResponseDTO>> getReservationDetail(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long trainerId) {
     requireTrainerId(trainerId);
+    GetReservationDetailRequestDTO request = new GetReservationDetailRequestDTO(id);
     return ResponseEntity.ok(
         ApiResponse.success(
             ReservationDetailResponseDTO.from(
-                getReservationDetailUseCase.execute(new GetReservationQuery(id, trainerId)))));
+                getReservationDetailUseCase.execute(request.toQuery(trainerId)))));
   }
 
   @PatchMapping("/{id}/approve")
   public ResponseEntity<ApiResponse<ApproveReservationResponseDTO>> approveReservation(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long trainerId) {
     requireTrainerId(trainerId);
+    ApproveReservationRequestDTO request = new ApproveReservationRequestDTO(id);
     return ResponseEntity.ok(
         ApiResponse.success(
             ApproveReservationResponseDTO.from(
-                approveReservationUseCase.execute(new ApproveReservationCommand(id, trainerId)))));
+                approveReservationUseCase.execute(request.toCommand(trainerId)))));
   }
 
   @PatchMapping("/{id}/reject")
@@ -104,11 +110,11 @@ public class ReservationTrainerController {
   public ResponseEntity<ApiResponse<RecoverReservationEscrowResponseDTO>> recoverReservationEscrow(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long trainerId) {
     requireTrainerId(trainerId);
+    RecoverReservationEscrowRequestDTO request = new RecoverReservationEscrowRequestDTO(id);
     return ResponseEntity.ok(
         ApiResponse.success(
             RecoverReservationEscrowResponseDTO.from(
-                recoverReservationEscrowUseCase.execute(
-                    new RecoverReservationEscrowCommand(id, trainerId)))));
+                recoverReservationEscrowUseCase.execute(request.toCommand(trainerId)))));
   }
 
   private void requireTrainerId(Long trainerId) {

@@ -12,14 +12,23 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ApproveReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ApproveReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowActorType;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -37,6 +46,8 @@ class ApproveReservationServiceTest {
 
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
+  @Mock private LoadReservationEscrowPort loadReservationEscrowPort;
+  @Mock private LoadReservationActionStatePort loadReservationActionStatePort;
 
   private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
   private static final Instant FIXED_NOW = Instant.parse("2025-06-01T03:00:00Z");
@@ -51,6 +62,7 @@ class ApproveReservationServiceTest {
   @BeforeEach
   void setUp() {
     sut = new ApproveReservationService(loadReservationPort, saveReservationPort, FIXED_CLOCK);
+    sut.setTransactionPort(ReservationTestTransactionPort.direct());
   }
 
   private Reservation pendingReservation() {
@@ -88,8 +100,43 @@ class ApproveReservationServiceTest {
           sut.execute(new ApproveReservationCommand(RESERVATION_ID, TRAINER_ID));
 
       // then
-      assertThat(result.status()).isEqualTo(ReservationStatus.APPROVED);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.APPROVED);
+      assertThat(result.businessStatus()).isEqualTo(ReservationStatus.APPROVED);
       then(saveReservationPort).should().save(any());
+    }
+
+    @Test
+    @DisplayName("[AP-07] USER_EIP7702 예약은 split escrow LOCKED와 active action 없음이 확인되면 승인된다")
+    void split_escrow_locked_without_active_action_approval_succeeds() {
+      ApproveReservationService splitSut =
+          new ApproveReservationService(
+              loadReservationPort,
+              saveReservationPort,
+              loadReservationEscrowPort,
+              loadReservationActionStatePort,
+              FIXED_CLOCK);
+      splitSut.setTransactionPort(ReservationTestTransactionPort.direct());
+      Reservation pending = pendingReservation();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(pending));
+      given(loadReservationEscrowPort.findByReservationIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(lockedEscrow()));
+      given(loadReservationActionStatePort.findByReservationIdAndStatuses(any(), any()))
+          .willReturn(List.of());
+      given(saveReservationPort.save(any())).willReturn(pending.approve());
+
+      ApproveReservationResult result =
+          splitSut.execute(new ApproveReservationCommand(RESERVATION_ID, TRAINER_ID));
+
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.APPROVED);
+      assertThat(result.businessStatus()).isEqualTo(ReservationStatus.APPROVED);
+      then(loadReservationEscrowPort).should().findByReservationIdWithLock(RESERVATION_ID);
+      then(loadReservationActionStatePort)
+          .should()
+          .findByReservationIdAndStatuses(
+              RESERVATION_ID,
+              List.of(
+                  ReservationActionStateStatus.PREPARING,
+                  ReservationActionStateStatus.INTENT_BOUND));
     }
   }
 
@@ -194,5 +241,61 @@ class ApproveReservationServiceTest {
 
       then(saveReservationPort).shouldHaveNoInteractions();
     }
+
+    @Test
+    @DisplayName("[AP-08] active action-state가 있으면 trainer approval을 차단한다")
+    void active_action_state_blocks_approval() {
+      ApproveReservationService splitSut =
+          new ApproveReservationService(
+              loadReservationPort,
+              saveReservationPort,
+              loadReservationEscrowPort,
+              loadReservationActionStatePort,
+              FIXED_CLOCK);
+      splitSut.setTransactionPort(ReservationTestTransactionPort.direct());
+      Reservation pending = pendingReservation();
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(pending));
+      given(loadReservationEscrowPort.findByReservationIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(lockedEscrow()));
+      given(loadReservationActionStatePort.findByReservationIdAndStatuses(any(), any()))
+          .willReturn(List.of(activeCancelActionState()));
+
+      assertThatThrownBy(
+              () -> splitSut.execute(new ApproveReservationCommand(RESERVATION_ID, TRAINER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+      then(saveReservationPort).shouldHaveNoInteractions();
+    }
+  }
+
+  private MarketplaceReservationEscrow lockedEscrow() {
+    return MarketplaceReservationEscrow.builder()
+        .id(11L)
+        .reservationId(RESERVATION_ID)
+        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+        .escrowStatus(ReservationEscrowStatus.LOCKED)
+        .orderKey("0x" + "0".repeat(63) + "1")
+        .buyerWalletAddress("0x1111111111111111111111111111111111111111")
+        .trainerWalletAddress("0x2222222222222222222222222222222222222222")
+        .contractDeadlineAt(LocalDateTime.ofInstant(FIXED_NOW, ZONE).plusDays(1))
+        .build();
+  }
+
+  private MarketplaceReservationActionState activeCancelActionState() {
+    return MarketplaceReservationActionState.builder()
+        .id(21L)
+        .reservationId(RESERVATION_ID)
+        .escrowId(11L)
+        .actionType(ReservationEscrowAction.BUYER_CANCEL)
+        .actorType(ReservationEscrowActorType.BUYER)
+        .actorUserId(1L)
+        .attemptNo(1)
+        .attemptToken("cancel-token")
+        .status(ReservationActionStateStatus.PREPARING)
+        .build();
   }
 }

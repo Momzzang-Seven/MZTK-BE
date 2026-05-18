@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.PrecheckMar
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.PrecheckMarketplacePurchaseUseCase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 /** Reservation infrastructure adapter for marketplace purchase precheck. */
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 @ConditionalOnBean(PrecheckMarketplacePurchaseUseCase.class)
+@Primary
 public class ReservationPurchasePrecheckAdapter implements PrecheckReservationPurchasePort {
 
   private final PrecheckMarketplacePurchaseUseCase precheckMarketplacePurchaseUseCase;

@@ -2,9 +2,11 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.exte
 
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 @Component
+@Primary
 public class ReservationEscrowPaymentConfigAdapter
     implements LoadReservationEscrowPaymentConfigPort {
 

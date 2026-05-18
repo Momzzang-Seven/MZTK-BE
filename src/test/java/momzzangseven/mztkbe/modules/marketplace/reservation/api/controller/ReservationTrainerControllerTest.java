@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Appr
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RejectReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
@@ -27,6 +28,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ReservationDisplayStatusMapper;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -97,7 +99,7 @@ class ReservationTrainerControllerTest {
   private static final String SAMPLE_USER_NICK = "user-nick";
 
   private ReservationSummaryResult summaryResult() {
-    return ReservationSummaryResult.from(
+    return ReservationDisplayStatusMapper.summaryResult(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
             .id(1L)
             .slotId(10L)
@@ -122,7 +124,7 @@ class ReservationTrainerControllerTest {
   }
 
   private ReservationSummaryResult repairedSummaryResult() {
-    return ReservationSummaryResult.from(
+    return ReservationDisplayStatusMapper.summaryResult(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
             .id(1L)
             .slotId(10L)
@@ -148,7 +150,7 @@ class ReservationTrainerControllerTest {
   }
 
   private GetReservationResult detailResult() {
-    return GetReservationResult.from(
+    return ReservationDisplayStatusMapper.detailResult(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
             .id(1L)
             .userId(50L)
@@ -177,7 +179,7 @@ class ReservationTrainerControllerTest {
   }
 
   private GetReservationResult repairedDetailResult() {
-    return GetReservationResult.from(
+    return ReservationDisplayStatusMapper.detailResult(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
             .id(1L)
             .userId(50L)
@@ -471,7 +473,9 @@ class ReservationTrainerControllerTest {
     @DisplayName("[TC-08] 정상 승인 요청 시 200 + APPROVED 상태를 반환한다")
     void approve_authenticated_returns200() throws Exception {
       given(approveReservationUseCase.execute(any()))
-          .willReturn(new ApproveReservationResult(1L, ReservationStatus.APPROVED));
+          .willReturn(
+              new ApproveReservationResult(
+                  1L, ReservationDisplayStatus.APPROVED, ReservationStatus.APPROVED));
 
       mockMvc
           .perform(
@@ -504,7 +508,8 @@ class ReservationTrainerControllerTest {
           .willReturn(
               new RejectReservationResult(
                   1L,
-                  ReservationStatus.REJECT_PENDING,
+                  ReservationDisplayStatus.REJECT_PENDING,
+                  null,
                   "REJECT_PENDING",
                   web3WriteView("MARKETPLACE_CLASS_CANCEL")));
 
@@ -590,7 +595,8 @@ class ReservationTrainerControllerTest {
           .willReturn(
               new RecoverReservationEscrowResult(
                   1L,
-                  ReservationStatus.REJECT_PENDING,
+                  ReservationDisplayStatus.REJECT_PENDING,
+                  null,
                   "REJECT_PENDING",
                   web3WriteView("MARKETPLACE_CLASS_CANCEL")));
 

@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.dto;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
@@ -55,7 +54,8 @@ public record GetReservationResult(
     LocalDate reservationDate,
     LocalTime reservationTime,
     int durationMinutes,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
     ReservationEscrowStatus escrowStatus,
     String userRequest,
     String orderId,
@@ -70,74 +70,5 @@ public record GetReservationResult(
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey,
-    ReservationExecutionResumeView web3Execution) {
-
-  /**
-   * Build a detail result from a reservation domain object.
-   *
-   * <p>{@code classTitle} and {@code priceAmount} must be sourced from the booking-time snapshot
-   * ({@code reservation.getBookedClassTitle()} / {@code reservation.getBookedPriceAmount()}) rather
-   * than from a live cross-module lookup. {@link
-   * momzzangseven.mztkbe.modules.marketplace.reservation.application.service.GetReservationDetailService}
-   * is responsible for applying the snapshot-first strategy before invoking this factory.
-   *
-   * @param reservation reservation domain model
-   * @param classTitle class title at booking time (from snapshot); {@code null} for legacy records
-   * @param priceAmount price in KRW at booking time (from snapshot); {@code null} for legacy
-   *     records
-   * @param thumbnailFinalObjectKey S3 thumbnail key (live lookup); {@code null} if not set
-   * @param trainerNickname trainer's current display nickname; {@code null} if unavailable
-   * @param userNickname reserving user's current display nickname; {@code null} if unavailable
-   * @return populated result record
-   */
-  public static GetReservationResult from(
-      Reservation reservation,
-      String classTitle,
-      Integer priceAmount,
-      String thumbnailFinalObjectKey,
-      String trainerNickname,
-      String userNickname) {
-    return from(
-        reservation,
-        classTitle,
-        priceAmount,
-        thumbnailFinalObjectKey,
-        trainerNickname,
-        userNickname,
-        null);
-  }
-
-  public static GetReservationResult from(
-      Reservation reservation,
-      String classTitle,
-      Integer priceAmount,
-      String thumbnailFinalObjectKey,
-      String trainerNickname,
-      String userNickname,
-      ReservationExecutionResumeView web3Execution) {
-    return new GetReservationResult(
-        reservation.getId(),
-        reservation.getUserId(),
-        reservation.getTrainerId(),
-        reservation.getSlotId(),
-        reservation.getReservationDate(),
-        reservation.getReservationTime(),
-        reservation.getDurationMinutes(),
-        reservation.getStatus(),
-        reservation.getEffectiveEscrowStatus(),
-        reservation.getUserRequest(),
-        reservation.getOrderId(),
-        reservation.getOrderKey(),
-        reservation.getTxHash(),
-        reservation.getContractDeadlineAt(),
-        reservation.getContractDeadlineEpochSeconds(),
-        reservation.getCreatedAt(),
-        reservation.getUpdatedAt(),
-        classTitle,
-        priceAmount,
-        trainerNickname,
-        userNickname,
-        thumbnailFinalObjectKey,
-        web3Execution);
-  }
-}
+    ReservationViewerActions viewerActions,
+    ReservationExecutionResumeView web3Execution) {}

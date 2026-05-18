@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RejectReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RejectReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
@@ -73,6 +74,7 @@ class RejectReservationServiceTest {
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
             FIXED_CLOCK);
+    sut.setTransactionPort(ReservationTestTransactionPort.direct());
   }
 
   private Reservation pendingReservation() {
@@ -124,7 +126,7 @@ class RejectReservationServiceTest {
       RejectReservationResult result =
           sut.execute(new RejectReservationCommand(RESERVATION_ID, TRAINER_ID, "일정 불가"));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.REJECT_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.REJECT_PENDING);
       assertThat(result.web3()).isNotNull();
       assertThat(result.web3().actionType()).isEqualTo("MARKETPLACE_CLASS_CANCEL");
       then(eventPublisher).shouldHaveNoInteractions();

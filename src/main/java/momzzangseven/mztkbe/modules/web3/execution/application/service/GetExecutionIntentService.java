@@ -7,11 +7,14 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentCleanupView;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentCandidateResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentCandidatesQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCandidatesUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCleanupViewUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentStateUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
@@ -21,6 +24,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.utils.Numeric;
@@ -36,7 +40,8 @@ import org.web3j.utils.Numeric;
 public class GetExecutionIntentService
     implements GetExecutionIntentUseCase,
         GetExecutionIntentStateUseCase,
-        GetExecutionIntentCleanupViewUseCase {
+        GetExecutionIntentCleanupViewUseCase,
+        GetExecutionIntentCandidatesUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
@@ -123,6 +128,21 @@ public class GetExecutionIntentService
   }
 
   @Override
+  public List<GetExecutionIntentCandidateResult> execute(GetExecutionIntentCandidatesQuery query) {
+    if (query == null || query.resourceType() == null || query.resourceId() == null) {
+      return List.of();
+    }
+    return executionIntentPersistencePort
+        .findByResource(
+            ExecutionResourceType.valueOf(query.resourceType().name()),
+            query.resourceId(),
+            query.limit())
+        .stream()
+        .map(this::toCandidate)
+        .toList();
+  }
+
+  @Override
   public List<ExecutionIntentCleanupView> getCleanupViewsByIds(List<Long> intentIds) {
     if (intentIds == null || intentIds.isEmpty()) {
       return List.of();
@@ -136,8 +156,29 @@ public class GetExecutionIntentService
                     intent.getResourceType(),
                     intent.getResourceId(),
                     intent.getActionType(),
-                    intent.getRequesterUserId()))
+                    intent.getRequesterUserId(),
+                    intent.getPayloadSnapshotJson()))
         .toList();
+  }
+
+  private GetExecutionIntentCandidateResult toCandidate(ExecutionIntent intent) {
+    Optional<ExecutionTransactionSummary> transaction =
+        intent.getSubmittedTxId() == null
+            ? Optional.empty()
+            : loadExecutionTransactionPort.findById(intent.getSubmittedTxId());
+    ExecutionIntentViewMapper.ExecutionTransactionView transactionView =
+        ExecutionIntentViewMapper.toTransactionView(transaction);
+    return new GetExecutionIntentCandidateResult(
+        intent.getPublicId(),
+        intent.getStatus(),
+        intent.getResourceType(),
+        intent.getResourceId(),
+        intent.getActionType(),
+        intent.getRequesterUserId(),
+        transactionView.transactionId(),
+        transactionView.transactionStatus(),
+        transactionView.txHash(),
+        intent.getPayloadSnapshotJson());
   }
 
   private SignRequestBundle buildSignRequest(ExecutionIntent intent) {

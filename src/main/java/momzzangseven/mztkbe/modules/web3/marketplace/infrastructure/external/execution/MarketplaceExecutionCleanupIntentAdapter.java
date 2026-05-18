@@ -40,7 +40,8 @@ public class MarketplaceExecutionCleanupIntentAdapter
                     view.publicId(),
                     view.resourceId(),
                     MarketplaceExecutionActionType.valueOf(view.actionType().name()),
-                    view.requesterUserId()))
+                    view.requesterUserId(),
+                    view.payloadSnapshotJson()))
         .toList();
   }
 

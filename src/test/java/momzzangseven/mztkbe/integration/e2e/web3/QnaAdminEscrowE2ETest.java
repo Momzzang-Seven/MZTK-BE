@@ -190,11 +190,11 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         .isEqualTo(1);
     assertThat(objectMapper.readTree(unsignedTxSnapshot(intentId)).path("expectedNonce").asLong())
         .isZero();
-
     var internalResult = runInternalExecutionBatchUseCase.runBatch(NOW);
 
     assertThat(internalResult.executedCount()).isEqualTo(1);
-    assertThat(internalResult.pendingCount()).isEqualTo(1);
+    assertThat(internalResult.signedCount()).isEqualTo(1);
+    assertThat(internalResult.pendingCount()).isZero();
     assertThat(createdCommandRef.get()).isNotNull();
     assertThat(createdCommandRef.get().fromAddress()).isEqualTo(SIGNER_ADDRESS);
     assertThat(createdCommandRef.get().toAddress()).isEqualTo(CALL_TARGET);
@@ -281,7 +281,8 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     var internalResult = runInternalExecutionBatchUseCase.runBatch(NOW);
 
     assertThat(internalResult.executedCount()).isEqualTo(1);
-    assertThat(internalResult.pendingCount()).isEqualTo(1);
+    assertThat(internalResult.signedCount()).isEqualTo(1);
+    assertThat(internalResult.pendingCount()).isZero();
     assertThat(createdCommandRef.get()).isNotNull();
     assertThat(createdCommandRef.get().fromAddress()).isEqualTo(SIGNER_ADDRESS);
     assertThat(createdCommandRef.get().toAddress()).isEqualTo(CALL_TARGET);

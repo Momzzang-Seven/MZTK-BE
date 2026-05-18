@@ -98,7 +98,8 @@ public class CompositeExecutionCleanupProtectionAdapter
         intent.getResourceType(),
         intent.getResourceId(),
         intent.getActionType(),
-        intent.getRequesterUserId());
+        intent.getRequesterUserId(),
+        intent.getPayloadSnapshotJson());
   }
 
   private boolean isMarketplaceUserIntent(ExecutionIntentCleanupView view) {

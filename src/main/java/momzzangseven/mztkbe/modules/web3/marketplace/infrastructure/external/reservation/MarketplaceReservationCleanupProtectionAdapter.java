@@ -31,6 +31,9 @@ public class MarketplaceReservationCleanupProtectionAdapter
   private ReservationExecutionCleanupProtectionQuery toReservationQuery(
       MarketplaceExecutionCleanupIntent intent) {
     return new ReservationExecutionCleanupProtectionQuery(
-        intent.publicId(), intent.resourceId(), intent.actionType().name());
+        intent.publicId(),
+        intent.resourceId(),
+        intent.actionType().name(),
+        intent.payloadSnapshotJson());
   }
 }

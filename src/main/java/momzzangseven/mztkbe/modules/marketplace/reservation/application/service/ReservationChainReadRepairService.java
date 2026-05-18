@@ -16,52 +16,35 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Rese
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionOperations;
-import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
-@Service
 public class ReservationChainReadRepairService implements RepairReservationChainReadUseCase {
 
   private final LoadReservationPort loadReservationPort;
   private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   private final SaveReservationPort saveReservationPort;
   private final Clock clock;
-  private TransactionOperations transactionOperations;
-  private TransactionOperations nonTransactionalOperations;
+  private RunReservationTransactionPort transactionPort;
 
   public ReservationChainReadRepairService(
       LoadReservationPort loadReservationPort,
-      @Nullable LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
       SaveReservationPort saveReservationPort,
       Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.loadReservationEscrowOrderPort =
-        loadReservationEscrowOrderPort == null
-            ? DisabledReservationWeb3PortFactory.escrowOrder()
-            : loadReservationEscrowOrderPort;
+        java.util.Objects.requireNonNull(loadReservationEscrowOrderPort);
     this.saveReservationPort = saveReservationPort;
     this.clock = clock;
   }
 
-  @Autowired
-  void setTransactionManager(PlatformTransactionManager transactionManager) {
-    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-    this.transactionOperations = transactionTemplate;
-    TransactionTemplate nonTransactionalTemplate = new TransactionTemplate(transactionManager);
-    nonTransactionalTemplate.setPropagationBehavior(
-        TransactionDefinition.PROPAGATION_NOT_SUPPORTED);
-    this.nonTransactionalOperations = nonTransactionalTemplate;
+  public void setTransactionPort(RunReservationTransactionPort transactionPort) {
+    this.transactionPort = java.util.Objects.requireNonNull(transactionPort);
   }
 
   @Override
@@ -209,17 +192,11 @@ public class ReservationChainReadRepairService implements RepairReservationChain
   }
 
   private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
-    if (transactionOperations == null) {
-      return supplier.get();
-    }
-    return transactionOperations.execute(status -> supplier.get());
+    return transactionPort.requiresNew(supplier);
   }
 
   private <T> T runWithoutTransaction(java.util.function.Supplier<T> supplier) {
-    if (nonTransactionalOperations == null) {
-      return supplier.get();
-    }
-    return nonTransactionalOperations.execute(status -> supplier.get());
+    return transactionPort.notSupported(supplier);
   }
 
   private Reservation repairCreatedOrder(

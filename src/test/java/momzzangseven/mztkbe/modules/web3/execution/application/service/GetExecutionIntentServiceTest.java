@@ -10,8 +10,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentCandidateResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentCandidatesQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateQuery;
@@ -26,6 +29,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTypeCode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import org.junit.jupiter.api.BeforeEach;
@@ -242,5 +246,51 @@ class GetExecutionIntentServiceTest {
     assertThat(result.transactionId()).isEqualTo(99L);
     assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SUCCEEDED);
     assertThat(result.txHash()).isEqualTo("0xhash");
+  }
+
+  @Test
+  void executeCandidates_returnsResourceCandidatesWithPayloadAndTransaction() {
+    ExecutionIntent intent =
+        ExecutionIntent.create(
+                "intent-candidate",
+                "root-candidate",
+                1,
+                ExecutionResourceType.ORDER,
+                "77",
+                ExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
+                7L,
+                9L,
+                ExecutionMode.EIP7702,
+                "0x" + "a".repeat(64),
+                "{\"reservationId\":77}",
+                "0x" + "1".repeat(40),
+                12L,
+                "0x" + "2".repeat(40),
+                LocalDateTime.of(2026, 4, 5, 12, 5),
+                "0x" + "3".repeat(64),
+                "0x" + "4".repeat(64),
+                null,
+                null,
+                BigInteger.TEN,
+                LocalDate.of(2026, 4, 5),
+                LocalDateTime.of(2026, 4, 5, 11, 0))
+            .markPendingOnchain(99L, LocalDateTime.of(2026, 4, 5, 11, 30));
+    when(executionIntentPersistencePort.findByResource(ExecutionResourceType.ORDER, "77", 20))
+        .thenReturn(List.of(intent));
+    when(loadExecutionTransactionPort.findById(99L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    99L, ExecutionTransactionStatus.PENDING, "0xhash")));
+
+    List<GetExecutionIntentCandidateResult> results =
+        service.execute(
+            new GetExecutionIntentCandidatesQuery(ExecutionResourceTypeCode.ORDER, "77", 20));
+
+    assertThat(results).hasSize(1);
+    assertThat(results.getFirst().executionIntentId()).isEqualTo("intent-candidate");
+    assertThat(results.getFirst().payloadSnapshotJson()).isEqualTo("{\"reservationId\":77}");
+    assertThat(results.getFirst().transactionStatus())
+        .isEqualTo(ExecutionTransactionStatus.PENDING);
   }
 }

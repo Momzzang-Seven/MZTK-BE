@@ -1,11 +1,13 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.api.dto;
 
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
 public record CreateReservationResponseDTO(
     Long reservationId,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
     String escrowStatus,
     String orderKey,
     ReservationWeb3WriteResponseDTO web3) {
@@ -13,6 +15,7 @@ public record CreateReservationResponseDTO(
     return new CreateReservationResponseDTO(
         result.reservationId(),
         result.status(),
+        result.businessStatus(),
         result.escrowStatus(),
         result.orderKey(),
         ReservationWeb3WriteResponseDTO.from(result.web3()));

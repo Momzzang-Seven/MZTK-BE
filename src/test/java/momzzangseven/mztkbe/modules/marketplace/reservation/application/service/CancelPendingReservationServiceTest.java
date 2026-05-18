@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -20,14 +21,21 @@ import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAcce
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -50,6 +58,9 @@ class CancelPendingReservationServiceTest {
   @Mock private CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   @Mock private LoadReservationWalletPort loadReservationWalletPort;
   @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
+  @Mock private LoadReservationActionStatePort loadReservationActionStatePort;
+  @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  @Mock private LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
@@ -74,6 +85,7 @@ class CancelPendingReservationServiceTest {
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
             FIXED_CLOCK);
+    sut.setTransactionPort(ReservationTestTransactionPort.direct());
   }
 
   private Reservation pendingReservation() {
@@ -126,11 +138,59 @@ class CancelPendingReservationServiceTest {
           sut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID));
 
       // then
-      assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.CANCEL_PENDING);
       assertThat(result.web3()).isNotNull();
       assertThat(result.web3().actionType()).isEqualTo("MARKETPLACE_CLASS_CANCEL");
       then(saveReservationPort).should(org.mockito.Mockito.times(2)).save(any());
       then(eventPublisher).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("[CP-02] 기존 active action-state가 있으면 새 cancel intent를 만들지 않는다")
+    void active_action_state_blocks_new_cancel() {
+      CancelPendingReservationService guardedSut =
+          new CancelPendingReservationService(
+              loadReservationPort,
+              saveReservationPort,
+              prepareReservationEscrowExecutionPort,
+              cancelReservationEscrowExecutionPort,
+              loadReservationWalletPort,
+              loadReservationEscrowPaymentConfigPort,
+              null,
+              null,
+              loadReservationActionStatePort,
+              null,
+              loadReservationExecutionStatePort,
+              loadReservationExecutionCandidatePort,
+              FIXED_CLOCK);
+      guardedSut.setTransactionPort(ReservationTestTransactionPort.direct());
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+          .willReturn(Optional.of(pendingReservation()));
+      given(
+              loadReservationActionStatePort.findByReservationIdAndStatuses(
+                  RESERVATION_ID,
+                  List.of(
+                      ReservationActionStateStatus.PREPARING,
+                      ReservationActionStateStatus.INTENT_BOUND)))
+          .willReturn(
+              List.of(
+                  MarketplaceReservationActionState.builder()
+                      .id(9L)
+                      .reservationId(RESERVATION_ID)
+                      .actionType(ReservationEscrowAction.TRAINER_REJECT)
+                      .status(ReservationActionStateStatus.INTENT_BOUND)
+                      .executionIntentPublicId("intent-reject")
+                      .build()));
+
+      assertThatThrownBy(
+              () ->
+                  guardedSut.execute(new CancelPendingReservationCommand(RESERVATION_ID, USER_ID)))
+          .isInstanceOfSatisfying(
+              BusinessException.class,
+              e ->
+                  assertThat(e.getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
   }
 

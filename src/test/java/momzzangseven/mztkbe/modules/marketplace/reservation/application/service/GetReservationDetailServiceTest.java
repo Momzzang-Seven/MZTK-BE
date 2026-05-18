@@ -14,12 +14,15 @@ import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAcce
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -67,7 +70,8 @@ class GetReservationDetailServiceTest {
 
     // then
     assertThat(result.reservationId()).isEqualTo(10L);
-    assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PENDING);
+    assertThat(result.businessStatus()).isEqualTo(ReservationStatus.PENDING);
   }
 
   @Test
@@ -89,8 +93,52 @@ class GetReservationDetailServiceTest {
 
     GetReservationResult result = repairingSut.execute(new GetReservationQuery(10L, 1L));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.USER_CANCELLED);
+    assertThat(result.businessStatus()).isEqualTo(ReservationStatus.USER_CANCELLED);
     then(repairUseCase).should().repairOne(original);
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - USER_EIP7702 txHash는 escrow projection lastTxHash를 우선 사용한다")
+  void execute_UsesEscrowLastTxHashBeforeReservationTxHash() {
+    Reservation reservation = sampleReservation(1L, 2L).toBuilder().txHash("legacy-tx").build();
+    LoadReservationEscrowPort escrowPort = mock(LoadReservationEscrowPort.class);
+    GetReservationDetailService escrowAwareSut =
+        new GetReservationDetailService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, null, escrowPort);
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(escrowPort.findByReservationId(10L))
+        .willReturn(
+            Optional.of(
+                MarketplaceReservationEscrow.builder()
+                    .reservationId(10L)
+                    .lastTxHash("0xescrowtx")
+                    .build()));
+    given(loadClassSummaryPort.findBySlotId(any())).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    GetReservationResult result = escrowAwareSut.execute(new GetReservationQuery(10L, 1L));
+
+    assertThat(result.txHash()).isEqualTo("0xescrowtx");
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - escrow lastTxHash가 없으면 기존 reservation txHash를 fallback으로 유지한다")
+  void execute_FallsBackToReservationTxHashWhenEscrowTxHashMissing() {
+    Reservation reservation = sampleReservation(1L, 2L).toBuilder().txHash("legacy-tx").build();
+    LoadReservationEscrowPort escrowPort = mock(LoadReservationEscrowPort.class);
+    GetReservationDetailService escrowAwareSut =
+        new GetReservationDetailService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, null, escrowPort);
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(escrowPort.findByReservationId(10L))
+        .willReturn(Optional.of(MarketplaceReservationEscrow.builder().reservationId(10L).build()));
+    given(loadClassSummaryPort.findBySlotId(any())).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    GetReservationResult result = escrowAwareSut.execute(new GetReservationQuery(10L, 1L));
+
+    assertThat(result.txHash()).isEqualTo("legacy-tx");
   }
 
   @Test

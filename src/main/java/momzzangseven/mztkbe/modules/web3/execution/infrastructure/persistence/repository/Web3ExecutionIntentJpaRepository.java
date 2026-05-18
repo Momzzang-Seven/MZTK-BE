@@ -38,6 +38,15 @@ public interface Web3ExecutionIntentJpaRepository
 
   @Query(
       "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " order by e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findByResource(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      Pageable pageable);
+
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
           + " where e.resourceType = :resourceType and e.resourceId in :resourceIds"
           + " order by e.resourceId asc, e.createdAt desc, e.id desc")
   List<Web3ExecutionIntentEntity> findLatestByResources(
@@ -147,7 +156,7 @@ public interface Web3ExecutionIntentJpaRepository
           from web3_execution_intents e
           where e.status = 'AWAITING_SIGNATURE'
             and e.mode = 'EIP1559'
-            and e.action_type in :actionTypes
+            and e.action_type in (:actionTypes)
           order by e.created_at asc, e.id asc
           limit 1
           for update skip locked
@@ -163,7 +172,7 @@ public interface Web3ExecutionIntentJpaRepository
           from web3_execution_intents e
           where e.status = 'AWAITING_SIGNATURE'
             and e.mode = 'EIP1559'
-            and e.action_type in :actionTypes
+            and e.action_type in (:actionTypes)
           limit 1
           """,
       nativeQuery = true)

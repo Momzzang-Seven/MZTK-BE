@@ -10,6 +10,7 @@ class ReservationStatusTest {
   @Test
   @DisplayName("isTerminal - correctly identifies terminal states")
   void isTerminal_CorrectlyIdentifies() {
+    assertThat(ReservationStatus.HOLDING.isTerminal()).isFalse();
     assertThat(ReservationStatus.PENDING.isTerminal()).isFalse();
     assertThat(ReservationStatus.APPROVED.isTerminal()).isFalse();
 
@@ -84,6 +85,7 @@ class ReservationStatusTest {
   @Test
   @DisplayName("user escrow statuses are scheduler-invisible and explicit")
   void userEscrowStatusesAreSchedulerInvisible() {
+    assertThat(ReservationStatus.HOLDING.isSchedulerInvisibleUserState()).isTrue();
     assertThat(ReservationStatus.PURCHASE_PREPARING.isSchedulerInvisibleUserState()).isTrue();
     assertThat(ReservationStatus.PURCHASE_PENDING.isSchedulerInvisibleUserState()).isTrue();
     assertThat(ReservationStatus.CANCEL_PENDING.isSchedulerInvisibleUserState()).isTrue();
@@ -102,6 +104,14 @@ class ReservationStatusTest {
   @Test
   @DisplayName("canTransitionTo - user escrow transition matrix")
   void canTransitionTo_UserEscrowTransitions() {
+    assertThat(ReservationStatus.HOLDING.canTransitionTo(ReservationStatus.PENDING)).isTrue();
+    assertThat(ReservationStatus.HOLDING.canTransitionTo(ReservationStatus.HOLD_EXPIRED)).isTrue();
+    assertThat(ReservationStatus.HOLDING.canTransitionTo(ReservationStatus.PAYMENT_FAILED))
+        .isTrue();
+    assertThat(ReservationStatus.HOLDING.canTransitionTo(ReservationStatus.PURCHASE_PREPARING))
+        .isFalse();
+    assertThat(ReservationStatus.HOLDING.canTransitionTo(ReservationStatus.PURCHASE_PENDING))
+        .isFalse();
     assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.PURCHASE_PREPARING))
         .isTrue();
     assertThat(

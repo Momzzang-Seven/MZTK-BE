@@ -7,8 +7,8 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceReservationStateException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
@@ -365,9 +365,9 @@ public class Reservation {
       Long expectedContractDeadlineEpochSeconds,
       LocalDateTime expectedContractDeadlineAt,
       String pendingAttemptToken) {
-    guardTransition(ReservationStatus.PURCHASE_PREPARING);
+    guardTransition(ReservationStatus.HOLDING);
     return toBuilder()
-        .status(ReservationStatus.PURCHASE_PREPARING)
+        .status(ReservationStatus.HOLDING)
         .escrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
         .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
         .orderKey(orderKey)
@@ -393,7 +393,7 @@ public class Reservation {
           case CONFIRM_PENDING -> ReservationEscrowStatus.CONFIRM_PENDING;
           case DEADLINE_REFUND_PENDING -> ReservationEscrowStatus.DEADLINE_REFUND_PENDING;
           default ->
-              throw new BusinessException(
+              throw new MarketplaceReservationStateException(
                   ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
                   "Cannot bind execution intent from " + status);
         };
@@ -404,11 +404,31 @@ public class Reservation {
   }
 
   public Reservation bindPurchaseIntent(String executionIntentPublicId) {
-    guardTransition(ReservationStatus.PURCHASE_PENDING);
+    if (status != ReservationStatus.HOLDING && status != ReservationStatus.PURCHASE_PREPARING) {
+      throw new MarketplaceReservationStateException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Cannot bind purchase intent from " + status);
+    }
     return toBuilder()
-        .status(ReservationStatus.PURCHASE_PENDING)
+        .status(ReservationStatus.HOLDING)
         .escrowStatus(ReservationEscrowStatus.PURCHASE_PENDING)
         .currentExecutionIntentPublicId(executionIntentPublicId)
+        .build();
+  }
+
+  public Reservation retryPurchasePreparing(
+      String pendingAttemptToken, LocalDateTime holdExpiresAt) {
+    if (status != ReservationStatus.HOLDING
+        || getEffectiveEscrowStatus() != ReservationEscrowStatus.PURCHASE_PREPARING
+        || currentExecutionIntentPublicId != null) {
+      throw new MarketplaceReservationStateException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Cannot retry purchase preparation from " + status);
+    }
+    return toBuilder()
+        .pendingAction(ReservationEscrowAction.PURCHASE)
+        .pendingAttemptToken(pendingAttemptToken)
+        .holdExpiresAt(holdExpiresAt)
         .build();
   }
 
@@ -468,7 +488,7 @@ public class Reservation {
       LocalDateTime contractDeadlineAt,
       boolean completionWindowFits) {
     if (!isCreatedChainRepairCandidate()) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Cannot repair created chain order from " + status);
     }
@@ -538,7 +558,7 @@ public class Reservation {
       Long contractDeadlineEpochSeconds,
       LocalDateTime contractDeadlineAt) {
     if (!outcomeStatus.isTerminal() && outcomeStatus != ReservationStatus.MANUAL_SYNC_REQUIRED) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Unsupported chain outcome status: " + outcomeStatus);
     }
@@ -661,7 +681,7 @@ public class Reservation {
 
   public Reservation rollbackToPriorState() {
     if (priorStatus == null) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Prior status is not available for rollback from " + status);
     }
@@ -708,7 +728,7 @@ public class Reservation {
 
   private void guardTransition(ReservationStatus next) {
     if (!status.canTransitionTo(next)) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Cannot transition from " + status + " to " + next);
     }

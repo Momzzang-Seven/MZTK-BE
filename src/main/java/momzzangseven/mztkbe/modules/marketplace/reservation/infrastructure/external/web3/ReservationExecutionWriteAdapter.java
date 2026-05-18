@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.Marketplace
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 /** Cross-module adapter for owner-scoped shared execution recovery reads. */
@@ -32,6 +33,7 @@ import org.springframework.stereotype.Component;
   GetExecutionIntentStateUseCase.class,
   ReplayConfirmedExecutionIntentUseCase.class
 })
+@Primary
 public class ReservationExecutionWriteAdapter
     implements LoadReservationExecutionWritePort,
         LoadReservationExecutionStatePort,

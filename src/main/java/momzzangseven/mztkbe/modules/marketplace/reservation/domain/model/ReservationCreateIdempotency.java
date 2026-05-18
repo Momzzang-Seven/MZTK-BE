@@ -19,7 +19,8 @@ public class ReservationCreateIdempotency {
   private final String payloadHash;
   private final ReservationCreateIdempotencyStatus status;
   private final Long reservationId;
-  private final String currentExecutionIntentPublicId;
+  private final Long escrowId;
+  private final Long actionStateId;
   private final String responseSnapshotJson;
   private final LocalDateTime expiresAt;
   private final LocalDateTime createdAt;
@@ -36,21 +37,18 @@ public class ReservationCreateIdempotency {
         .build();
   }
 
-  public ReservationCreateIdempotency markIntentCreated(
-      Long reservationId, String executionIntentPublicId) {
+  public ReservationCreateIdempotency attachReservationGraph(
+      Long reservationId, Long escrowId, Long actionStateId) {
     return toBuilder()
-        .status(ReservationCreateIdempotencyStatus.INTENT_CREATED)
         .reservationId(reservationId)
-        .currentExecutionIntentPublicId(executionIntentPublicId)
+        .escrowId(escrowId)
+        .actionStateId(actionStateId)
         .build();
   }
 
-  public ReservationCreateIdempotency markBound(
-      Long reservationId, String executionIntentPublicId, String responseSnapshotJson) {
+  public ReservationCreateIdempotency markBound(String responseSnapshotJson) {
     return toBuilder()
         .status(ReservationCreateIdempotencyStatus.BOUND)
-        .reservationId(reservationId)
-        .currentExecutionIntentPublicId(executionIntentPublicId)
         .responseSnapshotJson(responseSnapshotJson)
         .build();
   }
@@ -58,15 +56,17 @@ public class ReservationCreateIdempotency {
   public ReservationCreateIdempotency markCompleted(String responseSnapshotJson) {
     return toBuilder()
         .status(ReservationCreateIdempotencyStatus.COMPLETED)
-        .currentExecutionIntentPublicId(null)
         .responseSnapshotJson(responseSnapshotJson)
         .build();
+  }
+
+  public ReservationCreateIdempotency replaceActionState(Long actionStateId) {
+    return toBuilder().actionStateId(actionStateId).build();
   }
 
   public ReservationCreateIdempotency markFailed(String responseSnapshotJson) {
     return toBuilder()
         .status(ReservationCreateIdempotencyStatus.FAILED)
-        .currentExecutionIntentPublicId(null)
         .responseSnapshotJson(responseSnapshotJson)
         .build();
   }
@@ -76,7 +76,8 @@ public class ReservationCreateIdempotency {
         .payloadHash(payloadHash)
         .status(ReservationCreateIdempotencyStatus.PREPARING)
         .reservationId(null)
-        .currentExecutionIntentPublicId(null)
+        .escrowId(null)
+        .actionStateId(null)
         .responseSnapshotJson(null)
         .expiresAt(expiresAt)
         .build();

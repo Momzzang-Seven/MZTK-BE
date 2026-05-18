@@ -9,25 +9,25 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Rese
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowExecutionTerminatedCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApplyReservationEscrowExecutionHookUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionOperations;
-import org.springframework.transaction.support.TransactionTemplate;
 
-@Service
 @RequiredArgsConstructor
 @Slf4j
 public class ApplyReservationEscrowExecutionHookService
@@ -42,17 +42,32 @@ public class ApplyReservationEscrowExecutionHookService
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final Clock clock;
-  @Nullable private final RecordTrainerStrikePort recordTrainerStrikePort;
-  @Nullable private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
-  @Nullable private final LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
-  @Nullable private final SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
-  @Nullable private TransactionOperations nonTransactionalOperations;
+  private final RecordTrainerStrikePort recordTrainerStrikePort;
+  private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
+  private final LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
+  private final SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
+  private LoadReservationActionStatePort loadReservationActionStatePort;
+  private SaveReservationActionStatePort saveReservationActionStatePort;
+  private LoadReservationEscrowPort loadReservationEscrowPort;
+  private SaveReservationEscrowPort saveReservationEscrowPort;
+  private RunReservationTransactionPort transactionPort;
 
-  @Autowired
-  void setTransactionManager(PlatformTransactionManager transactionManager) {
-    TransactionTemplate template = new TransactionTemplate(transactionManager);
-    template.setPropagationBehavior(TransactionDefinition.PROPAGATION_NOT_SUPPORTED);
-    this.nonTransactionalOperations = template;
+  public void setTransactionPort(RunReservationTransactionPort transactionPort) {
+    this.transactionPort = java.util.Objects.requireNonNull(transactionPort);
+  }
+
+  public void setActionStatePorts(
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      SaveReservationActionStatePort saveReservationActionStatePort) {
+    this.loadReservationActionStatePort = loadReservationActionStatePort;
+    this.saveReservationActionStatePort = saveReservationActionStatePort;
+  }
+
+  public void setEscrowProjectionPorts(
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationEscrowPort saveReservationEscrowPort) {
+    this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.saveReservationEscrowPort = saveReservationEscrowPort;
   }
 
   @Override
@@ -60,7 +75,9 @@ public class ApplyReservationEscrowExecutionHookService
     ChainOrderLookup chainOrderLookup = loadChainOrderBeforeReservationLock(command);
     Reservation reservation = loadReservationForHook(command.executionIntentPublicId(), command);
     if (isAlreadyApplied(reservation, command.actionType(), command.actorType())) {
-      repairTxHashIfNeeded(reservation, command.txHash());
+      Reservation repaired = repairTxHashIfNeeded(reservation, command.txHash());
+      syncEscrowProjection(repaired, command.txHash(), null, null);
+      markActionStateConfirmed(command, repaired);
       recordTrainerRejectStrikeIfNeeded(reservation, command.actionType(), command.actorType());
       return;
     }
@@ -73,9 +90,16 @@ public class ApplyReservationEscrowExecutionHookService
       return;
     }
     if (chainOrderLookup.failure() != null) {
-      saveReservationPort.save(
+      Reservation updated =
           reservation.markDeadlineSyncRequired(
-              "CHAIN_ORDER_READ_FAILED", chainOrderLookup.failure().getMessage()));
+              "CHAIN_ORDER_READ_FAILED", chainOrderLookup.failure().getMessage());
+      saveReservationPort.save(updated);
+      syncEscrowProjection(
+          updated,
+          command.txHash(),
+          "CHAIN_ORDER_READ_FAILED",
+          chainOrderLookup.failure().getMessage());
+      markActionStateConfirmed(command, updated);
       return;
     }
     Reservation updated =
@@ -90,6 +114,8 @@ public class ApplyReservationEscrowExecutionHookService
           default -> throw new IllegalStateException("unsupported marketplace action");
         };
     saveReservationPort.save(updated);
+    syncEscrowProjection(updated, command.txHash(), null, null);
+    markActionStateConfirmed(command, updated);
     recordTrainerRejectStrikeIfNeeded(updated, command.actionType(), command.actorType());
   }
 
@@ -105,6 +131,8 @@ public class ApplyReservationEscrowExecutionHookService
             ? reservation.markPaymentFailed(command.terminalStatus(), command.failureReason())
             : reservation.rollbackToPriorState();
     saveReservationPort.save(updated);
+    syncEscrowProjection(updated, null, command.terminalStatus(), command.failureReason());
+    markActionStateTerminated(command, updated);
     markPurchaseCreateIdempotencyFailedIfNeeded(command, reservation);
   }
 
@@ -183,7 +211,7 @@ public class ApplyReservationEscrowExecutionHookService
   private Reservation applyPurchaseConfirmed(
       Reservation reservation,
       ReservationEscrowExecutionConfirmedCommand command,
-      @Nullable ReservationEscrowOrderView chainOrder) {
+      ReservationEscrowOrderView chainOrder) {
     if (chainOrder != null) {
       return applyPurchaseChainState(reservation, command, chainOrder);
     }
@@ -280,10 +308,7 @@ public class ApplyReservationEscrowExecutionHookService
   }
 
   private <T> T runWithoutTransaction(java.util.function.Supplier<T> supplier) {
-    if (nonTransactionalOperations == null) {
-      return supplier.get();
-    }
-    return nonTransactionalOperations.execute(status -> supplier.get());
+    return transactionPort.notSupported(supplier);
   }
 
   private void markPurchaseCreateIdempotencyFailedIfNeeded(
@@ -304,11 +329,118 @@ public class ApplyReservationEscrowExecutionHookService
                             + "\"}")));
   }
 
-  private void repairTxHashIfNeeded(Reservation reservation, @Nullable String txHash) {
-    if (txHash == null || txHash.equals(reservation.getTxHash())) {
+  private void syncEscrowProjection(
+      Reservation reservation, String txHash, String failureCode, String failureMessage) {
+    if (loadReservationEscrowPort == null || saveReservationEscrowPort == null) {
       return;
     }
-    saveReservationPort.save(reservation.updateTxHash(txHash));
+    loadReservationEscrowPort
+        .findByReservationIdWithLock(reservation.getId())
+        .map(
+            escrow ->
+                updateEscrowProjection(escrow, reservation, txHash, failureCode, failureMessage))
+        .ifPresent(saveReservationEscrowPort::save);
+  }
+
+  private MarketplaceReservationEscrow updateEscrowProjection(
+      MarketplaceReservationEscrow escrow,
+      Reservation reservation,
+      String txHash,
+      String failureCode,
+      String failureMessage) {
+    return escrow.toBuilder()
+        .escrowStatus(reservation.getEffectiveEscrowStatus())
+        .contractDeadlineEpochSeconds(reservation.getContractDeadlineEpochSeconds())
+        .contractDeadlineAt(reservation.getContractDeadlineAt())
+        .lastTxHash(txHash == null ? escrow.getLastTxHash() : txHash)
+        .lastFailureCode(failureCode)
+        .lastFailureMessage(failureMessage)
+        .build();
+  }
+
+  private void markActionStateConfirmed(
+      ReservationEscrowExecutionConfirmedCommand command, Reservation reservation) {
+    findActionStateForHook(
+            command.executionIntentPublicId(),
+            command.actionStateId(),
+            command.pendingAttemptToken(),
+            reservation)
+        .ifPresent(
+            actionState ->
+                saveReservationActionStatePort.save(
+                    actionState.toBuilder()
+                        .executionIntentPublicId(command.executionIntentPublicId())
+                        .status(ReservationActionStateStatus.CONFIRMED)
+                        .retryable(false)
+                        .errorCode(null)
+                        .errorReason(null)
+                        .build()));
+  }
+
+  private void markActionStateTerminated(
+      ReservationEscrowExecutionTerminatedCommand command, Reservation reservation) {
+    findActionStateForHook(
+            command.executionIntentPublicId(),
+            command.actionStateId(),
+            command.pendingAttemptToken(),
+            reservation)
+        .ifPresent(
+            actionState ->
+                saveReservationActionStatePort.save(
+                    actionState.toBuilder()
+                        .executionIntentPublicId(command.executionIntentPublicId())
+                        .status(ReservationActionStateStatus.TERMINATED)
+                        .retryable(isRetryableTerminal(command.terminalStatus()))
+                        .errorCode(command.terminalStatus())
+                        .errorReason(command.failureReason())
+                        .build()));
+  }
+
+  private java.util.Optional<MarketplaceReservationActionState> findActionStateForHook(
+      String executionIntentPublicId,
+      Long actionStateId,
+      String pendingAttemptToken,
+      Reservation reservation) {
+    if (loadReservationActionStatePort == null || saveReservationActionStatePort == null) {
+      return java.util.Optional.empty();
+    }
+    java.util.Optional<MarketplaceReservationActionState> byIntent =
+        loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock(
+            executionIntentPublicId);
+    if (byIntent.isPresent()) {
+      return byIntent.filter(
+          actionState -> actionStateMatches(actionState, reservation, pendingAttemptToken));
+    }
+    if (actionStateId == null) {
+      return java.util.Optional.empty();
+    }
+    return loadReservationActionStatePort
+        .findByIdWithLock(actionStateId)
+        .filter(actionState -> actionStateMatches(actionState, reservation, pendingAttemptToken));
+  }
+
+  private boolean actionStateMatches(
+      MarketplaceReservationActionState actionState,
+      Reservation reservation,
+      String pendingAttemptToken) {
+    return reservation.getId().equals(actionState.getReservationId())
+        && (pendingAttemptToken == null
+            || pendingAttemptToken.equals(actionState.getAttemptToken()));
+  }
+
+  private boolean isRetryableTerminal(String terminalStatus) {
+    return "FAILED_ONCHAIN".equals(terminalStatus)
+        || "EXPIRED".equals(terminalStatus)
+        || "NONCE_STALE".equals(terminalStatus);
+  }
+
+  private Reservation repairTxHashIfNeeded(Reservation reservation, String txHash) {
+    if (txHash == null || txHash.equals(reservation.getTxHash())) {
+      return reservation;
+    }
+    Reservation repaired = reservation.updateTxHash(txHash);
+    saveReservationPort.save(repaired);
+    return repaired;
   }
 
   private LocalDateTime deadlineAt(Long epochSeconds) {
@@ -318,14 +450,13 @@ public class ApplyReservationEscrowExecutionHookService
     return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), clock.getZone());
   }
 
-  private record ChainOrderLookup(
-      @Nullable ReservationEscrowOrderView order, @Nullable RuntimeException failure) {
+  private record ChainOrderLookup(ReservationEscrowOrderView order, RuntimeException failure) {
 
     private static ChainOrderLookup notLoaded() {
       return new ChainOrderLookup(null, null);
     }
 
-    private static ChainOrderLookup loaded(@Nullable ReservationEscrowOrderView order) {
+    private static ChainOrderLookup loaded(ReservationEscrowOrderView order) {
       return new ChainOrderLookup(order, null);
     }
 

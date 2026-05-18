@@ -12,4 +12,5 @@ public record ReservationEscrowExecutionConfirmedCommand(
     Long expectedContractDeadlineEpochSeconds,
     Long contractDeadlineEpochSeconds,
     LocalDateTime sessionEndAt,
-    String pendingAttemptToken) {}
+    String pendingAttemptToken,
+    Long actionStateId) {}

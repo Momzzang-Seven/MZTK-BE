@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter;
 
 import java.sql.SQLException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import javax.sql.DataSource;
@@ -8,9 +9,11 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationCreateIdempotencyEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationCreateIdempotencyJpaRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
@@ -19,6 +22,7 @@ public class ReservationCreateIdempotencyPersistenceAdapter
 
   private final ReservationCreateIdempotencyJpaRepository repository;
   private final DataSource dataSource;
+  private final Clock clock;
 
   @Override
   public Optional<ReservationCreateIdempotency> findByBuyerIdAndKeyHashWithLock(
@@ -70,6 +74,19 @@ public class ReservationCreateIdempotencyPersistenceAdapter
     return new ReserveCreateIdempotencyResult(created, true);
   }
 
+  @Override
+  @Transactional
+  public Optional<ReservationCreateIdempotency> replaceActionStateIfCurrent(
+      Long idempotencyId, Long expectedActionStateId, Long newActionStateId) {
+    int updated =
+        repository.replaceActionStateIfCurrent(
+            idempotencyId, expectedActionStateId, newActionStateId, LocalDateTime.now(clock));
+    if (updated == 0) {
+      return Optional.empty();
+    }
+    return repository.findByIdWithLock(idempotencyId).map(this::toDomain);
+  }
+
   private boolean isH2Database() {
     try (var connection = dataSource.getConnection()) {
       return "H2".equalsIgnoreCase(connection.getMetaData().getDatabaseProductName());
@@ -84,9 +101,10 @@ public class ReservationCreateIdempotencyPersistenceAdapter
         .buyerId(entity.getBuyerId())
         .keyHash(entity.getKeyHash())
         .payloadHash(entity.getPayloadHash())
-        .status(entity.getStatus())
+        .status(ReservationCreateIdempotencyStatus.valueOf(entity.getStatus()))
         .reservationId(entity.getReservationId())
-        .currentExecutionIntentPublicId(entity.getCurrentExecutionIntentPublicId())
+        .escrowId(entity.getEscrowId())
+        .actionStateId(entity.getActionStateId())
         .responseSnapshotJson(entity.getResponseSnapshotJson())
         .expiresAt(entity.getExpiresAt())
         .createdAt(entity.getCreatedAt())
@@ -100,9 +118,10 @@ public class ReservationCreateIdempotencyPersistenceAdapter
         .buyerId(domain.getBuyerId())
         .keyHash(domain.getKeyHash())
         .payloadHash(domain.getPayloadHash())
-        .status(domain.getStatus())
+        .status(domain.getStatus().name())
         .reservationId(domain.getReservationId())
-        .currentExecutionIntentPublicId(domain.getCurrentExecutionIntentPublicId())
+        .escrowId(domain.getEscrowId())
+        .actionStateId(domain.getActionStateId())
         .responseSnapshotJson(domain.getResponseSnapshotJson())
         .expiresAt(domain.getExpiresAt())
         .createdAt(domain.getCreatedAt())

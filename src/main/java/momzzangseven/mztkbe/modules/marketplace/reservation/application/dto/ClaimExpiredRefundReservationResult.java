@@ -5,6 +5,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 /** Result returned after preparing a buyer deadline refund execution. */
 public record ClaimExpiredRefundReservationResult(
     Long reservationId,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
     String escrowStatus,
     ReservationExecutionWriteView web3) {}

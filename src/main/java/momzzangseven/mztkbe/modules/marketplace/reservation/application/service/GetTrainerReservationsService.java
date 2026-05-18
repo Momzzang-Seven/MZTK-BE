@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationListStatusFilter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
@@ -19,10 +20,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Returns a cursor-paginated list of reservations assigned to the authenticated trainer.
@@ -48,7 +45,6 @@ import org.springframework.transaction.annotation.Transactional;
  * encodes this as {@code KeysetCursor(createdAt = reservationDate.atTime(reservationTime), id)}.
  * This matches the user-list sort contract so trainers and users see the same temporal ordering.
  */
-@Service
 public class GetTrainerReservationsService implements GetTrainerReservationsUseCase {
 
   // CURSOR_SCOPE is now status-dependent; use GetTrainerReservationsQuery.cursorScope(status).
@@ -59,13 +55,12 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
   private final LoadReservationExecutionResumePort loadReservationExecutionResumePort;
   private final RepairReservationChainReadUseCase repairReservationChainReadUseCase;
 
-  @Autowired
   public GetTrainerReservationsService(
       LoadReservationPort loadReservationPort,
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
-      @Nullable LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      @Nullable RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
     this.loadReservationPort = loadReservationPort;
     this.loadClassSummaryPort = loadClassSummaryPort;
     this.loadUserSummaryPort = loadUserSummaryPort;
@@ -92,7 +87,6 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
   }
 
   @Override
-  @Transactional(readOnly = true)
   public CursorSlice<ReservationSummaryResult> execute(GetTrainerReservationsQuery query) {
     query.validate();
     CursorPageRequest pageRequest = query.pageRequest();
@@ -140,13 +134,14 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
                           ? r.getBookedPriceAmount()
                           : (cs != null ? cs.priceAmount() : null);
                   UserSummary userSummary = userSummaries.get(r.getUserId());
-                  return ReservationSummaryResult.from(
+                  return ReservationDisplayStatusMapper.summaryResult(
                       r,
                       classTitle,
                       priceAmount,
                       cs != null ? cs.thumbnailFinalObjectKey() : null,
                       trainerSummary != null ? trainerSummary.nickname() : null,
                       userSummary != null ? userSummary.nickname() : null,
+                      query.trainerId(),
                       ReservationExecutionResumeViewer.hydrate(
                           r, query.trainerId(), web3ByReservationId.get(r.getId())));
                 })
@@ -170,8 +165,10 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
     CursorPageRequest request = initialRequest;
 
     while (matching.size() <= initialRequest.size()) {
+      ReservationStatus storedStatus =
+          ReservationListStatusFilterMapper.toStoredStatus(query.status());
       List<Reservation> loaded =
-          loadReservationPort.findByTrainerIdCursor(query.trainerId(), query.status(), request);
+          loadReservationPort.findByTrainerIdCursor(query.trainerId(), storedStatus, request);
       if (loaded.isEmpty()) {
         break;
       }
@@ -197,8 +194,10 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
     return new RepairedPage(List.copyOf(page), hasNext);
   }
 
-  private static boolean matchesStatus(Reservation reservation, ReservationStatus status) {
-    return status == null || reservation.getStatus() == status;
+  private static boolean matchesStatus(
+      Reservation reservation, ReservationListStatusFilter status) {
+    return status == null
+        || reservation.getStatus() == ReservationListStatusFilterMapper.toStoredStatus(status);
   }
 
   private static CursorPageRequest nextRequestAfter(

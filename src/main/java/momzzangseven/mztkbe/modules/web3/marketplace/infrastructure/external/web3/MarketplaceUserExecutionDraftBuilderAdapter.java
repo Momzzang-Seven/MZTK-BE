@@ -6,8 +6,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceExecutionStateException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionRequest;
@@ -107,9 +107,21 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
             signature.signedAt(),
             signature.signatureBytes() == null
                 ? null
-                : Numeric.toHexString(signature.signatureBytes()));
+                : Numeric.toHexString(signature.signatureBytes()),
+            1,
+            request.escrowId(),
+            request.actionStateId(),
+            request.rootIdempotencyKey());
 
     LocalDateTime expiresAt = expiresAt(context, signature, request);
+    String rootIdempotencyKey =
+        request.rootIdempotencyKey() == null || request.rootIdempotencyKey().isBlank()
+            ? MarketplaceEscrowIdempotencyKeyFactory.create(
+                request.actionType(),
+                request.actorType(),
+                request.authorityUserId(),
+                request.reservationId())
+            : request.rootIdempotencyKey();
     return new MarketplaceExecutionDraft(
         MarketplaceExecutionResourceType.ORDER,
         request.resourceId(),
@@ -119,11 +131,7 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
         request.counterpartyUserId(),
         request.orderId(),
         request.orderKey(),
-        MarketplaceEscrowIdempotencyKeyFactory.create(
-            request.actionType(),
-            request.actorType(),
-            request.authorityUserId(),
-            request.reservationId()),
+        rootIdempotencyKey,
         marketplacePayloadSerializer.hashHex(payload.idempotencyView()),
         marketplacePayloadSerializer.serialize(payload),
         List.of(call),
@@ -146,13 +154,13 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
             ? request.trainerWalletAddress()
             : request.buyerWalletAddress();
     if (!authorityAddress.equals(EvmAddress.of(expectedSnapshot).value())) {
-      throw new BusinessException(
+      throw new MarketplaceExecutionStateException(
           ErrorCode.MARKETPLACE_SWITCH_WALLET_REQUIRED,
           "active wallet does not match reservation wallet snapshot");
     }
     if (request.actionType() == MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE
         && request.allowanceStrategy() == MarketplaceAllowanceStrategy.APPROVE_BATCH) {
-      throw new BusinessException(
+      throw new MarketplaceExecutionStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "approve-batch marketplace purchase is not enabled for this draft builder");
     }

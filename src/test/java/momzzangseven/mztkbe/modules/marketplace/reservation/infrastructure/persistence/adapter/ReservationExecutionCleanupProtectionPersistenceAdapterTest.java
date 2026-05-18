@@ -11,9 +11,7 @@ import static org.mockito.Mockito.never;
 import java.util.Collection;
 import java.util.List;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionCleanupProtectionQuery;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationCreateIdempotencyJpaRepository;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.MarketplaceReservationActionStateJpaRepository;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationJpaRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,16 +27,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
 
   @Mock private ReservationJpaRepository reservationJpaRepository;
-  @Mock private ReservationCreateIdempotencyJpaRepository createIdempotencyJpaRepository;
+  @Mock private MarketplaceReservationActionStateJpaRepository actionStateJpaRepository;
 
   @Test
   @DisplayName(
-      "reservation pointer, create idempotency pointer, unbound pending action intent를 보호한다")
+      "reservation pointer, active action-state pointer, unbound pending action intent를 보호한다")
   void findProtectedExecutionIntentPublicIds_returnsReferencedAndOrphanFallbackIntents() {
     given(reservationJpaRepository.findCurrentExecutionIntentPublicIdsIn(anyCollection()))
         .willReturn(List.of("intent-current"));
     given(
-            createIdempotencyJpaRepository.findCurrentExecutionIntentPublicIdsIn(
+            actionStateJpaRepository.findExecutionIntentPublicIdsInByStatusIn(
                 anyCollection(), anyCollection()))
         .willReturn(List.of("intent-create"));
     given(
@@ -51,7 +49,7 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
         .willReturn(1L);
     ReservationExecutionCleanupProtectionPersistenceAdapter adapter =
         new ReservationExecutionCleanupProtectionPersistenceAdapter(
-            reservationJpaRepository, createIdempotencyJpaRepository);
+            reservationJpaRepository, actionStateJpaRepository);
 
     List<String> result =
         adapter.findProtectedExecutionIntentPublicIds(
@@ -76,7 +74,7 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
     given(reservationJpaRepository.findCurrentExecutionIntentPublicIdsIn(anyCollection()))
         .willReturn(List.of());
     given(
-            createIdempotencyJpaRepository.findCurrentExecutionIntentPublicIdsIn(
+            actionStateJpaRepository.findExecutionIntentPublicIdsInByStatusIn(
                 anyCollection(), anyCollection()))
         .willReturn(List.of());
     given(
@@ -85,21 +83,19 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
         .willReturn(1L);
     ReservationExecutionCleanupProtectionPersistenceAdapter adapter =
         new ReservationExecutionCleanupProtectionPersistenceAdapter(
-            reservationJpaRepository, createIdempotencyJpaRepository);
+            reservationJpaRepository, actionStateJpaRepository);
 
     List<String> result =
         adapter.findProtectedExecutionIntentPublicIds(List.of(intent("intent", "30", actionType)));
 
     assertThat(result).containsExactly("intent");
-    ArgumentCaptor<Collection<ReservationEscrowAction>> actionCaptor =
-        ArgumentCaptor.forClass(Collection.class);
-    ArgumentCaptor<Collection<ReservationStatus>> statusCaptor =
-        ArgumentCaptor.forClass(Collection.class);
+    ArgumentCaptor<Collection<String>> actionCaptor = ArgumentCaptor.forClass(Collection.class);
+    ArgumentCaptor<Collection<String>> statusCaptor = ArgumentCaptor.forClass(Collection.class);
     then(reservationJpaRepository)
         .should()
         .countUnboundPendingAction(eq(30L), actionCaptor.capture(), statusCaptor.capture());
-    assertThat(statusCaptor.getValue()).contains(ReservationStatus.valueOf(expectedStatus));
-    assertThat(actionCaptor.getValue()).contains(ReservationEscrowAction.valueOf(expectedAction));
+    assertThat(statusCaptor.getValue()).contains(expectedStatus);
+    assertThat(actionCaptor.getValue()).contains(expectedAction);
   }
 
   @ParameterizedTest
@@ -110,12 +106,12 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
     given(reservationJpaRepository.findCurrentExecutionIntentPublicIdsIn(anyCollection()))
         .willReturn(List.of());
     given(
-            createIdempotencyJpaRepository.findCurrentExecutionIntentPublicIdsIn(
+            actionStateJpaRepository.findExecutionIntentPublicIdsInByStatusIn(
                 anyCollection(), anyCollection()))
         .willReturn(List.of());
     ReservationExecutionCleanupProtectionPersistenceAdapter adapter =
         new ReservationExecutionCleanupProtectionPersistenceAdapter(
-            reservationJpaRepository, createIdempotencyJpaRepository);
+            reservationJpaRepository, actionStateJpaRepository);
 
     List<String> result =
         adapter.findProtectedExecutionIntentPublicIds(
@@ -127,8 +123,77 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
         .countUnboundPendingAction(anyLong(), anyCollection(), anyCollection());
   }
 
+  @Test
+  @DisplayName("marketplace payload evidence가 없거나 깨진 cleanup candidate는 fail-closed 보호한다")
+  void findProtectedExecutionIntentPublicIds_protectsMissingOrMalformedMarketplacePayload() {
+    given(reservationJpaRepository.findCurrentExecutionIntentPublicIdsIn(anyCollection()))
+        .willReturn(List.of());
+    given(
+            actionStateJpaRepository.findExecutionIntentPublicIdsInByStatusIn(
+                anyCollection(), anyCollection()))
+        .willReturn(List.of());
+    ReservationExecutionCleanupProtectionPersistenceAdapter adapter =
+        new ReservationExecutionCleanupProtectionPersistenceAdapter(
+            reservationJpaRepository, actionStateJpaRepository);
+
+    List<String> result =
+        adapter.findProtectedExecutionIntentPublicIds(
+            List.of(
+                new ReservationExecutionCleanupProtectionQuery(
+                    "intent-missing", "30", "MARKETPLACE_CLASS_PURCHASE", null),
+                new ReservationExecutionCleanupProtectionQuery(
+                    "intent-malformed", "31", "MARKETPLACE_CLASS_PURCHASE", "{not-json")));
+
+    assertThat(result).containsExactly("intent-missing", "intent-malformed");
+    then(reservationJpaRepository)
+        .should(never())
+        .countUnboundPendingAction(anyLong(), anyCollection(), anyCollection());
+  }
+
+  @Test
+  @DisplayName("payload evidence가 active action-state와 일치하면 orphan candidate를 보호한다")
+  void findProtectedExecutionIntentPublicIds_protectsActivePayloadEvidence() {
+    given(reservationJpaRepository.findCurrentExecutionIntentPublicIdsIn(anyCollection()))
+        .willReturn(List.of());
+    given(
+            actionStateJpaRepository.findExecutionIntentPublicIdsInByStatusIn(
+                anyCollection(), anyCollection()))
+        .willReturn(List.of());
+    given(
+            actionStateJpaRepository.countActiveByPayloadEvidence(
+                eq(200L), eq(30L), eq(100L), anyCollection(), eq("attempt-token"), anyCollection()))
+        .willReturn(1L);
+    ReservationExecutionCleanupProtectionPersistenceAdapter adapter =
+        new ReservationExecutionCleanupProtectionPersistenceAdapter(
+            reservationJpaRepository, actionStateJpaRepository);
+
+    List<String> result =
+        adapter.findProtectedExecutionIntentPublicIds(
+            List.of(intent("intent-evidence", "30", "MARKETPLACE_CLASS_PURCHASE")));
+
+    assertThat(result).containsExactly("intent-evidence");
+    then(reservationJpaRepository)
+        .should(never())
+        .countUnboundPendingAction(anyLong(), anyCollection(), anyCollection());
+  }
+
   private ReservationExecutionCleanupProtectionQuery intent(
       String publicId, String resourceId, String actionType) {
-    return new ReservationExecutionCleanupProtectionQuery(publicId, resourceId, actionType);
+    return new ReservationExecutionCleanupProtectionQuery(
+        publicId, resourceId, actionType, payload(resourceId, actionType));
+  }
+
+  private String payload(String resourceId, String actionType) {
+    return """
+        {
+          "payloadVersion": 1,
+          "reservationId": %s,
+          "escrowId": 100,
+          "actionStateId": 200,
+          "pendingAttemptToken": "attempt-token",
+          "actionType": "%s"
+        }
+        """
+        .formatted(resourceId.matches("\\d+") ? resourceId : "30", actionType);
   }
 }

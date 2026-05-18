@@ -161,18 +161,60 @@ class MigrationValidationTest {
     assertThat(columnExists("class_reservations", "current_execution_intent_public_id")).isTrue();
     assertThat(columnExists("class_reservations", "contract_deadline_epoch_seconds")).isTrue();
     assertThat(columnExists("class_reservations", "contract_deadline_at")).isTrue();
+    assertThat(columnExists("marketplace_reservation_escrows", "reservation_id")).isTrue();
+    assertThat(columnExists("marketplace_reservation_escrows", "price_base_units")).isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "attempt_token")).isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "execution_intent_public_id"))
+        .isTrue();
+    assertThat(columnExists("reservation_create_idempotency_keys", "escrow_id")).isTrue();
+    assertThat(columnExists("reservation_create_idempotency_keys", "action_state_id")).isTrue();
+    assertThat(
+            columnExists(
+                "reservation_create_idempotency_keys", "current_execution_intent_public_id"))
+        .isFalse();
     assertThat(indexExists("uk_class_reservations_order_key")).isTrue();
     assertThat(indexExists("uk_class_reservations_active_buyer_slot_datetime")).isTrue();
+    assertThat(indexExists("uk_marketplace_reservation_action_states_active")).isTrue();
     assertThat(indexExists("uk_reservation_create_idempotency_buyer_key")).isTrue();
     assertThat(indexExists("uk_reservation_slot_date_locks_slot_date")).isTrue();
     assertThat(indexExists("uk_trainer_strike_records_source")).isTrue();
 
     String statusConstraint = checkClause("class_reservations", "chk_class_reservations_status");
     assertThat(statusConstraint)
+        .contains("HOLDING")
         .contains("PURCHASE_PREPARING")
         .contains("PURCHASE_PENDING")
         .contains("DEADLINE_REFUND_AVAILABLE")
         .contains("DEADLINE_REFUNDED");
+
+    String escrowStatusConstraint =
+        checkClause(
+            "marketplace_reservation_escrows", "chk_marketplace_reservation_escrows_status");
+    assertThat(escrowStatusConstraint)
+        .contains("LOCKED")
+        .contains("DEADLINE_REFUND_AVAILABLE")
+        .contains("DEADLINE_REFUNDED")
+        .doesNotContain("PURCHASE_PREPARING")
+        .doesNotContain("CANCEL_PENDING");
+
+    String actionStateStatusConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_status");
+    assertThat(actionStateStatusConstraint)
+        .contains("PREPARING")
+        .contains("INTENT_BOUND")
+        .contains("PREPARATION_FAILED")
+        .contains("STALE");
+
+    String idempotencyStatusConstraint =
+        checkClause(
+            "reservation_create_idempotency_keys", "chk_reservation_create_idempotency_status");
+    assertThat(idempotencyStatusConstraint)
+        .contains("PREPARING")
+        .contains("BOUND")
+        .contains("COMPLETED")
+        .doesNotContain("INTENT_CREATED");
 
     String deadlineConstraint =
         checkClause("class_reservations", "chk_class_reservations_contract_deadline_pair");

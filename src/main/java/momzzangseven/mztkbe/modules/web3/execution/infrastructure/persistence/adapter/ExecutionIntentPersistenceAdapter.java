@@ -48,6 +48,15 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public List<ExecutionIntent> findByResource(
+      ExecutionResourceType resourceType, String resourceId, int limit) {
+    int size = limit <= 0 ? 20 : Math.min(limit, 100);
+    return repository.findByResource(resourceType, resourceId, PageRequest.of(0, size)).stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
   public Map<String, ExecutionIntent> findLatestByResources(
       ExecutionResourceType resourceType, Collection<String> resourceIds) {
     if (resourceIds == null || resourceIds.isEmpty()) {

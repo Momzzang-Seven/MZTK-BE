@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAllowa
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 @ConditionalOnBean(PrepareMarketplaceUserExecutionUseCase.class)
 @RequiredArgsConstructor
+@Primary
 public class ReservationMarketplaceExecutionAdapter
     implements PrepareReservationEscrowExecutionPort {
 
@@ -88,7 +90,10 @@ public class ReservationMarketplaceExecutionAdapter
         command.expectedContractDeadlineEpochSeconds(),
         command.contractDeadlineEpochSeconds(),
         command.pendingAttemptToken(),
-        command.targetTerminalStatus());
+        command.targetTerminalStatus(),
+        command.escrowId(),
+        command.actionStateId(),
+        command.rootIdempotencyKey());
   }
 
   private ReservationExecutionWriteView toView(MarketplaceExecutionIntentResult result) {

@@ -1,10 +1,8 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository;
 
 import jakarta.persistence.LockModeType;
-import java.util.Collection;
-import java.util.List;
+import java.time.LocalDateTime;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationCreateIdempotencyEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -29,6 +27,10 @@ public interface ReservationCreateIdempotencyJpaRepository
   Optional<ReservationCreateIdempotencyEntity> findByReservationIdWithLock(
       @Param("reservationId") Long reservationId);
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT k FROM ReservationCreateIdempotencyEntity k WHERE k.id = :id")
+  Optional<ReservationCreateIdempotencyEntity> findByIdWithLock(@Param("id") Long id);
+
   @Modifying
   @Query(
       value =
@@ -46,11 +48,18 @@ public interface ReservationCreateIdempotencyJpaRepository
       @Param("payloadHash") String payloadHash,
       @Param("expiresAt") java.time.LocalDateTime expiresAt);
 
+  @Modifying
   @Query(
-      "SELECT k.currentExecutionIntentPublicId FROM ReservationCreateIdempotencyEntity k "
-          + "WHERE k.currentExecutionIntentPublicId IN :publicIds "
-          + "AND k.status IN :activeStatuses")
-  List<String> findCurrentExecutionIntentPublicIdsIn(
-      @Param("publicIds") Collection<String> publicIds,
-      @Param("activeStatuses") Collection<ReservationCreateIdempotencyStatus> activeStatuses);
+      """
+      UPDATE ReservationCreateIdempotencyEntity k
+      SET k.actionStateId = :newActionStateId,
+          k.updatedAt = :updatedAt
+      WHERE k.id = :id
+        AND k.actionStateId = :expectedActionStateId
+      """)
+  int replaceActionStateIfCurrent(
+      @Param("id") Long id,
+      @Param("expectedActionStateId") Long expectedActionStateId,
+      @Param("newActionStateId") Long newActionStateId,
+      @Param("updatedAt") LocalDateTime updatedAt);
 }

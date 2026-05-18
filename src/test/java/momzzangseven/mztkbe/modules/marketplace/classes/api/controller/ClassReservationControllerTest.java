@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Comp
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
@@ -33,6 +34,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ReservationDisplayStatusMapper;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -120,7 +122,7 @@ class ClassReservationControllerTest {
               .LoadUserSummaryPort.UserSummary(50L, "user-nick");
 
   private ReservationSummaryResult summaryResult() {
-    return ReservationSummaryResult.from(
+    return ReservationDisplayStatusMapper.summaryResult(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
             .id(1L)
             .slotId(10L)
@@ -145,7 +147,7 @@ class ClassReservationControllerTest {
   }
 
   private ReservationSummaryResult repairedSummaryResult() {
-    return ReservationSummaryResult.from(
+    return ReservationDisplayStatusMapper.summaryResult(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
             .id(1L)
             .slotId(10L)
@@ -175,7 +177,7 @@ class ClassReservationControllerTest {
   }
 
   private GetReservationResult detailResult(Long viewerId) {
-    return GetReservationResult.from(
+    return ReservationDisplayStatusMapper.detailResult(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
             .id(1L)
             .userId(viewerId)
@@ -204,7 +206,7 @@ class ClassReservationControllerTest {
   }
 
   private GetReservationResult repairedDetailResult(Long viewerId) {
-    return GetReservationResult.from(
+    return ReservationDisplayStatusMapper.detailResult(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
             .id(1L)
             .userId(viewerId)
@@ -675,7 +677,8 @@ class ClassReservationControllerTest {
           .willReturn(
               new CancelPendingReservationResult(
                   1L,
-                  ReservationStatus.CANCEL_PENDING,
+                  ReservationDisplayStatus.CANCEL_PENDING,
+                  null,
                   "CANCEL_PENDING",
                   web3WriteView("MARKETPLACE_CLASS_CANCEL")));
 
@@ -720,7 +723,8 @@ class ClassReservationControllerTest {
           .willReturn(
               new CompleteReservationResult(
                   1L,
-                  ReservationStatus.CONFIRM_PENDING,
+                  ReservationDisplayStatus.CONFIRM_PENDING,
+                  null,
                   "CONFIRM_PENDING",
                   web3WriteView("MARKETPLACE_CLASS_CONFIRM")));
 
@@ -766,7 +770,8 @@ class ClassReservationControllerTest {
           .willReturn(
               new ClaimExpiredRefundReservationResult(
                   1L,
-                  ReservationStatus.DEADLINE_REFUND_PENDING,
+                  ReservationDisplayStatus.DEADLINE_REFUND_PENDING,
+                  null,
                   "DEADLINE_REFUND_PENDING",
                   web3WriteView("MARKETPLACE_CLASS_EXPIRED_REFUND", false)));
 
@@ -806,7 +811,8 @@ class ClassReservationControllerTest {
           .willReturn(
               new RecoverReservationEscrowResult(
                   1L,
-                  ReservationStatus.PURCHASE_PENDING,
+                  ReservationDisplayStatus.PURCHASE_PENDING,
+                  null,
                   "PURCHASE_PENDING",
                   web3WriteView("MARKETPLACE_CLASS_PURCHASE")));
 

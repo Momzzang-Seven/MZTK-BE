@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Prep
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
@@ -13,7 +14,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -22,7 +22,6 @@ import org.springframework.context.annotation.Configuration;
 public class ReservationWeb3StubConfig {
 
   @Bean
-  @ConditionalOnMissingBean(LoadReservationWalletPort.class)
   LoadReservationWalletPort disabledLoadReservationWalletPort() {
     return userId -> {
       throw new MarketplaceWeb3DisabledException();
@@ -30,7 +29,6 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
-  @ConditionalOnMissingBean(LoadReservationEscrowPaymentConfigPort.class)
   LoadReservationEscrowPaymentConfigPort disabledLoadReservationEscrowPaymentConfigPort() {
     return () -> {
       throw new MarketplaceWeb3DisabledException();
@@ -38,7 +36,6 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
-  @ConditionalOnMissingBean(LoadReservationEscrowOrderPort.class)
   LoadReservationEscrowOrderPort disabledLoadReservationEscrowOrderPort() {
     return new LoadReservationEscrowOrderPort() {
       @Override
@@ -59,7 +56,6 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
-  @ConditionalOnMissingBean(LoadReservationExecutionResumePort.class)
   LoadReservationExecutionResumePort disabledLoadReservationExecutionResumePort() {
     return new LoadReservationExecutionResumePort() {
       @Override
@@ -82,13 +78,11 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
-  @ConditionalOnMissingBean(CancelReservationEscrowExecutionPort.class)
   CancelReservationEscrowExecutionPort disabledCancelReservationEscrowExecutionPort() {
     return (executionIntentId, errorCode, errorReason) -> false;
   }
 
   @Bean
-  @ConditionalOnMissingBean(LoadReservationExecutionWritePort.class)
   LoadReservationExecutionWritePort disabledLoadReservationExecutionWritePort() {
     return (requesterUserId, executionIntentId) -> {
       throw new MarketplaceWeb3DisabledException();
@@ -96,7 +90,6 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
-  @ConditionalOnMissingBean(LoadReservationExecutionStatePort.class)
   LoadReservationExecutionStatePort disabledLoadReservationExecutionStatePort() {
     return executionIntentId -> {
       throw new MarketplaceWeb3DisabledException();
@@ -104,7 +97,6 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
-  @ConditionalOnMissingBean(ReplayConfirmedReservationExecutionPort.class)
   ReplayConfirmedReservationExecutionPort disabledReplayConfirmedReservationExecutionPort() {
     return (executionIntentId, expectedActionType) -> {
       throw new MarketplaceWeb3DisabledException();
@@ -112,7 +104,11 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
-  @ConditionalOnMissingBean(PrecheckReservationPurchasePort.class)
+  LoadReservationExecutionCandidatePort disabledLoadReservationExecutionCandidatePort() {
+    return reservationId -> java.util.List.of();
+  }
+
+  @Bean
   PrecheckReservationPurchasePort disabledPrecheckReservationPurchasePort() {
     return command -> {
       throw new MarketplaceWeb3DisabledException();
@@ -120,7 +116,6 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
-  @ConditionalOnMissingBean(PrepareReservationEscrowExecutionPort.class)
   PrepareReservationEscrowExecutionPort disabledPrepareReservationEscrowExecutionPort() {
     return new PrepareReservationEscrowExecutionPort() {
       @Override

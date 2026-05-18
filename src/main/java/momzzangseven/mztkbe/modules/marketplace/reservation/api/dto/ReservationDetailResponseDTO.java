@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
@@ -25,7 +26,8 @@ public record ReservationDetailResponseDTO(
     LocalDate reservationDate,
     LocalTime reservationTime,
     int durationMinutes,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
     ReservationEscrowStatus escrowStatus,
     String userRequest,
     String orderId,
@@ -40,6 +42,12 @@ public record ReservationDetailResponseDTO(
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey,
+    String viewerAction,
+    boolean viewerCanCancel,
+    boolean viewerCanReject,
+    boolean viewerCanComplete,
+    boolean viewerCanClaimDeadlineRefund,
+    boolean viewerCanRecover,
     ReservationWeb3ExecutionResponseDTO web3Execution) {
 
   public static ReservationDetailResponseDTO from(GetReservationResult result) {
@@ -52,6 +60,7 @@ public record ReservationDetailResponseDTO(
         result.reservationTime(),
         result.durationMinutes(),
         result.status(),
+        result.businessStatus(),
         result.escrowStatus(),
         result.userRequest(),
         result.orderId(),
@@ -66,6 +75,12 @@ public record ReservationDetailResponseDTO(
         result.trainerNickname(),
         result.userNickname(),
         result.thumbnailFinalObjectKey(),
+        result.viewerActions().viewerAction(),
+        result.viewerActions().viewerCanCancel(),
+        result.viewerActions().viewerCanReject(),
+        result.viewerActions().viewerCanComplete(),
+        result.viewerActions().viewerCanClaimDeadlineRefund(),
+        result.viewerActions().viewerCanRecover(),
         ReservationWeb3ExecutionResponseDTO.from(result.web3Execution()));
   }
 }

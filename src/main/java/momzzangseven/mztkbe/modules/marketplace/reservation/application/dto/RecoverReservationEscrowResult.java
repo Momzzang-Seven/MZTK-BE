@@ -5,6 +5,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 /** Result returned after resuming or preparing a marketplace recovery execution. */
 public record RecoverReservationEscrowResult(
     Long reservationId,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
     String escrowStatus,
     ReservationExecutionWriteView web3) {}

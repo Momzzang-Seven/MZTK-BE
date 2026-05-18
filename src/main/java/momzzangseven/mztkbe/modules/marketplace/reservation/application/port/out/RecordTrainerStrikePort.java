@@ -3,9 +3,8 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.ou
 /**
  * Output port for recording a trainer strike in the sanction module.
  *
- * <p>Belongs to the {@code reservation} module. The implementation lives in {@code
- * reservation/infrastructure/external/sanction/} and delegates to {@code
- * sanction/application/port/in/RecordTrainerStrikeUseCase}.
+ * <p>Belongs to the {@code reservation} module. Outer adapters may delegate to the sanction
+ * module's strike-recording input port.
  *
  * <p>Reason constants are shared via {@link
  * momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent}.

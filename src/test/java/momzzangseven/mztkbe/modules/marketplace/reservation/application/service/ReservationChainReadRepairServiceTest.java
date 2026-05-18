@@ -37,6 +37,14 @@ class ReservationChainReadRepairServiceTest {
   @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   @Mock private SaveReservationPort saveReservationPort;
 
+  private ReservationChainReadRepairService service() {
+    ReservationChainReadRepairService service =
+        new ReservationChainReadRepairService(
+            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    service.setTransactionPort(ReservationTestTransactionPort.direct());
+    return service;
+  }
+
   @Test
   @DisplayName("batch repair는 여러 sync-required 예약을 getOrders 한 번으로 조회하고 CREATED 상태를 LOCKED로 저장한다")
   void repairBatch_usesGetOrdersOnceAndSyncsCreatedOrder() {
@@ -54,9 +62,7 @@ class ReservationChainReadRepairServiceTest {
         .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
     given(loadReservationPort.findByIdWithLock(first.getId())).willReturn(Optional.of(first));
     given(loadReservationPort.findByIdWithLock(second.getId())).willReturn(Optional.of(second));
-    ReservationChainReadRepairService sut =
-        new ReservationChainReadRepairService(
-            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    ReservationChainReadRepairService sut = service();
 
     List<Reservation> repaired = sut.repairBatch(List.of(first, second));
 
@@ -85,9 +91,7 @@ class ReservationChainReadRepairServiceTest {
         .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
     given(loadReservationPort.findByIdWithLock(reservation.getId()))
         .willReturn(Optional.of(reservation));
-    ReservationChainReadRepairService sut =
-        new ReservationChainReadRepairService(
-            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    ReservationChainReadRepairService sut = service();
 
     List<Reservation> repaired = sut.repairBatch(List.of(reservation));
 
@@ -118,9 +122,7 @@ class ReservationChainReadRepairServiceTest {
     given(loadReservationPort.findByIdWithLock(cancelled.getId()))
         .willReturn(Optional.of(cancelled));
     given(loadReservationPort.findByIdWithLock(refunded.getId())).willReturn(Optional.of(refunded));
-    ReservationChainReadRepairService sut =
-        new ReservationChainReadRepairService(
-            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    ReservationChainReadRepairService sut = service();
 
     List<Reservation> repaired = sut.repairBatch(List.of(cancelled, refunded));
 
@@ -136,9 +138,7 @@ class ReservationChainReadRepairServiceTest {
     Reservation reservation = syncRequiredReservation(1L, "0x" + "0".repeat(63) + "1");
     given(loadReservationEscrowOrderPort.getOrders(List.of(reservation.getOrderKey())))
         .willThrow(new MarketplaceWeb3DisabledException());
-    ReservationChainReadRepairService sut =
-        new ReservationChainReadRepairService(
-            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    ReservationChainReadRepairService sut = service();
 
     List<Reservation> repaired = sut.repairBatch(List.of(reservation));
 
@@ -152,9 +152,7 @@ class ReservationChainReadRepairServiceTest {
     Reservation reservation = syncRequiredReservation(1L, "0x" + "0".repeat(63) + "1");
     given(loadReservationEscrowOrderPort.getOrders(List.of(reservation.getOrderKey())))
         .willThrow(new IllegalStateException("rpc unavailable"));
-    ReservationChainReadRepairService sut =
-        new ReservationChainReadRepairService(
-            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    ReservationChainReadRepairService sut = service();
 
     List<Reservation> repaired = sut.repairBatch(List.of(reservation));
 
@@ -173,9 +171,7 @@ class ReservationChainReadRepairServiceTest {
         .willAnswer(invocation -> invocation.getArgument(0, Reservation.class));
     given(loadReservationPort.findByIdWithLock(reservation.getId()))
         .willReturn(Optional.of(reservation));
-    ReservationChainReadRepairService sut =
-        new ReservationChainReadRepairService(
-            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    ReservationChainReadRepairService sut = service();
 
     Reservation repaired = sut.repairOne(reservation);
 
@@ -189,9 +185,7 @@ class ReservationChainReadRepairServiceTest {
     Reservation reservation = syncRequiredReservation(1L, "0x" + "0".repeat(63) + "1");
     given(loadReservationEscrowOrderPort.getOrder(reservation.getOrderKey()))
         .willThrow(new IllegalStateException("rpc unavailable"));
-    ReservationChainReadRepairService sut =
-        new ReservationChainReadRepairService(
-            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+    ReservationChainReadRepairService sut = service();
 
     Reservation repaired = sut.repairOne(reservation);
 

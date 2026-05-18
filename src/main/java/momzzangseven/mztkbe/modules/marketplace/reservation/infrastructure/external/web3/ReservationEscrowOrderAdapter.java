@@ -9,11 +9,13 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowOrderResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.GetMarketplaceEscrowOrderUseCase;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 /** Cross-module adapter for reading marketplace escrow order state from the Web3 module. */
 @Component
 @RequiredArgsConstructor
+@Primary
 public class ReservationEscrowOrderAdapter implements LoadReservationEscrowOrderPort {
 
   private final ObjectProvider<GetMarketplaceEscrowOrderUseCase> getMarketplaceEscrowOrderUseCase;

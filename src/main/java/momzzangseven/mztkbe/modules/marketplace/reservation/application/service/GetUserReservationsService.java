@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationListStatusFilter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
@@ -19,10 +20,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Returns a cursor-paginated list of reservations for the authenticated user.
@@ -51,7 +48,6 @@ import org.springframework.transaction.annotation.Transactional;
  * Using the full datetime (not {@code atStartOfDay()}) ensures that same-date reservations are
  * paginated in the same time-descending order the user sees in the list.
  */
-@Service
 public class GetUserReservationsService implements GetUserReservationsUseCase {
 
   // CURSOR_SCOPE is now status-dependent; use GetUserReservationsQuery.cursorScope(status).
@@ -62,13 +58,12 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
   private final LoadReservationExecutionResumePort loadReservationExecutionResumePort;
   private final RepairReservationChainReadUseCase repairReservationChainReadUseCase;
 
-  @Autowired
   public GetUserReservationsService(
       LoadReservationPort loadReservationPort,
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
-      @Nullable LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      @Nullable RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
     this.loadReservationPort = loadReservationPort;
     this.loadClassSummaryPort = loadClassSummaryPort;
     this.loadUserSummaryPort = loadUserSummaryPort;
@@ -95,7 +90,6 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
   }
 
   @Override
-  @Transactional(readOnly = true)
   public CursorSlice<ReservationSummaryResult> execute(GetUserReservationsQuery query) {
     query.validate();
     CursorPageRequest pageRequest = query.pageRequest();
@@ -139,13 +133,14 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
                           ? r.getBookedPriceAmount()
                           : (cs != null ? cs.priceAmount() : null);
                   UserSummary ts = trainerSummaries.get(r.getTrainerId());
-                  return ReservationSummaryResult.from(
+                  return ReservationDisplayStatusMapper.summaryResult(
                       r,
                       classTitle,
                       priceAmount,
                       cs != null ? cs.thumbnailFinalObjectKey() : null,
                       ts != null ? ts.nickname() : null,
                       null,
+                      query.userId(),
                       ReservationExecutionResumeViewer.hydrate(
                           r,
                           query.userId(),
@@ -174,8 +169,10 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
     CursorPageRequest request = initialRequest;
 
     while (matching.size() <= initialRequest.size()) {
+      ReservationStatus storedStatus =
+          ReservationListStatusFilterMapper.toStoredStatus(query.status());
       List<Reservation> loaded =
-          loadReservationPort.findByUserIdCursor(query.userId(), query.status(), request);
+          loadReservationPort.findByUserIdCursor(query.userId(), storedStatus, request);
       if (loaded.isEmpty()) {
         break;
       }
@@ -201,8 +198,10 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
     return new RepairedPage(List.copyOf(page), hasNext);
   }
 
-  private static boolean matchesStatus(Reservation reservation, ReservationStatus status) {
-    return status == null || reservation.getStatus() == status;
+  private static boolean matchesStatus(
+      Reservation reservation, ReservationListStatusFilter status) {
+    return status == null
+        || reservation.getStatus() == ReservationListStatusFilterMapper.toStoredStatus(status);
   }
 
   private static CursorPageRequest nextRequestAfter(

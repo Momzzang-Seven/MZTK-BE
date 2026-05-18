@@ -14,6 +14,9 @@ import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationJpaRepository;
@@ -189,7 +192,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
 
   @Override
   public List<Reservation> findByUserId(Long userId, ReservationStatus status) {
-    return reservationJpaRepository.findByUserId(userId, status).stream()
+    return reservationJpaRepository.findByUserId(userId, toName(status)).stream()
         .map(this::toDomain)
         .toList();
   }
@@ -214,13 +217,13 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
             ? reservationJpaRepository.findByUserIdCursorNoStatus(
                 userId, cursorDate, cursorTime, cursorId, page)
             : reservationJpaRepository.findByUserIdCursor(
-                userId, status, cursorDate, cursorTime, cursorId, page);
+                userId, toName(status), cursorDate, cursorTime, cursorId, page);
     return rows.stream().map(this::toDomain).toList();
   }
 
   @Override
   public List<Reservation> findByTrainerId(Long trainerId, ReservationStatus status) {
-    return reservationJpaRepository.findByTrainerId(trainerId, status).stream()
+    return reservationJpaRepository.findByTrainerId(trainerId, toName(status)).stream()
         .map(this::toDomain)
         .toList();
   }
@@ -242,7 +245,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
             ? reservationJpaRepository.findByTrainerIdCursorNoStatus(
                 trainerId, cursorDate, cursorTime, cursorId, page)
             : reservationJpaRepository.findByTrainerIdCursor(
-                trainerId, status, cursorDate, cursorTime, cursorId, page);
+                trainerId, toName(status), cursorDate, cursorTime, cursorId, page);
     return rows.stream().map(this::toDomain).toList();
   }
 
@@ -260,9 +263,9 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
         .reservationDate(domain.getReservationDate())
         .reservationTime(domain.getReservationTime())
         .durationMinutes(domain.getDurationMinutes())
-        .status(domain.getStatus())
-        .escrowStatus(domain.getEscrowStatus())
-        .escrowFlow(domain.getEscrowFlow())
+        .status(toName(domain.getStatus()))
+        .escrowStatus(toName(domain.getEscrowStatus()))
+        .escrowFlow(toName(domain.getEscrowFlow()))
         .userRequest(domain.getUserRequest())
         .rejectionReason(domain.getRejectionReason())
         .orderId(domain.getOrderId())
@@ -279,13 +282,13 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
         .expectedContractDeadlineAt(domain.getExpectedContractDeadlineAt())
         .contractDeadlineEpochSeconds(domain.getContractDeadlineEpochSeconds())
         .contractDeadlineAt(domain.getContractDeadlineAt())
-        .pendingAction(domain.getPendingAction())
+        .pendingAction(toName(domain.getPendingAction()))
         .pendingAttemptToken(domain.getPendingAttemptToken())
         .pendingExpectedVersion(domain.getPendingExpectedVersion())
-        .pendingExpectedStatus(domain.getPendingExpectedStatus())
-        .pendingExpectedEscrowStatus(domain.getPendingExpectedEscrowStatus())
-        .priorStatus(domain.getPriorStatus())
-        .priorEscrowStatus(domain.getPriorEscrowStatus())
+        .pendingExpectedStatus(toName(domain.getPendingExpectedStatus()))
+        .pendingExpectedEscrowStatus(toName(domain.getPendingExpectedEscrowStatus()))
+        .priorStatus(toName(domain.getPriorStatus()))
+        .priorEscrowStatus(toName(domain.getPriorEscrowStatus()))
         .createIdempotencyKeyHash(domain.getCreateIdempotencyKeyHash())
         .createPayloadHash(domain.getCreatePayloadHash())
         .serverSignatureSignedAt(domain.getServerSignatureSignedAt())
@@ -307,9 +310,9 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
         .reservationDate(entity.getReservationDate())
         .reservationTime(entity.getReservationTime())
         .durationMinutes(entity.getDurationMinutes())
-        .status(entity.getStatus())
-        .escrowStatus(entity.getEscrowStatus())
-        .escrowFlow(entity.getEscrowFlow())
+        .status(toEnum(entity.getStatus(), ReservationStatus.class))
+        .escrowStatus(toEnum(entity.getEscrowStatus(), ReservationEscrowStatus.class))
+        .escrowFlow(toEnum(entity.getEscrowFlow(), ReservationEscrowFlow.class))
         .userRequest(entity.getUserRequest())
         .rejectionReason(entity.getRejectionReason())
         .orderId(entity.getOrderId())
@@ -326,13 +329,14 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
         .expectedContractDeadlineAt(entity.getExpectedContractDeadlineAt())
         .contractDeadlineEpochSeconds(entity.getContractDeadlineEpochSeconds())
         .contractDeadlineAt(entity.getContractDeadlineAt())
-        .pendingAction(entity.getPendingAction())
+        .pendingAction(toEnum(entity.getPendingAction(), ReservationEscrowAction.class))
         .pendingAttemptToken(entity.getPendingAttemptToken())
         .pendingExpectedVersion(entity.getPendingExpectedVersion())
-        .pendingExpectedStatus(entity.getPendingExpectedStatus())
-        .pendingExpectedEscrowStatus(entity.getPendingExpectedEscrowStatus())
-        .priorStatus(entity.getPriorStatus())
-        .priorEscrowStatus(entity.getPriorEscrowStatus())
+        .pendingExpectedStatus(toEnum(entity.getPendingExpectedStatus(), ReservationStatus.class))
+        .pendingExpectedEscrowStatus(
+            toEnum(entity.getPendingExpectedEscrowStatus(), ReservationEscrowStatus.class))
+        .priorStatus(toEnum(entity.getPriorStatus(), ReservationStatus.class))
+        .priorEscrowStatus(toEnum(entity.getPriorEscrowStatus(), ReservationEscrowStatus.class))
         .createIdempotencyKeyHash(entity.getCreateIdempotencyKeyHash())
         .createPayloadHash(entity.getCreatePayloadHash())
         .serverSignatureSignedAt(entity.getServerSignatureSignedAt())
@@ -345,5 +349,13 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();
+  }
+
+  private static <E extends Enum<E>> E toEnum(String value, Class<E> enumType) {
+    return value == null ? null : Enum.valueOf(enumType, value);
+  }
+
+  private static String toName(Enum<?> value) {
+    return value == null ? null : value.name();
   }
 }

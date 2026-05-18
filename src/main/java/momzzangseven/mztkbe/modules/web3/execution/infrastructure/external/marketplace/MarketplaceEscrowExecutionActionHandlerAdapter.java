@@ -19,9 +19,9 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionT
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
+import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
@@ -77,7 +77,8 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
             payload.expectedContractDeadlineEpochSeconds(),
             payload.contractDeadlineEpochSeconds(),
             payload.sessionEndAt(),
-            payload.pendingAttemptToken()));
+            payload.pendingAttemptToken(),
+            payload.actionStateId()));
   }
 
   @Override
@@ -94,6 +95,7 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
             payload.actorType().name(),
             payload.reservationId(),
             payload.pendingAttemptToken(),
+            payload.actionStateId(),
             terminalStatus.name(),
             failureReason));
   }

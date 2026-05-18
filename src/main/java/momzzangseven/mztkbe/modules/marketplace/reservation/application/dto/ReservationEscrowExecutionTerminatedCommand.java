@@ -6,5 +6,6 @@ public record ReservationEscrowExecutionTerminatedCommand(
     String actorType,
     Long reservationId,
     String pendingAttemptToken,
+    Long actionStateId,
     String terminalStatus,
     String failureReason) {}

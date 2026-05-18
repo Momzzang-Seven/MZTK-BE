@@ -2,8 +2,6 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.pers
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -17,7 +15,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 
 @Entity
 @Table(
@@ -45,15 +42,17 @@ public class ReservationCreateIdempotencyEntity {
   @Column(name = "payload_hash", nullable = false, length = 128)
   private String payloadHash;
 
-  @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
-  private ReservationCreateIdempotencyStatus status;
+  private String status;
 
   @Column(name = "reservation_id")
   private Long reservationId;
 
-  @Column(name = "current_execution_intent_public_id", length = 36)
-  private String currentExecutionIntentPublicId;
+  @Column(name = "escrow_id")
+  private Long escrowId;
+
+  @Column(name = "action_state_id")
+  private Long actionStateId;
 
   @Column(name = "response_snapshot_json", columnDefinition = "TEXT")
   private String responseSnapshotJson;

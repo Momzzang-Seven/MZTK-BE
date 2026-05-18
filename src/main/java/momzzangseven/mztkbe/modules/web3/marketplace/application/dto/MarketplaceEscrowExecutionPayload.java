@@ -39,9 +39,19 @@ public record MarketplaceEscrowExecutionPayload(
     String callData,
     MarketplaceTokenMovement tokenMovement,
     Long signedAt,
-    String signatureHex) {
+    String signatureHex,
+    Integer payloadVersion,
+    Long escrowId,
+    Long actionStateId,
+    String rootIdempotencyKey) {
 
   public MarketplaceEscrowExecutionPayload {
+    if (payloadVersion == null) {
+      payloadVersion = 1;
+    }
+    if (payloadVersion != 1) {
+      throw new Web3InvalidInputException("unsupported marketplace payloadVersion");
+    }
     if (actionType == null) {
       throw new Web3InvalidInputException("actionType is required");
     }
@@ -74,6 +84,78 @@ public record MarketplaceEscrowExecutionPayload(
     if (tokenMovement == null) {
       throw new Web3InvalidInputException("tokenMovement is required");
     }
+    if (escrowId != null && escrowId <= 0) {
+      throw new Web3InvalidInputException("escrowId must be positive");
+    }
+    if (actionStateId != null && actionStateId <= 0) {
+      throw new Web3InvalidInputException("actionStateId must be positive");
+    }
+  }
+
+  public MarketplaceEscrowExecutionPayload(
+      MarketplaceExecutionActionType actionType,
+      MarketplaceActorType actorType,
+      Long reservationId,
+      String resourceId,
+      String orderId,
+      String orderKey,
+      Long authorityUserId,
+      Long requesterUserId,
+      Long counterpartyUserId,
+      Long buyerUserId,
+      Long trainerUserId,
+      Long reservationVersion,
+      String expectedReservationStatus,
+      String expectedEscrowStatus,
+      String buyerWalletAddress,
+      String trainerWalletAddress,
+      String tokenAddress,
+      BigInteger priceBaseUnits,
+      MarketplaceAllowanceStrategy allowanceStrategy,
+      LocalDateTime sessionEndAt,
+      Long expectedContractDeadlineEpochSeconds,
+      Long contractDeadlineEpochSeconds,
+      String pendingAttemptToken,
+      String targetTerminalStatus,
+      String callTarget,
+      String callData,
+      MarketplaceTokenMovement tokenMovement,
+      Long signedAt,
+      String signatureHex) {
+    this(
+        actionType,
+        actorType,
+        reservationId,
+        resourceId,
+        orderId,
+        orderKey,
+        authorityUserId,
+        requesterUserId,
+        counterpartyUserId,
+        buyerUserId,
+        trainerUserId,
+        reservationVersion,
+        expectedReservationStatus,
+        expectedEscrowStatus,
+        buyerWalletAddress,
+        trainerWalletAddress,
+        tokenAddress,
+        priceBaseUnits,
+        allowanceStrategy,
+        sessionEndAt,
+        expectedContractDeadlineEpochSeconds,
+        contractDeadlineEpochSeconds,
+        pendingAttemptToken,
+        targetTerminalStatus,
+        callTarget,
+        callData,
+        tokenMovement,
+        signedAt,
+        signatureHex,
+        1,
+        null,
+        null,
+        null);
   }
 
   public MarketplaceEscrowExecutionPayload idempotencyView() {
@@ -106,7 +188,11 @@ public record MarketplaceEscrowExecutionPayload(
         null,
         tokenMovement,
         null,
-        null);
+        null,
+        payloadVersion,
+        escrowId,
+        actionStateId,
+        rootIdempotencyKey);
   }
 
   public String idempotencyJson(ObjectMapper objectMapper) {

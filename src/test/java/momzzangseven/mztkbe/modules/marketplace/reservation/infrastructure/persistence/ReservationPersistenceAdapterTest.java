@@ -1,8 +1,10 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import jakarta.persistence.EntityManager;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -10,6 +12,7 @@ import java.util.List;
 import momzzangseven.mztkbe.global.time.TimeConfig;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.ClassSlotEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionCleanupProtectionQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
@@ -17,9 +20,11 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.MarketplaceReservationEscrowPersistenceAdapter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.ReservationCreateIdempotencyPersistenceAdapter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.ReservationExecutionCleanupProtectionPersistenceAdapter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.ReservationPersistenceAdapter;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.MarketplaceReservationEscrowEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationSlotDateLockJpaRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +37,7 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 @Import({
   ReservationPersistenceAdapter.class,
+  MarketplaceReservationEscrowPersistenceAdapter.class,
   ReservationCreateIdempotencyPersistenceAdapter.class,
   ReservationExecutionCleanupProtectionPersistenceAdapter.class,
   TimeConfig.class
@@ -40,6 +46,7 @@ class ReservationPersistenceAdapterTest {
 
   @Autowired private EntityManager entityManager;
   @Autowired private ReservationPersistenceAdapter reservationAdapter;
+  @Autowired private MarketplaceReservationEscrowPersistenceAdapter escrowAdapter;
   @Autowired private ReservationCreateIdempotencyPersistenceAdapter idempotencyAdapter;
 
   @Autowired
@@ -141,13 +148,69 @@ class ReservationPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("escrow priceBaseUnits persists uint256 max without precision loss")
+  void escrowPriceBaseUnitsRoundTripUint256Max() {
+    BigInteger maxUint256 = BigInteger.ONE.shiftLeft(256).subtract(BigInteger.ONE);
+
+    MarketplaceReservationEscrow saved =
+        escrowAdapter.save(
+            MarketplaceReservationEscrow.builder()
+                .reservationId(100L)
+                .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+                .escrowStatus(ReservationEscrowStatus.NONE)
+                .orderKey("0x" + "1".repeat(64))
+                .priceBaseUnits(maxUint256)
+                .build());
+
+    entityManager.flush();
+    entityManager.clear();
+
+    MarketplaceReservationEscrow loaded =
+        escrowAdapter.findByReservationId(saved.getReservationId()).orElseThrow();
+
+    assertThat(loaded.getPriceBaseUnits()).isEqualTo(maxUint256);
+  }
+
+  @Test
+  @DisplayName("escrow priceBaseUnits rejects values outside Solidity uint256 range")
+  void escrowPriceBaseUnitsRejectsOutOfRangeValues() {
+    BigInteger overflow = BigInteger.ONE.shiftLeft(256);
+
+    assertThatThrownBy(
+            () ->
+                escrowAdapter.save(
+                    MarketplaceReservationEscrow.builder()
+                        .reservationId(101L)
+                        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+                        .escrowStatus(ReservationEscrowStatus.NONE)
+                        .orderKey("0x" + "2".repeat(64))
+                        .priceBaseUnits(overflow)
+                        .build()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("uint256");
+
+    assertThatThrownBy(
+            () ->
+                escrowAdapter.save(
+                    MarketplaceReservationEscrow.builder()
+                        .reservationId(102L)
+                        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+                        .escrowStatus(ReservationEscrowStatus.NONE)
+                        .orderKey("0x" + "3".repeat(64))
+                        .priceBaseUnits(BigInteger.valueOf(-1L))
+                        .build()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("uint256");
+  }
+
+  @Test
   @DisplayName("create idempotency lifecycle is persisted and loaded with lock")
   void createIdempotencyRoundTrip() {
     ReservationCreateIdempotency saved =
         idempotencyAdapter.save(
             ReservationCreateIdempotency.preparing(
                     1L, "key-hash", "payload-hash", LocalDateTime.of(2026, 5, 16, 10, 0))
-                .markBound(10L, "33333333-3333-3333-3333-333333333333", "{\"ok\":true}"));
+                .markFailed("{\"ok\":false}"));
 
     entityManager.flush();
     entityManager.clear();
@@ -156,10 +219,8 @@ class ReservationPersistenceAdapterTest {
         idempotencyAdapter.findByBuyerIdAndKeyHashWithLock(1L, "key-hash").orElseThrow();
 
     assertThat(loaded.getId()).isEqualTo(saved.getId());
-    assertThat(loaded.getStatus()).isEqualTo(ReservationCreateIdempotencyStatus.BOUND);
-    assertThat(loaded.getReservationId()).isEqualTo(10L);
-    assertThat(loaded.getCurrentExecutionIntentPublicId())
-        .isEqualTo("33333333-3333-3333-3333-333333333333");
+    assertThat(loaded.getStatus()).isEqualTo(ReservationCreateIdempotencyStatus.FAILED);
+    assertThat(loaded.getResponseSnapshotJson()).isEqualTo("{\"ok\":false}");
   }
 
   @Test
@@ -183,8 +244,7 @@ class ReservationPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName(
-      "cleanup protection queries protect reservation, create idempotency, and unbound pending refs")
+  @DisplayName("cleanup protection queries protect reservation and unbound pending refs")
   void cleanupProtectionQueriesReturnProtectedPublicIds() {
     Long slotId = saveSlot();
     Reservation current =
@@ -215,10 +275,6 @@ class ReservationPersistenceAdapterTest {
                 .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
                 .pendingAction(ReservationEscrowAction.BUYER_CONFIRM)
                 .build());
-    idempotencyAdapter.save(
-        ReservationCreateIdempotency.preparing(
-                1L, "key-cleanup", "payload-cleanup", LocalDateTime.of(2026, 5, 16, 10, 0))
-            .markBound(current.getId(), "intent-create", "{\"ok\":true}"));
     entityManager.flush();
     entityManager.clear();
 
@@ -226,16 +282,44 @@ class ReservationPersistenceAdapterTest {
         cleanupProtectionAdapter.findProtectedExecutionIntentPublicIds(
             List.of(
                 new ReservationExecutionCleanupProtectionQuery(
-                    "intent-current", String.valueOf(current.getId()), "MARKETPLACE_CLASS_CANCEL"),
+                    "intent-current",
+                    String.valueOf(current.getId()),
+                    "MARKETPLACE_CLASS_CANCEL",
+                    marketplacePayload(
+                        current.getId(), 10L, 20L, "attempt-current", "MARKETPLACE_CLASS_CANCEL")),
                 new ReservationExecutionCleanupProtectionQuery(
-                    "intent-create", String.valueOf(current.getId()), "MARKETPLACE_CLASS_PURCHASE"),
+                    "intent-unbound",
+                    String.valueOf(unbound.getId()),
+                    "MARKETPLACE_CLASS_CONFIRM",
+                    marketplacePayload(
+                        unbound.getId(), 11L, 21L, "attempt-unbound", "MARKETPLACE_CLASS_CONFIRM")),
                 new ReservationExecutionCleanupProtectionQuery(
-                    "intent-unbound", String.valueOf(unbound.getId()), "MARKETPLACE_CLASS_CONFIRM"),
-                new ReservationExecutionCleanupProtectionQuery(
-                    "intent-free", "999999", "MARKETPLACE_CLASS_CONFIRM")));
+                    "intent-free",
+                    "999999",
+                    "MARKETPLACE_CLASS_CONFIRM",
+                    marketplacePayload(
+                        999999L, 12L, 22L, "attempt-free", "MARKETPLACE_CLASS_CONFIRM"))));
 
-    assertThat(protectedPublicIds)
-        .containsExactlyInAnyOrder("intent-current", "intent-create", "intent-unbound");
+    assertThat(protectedPublicIds).containsExactlyInAnyOrder("intent-current", "intent-unbound");
+  }
+
+  private String marketplacePayload(
+      Long reservationId,
+      Long escrowId,
+      Long actionStateId,
+      String attemptToken,
+      String actionType) {
+    return """
+        {
+          "payloadVersion": 1,
+          "reservationId": %d,
+          "escrowId": %d,
+          "actionStateId": %d,
+          "pendingAttemptToken": "%s",
+          "actionType": "%s"
+        }
+        """
+        .formatted(reservationId, escrowId, actionStateId, attemptToken, actionType);
   }
 
   @Test
@@ -278,19 +362,29 @@ class ReservationPersistenceAdapterTest {
       ReservationStatus status,
       ReservationEscrowFlow flow,
       LocalDateTime holdExpiresAt) {
-    reservationAdapter.save(
-        Reservation.builder()
-            .userId(System.nanoTime())
-            .trainerId(2L)
-            .slotId(slotId)
-            .reservationDate(date)
-            .reservationTime(LocalTime.of(10, 0))
-            .durationMinutes(60)
-            .status(status)
-            .escrowStatus(ReservationEscrowStatus.NONE)
-            .escrowFlow(flow)
-            .holdExpiresAt(holdExpiresAt)
-            .build());
+    Reservation saved =
+        reservationAdapter.save(
+            Reservation.builder()
+                .userId(System.nanoTime())
+                .trainerId(2L)
+                .slotId(slotId)
+                .reservationDate(date)
+                .reservationTime(LocalTime.of(10, 0))
+                .durationMinutes(60)
+                .status(status)
+                .escrowStatus(ReservationEscrowStatus.NONE)
+                .escrowFlow(flow)
+                .holdExpiresAt(holdExpiresAt)
+                .build());
+    if (flow.isUserEip7702() && holdExpiresAt != null) {
+      entityManager.persist(
+          MarketplaceReservationEscrowEntity.builder()
+              .reservationId(saved.getId())
+              .escrowFlow(flow.name())
+              .escrowStatus(ReservationEscrowStatus.NONE.name())
+              .holdExpiresAt(holdExpiresAt)
+              .build());
+    }
   }
 
   private Long saveSlot() {

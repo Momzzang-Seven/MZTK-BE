@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.dto;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
@@ -46,7 +45,8 @@ public record ReservationSummaryResult(
     LocalDate reservationDate,
     LocalTime reservationTime,
     int durationMinutes,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
     ReservationEscrowStatus escrowStatus,
     String userRequest,
     String orderKey,
@@ -57,63 +57,5 @@ public record ReservationSummaryResult(
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey,
-    ReservationExecutionResumeView web3Execution) {
-
-  /**
-   * Build a summary from a reservation domain object enriched with cross-module summaries.
-   *
-   * @param reservation reservation domain model
-   * @param classTitle class title (snapshot); {@code null} if unavailable
-   * @param priceAmount booking price; snapshot value if available, live adapter value otherwise
-   * @param thumbnailFinalObjectKey S3 thumbnail key; {@code null} if not set
-   * @param trainerNickname trainer's display nickname; {@code null} if unavailable
-   * @param userNickname reserving user's display nickname; {@code null} on user-list path
-   * @return populated result record
-   */
-  public static ReservationSummaryResult from(
-      Reservation reservation,
-      String classTitle,
-      Integer priceAmount,
-      String thumbnailFinalObjectKey,
-      String trainerNickname,
-      String userNickname) {
-    return from(
-        reservation,
-        classTitle,
-        priceAmount,
-        thumbnailFinalObjectKey,
-        trainerNickname,
-        userNickname,
-        null);
-  }
-
-  public static ReservationSummaryResult from(
-      Reservation reservation,
-      String classTitle,
-      Integer priceAmount,
-      String thumbnailFinalObjectKey,
-      String trainerNickname,
-      String userNickname,
-      ReservationExecutionResumeView web3Execution) {
-    return new ReservationSummaryResult(
-        reservation.getId(),
-        reservation.getSlotId(),
-        reservation.getTrainerId(),
-        reservation.getUserId(),
-        reservation.getReservationDate(),
-        reservation.getReservationTime(),
-        reservation.getDurationMinutes(),
-        reservation.getStatus(),
-        reservation.getEffectiveEscrowStatus(),
-        reservation.getUserRequest(),
-        reservation.getOrderKey(),
-        reservation.getContractDeadlineAt(),
-        reservation.getContractDeadlineEpochSeconds(),
-        classTitle,
-        priceAmount,
-        trainerNickname,
-        userNickname,
-        thumbnailFinalObjectKey,
-        web3Execution);
-  }
-}
+    ReservationViewerActions viewerActions,
+    ReservationExecutionResumeView web3Execution) {}

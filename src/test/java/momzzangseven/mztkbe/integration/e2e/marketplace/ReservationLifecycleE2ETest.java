@@ -37,6 +37,7 @@ import momzzangseven.mztkbe.modules.web3.admin.application.port.in.MarkTransacti
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -63,6 +64,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @TestPropertySource(
     properties = {"web3.chain-id=1337", "web3.eip712.chain-id=1337", "web3.eip7702.enabled=false"})
 @DisplayName("[E2E] Marketplace Reservation lifecycle")
+@Tag("e2e")
 class ReservationLifecycleE2ETest extends E2ETestBase {
 
   @Autowired private JdbcTemplate jdbcTemplate;
@@ -184,7 +186,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       long reservationId = createRoot.at("/data/reservationId").asLong();
       assertThat(createRoot.at("/data/status").asText()).isEqualTo("PURCHASE_PENDING");
       assertThat(createRoot.at("/data/web3/executionIntent/id").asText()).isNotBlank();
-      assertDbStatus(reservationId, "PURCHASE_PENDING");
+      assertDbStatus(reservationId, "HOLDING");
       markPurchaseConfirmedForE2E(reservationId);
       assertDbStatus(reservationId, "PENDING");
 
@@ -993,6 +995,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
   private void markPurchaseConfirmedForE2E(long reservationId) {
     Instant deadline = Instant.now().plusSeconds(604_800L);
+    String txHash = "0x" + "1".repeat(64);
     jdbcTemplate.update(
         "UPDATE class_reservations"
             + " SET status = 'PENDING',"
@@ -1005,7 +1008,30 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
             + " WHERE id = ?",
         deadline.getEpochSecond(),
         Timestamp.from(deadline),
-        "0x" + "1".repeat(64),
+        txHash,
+        reservationId);
+    jdbcTemplate.update(
+        "UPDATE marketplace_reservation_escrows"
+            + " SET escrow_status = 'LOCKED',"
+            + " escrow_flow = 'USER_EIP7702',"
+            + " contract_deadline_epoch_seconds = ?,"
+            + " contract_deadline_at = ?,"
+            + " last_tx_hash = ?,"
+            + " updated_at = CURRENT_TIMESTAMP"
+            + " WHERE reservation_id = ?",
+        deadline.getEpochSecond(),
+        Timestamp.from(deadline),
+        txHash,
+        reservationId);
+    jdbcTemplate.update(
+        "UPDATE marketplace_reservation_action_states"
+            + " SET status = 'CONFIRMED',"
+            + " retryable = FALSE,"
+            + " updated_at = CURRENT_TIMESTAMP"
+            + " WHERE reservation_id = ?"
+            + " AND action_type = 'PURCHASE'"
+            + " AND status IN ('PREPARING', 'INTENT_BOUND')"
+            + " AND execution_intent_public_id IS NOT NULL",
         reservationId);
   }
 

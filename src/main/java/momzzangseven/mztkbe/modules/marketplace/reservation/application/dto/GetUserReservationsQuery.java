@@ -11,12 +11,13 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
  * @param pageRequest cursor and page-size parameters
  */
 public record GetUserReservationsQuery(
-    Long userId, ReservationStatus status, CursorPageRequest pageRequest) {
+    Long userId, ReservationListStatusFilter status, CursorPageRequest pageRequest) {
 
   /**
    * Base cursor scope prefix. The effective scope is status-aware: {@link
-   * #cursorScope(ReservationStatus)} must be used to construct a fully-qualified scope string so
-   * that a cursor issued for one status filter cannot be replayed against a different filter.
+   * #cursorScope(ReservationListStatusFilter)} must be used to construct a fully-qualified scope
+   * string so that a cursor issued for one status filter cannot be replayed against a different
+   * filter.
    */
   public static final String CURSOR_SCOPE_PREFIX = "user-reservations";
 
@@ -32,13 +33,31 @@ public record GetUserReservationsQuery(
    * the next-cursor token) must call this method with the same {@code status} value so that the
    * scope embedded in the token matches the scope expected at decode time.
    */
-  public static String cursorScope(ReservationStatus status) {
+  public static String cursorScope(ReservationListStatusFilter status) {
     return CURSOR_SCOPE_PREFIX + ":" + (status == null ? "ALL" : status.name());
   }
 
-  /** Convenience constructor for tests / callers that do not supply a cursor yet. */
+  /** Transitional constructor for existing internal tests/callers that still pass stored status. */
+  public GetUserReservationsQuery(
+      Long userId, ReservationStatus status, CursorPageRequest pageRequest) {
+    this(userId, fromStoredStatus(status), pageRequest);
+  }
+
+  /** Transitional constructor for existing internal tests/callers that still pass stored status. */
   public GetUserReservationsQuery(Long userId, ReservationStatus status) {
-    this(userId, status, CursorPageRequest.of(null, null, 20, 100, cursorScope(status)));
+    this(
+        userId,
+        fromStoredStatus(status),
+        CursorPageRequest.of(null, null, 20, 100, cursorScope(fromStoredStatus(status))));
+  }
+
+  /** Transitional cursor-scope helper for existing internal tests/callers. */
+  public static String cursorScope(ReservationStatus status) {
+    return cursorScope(fromStoredStatus(status));
+  }
+
+  private static ReservationListStatusFilter fromStoredStatus(ReservationStatus status) {
+    return status == null ? null : ReservationListStatusFilter.valueOf(status.name());
   }
 
   public void validate() {

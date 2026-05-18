@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledExce
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
@@ -95,6 +96,7 @@ class ClaimExpiredRefundReservationServiceTest {
             loadReservationEscrowOrderPort,
             recordTrainerStrikePort,
             FIXED_CLOCK);
+    sut.setTransactionPort(ReservationTestTransactionPort.direct());
     org.mockito.Mockito.lenient()
         .when(loadReservationEscrowOrderPort.getOrder(any()))
         .thenThrow(new MarketplaceWeb3DisabledException());
@@ -132,7 +134,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
       assertThat(result.web3()).isNotNull();
       assertThat(result.web3().actionType()).isEqualTo("MARKETPLACE_CLASS_EXPIRED_REFUND");
     }
@@ -156,7 +158,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.CANCEL_PENDING);
       assertThat(result.web3()).isNotNull();
       assertThat(result.web3().existing()).isTrue();
       assertThat(result.web3().executionIntent().id()).isEqualTo("cancel-intent-1");
@@ -183,7 +185,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUNDED);
       assertThat(result.web3()).isNull();
       then(replayConfirmedReservationExecutionPort)
           .should()
@@ -216,7 +218,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.REJECTED);
       assertThat(result.web3()).isNull();
       then(replayConfirmedReservationExecutionPort)
           .should()
@@ -265,7 +267,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
       assertThat(result.web3()).isNotNull();
       assertThat(latestSaved.get().getCurrentExecutionIntentPublicId())
           .isEqualTo("refund-intent-1");
@@ -314,7 +316,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
       assertThat(latestSaved.get().getCurrentExecutionIntentPublicId())
           .isEqualTo("refund-intent-1");
       then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
@@ -365,7 +367,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
       assertThat(latestSaved.get().getCurrentExecutionIntentPublicId())
           .isEqualTo("new-refund-intent");
       then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
@@ -405,7 +407,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
       ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
       then(saveReservationPort).should(org.mockito.Mockito.times(3)).save(captor.capture());
       assertThat(captor.getAllValues().get(0).getStatus())
@@ -433,7 +435,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUNDED);
       assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.DEADLINE_REFUNDED.name());
       assertThat(result.web3()).isNull();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
@@ -471,7 +473,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
       assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("intent-1");
       then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
     }
@@ -498,7 +500,8 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(expectedStatus);
+      assertThat(result.status())
+          .isEqualTo(ReservationDisplayStatus.valueOf(expectedStatus.name()));
       assertThat(result.escrowStatus()).isEqualTo(expectedEscrow.name());
       assertThat(result.web3()).isNull();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
@@ -526,7 +529,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.USER_CANCELLED);
       then(recordTrainerStrikePort).shouldHaveNoInteractions();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
@@ -549,7 +552,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.USER_CANCELLED);
       assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED.name());
       then(recordTrainerStrikePort).shouldHaveNoInteractions();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
@@ -577,7 +580,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.REJECTED);
       then(recordTrainerStrikePort)
           .should()
           .recordStrike(
@@ -616,7 +619,7 @@ class ClaimExpiredRefundReservationServiceTest {
       ClaimExpiredRefundReservationResult result =
           sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.REJECTED);
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
     }
 

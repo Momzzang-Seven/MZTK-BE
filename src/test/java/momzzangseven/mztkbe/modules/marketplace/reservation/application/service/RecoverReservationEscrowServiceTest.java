@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAcce
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
@@ -90,6 +91,7 @@ class RecoverReservationEscrowServiceTest {
             loadReservationEscrowOrderPort,
             recordTrainerStrikePort,
             FIXED_CLOCK);
+    sut.setTransactionPort(ReservationTestTransactionPort.direct());
     org.mockito.Mockito.lenient()
         .when(saveReservationPort.save(any()))
         .thenAnswer(invocation -> invocation.getArgument(0, Reservation.class));
@@ -108,7 +110,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PENDING);
     assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED.name());
     assertThat(result.web3()).isNull();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
@@ -126,7 +128,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.TIMEOUT_CANCELLED);
     assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED.name());
     assertThat(result.web3()).isNull();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
@@ -144,7 +146,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.SETTLED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.SETTLED);
     assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.SETTLED.name());
     assertThat(result.web3()).isNull();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
@@ -162,7 +164,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.USER_CANCELLED);
     assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED.name());
     assertThat(result.web3()).isNull();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
@@ -181,7 +183,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.MANUAL_SYNC_REQUIRED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.MANUAL_SYNC_REQUIRED);
     assertThat(result.escrowStatus())
         .isEqualTo(ReservationEscrowStatus.MANUAL_SYNC_REQUIRED.name());
     assertThat(result.web3()).isNull();
@@ -226,7 +228,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
     assertThat(result.web3()).isNotNull();
     then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
     then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
@@ -306,7 +308,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PENDING);
     assertThat(result.web3()).isNull();
     then(replayConfirmedReservationExecutionPort)
         .should()
@@ -340,7 +342,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PENDING);
     assertThat(result.web3()).isNull();
     then(replayConfirmedReservationExecutionPort)
         .should()
@@ -372,7 +374,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.REJECTED);
     assertThat(result.web3()).isNull();
     then(replayConfirmedReservationExecutionPort)
         .should()
@@ -429,7 +431,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.CANCEL_PENDING);
     assertThat(result.web3()).isNotNull();
     assertThat(result.web3().existing()).isTrue();
     assertThat(result.web3().executionIntent().status()).isEqualTo("AWAITING_SIGNATURE");
@@ -484,7 +486,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
     assertThat(result.web3()).isNotNull();
     assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("refund-intent-1");
     then(prepareReservationEscrowExecutionPort).should().prepareDeadlineRefund(any());
@@ -539,7 +541,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
     assertThat(result.web3()).isNotNull();
     assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("refund-intent-1");
     then(loadReservationExecutionWritePort).shouldHaveNoInteractions();
@@ -642,7 +644,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, TRAINER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.REJECTED);
     then(recordTrainerStrikePort)
         .should()
         .recordStrike(
@@ -685,7 +687,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, TRAINER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.REJECTED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.REJECTED);
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
   }
 
@@ -702,7 +704,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUNDED);
     assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.DEADLINE_REFUNDED.name());
     assertThat(result.web3()).isNull();
     then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
@@ -771,7 +773,7 @@ class RecoverReservationEscrowServiceTest {
     RecoverReservationEscrowResult result =
         sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
 
-    assertThat(result.status()).isEqualTo(ReservationStatus.PURCHASE_PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PURCHASE_PENDING);
     assertThat(result.web3()).isNotNull();
     ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
     then(saveReservationPort).should().save(reservationCaptor.capture());

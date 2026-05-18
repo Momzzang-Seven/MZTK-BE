@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApplyReservationEscrowExecutionHookService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ReservationTestTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
@@ -75,17 +76,17 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
 
   @BeforeEach
   void setUp() {
-    sut =
-        new MarketplaceEscrowExecutionActionHandlerAdapter(
-            objectMapper,
-            new ApplyReservationEscrowExecutionHookService(
-                loadReservationPort,
-                saveReservationPort,
-                Clock.fixed(Instant.parse("2026-05-16T00:00:00Z"), ZoneOffset.UTC),
-                recordTrainerStrikePort,
-                loadReservationEscrowOrderPort,
-                loadReservationCreateIdempotencyPort,
-                saveReservationCreateIdempotencyPort));
+    ApplyReservationEscrowExecutionHookService hookService =
+        new ApplyReservationEscrowExecutionHookService(
+            loadReservationPort,
+            saveReservationPort,
+            Clock.fixed(Instant.parse("2026-05-16T00:00:00Z"), ZoneOffset.UTC),
+            recordTrainerStrikePort,
+            loadReservationEscrowOrderPort,
+            loadReservationCreateIdempotencyPort,
+            saveReservationCreateIdempotencyPort);
+    hookService.setTransactionPort(ReservationTestTransactionPort.direct());
+    sut = new MarketplaceEscrowExecutionActionHandlerAdapter(objectMapper, hookService);
     sut.setLoadExecutionTransactionPort(loadExecutionTransactionPort);
   }
 
@@ -500,7 +501,6 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
             .payloadHash("payload")
             .status(ReservationCreateIdempotencyStatus.COMPLETED)
             .reservationId(123L)
-            .currentExecutionIntentPublicId("intent-1")
             .expiresAt(LocalDateTime.of(2026, 5, 16, 1, 0))
             .build();
     given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
@@ -521,7 +521,6 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     then(saveReservationCreateIdempotencyPort).should().save(idempotencyCaptor.capture());
     assertThat(idempotencyCaptor.getValue().getStatus())
         .isEqualTo(ReservationCreateIdempotencyStatus.FAILED);
-    assertThat(idempotencyCaptor.getValue().getCurrentExecutionIntentPublicId()).isNull();
   }
 
   private Reservation purchasePreparing(String pendingAttemptToken) {

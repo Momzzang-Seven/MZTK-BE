@@ -5,11 +5,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 /** Result returned after a trainer rejects a reservation. */
 public record RejectReservationResult(
     Long reservationId,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
     String escrowStatus,
-    ReservationExecutionWriteView web3) {
-
-  public RejectReservationResult(Long reservationId, ReservationStatus status) {
-    this(reservationId, status, null, null);
-  }
-}
+    ReservationExecutionWriteView web3) {}

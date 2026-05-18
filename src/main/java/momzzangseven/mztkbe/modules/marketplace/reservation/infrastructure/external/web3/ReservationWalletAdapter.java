@@ -6,12 +6,14 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 @ConditionalOnBean(GetActiveWalletAddressUseCase.class)
+@Primary
 public class ReservationWalletAdapter implements LoadReservationWalletPort {
 
   private final GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;

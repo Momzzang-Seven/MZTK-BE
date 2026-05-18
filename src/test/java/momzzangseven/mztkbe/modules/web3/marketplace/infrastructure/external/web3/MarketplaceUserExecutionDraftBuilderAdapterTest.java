@@ -105,9 +105,15 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
     assertThat(draft.signatureMeta().signedAt()).isEqualTo(1_000L);
     assertThat(draft.signatureMeta().signatureExpiresAt()).isEqualTo(1_900L);
     assertThat(draft.expiresAt()).isEqualTo(LocalDateTime.ofEpochSecond(1_300, 0, ZoneOffset.UTC));
+    assertThat(draft.rootIdempotencyKey()).isEqualTo("buyer:10:create:key-hash");
     assertThat(draft.tokenMovement().fromRole()).isEqualTo("BUYER");
     assertThat(draft.tokenMovement().toRole()).isEqualTo("ESCROW");
     assertThat(draft.payloadSnapshotJson()).contains("\"signedAt\":1000");
+    assertThat(draft.payloadSnapshotJson()).contains("\"payloadVersion\":1");
+    assertThat(draft.payloadSnapshotJson()).contains("\"escrowId\":900");
+    assertThat(draft.payloadSnapshotJson()).contains("\"actionStateId\":901");
+    assertThat(draft.payloadSnapshotJson())
+        .contains("\"rootIdempotencyKey\":\"buyer:10:create:key-hash\"");
 
     ArgumentCaptor<MarketplaceServerSigPreimage> preimageCaptor =
         ArgumentCaptor.forClass(MarketplaceServerSigPreimage.class);
@@ -292,7 +298,10 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
         contractDeadlineEpochSeconds,
         contractDeadlineEpochSeconds,
         "attempt-token",
-        "PENDING");
+        "PENDING",
+        900L,
+        901L,
+        "buyer:10:create:key-hash");
   }
 
   private byte[] signature(byte fill) {

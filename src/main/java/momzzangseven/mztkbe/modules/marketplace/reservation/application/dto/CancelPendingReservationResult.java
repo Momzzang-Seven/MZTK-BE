@@ -5,11 +5,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 /** Result returned after a user cancels a pending reservation. */
 public record CancelPendingReservationResult(
     Long reservationId,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
     String escrowStatus,
-    ReservationExecutionWriteView web3) {
-
-  public CancelPendingReservationResult(Long reservationId, ReservationStatus status) {
-    this(reservationId, status, null, null);
-  }
-}
+    ReservationExecutionWriteView web3) {}

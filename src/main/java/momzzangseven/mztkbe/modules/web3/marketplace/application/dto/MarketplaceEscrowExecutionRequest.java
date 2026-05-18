@@ -34,7 +34,10 @@ public record MarketplaceEscrowExecutionRequest(
     Long expectedContractDeadlineEpochSeconds,
     Long contractDeadlineEpochSeconds,
     String pendingAttemptToken,
-    String targetTerminalStatus) {
+    String targetTerminalStatus,
+    Long escrowId,
+    Long actionStateId,
+    String rootIdempotencyKey) {
 
   public MarketplaceEscrowExecutionRequest {
     if (actionType == null) {
@@ -77,6 +80,69 @@ public record MarketplaceEscrowExecutionRequest(
     if (sessionEndAt == null) {
       throw new Web3InvalidInputException("sessionEndAt is required");
     }
+    if (escrowId != null && escrowId <= 0) {
+      throw new Web3InvalidInputException("escrowId must be positive");
+    }
+    if (actionStateId != null && actionStateId <= 0) {
+      throw new Web3InvalidInputException("actionStateId must be positive");
+    }
+  }
+
+  public MarketplaceEscrowExecutionRequest(
+      MarketplaceExecutionActionType actionType,
+      Long reservationId,
+      String resourceId,
+      String orderId,
+      String orderKey,
+      MarketplaceActorType actorType,
+      Long authorityUserId,
+      Long requesterUserId,
+      Long counterpartyUserId,
+      Long buyerUserId,
+      Long trainerUserId,
+      Long reservationVersion,
+      String expectedReservationStatus,
+      String expectedEscrowStatus,
+      String buyerWalletAddress,
+      String trainerWalletAddress,
+      String tokenAddress,
+      BigInteger priceBaseUnits,
+      MarketplaceAllowanceStrategy allowanceStrategy,
+      Integer bookedPriceAmountKrw,
+      LocalDateTime sessionEndAt,
+      Long expectedContractDeadlineEpochSeconds,
+      Long contractDeadlineEpochSeconds,
+      String pendingAttemptToken,
+      String targetTerminalStatus) {
+    this(
+        actionType,
+        reservationId,
+        resourceId,
+        orderId,
+        orderKey,
+        actorType,
+        authorityUserId,
+        requesterUserId,
+        counterpartyUserId,
+        buyerUserId,
+        trainerUserId,
+        reservationVersion,
+        expectedReservationStatus,
+        expectedEscrowStatus,
+        buyerWalletAddress,
+        trainerWalletAddress,
+        tokenAddress,
+        priceBaseUnits,
+        allowanceStrategy,
+        bookedPriceAmountKrw,
+        sessionEndAt,
+        expectedContractDeadlineEpochSeconds,
+        contractDeadlineEpochSeconds,
+        pendingAttemptToken,
+        targetTerminalStatus,
+        null,
+        null,
+        null);
   }
 
   public MarketplaceEscrowExecutionRequest(
@@ -116,6 +182,9 @@ public record MarketplaceEscrowExecutionRequest(
         MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
         bookedPriceAmountKrw,
         sessionEndAt,
+        null,
+        null,
+        null,
         null,
         null,
         null,

@@ -15,7 +15,9 @@ import java.util.Map;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationListStatusFilter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
@@ -91,7 +93,8 @@ class GetUserReservationsServiceTest {
 
     // then
     assertThat(result.items()).hasSize(1);
-    assertThat(result.items().get(0).status()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(result.items().get(0).status()).isEqualTo(ReservationDisplayStatus.PENDING);
+    assertThat(result.items().get(0).businessStatus()).isEqualTo(ReservationStatus.PENDING);
   }
 
   @Test
@@ -114,7 +117,10 @@ class GetUserReservationsServiceTest {
         repairingSut.execute(new GetUserReservationsQuery(1L, null));
 
     assertThat(result.items()).hasSize(1);
-    assertThat(result.items().getFirst().status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+    assertThat(result.items().getFirst().status())
+        .isEqualTo(ReservationDisplayStatus.DEADLINE_REFUNDED);
+    assertThat(result.items().getFirst().businessStatus())
+        .isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
     then(repairUseCase).should().repairBatch(List.of(original));
   }
 
@@ -152,6 +158,8 @@ class GetUserReservationsServiceTest {
     assertThat(hydrated.transaction().id()).isEqualTo(99L);
     assertThat(hydrated.transaction().status()).isEqualTo("SUCCEEDED");
     assertThat(hydrated.transaction().txHash()).isEqualTo("0xtx");
+    assertThat(result.items().getFirst().viewerActions().viewerAction()).isEqualTo("PURCHASE");
+    assertThat(result.items().getFirst().viewerActions().viewerCanRecover()).isTrue();
     then(resumePort).should().loadLatestBatch(List.of(10L));
   }
 
@@ -208,7 +216,13 @@ class GetUserReservationsServiceTest {
         new GetUserReservationsService(
             loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
     CursorPageRequest pageRequest =
-        CursorPageRequest.of(null, 1, 20, 100, GetUserReservationsQuery.cursorScope(status));
+        CursorPageRequest.of(
+            null,
+            1,
+            20,
+            100,
+            GetUserReservationsQuery.cursorScope(
+                ReservationListStatusFilter.valueOf(status.name())));
     given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
         .willReturn(List.of(first, second), List.of(third));
     given(repairUseCase.repairBatch(List.of(first, second)))
@@ -410,7 +424,8 @@ class GetUserReservationsServiceTest {
         new momzzangseven.mztkbe.global.pagination.KeysetCursor(
             java.time.LocalDateTime.of(2025, 6, 1, 10, 0),
             10L,
-            GetUserReservationsQuery.cursorScope(null)); // "user-reservations:ALL"
+            GetUserReservationsQuery.cursorScope(
+                (ReservationListStatusFilter) null)); // "user-reservations:ALL"
     String encodedAllCursor = momzzangseven.mztkbe.global.pagination.CursorCodec.encode(allCursor);
 
     // when — try to decode that cursor with an APPROVED-scoped page request
@@ -422,22 +437,23 @@ class GetUserReservationsServiceTest {
                     20,
                     20,
                     100,
-                    GetUserReservationsQuery.cursorScope(ReservationStatus.APPROVED)))
+                    GetUserReservationsQuery.cursorScope(ReservationListStatusFilter.APPROVED)))
         .isInstanceOf(momzzangseven.mztkbe.global.error.pagination.InvalidCursorException.class);
   }
 
   @Test
   @DisplayName("내 예약 목록 조회 - status가 다른 두 cursorScope 값은 서로 달라야 한다")
   void cursorScope_DifferentStatuses_ProduceDifferentScopes() {
-    String allScope = GetUserReservationsQuery.cursorScope(null);
-    String approvedScope = GetUserReservationsQuery.cursorScope(ReservationStatus.APPROVED);
-    String pendingScope = GetUserReservationsQuery.cursorScope(ReservationStatus.PENDING);
+    String allScope = GetUserReservationsQuery.cursorScope((ReservationListStatusFilter) null);
+    String approvedScope =
+        GetUserReservationsQuery.cursorScope(ReservationListStatusFilter.APPROVED);
+    String pendingScope = GetUserReservationsQuery.cursorScope(ReservationListStatusFilter.PENDING);
 
     assertThat(allScope).isNotEqualTo(approvedScope);
     assertThat(allScope).isNotEqualTo(pendingScope);
     assertThat(approvedScope).isNotEqualTo(pendingScope);
     // same status always produces the same scope
-    assertThat(GetUserReservationsQuery.cursorScope(ReservationStatus.APPROVED))
+    assertThat(GetUserReservationsQuery.cursorScope(ReservationListStatusFilter.APPROVED))
         .isEqualTo(approvedScope);
   }
 

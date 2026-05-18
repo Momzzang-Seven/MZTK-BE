@@ -2,8 +2,6 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.pers
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -17,10 +15,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -54,17 +48,14 @@ public class ReservationEntity {
   @Column(name = "duration_minutes", nullable = false)
   private int durationMinutes;
 
-  @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
-  private ReservationStatus status;
+  private String status;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "escrow_status", length = 40)
-  private ReservationEscrowStatus escrowStatus;
+  private String escrowStatus;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "escrow_flow", length = 30)
-  private ReservationEscrowFlow escrowFlow;
+  private String escrowFlow;
 
   @Column(name = "user_request", length = 500)
   private String userRequest;
@@ -114,9 +105,8 @@ public class ReservationEntity {
   @Column(name = "contract_deadline_at")
   private LocalDateTime contractDeadlineAt;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "pending_action", length = 40)
-  private ReservationEscrowAction pendingAction;
+  private String pendingAction;
 
   @Column(name = "pending_attempt_token", length = 100)
   private String pendingAttemptToken;
@@ -124,21 +114,17 @@ public class ReservationEntity {
   @Column(name = "pending_expected_version")
   private Long pendingExpectedVersion;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "pending_expected_status", length = 30)
-  private ReservationStatus pendingExpectedStatus;
+  private String pendingExpectedStatus;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "pending_expected_escrow_status", length = 40)
-  private ReservationEscrowStatus pendingExpectedEscrowStatus;
+  private String pendingExpectedEscrowStatus;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "prior_status", length = 30)
-  private ReservationStatus priorStatus;
+  private String priorStatus;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "prior_escrow_status", length = 40)
-  private ReservationEscrowStatus priorEscrowStatus;
+  private String priorEscrowStatus;
 
   @Column(name = "create_idempotency_key_hash", length = 128)
   private String createIdempotencyKeyHash;

@@ -3,14 +3,14 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceReservationStateException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledException;
+import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowCommand;
@@ -19,9 +19,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Rese
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ClaimExpiredRefundReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BindReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -29,23 +32,21 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowActorType;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionOperations;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /** Prepares the buyer-owned claimExpiredRefund marketplace execution. */
 @Slf4j
-@Service
 public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundReservationUseCase {
 
   private static final Set<String> RETRYABLE_TERMINAL_STATUSES =
@@ -61,66 +62,90 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   private final ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
-  @Nullable private final RecordTrainerStrikePort recordTrainerStrikePort;
+  private final LoadReservationEscrowPort loadReservationEscrowPort;
+  private final SaveReservationActionStatePort saveReservationActionStatePort;
+  private final LoadReservationActionStatePort loadReservationActionStatePort;
+  private final BindReservationActionStatePort bindReservationActionStatePort;
+  private final RecordTrainerStrikePort recordTrainerStrikePort;
   private final Clock clock;
-  private TransactionOperations transactionOperations;
+  private RunReservationTransactionPort transactionPort;
 
   public ClaimExpiredRefundReservationService(
       LoadReservationPort loadReservationPort,
       SaveReservationPort saveReservationPort,
-      @Nullable PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
-      @Nullable CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
-      @Nullable LoadReservationWalletPort loadReservationWalletPort,
-      @Nullable LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
-      @Nullable LoadReservationExecutionWritePort loadReservationExecutionWritePort,
-      @Nullable LoadReservationExecutionStatePort loadReservationExecutionStatePort,
-      @Nullable ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
-      @Nullable LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
-      @Nullable RecordTrainerStrikePort recordTrainerStrikePort,
+      PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
+      CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
+      LoadReservationWalletPort loadReservationWalletPort,
+      LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
+      LoadReservationExecutionWritePort loadReservationExecutionWritePort,
+      LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+      ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      RecordTrainerStrikePort recordTrainerStrikePort,
+      Clock clock) {
+    this(
+        loadReservationPort,
+        saveReservationPort,
+        prepareReservationEscrowExecutionPort,
+        cancelReservationEscrowExecutionPort,
+        loadReservationWalletPort,
+        loadReservationEscrowPaymentConfigPort,
+        loadReservationExecutionWritePort,
+        loadReservationExecutionStatePort,
+        replayConfirmedReservationExecutionPort,
+        loadReservationEscrowOrderPort,
+        null,
+        null,
+        null,
+        null,
+        recordTrainerStrikePort,
+        clock);
+  }
+
+  public ClaimExpiredRefundReservationService(
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
+      CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
+      LoadReservationWalletPort loadReservationWalletPort,
+      LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
+      LoadReservationExecutionWritePort loadReservationExecutionWritePort,
+      LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+      ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationActionStatePort saveReservationActionStatePort,
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      BindReservationActionStatePort bindReservationActionStatePort,
+      RecordTrainerStrikePort recordTrainerStrikePort,
       Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.saveReservationPort = saveReservationPort;
     this.prepareReservationEscrowExecutionPort =
-        prepareReservationEscrowExecutionPort == null
-            ? DisabledReservationWeb3PortFactory.prepareExecution()
-            : prepareReservationEscrowExecutionPort;
+        java.util.Objects.requireNonNull(prepareReservationEscrowExecutionPort);
     this.cancelReservationEscrowExecutionPort =
-        cancelReservationEscrowExecutionPort == null
-            ? DisabledReservationWeb3PortFactory.cancelExecution()
-            : cancelReservationEscrowExecutionPort;
-    this.loadReservationWalletPort =
-        loadReservationWalletPort == null
-            ? DisabledReservationWeb3PortFactory.wallet()
-            : loadReservationWalletPort;
+        java.util.Objects.requireNonNull(cancelReservationEscrowExecutionPort);
+    this.loadReservationWalletPort = java.util.Objects.requireNonNull(loadReservationWalletPort);
     this.loadReservationEscrowPaymentConfigPort =
-        loadReservationEscrowPaymentConfigPort == null
-            ? DisabledReservationWeb3PortFactory.paymentConfig()
-            : loadReservationEscrowPaymentConfigPort;
+        java.util.Objects.requireNonNull(loadReservationEscrowPaymentConfigPort);
     this.loadReservationExecutionWritePort =
-        loadReservationExecutionWritePort == null
-            ? DisabledReservationWeb3PortFactory.executionWrite()
-            : loadReservationExecutionWritePort;
+        java.util.Objects.requireNonNull(loadReservationExecutionWritePort);
     this.loadReservationExecutionStatePort =
-        loadReservationExecutionStatePort == null
-            ? DisabledReservationWeb3PortFactory.executionState()
-            : loadReservationExecutionStatePort;
+        java.util.Objects.requireNonNull(loadReservationExecutionStatePort);
     this.replayConfirmedReservationExecutionPort =
-        replayConfirmedReservationExecutionPort == null
-            ? DisabledReservationWeb3PortFactory.confirmedReplay()
-            : replayConfirmedReservationExecutionPort;
+        java.util.Objects.requireNonNull(replayConfirmedReservationExecutionPort);
     this.loadReservationEscrowOrderPort =
-        loadReservationEscrowOrderPort == null
-            ? DisabledReservationWeb3PortFactory.escrowOrder()
-            : loadReservationEscrowOrderPort;
+        java.util.Objects.requireNonNull(loadReservationEscrowOrderPort);
+    this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.saveReservationActionStatePort = saveReservationActionStatePort;
+    this.loadReservationActionStatePort = loadReservationActionStatePort;
+    this.bindReservationActionStatePort = bindReservationActionStatePort;
     this.recordTrainerStrikePort = recordTrainerStrikePort;
     this.clock = clock;
   }
 
-  @Autowired
-  void setTransactionManager(PlatformTransactionManager transactionManager) {
-    TransactionTemplate template = new TransactionTemplate(transactionManager);
-    template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-    this.transactionOperations = template;
+  public void setTransactionPort(RunReservationTransactionPort transactionPort) {
+    this.transactionPort = java.util.Objects.requireNonNull(transactionPort);
   }
 
   @Override
@@ -181,17 +206,13 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     Reservation reservation =
         loadReservationPort
             .findByIdWithLock(command.reservationId())
-            .orElseThrow(
-                () ->
-                    new BusinessException(
-                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
-                        "Reservation not found: " + command.reservationId()));
+            .orElseThrow(() -> new ReservationNotFoundException(command.reservationId()));
 
     if (!reservation.isOwnedByUser(command.userId())) {
       throw new MarketplaceUnauthorizedAccessException();
     }
     if (isUnboundDeadlineRefundPending(reservation)) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "Deadline refund preparation is already in progress");
     }
@@ -205,7 +226,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
         return DeadlineRefundInspection.existing(
             reservation, loadOwnedCurrentExecution(command, reservation));
       }
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "another marketplace execution is still active for this reservation");
     }
@@ -217,13 +238,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     Reservation reservation =
         loadReservationPort
             .findByIdWithLock(expected.getId())
-            .orElseThrow(
-                () ->
-                    new BusinessException(
-                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
-                        "Reservation not found: " + expected.getId()));
+            .orElseThrow(() -> new ReservationNotFoundException(expected.getId()));
     if (!sameClaimSnapshot(reservation, expected)) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "marketplace reservation state changed before deadline refund preparation");
     }
@@ -236,7 +253,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       throw new MarketplaceUnauthorizedAccessException();
     }
     if (isUnboundDeadlineRefundPending(reservation)) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "Deadline refund preparation is already in progress");
     }
@@ -250,17 +267,33 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
         return BeginDeadlineRefundResult.existing(
             reservation, loadOwnedCurrentExecution(command, reservation));
       }
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "another marketplace execution is still active for this reservation");
     }
 
     Reservation refundable = ensureRefundAvailable(reservation, currentState != null);
+    MarketplaceReservationEscrow escrow = loadEscrowProjection(refundable);
+    if (escrow != null) {
+      ReservationEscrowActionGuard.requireActiveWalletMatchesSnapshot(
+          loadReservationWalletPort, command.userId(), escrow.getBuyerWalletAddress());
+    }
     Reservation pending =
         saveReservationPort.save(
             refundable.beginDeadlineRefundPending(UUID.randomUUID().toString()));
+    MarketplaceReservationActionState actionState =
+        createActionState(
+            pending,
+            escrow,
+            ReservationEscrowAction.DEADLINE_REFUND,
+            ReservationEscrowActorType.BUYER,
+            command.userId(),
+            ReservationStatus.DEADLINE_REFUND_AVAILABLE,
+            ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE,
+            null);
     return BeginDeadlineRefundResult.pending(
-        new PendingPreparation(pending, commandFor(pending, command.userId())));
+        new PendingPreparation(
+            pending, commandFor(pending, escrow, actionState, command.userId()), actionState));
   }
 
   private ClaimExpiredRefundReservationResult replayConfirmedState(
@@ -285,7 +318,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   private ChainSyncResult syncChainStateBeforeClaim(Reservation reservation) {
     ReservationEscrowOrderView order;
     try {
-      order = loadReservationEscrowOrderPort.getOrder(ensureOrderKey(reservation));
+      order =
+          loadReservationEscrowOrderPort.getOrder(
+              ReservationOrderKeySupport.requireOrderKey(reservation));
     } catch (MarketplaceWeb3DisabledException e) {
       return ChainSyncResult.continueWith(reservation);
     }
@@ -297,16 +332,12 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     Reservation reservation =
         loadReservationPort
             .findByIdWithLock(expected.getId())
-            .orElseThrow(
-                () ->
-                    new BusinessException(
-                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
-                        "Reservation not found: " + expected.getId()));
+            .orElseThrow(() -> new ReservationNotFoundException(expected.getId()));
     if (!sameClaimSnapshot(reservation, expected)) {
       return ChainSyncResult.continueWith(reservation);
     }
     if (order == null || order.isAbsent()) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
           "Marketplace escrow order is absent and cannot be refunded safely");
     }
@@ -349,7 +380,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
                   order.deadlineEpochSeconds(),
                   deadlineAt));
       default ->
-          throw new BusinessException(
+          throw new MarketplaceReservationStateException(
               ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
               "Unsupported marketplace escrow order state: " + order.state());
     };
@@ -358,12 +389,12 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   private ChainSyncResult syncCreatedChainOrder(
       Reservation reservation, ReservationEscrowOrderView order, LocalDateTime deadlineAt) {
     if (isUnboundDeadlineRefundPending(reservation)) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "Deadline refund preparation is already in progress");
     }
     if (deadlineAt == null || !LocalDateTime.now(clock).isAfter(deadlineAt)) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
           "Deadline refund is not yet available on the escrow contract");
     }
@@ -460,7 +491,6 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     }
   }
 
-  @Nullable
   private ReservationExecutionStateView loadCurrentExecutionStateIfPresent(
       Reservation reservation) {
     if (reservation.getCurrentExecutionIntentPublicId() == null) {
@@ -474,7 +504,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       ClaimExpiredRefundReservationCommand command, Reservation reservation) {
     return loadReservationExecutionWritePort
         .load(command.userId(), reservation.getCurrentExecutionIntentPublicId())
-        .asExistingForOrder(ensureOrderKey(reservation));
+        .asExistingForOrder(ReservationOrderKeySupport.requireOrderKey(reservation));
   }
 
   private Reservation bindPendingExecution(
@@ -482,12 +512,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     Reservation current =
         loadReservationPort
             .findByIdWithLock(phaseA.reservation().getId())
-            .orElseThrow(
-                () ->
-                    new BusinessException(
-                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
-                        "Reservation not found: " + phaseA.reservation().getId()));
+            .orElseThrow(() -> new ReservationNotFoundException(phaseA.reservation().getId()));
     validatePendingSnapshot(current, phaseA.reservation(), expectedStatus);
+    bindActionState(phaseA, executionIntentId);
     return saveReservationPort.save(current.bindPendingExecutionIntent(executionIntentId));
   }
 
@@ -505,6 +532,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
                               phaseA.reservation().getPendingAttemptToken()))
               .ifPresent(
                   reservation -> saveReservationPort.save(reservation.rollbackToPriorState()));
+          markActionStatePreparationFailed(phaseA, "ROLLBACK", "marketplace action rolled back");
           return null;
         });
   }
@@ -538,7 +566,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       Reservation current, Reservation expected, ReservationStatus expectedStatus) {
     if (current.getStatus() != expectedStatus
         || !equalsNullable(current.getPendingAttemptToken(), expected.getPendingAttemptToken())) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "marketplace reservation state changed before execution intent bind");
     }
@@ -549,17 +577,15 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
   }
 
   private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
-    if (transactionOperations == null) {
-      return supplier.get();
-    }
-    return transactionOperations.execute(status -> supplier.get());
+    return transactionPort.requiresNew(supplier);
   }
 
   private ClaimExpiredRefundReservationResult result(
       Reservation reservation, ReservationExecutionWriteView web3) {
     return new ClaimExpiredRefundReservationResult(
         reservation.getId(),
-        reservation.getStatus(),
+        ReservationDisplayStatusMapper.displayStatus(reservation),
+        ReservationDisplayStatusMapper.businessStatus(reservation),
         reservation.getEffectiveEscrowStatus().name(),
         web3);
   }
@@ -582,17 +608,17 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       if (currentIntentRetryableTerminal) {
         return saveReservationPort.save(reservation.markDeadlineRefundAvailable());
       }
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "Deadline refund execution is already pending");
     }
     if (reservation.getContractDeadlineAt() == null) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
           "Contract deadline is not available for this reservation");
     }
     if (!LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt())) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
           "Deadline refund is only available after the contract deadline");
     }
@@ -600,23 +626,37 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       return reservation;
     }
     if (!reservation.getStatus().canTransitionTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE)) {
-      throw new BusinessException(
+      throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Cannot claim deadline refund in status: " + reservation.getStatus());
     }
     return saveReservationPort.save(reservation.markDeadlineRefundAvailable());
   }
 
-  private PrepareReservationEscrowCommand commandFor(Reservation reservation, Long buyerUserId) {
+  private PrepareReservationEscrowCommand commandFor(
+      Reservation reservation,
+      MarketplaceReservationEscrow escrow,
+      MarketplaceReservationActionState actionState,
+      Long buyerUserId) {
     String buyerWallet =
-        walletOrSnapshot(reservation.getBuyerWalletAddress(), reservation.getUserId());
+        ReservationEscrowActionGuard.walletOrSnapshot(
+            loadReservationWalletPort,
+            escrow == null ? reservation.getBuyerWalletAddress() : escrow.getBuyerWalletAddress(),
+            reservation.getUserId());
     String trainerWallet =
-        walletOrSnapshot(reservation.getTrainerWalletAddress(), reservation.getTrainerId());
+        ReservationEscrowActionGuard.walletOrSnapshot(
+            loadReservationWalletPort,
+            escrow == null
+                ? reservation.getTrainerWalletAddress()
+                : escrow.getTrainerWalletAddress(),
+            reservation.getTrainerId());
     var payment = loadReservationEscrowPaymentConfigPort.load();
     return new PrepareReservationEscrowCommand(
         reservation.getId(),
         reservation.getOrderId(),
-        ensureOrderKey(reservation),
+        escrow == null
+            ? ReservationOrderKeySupport.requireOrderKey(reservation)
+            : escrow.getOrderKey(),
         "BUYER",
         buyerUserId,
         buyerUserId,
@@ -628,54 +668,133 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
         reservation.getPriorEscrowStatus(),
         buyerWallet,
         trainerWallet,
-        reservation.getTokenAddress() == null
-            ? payment.tokenAddress()
-            : reservation.getTokenAddress(),
-        reservation.getPriceBaseUnits() == null
-            ? payment.priceBaseUnits(reservation.getBookedPriceAmount()).toString()
-            : reservation.getPriceBaseUnits(),
+        escrow == null || escrow.getTokenAddress() == null
+            ? reservation.getTokenAddress() == null
+                ? payment.tokenAddress()
+                : reservation.getTokenAddress()
+            : escrow.getTokenAddress(),
+        escrow == null || escrow.getPriceBaseUnits() == null
+            ? reservation.getPriceBaseUnits() == null
+                ? payment.priceBaseUnits(reservation.getBookedPriceAmount()).toString()
+                : reservation.getPriceBaseUnits()
+            : escrow.getPriceBaseUnits().toString(),
         reservation.getBookedPriceAmount(),
         reservation.sessionEndAt(),
-        reservation.getExpectedContractDeadlineEpochSeconds(),
-        reservation.getContractDeadlineEpochSeconds(),
+        escrow == null
+            ? reservation.getExpectedContractDeadlineEpochSeconds()
+            : escrow.getExpectedContractDeadlineEpochSeconds(),
+        escrow == null
+            ? reservation.getContractDeadlineEpochSeconds()
+            : escrow.getContractDeadlineEpochSeconds(),
         reservation.getPendingAttemptToken(),
-        "DEADLINE_REFUNDED");
+        "DEADLINE_REFUNDED",
+        escrow == null ? null : escrow.getId(),
+        actionState == null ? null : actionState.getId(),
+        actionState == null ? null : actionState.getRootIdempotencyKey());
   }
 
-  private String walletOrSnapshot(String snapshot, Long userId) {
-    if (snapshot != null && !snapshot.isBlank()) {
-      return snapshot;
+  private MarketplaceReservationEscrow loadEscrowProjection(Reservation reservation) {
+    if (loadReservationEscrowPort == null) {
+      return null;
     }
-    return loadReservationWalletPort
-        .loadActiveWalletAddress(userId)
+    MarketplaceReservationEscrow escrow =
+        loadReservationEscrowPort
+            .findByReservationIdWithLock(reservation.getId())
+            .orElseThrow(
+                () ->
+                    new MarketplaceReservationStateException(
+                        ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
+                        "Reservation escrow projection is missing"));
+    if (!escrow.getEscrowFlow().isUserEip7702()) {
+      throw new MarketplaceReservationStateException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Reservation escrow projection is not user-managed");
+    }
+    return escrow;
+  }
+
+  private MarketplaceReservationActionState createActionState(
+      Reservation reservation,
+      MarketplaceReservationEscrow escrow,
+      ReservationEscrowAction action,
+      ReservationEscrowActorType actorType,
+      Long actorUserId,
+      ReservationStatus expectedStatus,
+      ReservationEscrowStatus expectedEscrowStatus,
+      String actionReason) {
+    if (saveReservationActionStatePort == null) {
+      return null;
+    }
+    int attemptNo =
+        loadReservationActionStatePort == null
+            ? 1
+            : loadReservationActionStatePort
+                    .findLatestByReservationId(reservation.getId())
+                    .map(MarketplaceReservationActionState::getAttemptNo)
+                    .orElse(0)
+                + 1;
+    MarketplaceReservationActionState saved =
+        saveReservationActionStatePort.save(
+            MarketplaceReservationActionState.builder()
+                .reservationId(reservation.getId())
+                .escrowId(escrow == null ? null : escrow.getId())
+                .actionType(action)
+                .actorType(actorType)
+                .actorUserId(actorUserId)
+                .attemptNo(attemptNo)
+                .attemptToken(reservation.getPendingAttemptToken())
+                .status(ReservationActionStateStatus.PREPARING)
+                .expectedReservationVersion(reservation.getVersion())
+                .expectedReservationStatus(expectedStatus)
+                .expectedEscrowStatus(expectedEscrowStatus)
+                .priorReservationStatus(reservation.getPriorStatus())
+                .priorEscrowStatus(reservation.getPriorEscrowStatus())
+                .actionReason(actionReason)
+                .build());
+    return saveReservationActionStatePort.save(
+        saved.toBuilder()
+            .rootIdempotencyKey(rootIdempotencyKey(escrow, action, saved.getId()))
+            .build());
+  }
+
+  private String rootIdempotencyKey(
+      MarketplaceReservationEscrow escrow, ReservationEscrowAction action, Long actionStateId) {
+    String orderKey = escrow == null ? "reservation" : escrow.getOrderKey();
+    return "order:" + orderKey + ":escrow-action:" + action.name() + ":state:" + actionStateId;
+  }
+
+  private void bindActionState(PendingPreparation phaseA, String executionIntentId) {
+    if (phaseA.actionState() == null || bindReservationActionStatePort == null) {
+      return;
+    }
+    bindReservationActionStatePort
+        .bindExecutionIntent(
+            phaseA.actionState().getId(), phaseA.actionState().getAttemptToken(), executionIntentId)
         .orElseThrow(
             () ->
-                new BusinessException(
-                    ErrorCode.WALLET_NOT_CONNECTED, "Active wallet not found: userId=" + userId));
+                new MarketplaceReservationStateException(
+                    ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+                    "marketplace reservation action state changed before execution intent bind"));
   }
 
-  private String ensureOrderKey(Reservation reservation) {
-    if (reservation.getOrderKey() != null && !reservation.getOrderKey().isBlank()) {
-      return reservation.getOrderKey();
+  private void markActionStatePreparationFailed(
+      PendingPreparation phaseA, String errorCode, String errorReason) {
+    if (phaseA.actionState() == null || saveReservationActionStatePort == null) {
+      return;
     }
-    try {
-      UUID uuid = UUID.fromString(reservation.getOrderId());
-      return "0x"
-          + "0".repeat(32)
-          + String.format(
-              Locale.ROOT,
-              "%016x%016x",
-              uuid.getMostSignificantBits(),
-              uuid.getLeastSignificantBits());
-    } catch (RuntimeException e) {
-      throw new BusinessException(
-          ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
-          "Reservation order key is missing and cannot be derived");
-    }
+    saveReservationActionStatePort.save(
+        phaseA.actionState().toBuilder()
+            .status(ReservationActionStateStatus.PREPARATION_FAILED)
+            .retryable(false)
+            .errorCode(errorCode)
+            .errorReason(errorReason)
+            .build());
   }
 
   private record PendingPreparation(
-      Reservation reservation, PrepareReservationEscrowCommand prepareCommand) {}
+      Reservation reservation,
+      PrepareReservationEscrowCommand prepareCommand,
+      MarketplaceReservationActionState actionState) {}
 
   private record DeadlineRefundInspection(
       Reservation reservation,

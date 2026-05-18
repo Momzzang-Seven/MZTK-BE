@@ -8,15 +8,13 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Returns the full detail of a single reservation.
@@ -35,7 +33,6 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Trainer and user nicknames are resolved live from the {@code user} module.
  * </ul>
  */
-@Service
 public class GetReservationDetailService implements GetReservationDetailUseCase {
 
   private final LoadReservationPort loadReservationPort;
@@ -43,14 +40,15 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
   private final LoadUserSummaryPort loadUserSummaryPort;
   private final LoadReservationExecutionResumePort loadReservationExecutionResumePort;
   private final RepairReservationChainReadUseCase repairReservationChainReadUseCase;
+  private final LoadReservationEscrowPort loadReservationEscrowPort;
 
-  @Autowired
   public GetReservationDetailService(
       LoadReservationPort loadReservationPort,
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
-      @Nullable LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      @Nullable RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase,
+      LoadReservationEscrowPort loadReservationEscrowPort) {
     this.loadReservationPort = loadReservationPort;
     this.loadClassSummaryPort = loadClassSummaryPort;
     this.loadUserSummaryPort = loadUserSummaryPort;
@@ -62,6 +60,22 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
         repairReservationChainReadUseCase == null
             ? noOpRepairUseCase()
             : repairReservationChainReadUseCase;
+    this.loadReservationEscrowPort = loadReservationEscrowPort;
+  }
+
+  public GetReservationDetailService(
+      LoadReservationPort loadReservationPort,
+      LoadClassSummaryPort loadClassSummaryPort,
+      LoadUserSummaryPort loadUserSummaryPort,
+      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+    this(
+        loadReservationPort,
+        loadClassSummaryPort,
+        loadUserSummaryPort,
+        loadReservationExecutionResumePort,
+        repairReservationChainReadUseCase,
+        null);
   }
 
   public GetReservationDetailService(
@@ -73,7 +87,8 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
         loadClassSummaryPort,
         loadUserSummaryPort,
         emptyResumePort(),
-        noOpRepairUseCase());
+        noOpRepairUseCase(),
+        null);
   }
 
   private static LoadReservationExecutionResumePort emptyResumePort() {
@@ -112,7 +127,6 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
   }
 
   @Override
-  @Transactional(readOnly = true)
   public GetReservationResult execute(GetReservationQuery query) {
     query.validate();
 
@@ -126,6 +140,7 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
       throw new MarketplaceUnauthorizedAccessException();
     }
     reservation = repairReservationChainReadUseCase.repairOne(reservation);
+    reservation = applyEscrowTxHashOverride(reservation);
 
     // Snapshot fields take precedence for price and title (immutable at booking time).
     // Both snapshot fields must be present — if only one is populated (partial snapshot)
@@ -158,16 +173,29 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
         loadUserSummaryPort.findById(reservation.getTrainerId()).orElse(null);
     UserSummary userSummary = loadUserSummaryPort.findById(reservation.getUserId()).orElse(null);
 
-    return GetReservationResult.from(
+    return ReservationDisplayStatusMapper.detailResult(
         reservation,
         classTitle,
         priceAmount,
         thumbnailFinalObjectKey,
         trainerSummary != null ? trainerSummary.nickname() : null,
         userSummary != null ? userSummary.nickname() : null,
+        requesterId,
         ReservationExecutionResumeViewer.hydrate(
             reservation,
             requesterId,
             loadReservationExecutionResumePort.loadLatest(reservation.getId()).orElse(null)));
+  }
+
+  private Reservation applyEscrowTxHashOverride(Reservation reservation) {
+    if (loadReservationEscrowPort == null) {
+      return reservation;
+    }
+    return loadReservationEscrowPort
+        .findByReservationId(reservation.getId())
+        .map(MarketplaceReservationEscrow::getLastTxHash)
+        .filter(txHash -> txHash != null && !txHash.isBlank())
+        .map(txHash -> reservation.toBuilder().txHash(txHash).build())
+        .orElse(reservation);
   }
 }

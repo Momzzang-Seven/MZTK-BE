@@ -5,22 +5,22 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CancelPendingReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CancelPendingReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ClaimExpiredRefundReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ClaimExpiredRefundReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CompleteReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CompleteReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CreateReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CreateReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.GetReservationDetailRequestDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.GetUserReservationsRequestDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RecoverReservationEscrowRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RecoverReservationEscrowResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationCursorResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationDetailResponseDTO;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationCommand;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ClaimExpiredRefundReservationCommand;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CompleteReservationCommand;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverReservationEscrowCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationListStatusFilter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CancelPendingReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ClaimExpiredRefundReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CompleteReservationUseCase;
@@ -28,7 +28,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -71,27 +70,26 @@ public class ClassReservationController {
   @GetMapping("/me/reservations")
   public ResponseEntity<ApiResponse<ReservationCursorResponse>> getMyReservations(
       @AuthenticationPrincipal Long userId,
-      @RequestParam(required = false) ReservationStatus status,
+      @RequestParam(required = false) ReservationListStatusFilter status,
       @RequestParam(required = false) String cursor,
       @RequestParam(required = false) Integer size) {
     requireUserId(userId);
-    CursorPageRequest pageRequest =
-        CursorPageRequest.of(cursor, size, 20, 100, GetUserReservationsQuery.cursorScope(status));
+    GetUserReservationsRequestDTO request = new GetUserReservationsRequestDTO(status, cursor, size);
     return ResponseEntity.ok(
         ApiResponse.success(
             ReservationCursorResponse.from(
-                getUserReservationsUseCase.execute(
-                    new GetUserReservationsQuery(userId, status, pageRequest)))));
+                getUserReservationsUseCase.execute(request.toQuery(userId)))));
   }
 
   @GetMapping("/reservations/{id}")
   public ResponseEntity<ApiResponse<ReservationDetailResponseDTO>> getReservationDetail(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
     requireUserId(userId);
+    GetReservationDetailRequestDTO request = new GetReservationDetailRequestDTO(id);
     return ResponseEntity.ok(
         ApiResponse.success(
             ReservationDetailResponseDTO.from(
-                getReservationDetailUseCase.execute(new GetReservationQuery(id, userId)))));
+                getReservationDetailUseCase.execute(request.toQuery(userId)))));
   }
 
   @PostMapping("/classes/{classId}/reservations")
@@ -110,43 +108,45 @@ public class ClassReservationController {
   public ResponseEntity<ApiResponse<CancelPendingReservationResponseDTO>> cancelReservation(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
     requireUserId(userId);
+    CancelPendingReservationRequestDTO request = new CancelPendingReservationRequestDTO(id);
     return ResponseEntity.ok(
         ApiResponse.success(
             CancelPendingReservationResponseDTO.from(
-                cancelPendingReservationUseCase.execute(
-                    new CancelPendingReservationCommand(id, userId)))));
+                cancelPendingReservationUseCase.execute(request.toCommand(userId)))));
   }
 
   @PatchMapping("/me/reservations/{id}/complete")
   public ResponseEntity<ApiResponse<CompleteReservationResponseDTO>> completeReservation(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
     requireUserId(userId);
+    CompleteReservationRequestDTO request = new CompleteReservationRequestDTO(id);
     return ResponseEntity.ok(
         ApiResponse.success(
             CompleteReservationResponseDTO.from(
-                completeReservationUseCase.execute(new CompleteReservationCommand(id, userId)))));
+                completeReservationUseCase.execute(request.toCommand(userId)))));
   }
 
   @PatchMapping("/me/reservations/{id}/deadline-refund")
   public ResponseEntity<ApiResponse<ClaimExpiredRefundReservationResponseDTO>> claimExpiredRefund(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
     requireUserId(userId);
+    ClaimExpiredRefundReservationRequestDTO request =
+        new ClaimExpiredRefundReservationRequestDTO(id);
     return ResponseEntity.ok(
         ApiResponse.success(
             ClaimExpiredRefundReservationResponseDTO.from(
-                claimExpiredRefundReservationUseCase.execute(
-                    new ClaimExpiredRefundReservationCommand(id, userId)))));
+                claimExpiredRefundReservationUseCase.execute(request.toCommand(userId)))));
   }
 
   @PostMapping("/me/reservations/{id}/web3/recover")
   public ResponseEntity<ApiResponse<RecoverReservationEscrowResponseDTO>> recoverReservationEscrow(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
     requireUserId(userId);
+    RecoverReservationEscrowRequestDTO request = new RecoverReservationEscrowRequestDTO(id);
     return ResponseEntity.ok(
         ApiResponse.success(
             RecoverReservationEscrowResponseDTO.from(
-                recoverReservationEscrowUseCase.execute(
-                    new RecoverReservationEscrowCommand(id, userId)))));
+                recoverReservationEscrowUseCase.execute(request.toCommand(userId)))));
   }
 
   private void requireUserId(Long userId) {
