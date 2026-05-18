@@ -299,6 +299,8 @@ public class SecurityConfig {
                     // --- Actuator Endpoints ---
                     .requestMatchers("/actuator/info")
                     .authenticated()
+                    .requestMatchers("/actuator/prometheus")
+                    .permitAll()
                     .requestMatchers("/actuator/**")
                     .hasAuthority("ROLE_ADMIN")
 
