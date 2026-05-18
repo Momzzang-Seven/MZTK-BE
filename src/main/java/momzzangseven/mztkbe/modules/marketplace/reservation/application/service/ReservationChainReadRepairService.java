@@ -37,6 +37,7 @@ public class ReservationChainReadRepairService implements RepairReservationChain
   private final SaveReservationPort saveReservationPort;
   private final Clock clock;
   private TransactionOperations transactionOperations;
+  private TransactionOperations nonTransactionalOperations;
 
   public ReservationChainReadRepairService(
       LoadReservationPort loadReservationPort,
@@ -57,6 +58,10 @@ public class ReservationChainReadRepairService implements RepairReservationChain
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
     transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     this.transactionOperations = transactionTemplate;
+    TransactionTemplate nonTransactionalTemplate = new TransactionTemplate(transactionManager);
+    nonTransactionalTemplate.setPropagationBehavior(
+        TransactionDefinition.PROPAGATION_NOT_SUPPORTED);
+    this.nonTransactionalOperations = nonTransactionalTemplate;
   }
 
   @Override
@@ -66,7 +71,8 @@ public class ReservationChainReadRepairService implements RepairReservationChain
     }
     try {
       ReservationEscrowOrderView order =
-          loadReservationEscrowOrderPort.getOrder(reservation.getOrderKey());
+          runWithoutTransaction(
+              () -> loadReservationEscrowOrderPort.getOrder(reservation.getOrderKey()));
       return repairFromOrder(reservation, order);
     } catch (MarketplaceWeb3DisabledException e) {
       return reservation;
@@ -90,7 +96,9 @@ public class ReservationChainReadRepairService implements RepairReservationChain
     Map<String, ReservationEscrowOrderView> ordersByKey;
     try {
       ordersByKey =
-          loadReservationEscrowOrderPort.getOrders(orderKeys(candidates)).stream()
+          runWithoutTransaction(
+                  () -> loadReservationEscrowOrderPort.getOrders(orderKeys(candidates)))
+              .stream()
               .collect(
                   Collectors.toMap(
                       order -> normalize(order.orderKey()),
@@ -205,6 +213,13 @@ public class ReservationChainReadRepairService implements RepairReservationChain
       return supplier.get();
     }
     return transactionOperations.execute(status -> supplier.get());
+  }
+
+  private <T> T runWithoutTransaction(java.util.function.Supplier<T> supplier) {
+    if (nonTransactionalOperations == null) {
+      return supplier.get();
+    }
+    return nonTransactionalOperations.execute(status -> supplier.get());
   }
 
   private Reservation repairCreatedOrder(

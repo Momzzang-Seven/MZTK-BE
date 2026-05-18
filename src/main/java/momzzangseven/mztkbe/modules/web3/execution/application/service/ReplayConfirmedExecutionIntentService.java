@@ -34,7 +34,7 @@ public class ReplayConfirmedExecutionIntentService
     command.validate();
     ExecutionActionType expectedActionType = parseActionType(command.expectedActionType());
     return executionIntentPersistencePort
-        .findByPublicId(command.executionIntentId())
+        .findByPublicIdForUpdate(command.executionIntentId())
         .filter(intent -> intent.getActionType() == expectedActionType)
         .flatMap(this::confirmedOrRepairable)
         .map(this::replayConfirmed)

@@ -17,7 +17,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 
 @Entity
@@ -67,38 +66,6 @@ public class ReservationCreateIdempotencyEntity {
 
   @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
-
-  public static ReservationCreateIdempotencyEntity fromDomain(ReservationCreateIdempotency domain) {
-    return ReservationCreateIdempotencyEntity.builder()
-        .id(domain.getId())
-        .buyerId(domain.getBuyerId())
-        .keyHash(domain.getKeyHash())
-        .payloadHash(domain.getPayloadHash())
-        .status(domain.getStatus())
-        .reservationId(domain.getReservationId())
-        .currentExecutionIntentPublicId(domain.getCurrentExecutionIntentPublicId())
-        .responseSnapshotJson(domain.getResponseSnapshotJson())
-        .expiresAt(domain.getExpiresAt())
-        .createdAt(domain.getCreatedAt())
-        .updatedAt(domain.getUpdatedAt())
-        .build();
-  }
-
-  public ReservationCreateIdempotency toDomain() {
-    return ReservationCreateIdempotency.builder()
-        .id(id)
-        .buyerId(buyerId)
-        .keyHash(keyHash)
-        .payloadHash(payloadHash)
-        .status(status)
-        .reservationId(reservationId)
-        .currentExecutionIntentPublicId(currentExecutionIntentPublicId)
-        .responseSnapshotJson(responseSnapshotJson)
-        .expiresAt(expiresAt)
-        .createdAt(createdAt)
-        .updatedAt(updatedAt)
-        .build();
-  }
 
   @PrePersist
   void onCreate() {

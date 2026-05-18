@@ -14,26 +14,28 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.ClassNotFoundException;
 import momzzangseven.mztkbe.global.error.marketplace.ReservationInvalidSlotDateException;
 import momzzangseven.mztkbe.global.error.marketplace.TrainerSuspendedException;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrecheckReservationPurchaseCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort.ReservationClassSlotView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort.ReservationClassView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
@@ -73,8 +75,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class CreateReservationService implements CreateReservationUseCase {
 
-  private final GetClassSlotInfoUseCase getClassSlotInfoUseCase;
-  private final GetClassInfoUseCase getClassInfoUseCase;
+  private final LoadReservationClassPort loadReservationClassPort;
   private final CheckTrainerSanctionPort checkTrainerSanctionPort;
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
@@ -84,14 +85,15 @@ public class CreateReservationService implements CreateReservationUseCase {
   private final PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
   private final CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   private final LoadReservationExecutionWritePort loadReservationExecutionWritePort;
+  private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  private final ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   private final LoadReservationWalletPort loadReservationWalletPort;
   private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   private final Clock clock;
   private TransactionOperations transactionOperations;
 
   public CreateReservationService(
-      GetClassSlotInfoUseCase getClassSlotInfoUseCase,
-      GetClassInfoUseCase getClassInfoUseCase,
+      LoadReservationClassPort loadReservationClassPort,
       CheckTrainerSanctionPort checkTrainerSanctionPort,
       LoadReservationPort loadReservationPort,
       SaveReservationPort saveReservationPort,
@@ -101,11 +103,12 @@ public class CreateReservationService implements CreateReservationUseCase {
       @Nullable PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
       @Nullable CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
       @Nullable LoadReservationExecutionWritePort loadReservationExecutionWritePort,
+      @Nullable LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+      @Nullable ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
       @Nullable LoadReservationWalletPort loadReservationWalletPort,
       @Nullable LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
       Clock clock) {
-    this.getClassSlotInfoUseCase = getClassSlotInfoUseCase;
-    this.getClassInfoUseCase = getClassInfoUseCase;
+    this.loadReservationClassPort = loadReservationClassPort;
     this.checkTrainerSanctionPort = checkTrainerSanctionPort;
     this.loadReservationPort = loadReservationPort;
     this.saveReservationPort = saveReservationPort;
@@ -127,6 +130,14 @@ public class CreateReservationService implements CreateReservationUseCase {
         loadReservationExecutionWritePort == null
             ? DisabledReservationWeb3PortFactory.executionWrite()
             : loadReservationExecutionWritePort;
+    this.loadReservationExecutionStatePort =
+        loadReservationExecutionStatePort == null
+            ? DisabledReservationWeb3PortFactory.executionState()
+            : loadReservationExecutionStatePort;
+    this.replayConfirmedReservationExecutionPort =
+        replayConfirmedReservationExecutionPort == null
+            ? DisabledReservationWeb3PortFactory.confirmedReplay()
+            : replayConfirmedReservationExecutionPort;
     this.loadReservationWalletPort =
         loadReservationWalletPort == null
             ? DisabledReservationWeb3PortFactory.wallet()
@@ -165,13 +176,13 @@ public class CreateReservationService implements CreateReservationUseCase {
     precheckReservationPurchasePort.precheckPurchase(
         new PrecheckReservationPurchaseCommand(
             command.userId(),
-            purchaseSnapshot.cls().getTrainerId(),
+            purchaseSnapshot.cls().trainerId(),
             command.classId(),
-            purchaseSnapshot.slot().getId(),
+            purchaseSnapshot.slot().id(),
             command.reservationDate(),
             command.reservationTime(),
             command.signedAmount(),
-            purchaseSnapshot.cls().getPriceAmount(),
+            purchaseSnapshot.cls().priceAmount(),
             purchaseSnapshot.buyerWalletAddress(),
             purchaseSnapshot.trainerWalletAddress(),
             purchaseSnapshot.tokenAddress(),
@@ -199,9 +210,9 @@ public class CreateReservationService implements CreateReservationUseCase {
   }
 
   private CreateLocalContext loadValidatedLocalContext(CreateReservationCommand command) {
-    ClassSlot slot =
-        getClassSlotInfoUseCase
-            .findByIdWithLock(command.slotId())
+    ReservationClassSlotView slot =
+        loadReservationClassPort
+            .findSlotByIdWithLock(command.slotId())
             .orElseThrow(
                 () ->
                     new BusinessException(
@@ -212,25 +223,25 @@ public class CreateReservationService implements CreateReservationUseCase {
                             + command.slotId()));
 
     // 1-a. Verify the slot belongs to the requested class (tamper guard)
-    if (!slot.getClassId().equals(command.classId())) {
+    if (!slot.classId().equals(command.classId())) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
           "Slot " + command.slotId() + " does not belong to class " + command.classId());
     }
 
     // 1-b. Guard against booking a soft-deleted slot
-    if (!slot.isActive()) {
+    if (!slot.active()) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
           "Slot " + command.slotId() + " is inactive and cannot be booked");
     }
 
     // 2. Validate date/time against slot schedule
-    if (!slot.getDaysOfWeek().contains(command.reservationDate().getDayOfWeek())) {
-      throw new ReservationInvalidSlotDateException(slot.getId());
+    if (!slot.daysOfWeek().contains(command.reservationDate().getDayOfWeek())) {
+      throw new ReservationInvalidSlotDateException(slot.id());
     }
-    if (!slot.getStartTime().equals(command.reservationTime())) {
-      throw new ReservationInvalidSlotDateException(slot.getId());
+    if (!slot.startTime().equals(command.reservationTime())) {
+      throw new ReservationInvalidSlotDateException(slot.id());
     }
 
     LocalDateTime requestedSessionStart =
@@ -242,12 +253,12 @@ public class CreateReservationService implements CreateReservationUseCase {
     }
 
     // 3. Load class and validate active status
-    MarketplaceClass cls =
-        getClassInfoUseCase
-            .findById(command.classId())
+    ReservationClassView cls =
+        loadReservationClassPort
+            .findClassById(command.classId())
             .orElseThrow(() -> new ClassNotFoundException(command.classId()));
 
-    if (!cls.isActive()) {
+    if (!cls.active()) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_CLASS_INACTIVE, "Class is not active: " + command.classId());
     }
@@ -260,7 +271,7 @@ public class CreateReservationService implements CreateReservationUseCase {
     var paymentConfig = loadReservationEscrowPaymentConfigPort.load();
     BigInteger priceBaseUnits = validateSignedPrice(paymentConfig, command, context.cls());
     String buyerWallet = loadActiveWalletOrThrow(command.userId());
-    String trainerWallet = loadActiveWalletOrThrow(context.cls().getTrainerId());
+    String trainerWallet = loadActiveWalletOrThrow(context.cls().trainerId());
     Instant expectedDeadlineInstant =
         clock.instant().plusSeconds(paymentConfig.defaultDeadlineDurationSeconds());
     LocalDateTime expectedDeadlineAt =
@@ -281,20 +292,19 @@ public class CreateReservationService implements CreateReservationUseCase {
       CreateReservationCommand command, PurchaseSnapshot purchaseSnapshot) {
     CreateLocalContext context = loadValidatedLocalContext(command);
     validatePurchaseSnapshotStillCurrent(command, purchaseSnapshot, context);
-    ClassSlot slot = context.slot();
-    MarketplaceClass cls = context.cls();
+    ReservationClassSlotView slot = context.slot();
+    ReservationClassView cls = context.cls();
 
     // 5. Trainer sanction check
-    if (checkTrainerSanctionPort.hasActiveSanction(cls.getTrainerId())) {
+    if (checkTrainerSanctionPort.hasActiveSanction(cls.trainerId())) {
       throw new TrainerSuspendedException();
     }
 
     // 6. Capacity check with slot/date lock — prevents empty-date phantom over-commit under
     // concurrency.
-    loadReservationPort.lockSlotDateCapacityKey(slot.getId(), command.reservationDate());
+    loadReservationPort.lockSlotDateCapacityKey(slot.id(), command.reservationDate());
     String keyHash = sha256Hex(createIdempotencyKey(command));
-    String payloadHash =
-        sha256Hex(createPayload(command, cls.getTrainerId(), cls.getPriceAmount()));
+    String payloadHash = sha256Hex(createPayload(command, cls.trainerId(), cls.priceAmount()));
     ReservationCreateIdempotency idempotency = null;
     var existingKey =
         loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(
@@ -321,7 +331,7 @@ public class CreateReservationService implements CreateReservationUseCase {
     }
     loadReservationPort
         .findActiveByBuyerAndSlotDateTimeWithLock(
-            command.userId(), slot.getId(), command.reservationDate(), command.reservationTime())
+            command.userId(), slot.id(), command.reservationDate(), command.reservationTime())
         .ifPresent(
             existing -> {
               if (canReleaseExpiredUnboundHold(existing)) {
@@ -334,11 +344,11 @@ public class CreateReservationService implements CreateReservationUseCase {
             });
     int activeCount =
         loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(
-            slot.getId(), command.reservationDate());
-    if (activeCount >= slot.getCapacity()) {
+            slot.id(), command.reservationDate());
+    if (activeCount >= slot.capacity()) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_RESERVATION_SLOT_FULL,
-          "Slot " + slot.getId() + " is at full capacity (" + slot.getCapacity() + ")");
+          "Slot " + slot.id() + " is at full capacity (" + slot.capacity() + ")");
     }
 
     if (idempotency == null) {
@@ -354,16 +364,16 @@ public class CreateReservationService implements CreateReservationUseCase {
     Reservation reservation =
         Reservation.createPending(
             command.userId(),
-            cls.getTrainerId(),
-            slot.getId(),
+            cls.trainerId(),
+            slot.id(),
             command.reservationDate(),
             command.reservationTime(),
-            cls.getDurationMinutes(),
+            cls.durationMinutes(),
             command.userRequest(),
             orderId,
             null,
-            cls.getPriceAmount(), // snapshot: price at booking time
-            cls.getTitle()); // snapshot: title at booking time
+            cls.priceAmount(), // snapshot: price at booking time
+            cls.title()); // snapshot: title at booking time
 
     String purchaseAttemptToken = UUID.randomUUID().toString();
     Reservation preparing =
@@ -453,9 +463,9 @@ public class CreateReservationService implements CreateReservationUseCase {
 
   @Nullable
   private String currentClassPayloadHash(CreateReservationCommand command) {
-    return getClassInfoUseCase
-        .findById(command.classId())
-        .map(cls -> sha256Hex(createPayload(command, cls.getTrainerId(), cls.getPriceAmount())))
+    return loadReservationClassPort
+        .findClassById(command.classId())
+        .map(cls -> sha256Hex(createPayload(command, cls.trainerId(), cls.priceAmount())))
         .orElse(null);
   }
 
@@ -514,18 +524,20 @@ public class CreateReservationService implements CreateReservationUseCase {
   private BigInteger validateSignedPrice(
       LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig paymentConfig,
       CreateReservationCommand command,
-      MarketplaceClass cls) {
+      ReservationClassView cls) {
     try {
-      return paymentConfig.priceBaseUnits(command.signedAmount(), cls.getPriceAmount());
+      return paymentConfig.priceBaseUnits(command.signedAmount(), cls.priceAmount());
     } catch (IllegalArgumentException e) {
       throw new BusinessException(ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH, e.getMessage());
     }
   }
 
   private void validateCompletionWindowFits(
-      CreateReservationCommand command, MarketplaceClass cls, LocalDateTime expectedDeadlineAt) {
+      CreateReservationCommand command,
+      ReservationClassView cls,
+      LocalDateTime expectedDeadlineAt) {
     if (LocalDateTime.of(command.reservationDate(), command.reservationTime())
-        .plusMinutes(cls.getDurationMinutes())
+        .plusMinutes(cls.durationMinutes())
         .plusHours(24)
         .isAfter(expectedDeadlineAt)) {
       throw new BusinessException(
@@ -538,16 +550,16 @@ public class CreateReservationService implements CreateReservationUseCase {
       CreateReservationCommand command,
       PurchaseSnapshot purchaseSnapshot,
       CreateLocalContext currentContext) {
-    MarketplaceClass currentClass = currentContext.cls();
-    if (!purchaseSnapshot.cls().getTrainerId().equals(currentClass.getTrainerId())
-        || purchaseSnapshot.cls().getPriceAmount() != currentClass.getPriceAmount()
-        || purchaseSnapshot.cls().getDurationMinutes() != currentClass.getDurationMinutes()) {
+    ReservationClassView currentClass = currentContext.cls();
+    if (!purchaseSnapshot.cls().trainerId().equals(currentClass.trainerId())
+        || purchaseSnapshot.cls().priceAmount() != currentClass.priceAmount()
+        || purchaseSnapshot.cls().durationMinutes() != currentClass.durationMinutes()) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "marketplace class changed after purchase precheck");
     }
     String currentBuyerWallet = loadActiveWalletOrThrow(command.userId());
-    String currentTrainerWallet = loadActiveWalletOrThrow(currentClass.getTrainerId());
+    String currentTrainerWallet = loadActiveWalletOrThrow(currentClass.trainerId());
     if (!purchaseSnapshot.buyerWalletAddress().equalsIgnoreCase(currentBuyerWallet)
         || !purchaseSnapshot.trainerWalletAddress().equalsIgnoreCase(currentTrainerWallet)) {
       throw new BusinessException(
@@ -706,18 +718,47 @@ public class CreateReservationService implements CreateReservationUseCase {
         idempotency.getCurrentExecutionIntentPublicId() != null
             ? idempotency.getCurrentExecutionIntentPublicId()
             : reservation.getCurrentExecutionIntentPublicId();
+    Reservation resolvedReservation = replayConfirmedPurchaseIfNeeded(reservation, intentId);
+    boolean replayChangedReservation =
+        resolvedReservation.getStatus() != reservation.getStatus()
+            || !equalsNullable(
+                resolvedReservation.getCurrentExecutionIntentPublicId(),
+                reservation.getCurrentExecutionIntentPublicId());
+    if (replayChangedReservation) {
+      intentId = resolvedReservation.getCurrentExecutionIntentPublicId();
+    }
     ReservationExecutionWriteView web3 =
         intentId == null || intentId.isBlank()
             ? null
             : loadReservationExecutionWritePort
                 .load(buyerId, intentId)
-                .asExistingForOrder(reservation.getOrderKey());
+                .asExistingForOrder(resolvedReservation.getOrderKey());
     return new CreateReservationResult(
-        reservation.getId(),
-        reservation.getStatus(),
-        reservation.getEffectiveEscrowStatus().name(),
-        reservation.getOrderKey(),
+        resolvedReservation.getId(),
+        resolvedReservation.getStatus(),
+        resolvedReservation.getEffectiveEscrowStatus().name(),
+        resolvedReservation.getOrderKey(),
         web3);
+  }
+
+  private Reservation replayConfirmedPurchaseIfNeeded(Reservation reservation, String intentId) {
+    if (intentId == null || intentId.isBlank()) {
+      return reservation;
+    }
+    ReservationExecutionStateView state = loadReservationExecutionStatePort.loadState(intentId);
+    if (!isConfirmedOutcome(state)) {
+      return reservation;
+    }
+    if (!replayConfirmedReservationExecutionPort.replayConfirmed(
+        state.executionIntentId(), state.actionType())) {
+      return reservation;
+    }
+    return loadReservationPort.findById(reservation.getId()).orElse(reservation);
+  }
+
+  private boolean isConfirmedOutcome(ReservationExecutionStateView state) {
+    return state != null
+        && ("CONFIRMED".equals(state.status()) || "SUCCEEDED".equals(state.transactionStatus()));
   }
 
   private String loadActiveWalletOrThrow(Long userId) {
@@ -787,11 +828,11 @@ public class CreateReservationService implements CreateReservationUseCase {
             uuid.getLeastSignificantBits());
   }
 
-  private record CreateLocalContext(ClassSlot slot, MarketplaceClass cls) {}
+  private record CreateLocalContext(ReservationClassSlotView slot, ReservationClassView cls) {}
 
   private record PurchaseSnapshot(
-      ClassSlot slot,
-      MarketplaceClass cls,
+      ReservationClassSlotView slot,
+      ReservationClassView cls,
       String buyerWalletAddress,
       String trainerWalletAddress,
       String tokenAddress,

@@ -15,10 +15,12 @@ import java.util.Map;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
@@ -114,6 +116,43 @@ class GetUserReservationsServiceTest {
     assertThat(result.items()).hasSize(1);
     assertThat(result.items().getFirst().status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
     then(repairUseCase).should().repairBatch(List.of(original));
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - 최신 web3 execution summary를 hydrate하고 viewer recover flag를 계산한다")
+  void execute_HydratesWeb3ExecutionSummary() {
+    Reservation reservation =
+        sampleReservation(1L).toBuilder()
+            .currentExecutionIntentPublicId("intent-1")
+            .status(ReservationStatus.PURCHASE_PENDING)
+            .build();
+    LoadReservationExecutionResumePort resumePort = mock(LoadReservationExecutionResumePort.class);
+    GetUserReservationsService hydratingSut =
+        new GetUserReservationsService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, resumePort, null);
+    ReservationExecutionResumeView resumeView =
+        resumeView(
+            "MARKETPLACE_CLASS_PURCHASE",
+            "PENDING_ONCHAIN",
+            new ReservationExecutionResumeView.Transaction(99L, "SUCCEEDED", "0xtx"));
+    given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
+        .willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+    given(resumePort.loadLatestBatch(List.of(10L))).willReturn(Map.of(10L, resumeView));
+
+    CursorSlice<ReservationSummaryResult> result =
+        hydratingSut.execute(new GetUserReservationsQuery(1L, null));
+
+    ReservationExecutionResumeView hydrated = result.items().getFirst().web3Execution();
+    assertThat(hydrated).isNotNull();
+    assertThat(hydrated.viewerAction()).isEqualTo("PURCHASE");
+    assertThat(hydrated.viewerCanExecute()).isFalse();
+    assertThat(hydrated.viewerCanRecover()).isTrue();
+    assertThat(hydrated.transaction().id()).isEqualTo(99L);
+    assertThat(hydrated.transaction().status()).isEqualTo("SUCCEEDED");
+    assertThat(hydrated.transaction().txHash()).isEqualTo("0xtx");
+    then(resumePort).should().loadLatestBatch(List.of(10L));
   }
 
   @Test
@@ -400,5 +439,18 @@ class GetUserReservationsServiceTest {
     // same status always produces the same scope
     assertThat(GetUserReservationsQuery.cursorScope(ReservationStatus.APPROVED))
         .isEqualTo(approvedScope);
+  }
+
+  private ReservationExecutionResumeView resumeView(
+      String actionType,
+      String intentStatus,
+      ReservationExecutionResumeView.Transaction transaction) {
+    return new ReservationExecutionResumeView(
+        new ReservationExecutionResumeView.Resource("ORDER", "10", "PENDING_EXECUTION"),
+        actionType,
+        new ReservationExecutionResumeView.ExecutionIntent(
+            "intent-1", intentStatus, java.time.LocalDateTime.of(2026, 5, 18, 10, 0), 1_800L),
+        new ReservationExecutionResumeView.Execution("EIP7702", 2),
+        transaction);
   }
 }

@@ -46,7 +46,8 @@ class ReplayConfirmedExecutionIntentServiceTest {
     ExecutionIntent intent = confirmedIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
     ExecutionActionPlan actionPlan = actionPlan();
     ReplayConfirmedExecutionIntentService service = service();
-    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
     when(executionActionHandlerPort.supports(ExecutionActionType.QNA_QUESTION_UPDATE))
         .thenReturn(true);
     when(executionActionHandlerPort.supports(intent)).thenReturn(true);
@@ -64,7 +65,8 @@ class ReplayConfirmedExecutionIntentServiceTest {
   void execute_skipsWhenIntentActionTypeDoesNotMatch() {
     ExecutionIntent intent = confirmedIntent(ExecutionActionType.QNA_QUESTION_DELETE);
     ReplayConfirmedExecutionIntentService service = service();
-    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
 
     boolean result =
         service.execute(
@@ -78,7 +80,8 @@ class ReplayConfirmedExecutionIntentServiceTest {
   void execute_skipsWhenIntentIsNotConfirmed() {
     ExecutionIntent intent = pendingIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
     ReplayConfirmedExecutionIntentService service = service();
-    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
 
     boolean result =
         service.execute(
@@ -93,7 +96,8 @@ class ReplayConfirmedExecutionIntentServiceTest {
     ExecutionIntent intent = pendingIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
     ExecutionActionPlan actionPlan = actionPlan();
     ReplayConfirmedExecutionIntentService service = service();
-    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
     when(loadExecutionTransactionPort.findById(99L))
         .thenReturn(
             Optional.of(

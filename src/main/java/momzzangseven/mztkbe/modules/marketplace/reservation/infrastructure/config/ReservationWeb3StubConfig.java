@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.conf
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceWeb3DisabledException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
@@ -36,6 +38,27 @@ public class ReservationWeb3StubConfig {
   }
 
   @Bean
+  @ConditionalOnMissingBean(LoadReservationEscrowOrderPort.class)
+  LoadReservationEscrowOrderPort disabledLoadReservationEscrowOrderPort() {
+    return new LoadReservationEscrowOrderPort() {
+      @Override
+      public momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+              .ReservationEscrowOrderView
+          getOrder(String orderKey) {
+        throw new MarketplaceWeb3DisabledException();
+      }
+
+      @Override
+      public java.util.List<
+              momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                  .ReservationEscrowOrderView>
+          getOrders(java.util.Collection<String> orderKeys) {
+        throw new MarketplaceWeb3DisabledException();
+      }
+    };
+  }
+
+  @Bean
   @ConditionalOnMissingBean(LoadReservationExecutionResumePort.class)
   LoadReservationExecutionResumePort disabledLoadReservationExecutionResumePort() {
     return new LoadReservationExecutionResumePort() {
@@ -56,6 +79,12 @@ public class ReservationWeb3StubConfig {
         return java.util.Map.of();
       }
     };
+  }
+
+  @Bean
+  @ConditionalOnMissingBean(CancelReservationEscrowExecutionPort.class)
+  CancelReservationEscrowExecutionPort disabledCancelReservationEscrowExecutionPort() {
+    return (executionIntentId, errorCode, errorReason) -> false;
   }
 
   @Bean

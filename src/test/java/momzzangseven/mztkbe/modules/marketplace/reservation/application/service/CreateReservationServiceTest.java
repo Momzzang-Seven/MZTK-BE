@@ -19,23 +19,25 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareReservationEscrowResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort.ReservationClassSlotView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort.ReservationClassView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
@@ -58,8 +60,7 @@ import org.web3j.utils.Numeric;
 @DisplayName("CreateReservationService 단위 테스트")
 class CreateReservationServiceTest {
 
-  @Mock private GetClassSlotInfoUseCase getClassSlotInfoUseCase;
-  @Mock private GetClassInfoUseCase getClassInfoUseCase;
+  @Mock private LoadReservationClassPort loadReservationClassPort;
   @Mock private CheckTrainerSanctionPort checkTrainerSanctionPort;
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
@@ -69,6 +70,8 @@ class CreateReservationServiceTest {
   @Mock private PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort;
   @Mock private CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort;
   @Mock private LoadReservationExecutionWritePort loadReservationExecutionWritePort;
+  @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  @Mock private ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   @Mock private LoadReservationWalletPort loadReservationWalletPort;
   @Mock private LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
 
@@ -96,16 +99,15 @@ class CreateReservationServiceTest {
   private static final BigInteger PRICE_BASE_UNITS = new BigInteger("50000000000000000000000");
   private static final int CAPACITY = 3;
 
-  private ClassSlot slot;
-  private MarketplaceClass cls;
+  private ReservationClassSlotView slot;
+  private ReservationClassView cls;
   private CreateReservationCommand command;
 
   @BeforeEach
   void setUp() {
     sut =
         new CreateReservationService(
-            getClassSlotInfoUseCase,
-            getClassInfoUseCase,
+            loadReservationClassPort,
             checkTrainerSanctionPort,
             loadReservationPort,
             saveReservationPort,
@@ -115,29 +117,14 @@ class CreateReservationServiceTest {
             prepareReservationEscrowExecutionPort,
             cancelReservationEscrowExecutionPort,
             loadReservationExecutionWritePort,
+            loadReservationExecutionStatePort,
+            replayConfirmedReservationExecutionPort,
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
             FIXED_CLOCK);
 
-    slot =
-        ClassSlot.builder()
-            .id(SLOT_ID)
-            .classId(CLASS_ID)
-            .daysOfWeek(List.of(DayOfWeek.MONDAY))
-            .startTime(START_TIME)
-            .capacity(CAPACITY)
-            .active(true)
-            .build();
-
-    cls =
-        MarketplaceClass.builder()
-            .id(CLASS_ID)
-            .trainerId(TRAINER_ID)
-            .priceAmount(PRICE)
-            .durationMinutes(60)
-            .title("테스트 클래스")
-            .active(true)
-            .build();
+    slot = slotView(START_TIME, true);
+    cls = classView(PRICE, 60, true);
 
     command =
         new CreateReservationCommand(
@@ -170,6 +157,16 @@ class CreateReservationServiceTest {
                 "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
   }
 
+  private ReservationClassSlotView slotView(LocalTime startTime, boolean active) {
+    return new ReservationClassSlotView(
+        SLOT_ID, CLASS_ID, List.of(DayOfWeek.MONDAY), startTime, CAPACITY, active);
+  }
+
+  private ReservationClassView classView(int priceAmount, int durationMinutes, boolean active) {
+    return new ReservationClassView(
+        CLASS_ID, TRAINER_ID, priceAmount, durationMinutes, "테스트 클래스", active);
+  }
+
   @Nested
   @DisplayName("성공 케이스")
   class 성공 {
@@ -178,8 +175,8 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-01] 정상 예약 생성 시 PENDING 상태 반환 및 EscrowDispatchEvent(PURCHASE) 발행")
     void 정상_예약_생성() {
       // given
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(Optional.empty());
@@ -239,8 +236,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-09] Phase B 바인딩 실패 시 signable intent를 취소하고 hold를 실패 처리한다")
     void phase_b_바인딩_실패_보상() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(Optional.empty());
@@ -306,8 +303,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-11] Phase B 보상에서 intent 취소가 불가하면 purchase hold를 즉시 실패 처리하지 않는다")
     void phase_b_보상_취소_불가_시_즉시_실패처리하지_않음() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(Optional.empty());
@@ -358,8 +355,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-14] Phase B 전에 purchase hold가 만료되면 intent를 취소하고 HOLD_EXPIRED로 정리한다")
     void phase_b_전에_hold가_만료되면_intent를_취소하고_hold_expired로_정리한다() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(Optional.empty());
@@ -414,8 +411,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-08] 같은 슬롯의 만료된 unbound hold는 HOLD_EXPIRED로 전환하고 새 예약을 진행한다")
     void 만료된_홀드_정리_후_예약_생성() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(Optional.empty());
@@ -461,8 +458,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-10] 완료된 create idempotency replay는 저장 스냅샷 대신 현재 execution intent를 재조회한다")
     void 완료된_idempotency_replay는_execution_intent를_재조회한다() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       Reservation existingReservation =
           replayReservation(ReservationStatus.PURCHASE_PENDING, "intent-existing");
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
@@ -488,6 +485,52 @@ class CreateReservationServiceTest {
       assertThat(result.web3().existing()).isTrue();
       then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
       then(saveReservationPort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName(
+        "[CR-10A] 완료된 create idempotency replay에서 confirmed intent는 즉시 replay 후 최신 예약을 반환한다")
+    void 완료된_idempotency_replay는_confirmed_intent를_즉시_replay한다() {
+      Reservation existingReservation =
+          replayReservation(ReservationStatus.PURCHASE_PENDING, "intent-existing");
+      Reservation repairedReservation =
+          existingReservation.toBuilder()
+              .status(ReservationStatus.PENDING)
+              .currentExecutionIntentPublicId(null)
+              .build();
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(
+              Optional.of(
+                  ReservationCreateIdempotency.builder()
+                      .buyerId(USER_ID)
+                      .payloadHash(expectedPayloadHash())
+                      .status(ReservationCreateIdempotencyStatus.COMPLETED)
+                      .reservationId(existingReservation.getId())
+                      .currentExecutionIntentPublicId("intent-existing")
+                      .responseSnapshotJson("{\"stale\":true}")
+                      .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+                      .build()));
+      given(loadReservationPort.findById(existingReservation.getId()))
+          .willReturn(Optional.of(existingReservation), Optional.of(repairedReservation));
+      given(loadReservationExecutionStatePort.loadState("intent-existing"))
+          .willReturn(
+              new ReservationExecutionStateView(
+                  "intent-existing", "CONFIRMED", "MARKETPLACE_CLASS_PURCHASE", USER_ID));
+      given(
+              replayConfirmedReservationExecutionPort.replayConfirmed(
+                  "intent-existing", "MARKETPLACE_CLASS_PURCHASE"))
+          .willReturn(true);
+
+      CreateReservationResult result = sut.execute(command);
+
+      assertThat(result.reservationId()).isEqualTo(existingReservation.getId());
+      assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+      assertThat(result.web3()).isNull();
+      then(precheckReservationPurchasePort).shouldHaveNoInteractions();
+      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+      then(replayConfirmedReservationExecutionPort)
+          .should()
+          .replayConfirmed("intent-existing", "MARKETPLACE_CLASS_PURCHASE");
     }
 
     @Test
@@ -530,8 +573,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-12] BOUND create idempotency replay도 저장 스냅샷 대신 현재 execution intent를 재조회한다")
     void bound_idempotency_replay도_execution_intent를_재조회한다() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       Reservation existingReservation =
           replayReservation(ReservationStatus.PURCHASE_PENDING, "intent-bound");
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
@@ -562,8 +605,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-12B] 같은 idempotency key가 다른 payload로 재사용되면 conflict를 반환한다")
     void 같은_idempotency_key_다른_payload_재사용은_conflict() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(
               Optional.of(
@@ -589,8 +632,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-11] 같은 idempotency key 동시 생성 loser는 winner row를 재조회해 deterministic replay한다")
     void 동시_생성_loser는_winner를_재조회한다() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(Optional.empty())
@@ -641,8 +684,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-13] FAILED create idempotency는 새 hold와 execution intent 생성으로 재시작한다")
     void failed_idempotency는_새_예약_생성으로_재시작한다() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(
@@ -713,8 +756,8 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-02] 슬롯 정원 초과 시 MARKETPLACE_RESERVATION_SLOT_FULL 예외")
     void 슬롯_정원_초과() {
       // given
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
           .willReturn(CAPACITY); // 이미 가득 참
@@ -736,8 +779,8 @@ class CreateReservationServiceTest {
           new CreateReservationCommand(
               USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, BigInteger.valueOf(99_999L));
 
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       org.mockito.BDDMockito.willThrow(
               new BusinessException(
                   ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
@@ -758,8 +801,8 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-04] 트레이너 정지 상태 시 MARKETPLACE_TRAINER_SUSPENDED 예외")
     void 트레이너_정지_상태() {
       // given
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
 
       // when & then
@@ -780,7 +823,7 @@ class CreateReservationServiceTest {
           new CreateReservationCommand(
               USER_ID, CLASS_ID, SLOT_ID, tuesday, START_TIME, null, PRICE_BASE_UNITS);
 
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
 
       // when & then
       assertThatThrownBy(() -> sut.execute(wrongDayCmd))
@@ -795,17 +838,9 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-06] 비활성 슬롯 예약 시도 시 MARKETPLACE_RESERVATION_INVALID_SLOT_DATE 예외")
     void 비활성_슬롯() {
       // given: 슬롯이 soft-delete 된 상태
-      ClassSlot inactiveSlot =
-          ClassSlot.builder()
-              .id(SLOT_ID)
-              .classId(CLASS_ID)
-              .daysOfWeek(List.of(DayOfWeek.MONDAY))
-              .startTime(START_TIME)
-              .capacity(CAPACITY)
-              .active(false) // 비활성화
-              .build();
+      ReservationClassSlotView inactiveSlot = slotView(START_TIME, false);
 
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID))
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID))
           .willReturn(Optional.of(inactiveSlot));
 
       // when & then
@@ -825,21 +860,14 @@ class CreateReservationServiceTest {
       LocalDate today = LocalDate.of(2024, 6, 3); // 월요일
       LocalTime pastTime = LocalTime.of(9, 0);
 
-      ClassSlot mondaySlot =
-          ClassSlot.builder()
-              .id(SLOT_ID)
-              .classId(CLASS_ID)
-              .daysOfWeek(List.of(DayOfWeek.MONDAY))
-              .startTime(pastTime)
-              .capacity(CAPACITY)
-              .active(true)
-              .build();
+      ReservationClassSlotView mondaySlot = slotView(pastTime, true);
 
       CreateReservationCommand pastCmd =
           new CreateReservationCommand(
               USER_ID, CLASS_ID, SLOT_ID, today, pastTime, null, PRICE_BASE_UNITS);
 
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(mondaySlot));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID))
+          .willReturn(Optional.of(mondaySlot));
 
       // when & then
       assertThatThrownBy(() -> sut.execute(pastCmd))
@@ -853,8 +881,8 @@ class CreateReservationServiceTest {
     @Test
     @DisplayName("[CR-12] PREPARING create idempotency가 살아 있으면 active execution conflict를 반환한다")
     void preparing_idempotency가_살아있으면_conflict() {
-      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
           .willReturn(

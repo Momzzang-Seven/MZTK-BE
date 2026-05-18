@@ -35,21 +35,19 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
 
   @Override
   public Optional<Reservation> findById(Long reservationId) {
-    return reservationJpaRepository.findById(reservationId).map(ReservationEntity::toDomain);
+    return reservationJpaRepository.findById(reservationId).map(this::toDomain);
   }
 
   @Override
   public Optional<Reservation> findByIdWithLock(Long reservationId) {
-    return reservationJpaRepository
-        .findByIdWithLock(reservationId)
-        .map(ReservationEntity::toDomain);
+    return reservationJpaRepository.findByIdWithLock(reservationId).map(this::toDomain);
   }
 
   @Override
   public Optional<Reservation> findByCurrentExecutionIntentPublicIdWithLock(String publicId) {
     return reservationJpaRepository
         .findByCurrentExecutionIntentPublicIdWithLock(publicId)
-        .map(ReservationEntity::toDomain);
+        .map(this::toDomain);
   }
 
   @Override
@@ -60,7 +58,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
             buyerId, slotId, reservationDate, reservationTime, PageRequest.of(0, 1))
         .stream()
         .findFirst()
-        .map(ReservationEntity::toDomain);
+        .map(this::toDomain);
   }
 
   @Override
@@ -163,7 +161,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
             nowPlusWindow.toLocalTime(),
             org.springframework.data.domain.PageRequest.of(0, batchSize))
         .stream()
-        .map(ReservationEntity::toDomain)
+        .map(this::toDomain)
         .toList();
   }
 
@@ -178,7 +176,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
         .findApprovedCandidates(
             now, targetDate, org.springframework.data.domain.PageRequest.of(0, batchSize * 2))
         .stream()
-        .map(ReservationEntity::toDomain)
+        .map(this::toDomain)
         .filter(r -> r.sessionEndAt().plusHours(24).isBefore(now))
         .limit(batchSize)
         .toList();
@@ -192,7 +190,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   @Override
   public List<Reservation> findByUserId(Long userId, ReservationStatus status) {
     return reservationJpaRepository.findByUserId(userId, status).stream()
-        .map(ReservationEntity::toDomain)
+        .map(this::toDomain)
         .toList();
   }
 
@@ -217,13 +215,13 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
                 userId, cursorDate, cursorTime, cursorId, page)
             : reservationJpaRepository.findByUserIdCursor(
                 userId, status, cursorDate, cursorTime, cursorId, page);
-    return rows.stream().map(ReservationEntity::toDomain).toList();
+    return rows.stream().map(this::toDomain).toList();
   }
 
   @Override
   public List<Reservation> findByTrainerId(Long trainerId, ReservationStatus status) {
     return reservationJpaRepository.findByTrainerId(trainerId, status).stream()
-        .map(ReservationEntity::toDomain)
+        .map(this::toDomain)
         .toList();
   }
 
@@ -245,11 +243,107 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
                 trainerId, cursorDate, cursorTime, cursorId, page)
             : reservationJpaRepository.findByTrainerIdCursor(
                 trainerId, status, cursorDate, cursorTime, cursorId, page);
-    return rows.stream().map(ReservationEntity::toDomain).toList();
+    return rows.stream().map(this::toDomain).toList();
   }
 
   @Override
   public Reservation save(Reservation reservation) {
-    return reservationJpaRepository.save(ReservationEntity.fromDomain(reservation)).toDomain();
+    return toDomain(reservationJpaRepository.save(toEntity(reservation)));
+  }
+
+  private ReservationEntity toEntity(Reservation domain) {
+    return ReservationEntity.builder()
+        .id(domain.getId())
+        .userId(domain.getUserId())
+        .trainerId(domain.getTrainerId())
+        .slotId(domain.getSlotId())
+        .reservationDate(domain.getReservationDate())
+        .reservationTime(domain.getReservationTime())
+        .durationMinutes(domain.getDurationMinutes())
+        .status(domain.getStatus())
+        .escrowStatus(domain.getEscrowStatus())
+        .escrowFlow(domain.getEscrowFlow())
+        .userRequest(domain.getUserRequest())
+        .rejectionReason(domain.getRejectionReason())
+        .orderId(domain.getOrderId())
+        .orderKey(domain.getOrderKey())
+        .currentExecutionIntentPublicId(domain.getCurrentExecutionIntentPublicId())
+        .buyerWalletAddress(domain.getBuyerWalletAddress())
+        .trainerWalletAddress(domain.getTrainerWalletAddress())
+        .tokenAddress(domain.getTokenAddress())
+        .priceBaseUnits(domain.getPriceBaseUnits())
+        .txHash(domain.getTxHash())
+        .holdExpiresAt(domain.getHoldExpiresAt())
+        .pendingActionExpiresAt(domain.getPendingActionExpiresAt())
+        .expectedContractDeadlineEpochSeconds(domain.getExpectedContractDeadlineEpochSeconds())
+        .expectedContractDeadlineAt(domain.getExpectedContractDeadlineAt())
+        .contractDeadlineEpochSeconds(domain.getContractDeadlineEpochSeconds())
+        .contractDeadlineAt(domain.getContractDeadlineAt())
+        .pendingAction(domain.getPendingAction())
+        .pendingAttemptToken(domain.getPendingAttemptToken())
+        .pendingExpectedVersion(domain.getPendingExpectedVersion())
+        .pendingExpectedStatus(domain.getPendingExpectedStatus())
+        .pendingExpectedEscrowStatus(domain.getPendingExpectedEscrowStatus())
+        .priorStatus(domain.getPriorStatus())
+        .priorEscrowStatus(domain.getPriorEscrowStatus())
+        .createIdempotencyKeyHash(domain.getCreateIdempotencyKeyHash())
+        .createPayloadHash(domain.getCreatePayloadHash())
+        .serverSignatureSignedAt(domain.getServerSignatureSignedAt())
+        .serverSignatureExpiresAt(domain.getServerSignatureExpiresAt())
+        .escrowFailureCode(domain.getEscrowFailureCode())
+        .escrowFailureMessage(domain.getEscrowFailureMessage())
+        .bookedPriceAmount(domain.getBookedPriceAmount())
+        .bookedClassTitle(domain.getBookedClassTitle())
+        .version(domain.getVersion())
+        .build();
+  }
+
+  private Reservation toDomain(ReservationEntity entity) {
+    return Reservation.builder()
+        .id(entity.getId())
+        .userId(entity.getUserId())
+        .trainerId(entity.getTrainerId())
+        .slotId(entity.getSlotId())
+        .reservationDate(entity.getReservationDate())
+        .reservationTime(entity.getReservationTime())
+        .durationMinutes(entity.getDurationMinutes())
+        .status(entity.getStatus())
+        .escrowStatus(entity.getEscrowStatus())
+        .escrowFlow(entity.getEscrowFlow())
+        .userRequest(entity.getUserRequest())
+        .rejectionReason(entity.getRejectionReason())
+        .orderId(entity.getOrderId())
+        .orderKey(entity.getOrderKey())
+        .currentExecutionIntentPublicId(entity.getCurrentExecutionIntentPublicId())
+        .buyerWalletAddress(entity.getBuyerWalletAddress())
+        .trainerWalletAddress(entity.getTrainerWalletAddress())
+        .tokenAddress(entity.getTokenAddress())
+        .priceBaseUnits(entity.getPriceBaseUnits())
+        .txHash(entity.getTxHash())
+        .holdExpiresAt(entity.getHoldExpiresAt())
+        .pendingActionExpiresAt(entity.getPendingActionExpiresAt())
+        .expectedContractDeadlineEpochSeconds(entity.getExpectedContractDeadlineEpochSeconds())
+        .expectedContractDeadlineAt(entity.getExpectedContractDeadlineAt())
+        .contractDeadlineEpochSeconds(entity.getContractDeadlineEpochSeconds())
+        .contractDeadlineAt(entity.getContractDeadlineAt())
+        .pendingAction(entity.getPendingAction())
+        .pendingAttemptToken(entity.getPendingAttemptToken())
+        .pendingExpectedVersion(entity.getPendingExpectedVersion())
+        .pendingExpectedStatus(entity.getPendingExpectedStatus())
+        .pendingExpectedEscrowStatus(entity.getPendingExpectedEscrowStatus())
+        .priorStatus(entity.getPriorStatus())
+        .priorEscrowStatus(entity.getPriorEscrowStatus())
+        .createIdempotencyKeyHash(entity.getCreateIdempotencyKeyHash())
+        .createPayloadHash(entity.getCreatePayloadHash())
+        .serverSignatureSignedAt(entity.getServerSignatureSignedAt())
+        .serverSignatureExpiresAt(entity.getServerSignatureExpiresAt())
+        .escrowFailureCode(entity.getEscrowFailureCode())
+        .escrowFailureMessage(entity.getEscrowFailureMessage())
+        .bookedPriceAmount(entity.getBookedPriceAmount())
+        .bookedClassTitle(entity.getBookedClassTitle())
+        .version(entity.getVersion())
+        .createdAt(entity.getCreatedAt())
+        .updatedAt(entity.getUpdatedAt())
+        .build();
   }
 }

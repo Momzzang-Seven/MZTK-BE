@@ -33,7 +33,7 @@ public class ReservationCreateIdempotencyPersistenceAdapter
 
   @Override
   public ReservationCreateIdempotency save(ReservationCreateIdempotency idempotency) {
-    return toDomain(repository.save(ReservationCreateIdempotencyEntity.fromDomain(idempotency)));
+    return toDomain(repository.save(toEntity(idempotency)));
   }
 
   @Override
@@ -64,7 +64,7 @@ public class ReservationCreateIdempotencyPersistenceAdapter
     ReservationCreateIdempotency created =
         toDomain(
             repository.save(
-                ReservationCreateIdempotencyEntity.fromDomain(
+                toEntity(
                     ReservationCreateIdempotency.preparing(
                         buyerId, keyHash, payloadHash, expiresAt))));
     return new ReserveCreateIdempotencyResult(created, true);
@@ -79,6 +79,34 @@ public class ReservationCreateIdempotencyPersistenceAdapter
   }
 
   private ReservationCreateIdempotency toDomain(ReservationCreateIdempotencyEntity entity) {
-    return entity.toDomain();
+    return ReservationCreateIdempotency.builder()
+        .id(entity.getId())
+        .buyerId(entity.getBuyerId())
+        .keyHash(entity.getKeyHash())
+        .payloadHash(entity.getPayloadHash())
+        .status(entity.getStatus())
+        .reservationId(entity.getReservationId())
+        .currentExecutionIntentPublicId(entity.getCurrentExecutionIntentPublicId())
+        .responseSnapshotJson(entity.getResponseSnapshotJson())
+        .expiresAt(entity.getExpiresAt())
+        .createdAt(entity.getCreatedAt())
+        .updatedAt(entity.getUpdatedAt())
+        .build();
+  }
+
+  private ReservationCreateIdempotencyEntity toEntity(ReservationCreateIdempotency domain) {
+    return ReservationCreateIdempotencyEntity.builder()
+        .id(domain.getId())
+        .buyerId(domain.getBuyerId())
+        .keyHash(domain.getKeyHash())
+        .payloadHash(domain.getPayloadHash())
+        .status(domain.getStatus())
+        .reservationId(domain.getReservationId())
+        .currentExecutionIntentPublicId(domain.getCurrentExecutionIntentPublicId())
+        .responseSnapshotJson(domain.getResponseSnapshotJson())
+        .expiresAt(domain.getExpiresAt())
+        .createdAt(domain.getCreatedAt())
+        .updatedAt(domain.getUpdatedAt())
+        .build();
   }
 }
