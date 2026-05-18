@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import java.time.Clock;
+import java.util.Objects;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
@@ -64,52 +65,7 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
             ? noOpRepairUseCase()
             : repairReservationChainReadUseCase;
     this.loadReservationEscrowPort = loadReservationEscrowPort;
-    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
-  }
-
-  public GetReservationDetailService(
-      LoadReservationPort loadReservationPort,
-      LoadClassSummaryPort loadClassSummaryPort,
-      LoadUserSummaryPort loadUserSummaryPort,
-      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      RepairReservationChainReadUseCase repairReservationChainReadUseCase,
-      LoadReservationEscrowPort loadReservationEscrowPort) {
-    this(
-        loadReservationPort,
-        loadClassSummaryPort,
-        loadUserSummaryPort,
-        loadReservationExecutionResumePort,
-        repairReservationChainReadUseCase,
-        loadReservationEscrowPort,
-        Clock.systemDefaultZone());
-  }
-
-  public GetReservationDetailService(
-      LoadReservationPort loadReservationPort,
-      LoadClassSummaryPort loadClassSummaryPort,
-      LoadUserSummaryPort loadUserSummaryPort,
-      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
-    this(
-        loadReservationPort,
-        loadClassSummaryPort,
-        loadUserSummaryPort,
-        loadReservationExecutionResumePort,
-        repairReservationChainReadUseCase,
-        null);
-  }
-
-  public GetReservationDetailService(
-      LoadReservationPort loadReservationPort,
-      LoadClassSummaryPort loadClassSummaryPort,
-      LoadUserSummaryPort loadUserSummaryPort) {
-    this(
-        loadReservationPort,
-        loadClassSummaryPort,
-        loadUserSummaryPort,
-        emptyResumePort(),
-        noOpRepairUseCase(),
-        null);
+    this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   private static LoadReservationExecutionResumePort emptyResumePort() {

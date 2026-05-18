@@ -9,10 +9,15 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
@@ -30,21 +35,65 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class GetUserReservationsServiceTest {
 
+  private static final Clock TEST_CLOCK =
+      Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private LoadClassSummaryPort loadClassSummaryPort;
   @Mock private LoadUserSummaryPort loadUserSummaryPort;
 
-  @InjectMocks private GetUserReservationsService sut;
+  private GetUserReservationsService sut;
+
+  @BeforeEach
+  void setUp() {
+    sut =
+        new GetUserReservationsService(
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            emptyResumePort(),
+            noOpRepairUseCase(),
+            TEST_CLOCK);
+  }
+
+  private static LoadReservationExecutionResumePort emptyResumePort() {
+    return new LoadReservationExecutionResumePort() {
+      @Override
+      public Optional<ReservationExecutionResumeView> loadLatest(Long reservationId) {
+        return Optional.empty();
+      }
+
+      @Override
+      public Map<Long, ReservationExecutionResumeView> loadLatestBatch(
+          Collection<Long> reservationIds) {
+        return Map.of();
+      }
+    };
+  }
+
+  private static RepairReservationChainReadUseCase noOpRepairUseCase() {
+    return new RepairReservationChainReadUseCase() {
+      @Override
+      public Reservation repairOne(Reservation reservation) {
+        return reservation;
+      }
+
+      @Override
+      public List<Reservation> repairBatch(List<Reservation> reservations) {
+        return reservations;
+      }
+    };
+  }
 
   private Reservation sampleReservation(Long userId) {
     return Reservation.builder()
@@ -155,7 +204,12 @@ class GetUserReservationsServiceTest {
     RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
     GetUserReservationsService repairingSut =
         new GetUserReservationsService(
-            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            null,
+            repairUseCase,
+            TEST_CLOCK);
     given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
         .willReturn(List.of(original));
     given(repairUseCase.repairBatch(List.of(original))).willReturn(List.of(repaired));
@@ -184,7 +238,12 @@ class GetUserReservationsServiceTest {
     LoadReservationExecutionResumePort resumePort = mock(LoadReservationExecutionResumePort.class);
     GetUserReservationsService hydratingSut =
         new GetUserReservationsService(
-            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, resumePort, null);
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            resumePort,
+            null,
+            TEST_CLOCK);
     ReservationExecutionResumeView resumeView =
         resumeView(
             "MARKETPLACE_CLASS_PURCHASE",
@@ -221,7 +280,12 @@ class GetUserReservationsServiceTest {
     RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
     GetUserReservationsService repairingSut =
         new GetUserReservationsService(
-            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            null,
+            repairUseCase,
+            TEST_CLOCK);
     given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
         .willReturn(List.of(original));
     given(repairUseCase.repairBatch(List.of(original))).willReturn(List.of(repaired));
@@ -263,7 +327,12 @@ class GetUserReservationsServiceTest {
     RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
     GetUserReservationsService repairingSut =
         new GetUserReservationsService(
-            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            null,
+            repairUseCase,
+            TEST_CLOCK);
     CursorPageRequest pageRequest =
         CursorPageRequest.of(
             null,

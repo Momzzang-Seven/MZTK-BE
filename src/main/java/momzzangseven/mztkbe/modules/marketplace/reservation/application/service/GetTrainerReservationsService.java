@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import momzzangseven.mztkbe.global.pagination.CursorCodec;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
@@ -75,34 +76,7 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
         repairReservationChainReadUseCase == null
             ? noOpRepairUseCase()
             : repairReservationChainReadUseCase;
-    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
-  }
-
-  public GetTrainerReservationsService(
-      LoadReservationPort loadReservationPort,
-      LoadClassSummaryPort loadClassSummaryPort,
-      LoadUserSummaryPort loadUserSummaryPort,
-      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
-    this(
-        loadReservationPort,
-        loadClassSummaryPort,
-        loadUserSummaryPort,
-        loadReservationExecutionResumePort,
-        repairReservationChainReadUseCase,
-        Clock.systemDefaultZone());
-  }
-
-  public GetTrainerReservationsService(
-      LoadReservationPort loadReservationPort,
-      LoadClassSummaryPort loadClassSummaryPort,
-      LoadUserSummaryPort loadUserSummaryPort) {
-    this(
-        loadReservationPort,
-        loadClassSummaryPort,
-        loadUserSummaryPort,
-        emptyResumePort(),
-        noOpRepairUseCase());
+    this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   @Override
