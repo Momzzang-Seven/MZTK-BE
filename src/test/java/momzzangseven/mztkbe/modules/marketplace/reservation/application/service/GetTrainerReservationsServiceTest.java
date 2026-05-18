@@ -13,6 +13,7 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
@@ -145,6 +146,55 @@ class GetTrainerReservationsServiceTest {
     assertThat(result.hasNext()).isFalse();
     assertThat(result.nextCursor()).isNull();
     then(repairUseCase).should().repairBatch(List.of(original));
+  }
+
+  @Test
+  @DisplayName("트레이너 수강 신청 목록 조회 - repair 후 필터링으로 페이지가 비면 다음 raw page에서 보충한다")
+  void execute_StatusFilter_SupplementsPageAfterRepairFiltering() {
+    ReservationStatus status = ReservationStatus.DEADLINE_SYNC_REQUIRED;
+    Reservation first =
+        sampleReservation(2L).toBuilder()
+            .id(30L)
+            .reservationDate(LocalDate.of(2025, 6, 3))
+            .status(status)
+            .build();
+    Reservation second =
+        sampleReservation(2L).toBuilder()
+            .id(20L)
+            .reservationDate(LocalDate.of(2025, 6, 2))
+            .status(status)
+            .build();
+    Reservation third =
+        sampleReservation(2L).toBuilder()
+            .id(10L)
+            .reservationDate(LocalDate.of(2025, 6, 1))
+            .status(status)
+            .build();
+    Reservation repairedFirst =
+        first.toBuilder().status(ReservationStatus.DEADLINE_REFUNDED).build();
+    RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
+    GetTrainerReservationsService repairingSut =
+        new GetTrainerReservationsService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(null, 1, 20, 100, GetTrainerReservationsQuery.cursorScope(status));
+    given(loadReservationPort.findByTrainerIdCursor(any(), any(), any()))
+        .willReturn(List.of(first, second), List.of(third));
+    given(repairUseCase.repairBatch(List.of(first, second)))
+        .willReturn(List.of(repairedFirst, second));
+    given(repairUseCase.repairBatch(List.of(third))).willReturn(List.of(third));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findById(2L)).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    CursorSlice<ReservationSummaryResult> result =
+        repairingSut.execute(new GetTrainerReservationsQuery(2L, status, pageRequest));
+
+    assertThat(result.items())
+        .singleElement()
+        .satisfies(item -> assertThat(item.reservationId()).isEqualTo(20L));
+    assertThat(result.hasNext()).isTrue();
+    assertThat(result.nextCursor()).isNotBlank();
   }
 
   @Test
