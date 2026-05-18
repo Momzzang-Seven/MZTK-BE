@@ -250,6 +250,25 @@ class ReservationPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("create idempotency action state replacement requires the expected current state")
+  void replaceActionStateIfCurrentRequiresExpectedActionState() {
+    ReservationCreateIdempotency saved =
+        idempotencyAdapter.save(
+            ReservationCreateIdempotency.preparing(
+                    1L, "replace-key", "payload-hash", LocalDateTime.of(2026, 5, 16, 10, 0))
+                .attachReservationGraph(10L, 20L, 30L)
+                .markBound("{\"ok\":true}"));
+
+    assertThat(idempotencyAdapter.replaceActionStateIfCurrent(saved.getId(), 999L, 40L)).isEmpty();
+
+    ReservationCreateIdempotency replaced =
+        idempotencyAdapter.replaceActionStateIfCurrent(saved.getId(), 30L, 40L).orElseThrow();
+
+    assertThat(replaced.getActionStateId()).isEqualTo(40L);
+    assertThat(idempotencyAdapter.replaceActionStateIfCurrent(saved.getId(), 30L, 50L)).isEmpty();
+  }
+
+  @Test
   @DisplayName("cleanup protection queries protect reservation and unbound pending refs")
   void cleanupProtectionQueriesReturnProtectedPublicIds() {
     Long slotId = saveSlot();

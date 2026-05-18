@@ -5,11 +5,12 @@ public record ReservationViewerActions(
     String viewerAction,
     boolean viewerCanCancel,
     boolean viewerCanReject,
+    boolean viewerCanApprove,
     boolean viewerCanComplete,
     boolean viewerCanClaimDeadlineRefund,
     boolean viewerCanRecover) {
 
   public static ReservationViewerActions none() {
-    return new ReservationViewerActions(null, false, false, false, false, false);
+    return new ReservationViewerActions(null, false, false, false, false, false, false);
   }
 }

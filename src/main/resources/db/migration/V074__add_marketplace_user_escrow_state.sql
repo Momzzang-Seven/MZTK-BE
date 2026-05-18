@@ -1,9 +1,10 @@
+-- flyway:executeInTransaction=false
+
 -- MOM-313: marketplace user-managed EIP-7702 escrow foundation.
 -- This migration only adds user-flow state storage and guards. It does not add scheduler/admin
 -- actions or reconciliation jobs.
--- Operational note: this file creates several normal indexes inside the default Flyway
--- transaction. If V074 is ever applied to a large production dataset, split index creation into
--- a maintenance-window migration or a separate non-transactional CONCURRENTLY migration.
+-- Existing-table indexes in this migration use CONCURRENTLY, so this file must run outside a
+-- transaction.
 
 -- Preflight: duplicate active reservation rows would break the new natural guard.
 DO $$
@@ -114,18 +115,18 @@ ALTER TABLE class_reservations
         )
     );
 
-CREATE UNIQUE INDEX uk_class_reservations_order_key
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_class_reservations_order_key
     ON class_reservations (order_key)
     WHERE order_key IS NOT NULL;
 
-CREATE UNIQUE INDEX uk_class_reservations_current_execution_intent_public_id
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_class_reservations_current_execution_intent_public_id
     ON class_reservations (current_execution_intent_public_id)
     WHERE current_execution_intent_public_id IS NOT NULL;
 
-CREATE INDEX idx_class_reservations_escrow_flow_status
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_class_reservations_escrow_flow_status
     ON class_reservations (escrow_flow, status);
 
-CREATE UNIQUE INDEX uk_class_reservations_active_buyer_slot_datetime
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_class_reservations_active_buyer_slot_datetime
     ON class_reservations (user_id, class_slot_id, reservation_date, reservation_time)
     WHERE status NOT IN (
         'USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED',
@@ -331,6 +332,6 @@ ALTER TABLE trainer_strike_records
     ADD COLUMN source_type VARCHAR(80),
     ADD COLUMN source_id VARCHAR(120);
 
-CREATE UNIQUE INDEX uk_trainer_strike_records_source
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_trainer_strike_records_source
     ON trainer_strike_records (source_type, source_id)
     WHERE source_type IS NOT NULL AND source_id IS NOT NULL;

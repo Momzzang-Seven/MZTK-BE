@@ -32,6 +32,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -50,6 +51,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -291,6 +293,23 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     assertThat(buyerCancelPlan.referenceType()).isEqualTo(ExecutionReferenceType.SERVER_TO_USER);
     assertThat(trainerRejectPlan.referenceType()).isEqualTo(ExecutionReferenceType.SERVER_TO_USER);
     assertThat(deadlineRefundPlan.referenceType()).isEqualTo(ExecutionReferenceType.SERVER_TO_USER);
+  }
+
+  @ParameterizedTest
+  @EnumSource(MarketplaceExecutionActionType.class)
+  @DisplayName("marketplace runtime action plan call uses the exact payload call target and data")
+  void buildActionPlan_usesPayloadCallTargetAndData(MarketplaceExecutionActionType actionType)
+      throws Exception {
+    MarketplaceEscrowExecutionPayload payload =
+        payload("attempt-token", actionType, MarketplaceActorType.BUYER);
+
+    ExecutionActionPlan actionPlan =
+        sut.buildActionPlan(
+            intent("intent-action-plan", ExecutionActionType.valueOf(actionType.name()), payload));
+
+    assertThat(actionPlan.calls())
+        .containsExactly(
+            new ExecutionDraftCall(payload.callTarget(), BigInteger.ZERO, payload.callData()));
   }
 
   @Test

@@ -48,7 +48,7 @@ public interface ReservationCreateIdempotencyJpaRepository
       @Param("payloadHash") String payloadHash,
       @Param("expiresAt") java.time.LocalDateTime expiresAt);
 
-  @Modifying
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       """
       UPDATE ReservationCreateIdempotencyEntity k

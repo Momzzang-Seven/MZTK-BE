@@ -30,6 +30,7 @@ class ReservationViewerActionPolicyTest {
     assertThat(actions.viewerAction()).isEqualTo("BUYER_CANCEL");
     assertThat(actions.viewerCanCancel()).isTrue();
     assertThat(actions.viewerCanReject()).isFalse();
+    assertThat(actions.viewerCanApprove()).isFalse();
   }
 
   @Test
@@ -39,6 +40,7 @@ class ReservationViewerActionPolicyTest {
 
     assertThat(actions.viewerAction()).isEqualTo("TRAINER_REJECT");
     assertThat(actions.viewerCanReject()).isTrue();
+    assertThat(actions.viewerCanApprove()).isTrue();
     assertThat(actions.viewerCanCancel()).isFalse();
   }
 
@@ -62,6 +64,39 @@ class ReservationViewerActionPolicyTest {
     ReservationViewerActions actions = resolve(reservation(ReservationStatus.APPROVED), 1L, null);
 
     assertThat(actions).isEqualTo(ReservationViewerActions.none());
+  }
+
+  @Test
+  @DisplayName("expired pending reservation exposes buyer deadline refund instead of cancel/reject")
+  void expiredPendingReservationExposesBuyerDeadlineRefund() {
+    Reservation expired =
+        reservation(ReservationStatus.PENDING).toBuilder()
+            .contractDeadlineAt(LocalDateTime.now(CLOCK).minusMinutes(1))
+            .build();
+
+    ReservationViewerActions buyerActions = resolve(expired, 1L, null);
+    ReservationViewerActions trainerActions = resolve(expired, 2L, null);
+
+    assertThat(buyerActions.viewerAction()).isEqualTo("DEADLINE_REFUND");
+    assertThat(buyerActions.viewerCanClaimDeadlineRefund()).isTrue();
+    assertThat(buyerActions.viewerCanCancel()).isFalse();
+    assertThat(trainerActions).isEqualTo(ReservationViewerActions.none());
+  }
+
+  @Test
+  @DisplayName("expired approved reservation exposes buyer deadline refund instead of confirm")
+  void expiredApprovedReservationExposesBuyerDeadlineRefund() {
+    Reservation expiredEnded =
+        reservation(ReservationStatus.APPROVED).toBuilder()
+            .reservationDate(LocalDate.of(2026, 5, 18))
+            .contractDeadlineAt(LocalDateTime.now(CLOCK).minusMinutes(1))
+            .build();
+
+    ReservationViewerActions actions = resolve(expiredEnded, 1L, null);
+
+    assertThat(actions.viewerAction()).isEqualTo("DEADLINE_REFUND");
+    assertThat(actions.viewerCanClaimDeadlineRefund()).isTrue();
+    assertThat(actions.viewerCanComplete()).isFalse();
   }
 
   @Test
