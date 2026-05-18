@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +25,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
@@ -68,6 +68,7 @@ public class TransactionalExecuteExecutionIntentDelegate
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
+  private final RunAfterCommitPort runAfterCommitPort;
   private final Clock appClock;
 
   /**
@@ -98,7 +99,7 @@ public class TransactionalExecuteExecutionIntentDelegate
     }
 
     LocalDateTime now = LocalDateTime.now(appClock);
-    if (intent.getExpiresAt().isBefore(now)) {
+    if (!intent.getExpiresAt().isAfter(now)) {
       ExecutionIntent expired =
           executionIntentPersistencePort.update(
               intent.expire(
@@ -201,7 +202,7 @@ public class TransactionalExecuteExecutionIntentDelegate
 
     // Verify Execution(Submit) Signature
     BigInteger deadlineEpochSeconds =
-        BigInteger.valueOf(intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC));
+        ExecutionDeadlineEpoch.toEpochSeconds(intent.getExpiresAt(), appClock);
     if (!executionEip7702GatewayPort.verifyExecutionSignature(
         intent.getAuthorityAddress(),
         intent.getPublicId(),
@@ -213,7 +214,8 @@ public class TransactionalExecuteExecutionIntentDelegate
 
     // Encode Execution(Submit) Signature
     String executeCallData =
-        executionEip7702GatewayPort.encodeExecute(calls, command.submitSignature());
+        executionEip7702GatewayPort.encodeExecute(
+            calls, intent.getPublicId(), deadlineEpochSeconds, command.submitSignature());
 
     // Estimate gas, load fee plan via eip7702 module
     BigInteger estimatedGas =
@@ -328,14 +330,19 @@ public class TransactionalExecuteExecutionIntentDelegate
               ? signedPayload.txHash()
               : broadcast.txHash();
       executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
-      executionIntentPersistencePort.update(
-          intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
+      ExecutionIntent pendingIntent =
+          executionIntentPersistencePort.update(
+              intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
       moveReservedSponsorExposureToConsumed(
           intent.getRequesterUserId(),
           intent.resolveSponsorUsageDateKst(),
           intent.getReservedSponsorCostWei());
-      actionHandler.afterTransactionSubmitted(
-          intent, actionPlan, ExecutionTransactionStatus.PENDING);
+      ExecutionActionHookRunner.afterTransactionSubmitted(
+          runAfterCommitPort,
+          actionHandler,
+          pendingIntent,
+          actionPlan,
+          ExecutionTransactionStatus.PENDING);
       return new ExecuteExecutionIntentResult(
           intent.getPublicId(),
           ExecutionIntentStatus.PENDING_ONCHAIN,
@@ -353,9 +360,15 @@ public class TransactionalExecuteExecutionIntentDelegate
         reason,
         LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
-    executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, ExecutionTransactionStatus.SIGNED);
+    ExecutionIntent signedIntent =
+        executionIntentPersistencePort.update(
+            intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    ExecutionActionHookRunner.afterTransactionSubmitted(
+        runAfterCommitPort,
+        actionHandler,
+        signedIntent,
+        actionPlan,
+        ExecutionTransactionStatus.SIGNED);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
@@ -441,10 +454,15 @@ public class TransactionalExecuteExecutionIntentDelegate
               ? decoded.txHash()
               : broadcast.txHash();
       executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
-      executionIntentPersistencePort.update(
-          intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
-      actionHandler.afterTransactionSubmitted(
-          intent, actionPlan, ExecutionTransactionStatus.PENDING);
+      ExecutionIntent pendingIntent =
+          executionIntentPersistencePort.update(
+              intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
+      ExecutionActionHookRunner.afterTransactionSubmitted(
+          runAfterCommitPort,
+          actionHandler,
+          pendingIntent,
+          actionPlan,
+          ExecutionTransactionStatus.PENDING);
       return new ExecuteExecutionIntentResult(
           intent.getPublicId(),
           ExecutionIntentStatus.PENDING_ONCHAIN,
@@ -462,9 +480,15 @@ public class TransactionalExecuteExecutionIntentDelegate
         reason,
         LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
-    executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, ExecutionTransactionStatus.SIGNED);
+    ExecutionIntent signedIntent =
+        executionIntentPersistencePort.update(
+            intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    ExecutionActionHookRunner.afterTransactionSubmitted(
+        runAfterCommitPort,
+        actionHandler,
+        signedIntent,
+        actionPlan,
+        ExecutionTransactionStatus.SIGNED);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
@@ -535,9 +559,7 @@ public class TransactionalExecuteExecutionIntentDelegate
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {
-    return executionActionHandlerPorts.stream()
-        .filter(handler -> handler.supports(intent.getActionType()))
-        .findFirst()
+    return ExecutionActionHandlerPort.findMatching(executionActionHandlerPorts, intent)
         .orElseThrow(
             () ->
                 new IllegalStateException(

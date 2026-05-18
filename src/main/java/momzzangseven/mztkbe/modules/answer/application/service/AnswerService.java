@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPublicationStateException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerMutationResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
@@ -33,7 +34,6 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerS
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerUpdateImagePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerUpdateStatePort;
@@ -268,7 +268,7 @@ public class AnswerService
                 .toList();
     // Owner-visible resume rows are hydrated in one batch to avoid one latest-summary lookup per
     // owned answer.
-    Map<Long, momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView>
+    Map<Long, momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionResumeView>
         web3ExecutionsByAnswerId =
             ownerAnswerIds.isEmpty()
                 ? Map.of()
@@ -350,7 +350,7 @@ public class AnswerService
       return preparation.localResult();
     }
 
-    Optional<momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView>
+    Optional<momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView>
         preparedWeb3;
     try {
       if (preparation.managedUpdate()) {
@@ -636,7 +636,7 @@ public class AnswerService
       Map<Long, Long> likeCounts,
       Map<Long, Long> commentCounts,
       Set<Long> likedAnswerIds,
-      Map<Long, momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView>
+      Map<Long, momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionResumeView>
           web3ExecutionsByAnswerId) {
     return answerReadAssembler.assemble(
         answer,

@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -37,6 +40,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
@@ -87,6 +91,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
+  private final RunAfterCommitPort runAfterCommitPort = Runnable::run;
   private TransactionalExecuteExecutionIntentDelegate delegate;
 
   @BeforeEach
@@ -102,9 +107,13 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
             publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
+        .thenReturn(true);
+    lenient()
+        .when(executionActionHandlerPort.supports(any(ExecutionIntent.class)))
         .thenReturn(true);
     lenient()
         .when(executionActionHandlerPort.buildActionPlan(org.mockito.ArgumentMatchers.any()))
@@ -272,6 +281,62 @@ class TransactionalExecuteExecutionIntentDelegateTest {
 
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
     assertThat(result.transactionId()).isEqualTo(201L);
+  }
+
+  @Test
+  void executeEip1559_keepsSubmittedState_whenAfterSubmittedHookFails() throws Exception {
+    ExecutionIntent intent = existingEip1559Intent();
+    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
+        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
+            "0xsigned",
+            "0xhash",
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot(),
+            intent.getUnsignedTxFingerprint());
+    ExecutionTransactionGatewayPort.TransactionRecord created =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            202L, ExecutionTransactionStatus.CREATED, null);
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(eip1559TransactionCodecPort.decodeAndVerify(
+            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
+        .thenReturn(decoded);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.createAndFlush(any())).thenReturn(created);
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", "rpc-1", null));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    doThrow(new RuntimeException("hook failed"))
+        .when(executionActionHandlerPort)
+        .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
+            /* gate */ null);
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.transactionId()).isEqualTo(202L);
+    verify(executionTransactionGatewayPort).markPending(202L, "0xhash");
+    verify(executionIntentPersistencePort)
+        .update(
+            argThat(
+                updated ->
+                    updated.getStatus() == ExecutionIntentStatus.PENDING_ONCHAIN
+                        && Long.valueOf(202L).equals(updated.getSubmittedTxId())));
+    verify(executionActionHandlerPort)
+        .afterTransactionSubmitted(
+            argThat(
+                hookIntent ->
+                    hookIntent.getStatus() == ExecutionIntentStatus.PENDING_ONCHAIN
+                        && Long.valueOf(202L).equals(hookIntent.getSubmittedTxId())),
+            any(),
+            eq(ExecutionTransactionStatus.PENDING));
   }
 
   @Test
@@ -450,7 +515,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .thenReturn(BigInteger.valueOf(intent.getAuthorityNonce()));
     when(executionEip7702GatewayPort.verifyExecutionSignature(any(), any(), any(), any(), any()))
         .thenReturn(true);
-    when(executionEip7702GatewayPort.encodeExecute(any(), any())).thenReturn("0xexec");
+    when(executionEip7702GatewayPort.encodeExecute(any(), any(), any(), any()))
+        .thenReturn("0xexec");
     when(executionEip7702GatewayPort.estimateGasWithAuthorization(any(), any(), any(), any()))
         .thenReturn(BigInteger.valueOf(120_000));
     when(executionEip7702GatewayPort.loadSponsorFeePlan())
@@ -697,5 +763,98 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     // Sponsor exposure: reservedCost moves from reserved → consumed via release().consume() chain.
     verify(usage).release(reservedCost);
     verify(usage).consume(reservedCost);
+    verify(executionEip7702GatewayPort)
+        .encodeExecute(
+            any(),
+            eq(intent.getPublicId()),
+            eq(BigInteger.valueOf(intent.getExpiresAt().atZone(APP_ZONE).toEpochSecond())),
+            eq("0xsubmit"));
+  }
+
+  @Test
+  void execute_usesIntentSpecificActionHandler_whenMultipleHandlersSupportQnaAnswerAccept()
+      throws Exception {
+    ExecutionActionHandlerPort firstHandler = mock(ExecutionActionHandlerPort.class);
+    ExecutionActionHandlerPort secondHandler = mock(ExecutionActionHandlerPort.class);
+    TransactionalExecuteExecutionIntentDelegate localDelegate =
+        new TransactionalExecuteExecutionIntentDelegate(
+            executionIntentPersistencePort,
+            sponsorDailyUsagePersistencePort,
+            executionTransactionGatewayPort,
+            executionEip7702GatewayPort,
+            eip1559TransactionCodecPort,
+            loadExecutionChainIdPort,
+            loadExecutionRetryPolicyPort,
+            List.of(firstHandler, secondHandler),
+            publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
+            FIXED_CLOCK);
+    ExecutionIntent intent =
+        existingEip1559Intent().toBuilder()
+            .publicId("intent-qna-accept")
+            .resourceType(ExecutionResourceType.QUESTION)
+            .actionType(ExecutionActionType.QNA_ANSWER_ACCEPT)
+            .build();
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-qna-accept"))
+        .thenReturn(Optional.of(intent));
+    when(firstHandler.supports(ExecutionActionType.QNA_ANSWER_ACCEPT)).thenReturn(true);
+    when(secondHandler.supports(ExecutionActionType.QNA_ANSWER_ACCEPT)).thenReturn(true);
+    when(firstHandler.supports(intent)).thenReturn(false);
+    when(secondHandler.supports(intent)).thenReturn(true);
+    when(secondHandler.buildActionPlan(intent))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_USER,
+                List.of(new ExecutionDraftCall("0x" + "3".repeat(40), BigInteger.ZERO, "0x1234"))));
+
+    assertThatThrownBy(
+            () ->
+                localDelegate.execute(
+                    new ExecuteExecutionIntentCommand(7L, "intent-qna-accept", null, null, null),
+                    sponsorGate()))
+        .isInstanceOf(momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException.class)
+        .hasMessageContaining("signedRawTransaction is required");
+
+    verify(secondHandler).buildActionPlan(intent);
+    verify(firstHandler, never()).buildActionPlan(any());
+  }
+
+  @Test
+  void execute_rejectsSingleActionTypeMatchWhenIntentSpecificSupportIsFalse() throws Exception {
+    ExecutionActionHandlerPort handler = mock(ExecutionActionHandlerPort.class);
+    TransactionalExecuteExecutionIntentDelegate localDelegate =
+        new TransactionalExecuteExecutionIntentDelegate(
+            executionIntentPersistencePort,
+            sponsorDailyUsagePersistencePort,
+            executionTransactionGatewayPort,
+            executionEip7702GatewayPort,
+            eip1559TransactionCodecPort,
+            loadExecutionChainIdPort,
+            loadExecutionRetryPolicyPort,
+            List.of(handler),
+            publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
+            FIXED_CLOCK);
+    ExecutionIntent intent =
+        existingEip1559Intent().toBuilder()
+            .publicId("intent-legacy-qna")
+            .resourceType(ExecutionResourceType.QUESTION)
+            .actionType(ExecutionActionType.QNA_ANSWER_ACCEPT)
+            .build();
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-legacy-qna"))
+        .thenReturn(Optional.of(intent));
+    when(handler.supports(ExecutionActionType.QNA_ANSWER_ACCEPT)).thenReturn(true);
+    when(handler.supports(intent)).thenReturn(false);
+
+    assertThatThrownBy(
+            () ->
+                localDelegate.execute(
+                    new ExecuteExecutionIntentCommand(7L, "intent-legacy-qna", null, null, null),
+                    sponsorGate()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("no execution action handler for actionType=QNA_ANSWER_ACCEPT");
+
+    verify(handler, never()).buildActionPlan(any());
   }
 }

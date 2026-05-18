@@ -6,8 +6,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +36,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class GetLatestExecutionIntentSummaryServiceTest {
 
+  private static final Clock APP_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-11T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private LoadExecutionTransactionPort loadExecutionTransactionPort;
 
@@ -42,7 +48,7 @@ class GetLatestExecutionIntentSummaryServiceTest {
   void setUp() {
     service =
         new GetLatestExecutionIntentSummaryService(
-            executionIntentPersistencePort, loadExecutionTransactionPort);
+            executionIntentPersistencePort, loadExecutionTransactionPort, APP_CLOCK);
   }
 
   @Test

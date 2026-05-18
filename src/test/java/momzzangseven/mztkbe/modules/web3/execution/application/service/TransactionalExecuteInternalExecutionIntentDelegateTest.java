@@ -32,6 +32,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -73,6 +74,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
+  private final RunAfterCommitPort runAfterCommitPort = Runnable::run;
   private TransactionalExecuteInternalExecutionIntentDelegate delegate;
   private SponsorWalletGate gate;
 
@@ -87,6 +89,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
             publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
             FIXED_CLOCK);
 
     gate =
@@ -96,6 +99,9 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
 
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.QNA_ADMIN_SETTLE))
+        .thenReturn(true);
+    lenient()
+        .when(executionActionHandlerPort.supports(any(ExecutionIntent.class)))
         .thenReturn(true);
     lenient()
         .when(executionActionHandlerPort.buildActionPlan(any()))

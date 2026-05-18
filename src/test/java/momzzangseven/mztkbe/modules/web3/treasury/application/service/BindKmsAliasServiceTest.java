@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.BindKmsAliasCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.KmsAuditAction;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
@@ -23,6 +24,7 @@ class BindKmsAliasServiceTest {
 
   private static final String ALIAS = "reward-treasury";
   private static final String KMS_KEY_ID = "kms-key-1";
+  private static final String OTHER_KMS_KEY_ID = "kms-key-other";
   private static final String ADDRESS = "0x" + "a".repeat(40);
   private static final Long OPERATOR_ID = 7L;
 
@@ -55,7 +57,8 @@ class BindKmsAliasServiceTest {
     doThrow(new KmsAliasAlreadyExistsException("alias taken"))
         .when(kmsKeyLifecyclePort)
         .createAlias(ALIAS, KMS_KEY_ID);
-    when(kmsKeyLifecyclePort.describeAliasTarget(ALIAS)).thenReturn(KmsKeyState.PENDING_DELETION);
+    when(kmsKeyLifecyclePort.describeAlias(ALIAS))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.PENDING_DELETION, OTHER_KMS_KEY_ID));
 
     service.execute(cmd());
 
@@ -70,7 +73,8 @@ class BindKmsAliasServiceTest {
     doThrow(new KmsAliasAlreadyExistsException("alias taken"))
         .when(kmsKeyLifecyclePort)
         .createAlias(ALIAS, KMS_KEY_ID);
-    when(kmsKeyLifecyclePort.describeAliasTarget(ALIAS)).thenReturn(KmsKeyState.UNAVAILABLE);
+    when(kmsKeyLifecyclePort.describeAlias(ALIAS))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.UNAVAILABLE, null));
 
     service.execute(cmd());
 
@@ -78,11 +82,45 @@ class BindKmsAliasServiceTest {
   }
 
   @Test
-  void execute_throwsAlreadyProvisioned_whenAliasPointsToEnabledKey() {
+  void execute_idempotentSuccess_whenAliasAlreadyBoundToSameKey() {
     doThrow(new KmsAliasAlreadyExistsException("alias taken"))
         .when(kmsKeyLifecyclePort)
         .createAlias(ALIAS, KMS_KEY_ID);
-    when(kmsKeyLifecyclePort.describeAliasTarget(ALIAS)).thenReturn(KmsKeyState.ENABLED);
+    when(kmsKeyLifecyclePort.describeAlias(ALIAS))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, KMS_KEY_ID));
+
+    service.execute(cmd());
+
+    verify(kmsKeyLifecyclePort, never()).updateAlias(ALIAS, KMS_KEY_ID);
+    verify(kmsAuditRecorder)
+        .record(
+            OPERATOR_ID, ALIAS, KMS_KEY_ID, ADDRESS, KmsAuditAction.KMS_CREATE_ALIAS, true, null);
+  }
+
+  @Test
+  void execute_recoversWithUpdateAlias_whenEnabledAliasPointsToDifferentKey() {
+    doThrow(new KmsAliasAlreadyExistsException("alias taken"))
+        .when(kmsKeyLifecyclePort)
+        .createAlias(ALIAS, KMS_KEY_ID);
+    when(kmsKeyLifecyclePort.describeAlias(ALIAS))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.ENABLED, OTHER_KMS_KEY_ID));
+
+    service.execute(cmd());
+
+    verify(kmsKeyLifecyclePort).updateAlias(ALIAS, KMS_KEY_ID);
+    verify(kmsAuditRecorder)
+        .record(
+            OPERATOR_ID, ALIAS, KMS_KEY_ID, ADDRESS, KmsAuditAction.KMS_UPDATE_ALIAS, true, null);
+  }
+
+  @Test
+  void execute_throwsAlreadyProvisioned_whenAliasInUnrecoverableState() {
+    doThrow(new KmsAliasAlreadyExistsException("alias taken"))
+        .when(kmsKeyLifecyclePort)
+        .createAlias(ALIAS, KMS_KEY_ID);
+    // PENDING_IMPORT is neither a recoverable ghost nor ENABLED — fall through to operator surface.
+    when(kmsKeyLifecyclePort.describeAlias(ALIAS))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.PENDING_IMPORT, OTHER_KMS_KEY_ID));
 
     assertThatThrownBy(() -> service.execute(cmd()))
         .isInstanceOf(TreasuryWalletAlreadyProvisionedException.class);
@@ -122,7 +160,8 @@ class BindKmsAliasServiceTest {
     doThrow(new KmsAliasAlreadyExistsException("alias taken"))
         .when(kmsKeyLifecyclePort)
         .createAlias(ALIAS, KMS_KEY_ID);
-    when(kmsKeyLifecyclePort.describeAliasTarget(ALIAS)).thenReturn(KmsKeyState.PENDING_DELETION);
+    when(kmsKeyLifecyclePort.describeAlias(ALIAS))
+        .thenReturn(new AliasTargetInfo(KmsKeyState.PENDING_DELETION, OTHER_KMS_KEY_ID));
     RuntimeException updateFailure = new IllegalStateException("KMS update down");
     doThrow(updateFailure).when(kmsKeyLifecyclePort).updateAlias(ALIAS, KMS_KEY_ID);
 

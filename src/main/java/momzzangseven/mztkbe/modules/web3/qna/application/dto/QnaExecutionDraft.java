@@ -25,6 +25,7 @@ public record QnaExecutionDraft(
     String authorizationPayloadHash,
     QnaUnsignedTxSnapshot unsignedTxSnapshot,
     String unsignedTxFingerprint,
+    Long signedAt,
     LocalDateTime expiresAt) {
 
   public QnaExecutionDraft {

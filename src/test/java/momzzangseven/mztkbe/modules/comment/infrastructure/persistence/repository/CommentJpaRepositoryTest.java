@@ -200,7 +200,7 @@ class CommentJpaRepositoryTest {
 
   @Test
   @DisplayName(
-      "countManagedBoardCommentsByPostIds() counts active managed comments and excludes deleted")
+      "countManagedBoardCommentsByPostIds() counts managed comments including soft-deleted")
   void countManagedBoardCommentsByPostIds_matchesManagedListCriteria() {
     LocalDateTime base = LocalDateTime.of(2026, 3, 2, 12, 30);
     CommentEntity root = persistRoot(810L, 41L, "root", base);
@@ -217,7 +217,7 @@ class CommentJpaRepositoryTest {
                     CommentJpaRepository.PostCommentCount::getPostId,
                     CommentJpaRepository.PostCommentCount::getCommentCount));
 
-    assertThat(counts).containsEntry(810L, 3L).containsEntry(811L, 1L);
+    assertThat(counts).containsEntry(810L, 3L).containsEntry(811L, 2L);
   }
 
   @Test

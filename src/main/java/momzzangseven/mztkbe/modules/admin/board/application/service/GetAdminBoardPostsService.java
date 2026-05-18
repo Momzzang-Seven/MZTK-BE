@@ -49,6 +49,8 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
     LoadAdminBoardPostsPort.AdminBoardPostQuery postQuery =
         new LoadAdminBoardPostsPort.AdminBoardPostQuery(
             command.search(),
+            command.postId(),
+            command.userId(),
             command.status(),
             command.type(),
             command.publicationStatus(),
@@ -95,6 +97,8 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
         loadAdminBoardPostsPort.loadPage(
             new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
                 command.search(),
+                command.postId(),
+                command.userId(),
                 command.status(),
                 command.type(),
                 command.publicationStatus(),

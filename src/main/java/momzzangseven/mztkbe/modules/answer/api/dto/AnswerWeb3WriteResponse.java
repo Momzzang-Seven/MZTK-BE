@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.answer.api.dto;
 
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 
 /** Public API projection of answer lifecycle write payload. */
 public record AnswerWeb3WriteResponse(
@@ -9,7 +9,19 @@ public record AnswerWeb3WriteResponse(
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequest signRequest,
-    boolean existing) {
+    boolean existing,
+    SignatureMeta signatureMeta) {
+
+  /** Backward-compatible 6-arg constructor for tests that don't carry server-sig metadata. */
+  public AnswerWeb3WriteResponse(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequest signRequest,
+      boolean existing) {
+    this(resource, actionType, executionIntent, execution, signRequest, existing, null);
+  }
 
   /** Returns {@code null} when no new answer execution intent was prepared. */
   public static AnswerWeb3WriteResponse from(AnswerExecutionWriteView view) {
@@ -22,15 +34,18 @@ public record AnswerWeb3WriteResponse(
         new ExecutionIntent(
             view.executionIntent().id(),
             view.executionIntent().status(),
-            view.executionIntent().expiresAt()),
+            view.executionIntent().expiresAt(),
+            view.executionIntent().expiresAtEpochSeconds()),
         new Execution(view.execution().mode(), view.execution().signCount()),
         SignRequest.from(view.signRequest()),
-        view.existing());
+        view.existing(),
+        SignatureMeta.from(view.signatureMeta()));
   }
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, java.time.LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, java.time.LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 
@@ -99,6 +114,16 @@ public record AnswerWeb3WriteResponse(
           request.maxPriorityFeePerGasHex(),
           request.maxFeePerGasHex(),
           request.expectedNonce());
+    }
+  }
+
+  public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {
+
+    static SignatureMeta from(AnswerExecutionWriteView.SignatureMeta meta) {
+      if (meta == null) {
+        return null;
+      }
+      return new SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
     }
   }
 }

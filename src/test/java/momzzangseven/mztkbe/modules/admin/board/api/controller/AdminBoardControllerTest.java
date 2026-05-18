@@ -9,18 +9,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardCommentResult;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardCommentSearchResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardModerationResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardPostResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCommentCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardCommentUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardPostUseCase;
+import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardCommentsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostCommentsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.UnblockAdminBoardPostUseCase;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardCommentTargetType;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
@@ -68,6 +72,7 @@ class AdminBoardControllerTest {
       txSignedRecoveryWorker;
 
   @MockitoBean private GetAdminBoardPostsUseCase getAdminBoardPostsUseCase;
+  @MockitoBean private GetAdminBoardCommentsUseCase getAdminBoardCommentsUseCase;
   @MockitoBean private GetAdminBoardPostCommentsUseCase getAdminBoardPostCommentsUseCase;
   @MockitoBean private BanAdminBoardPostUseCase banAdminBoardPostUseCase;
   @MockitoBean private UnblockAdminBoardPostUseCase unblockAdminBoardPostUseCase;
@@ -108,8 +113,8 @@ class AdminBoardControllerTest {
   }
 
   @Test
-  @DisplayName("GET /admin/boards/posts 상태와 타입 필터를 command 로 전달한다")
-  void getPosts_filters_areMappedToCommand() throws Exception {
+  @DisplayName("GET /admin/boards/posts 검색과 상태 필터를 command 로 전달한다")
+  void getPosts_withSearchFilters_passesCommand() throws Exception {
     given(
             getAdminBoardPostsUseCase.execute(
                 org.mockito.ArgumentMatchers.any(GetAdminBoardPostsCommand.class)))
@@ -118,7 +123,9 @@ class AdminBoardControllerTest {
     mockMvc
         .perform(
             get("/admin/boards/posts")
-                .param("search", "target")
+                .param("search", "  content  ")
+                .param("postId", "21")
+                .param("userId", "7")
                 .param("status", "OPEN")
                 .param("type", "QUESTION")
                 .param("publicationStatus", "FAILED")
@@ -132,7 +139,9 @@ class AdminBoardControllerTest {
     ArgumentCaptor<GetAdminBoardPostsCommand> captor =
         ArgumentCaptor.forClass(GetAdminBoardPostsCommand.class);
     org.mockito.Mockito.verify(getAdminBoardPostsUseCase).execute(captor.capture());
-    org.assertj.core.api.Assertions.assertThat(captor.getValue().search()).isEqualTo("target");
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().search()).isEqualTo("content");
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().postId()).isEqualTo(21L);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().userId()).isEqualTo(7L);
     org.assertj.core.api.Assertions.assertThat(captor.getValue().status())
         .isEqualTo(AdminBoardPostStatus.OPEN);
     org.assertj.core.api.Assertions.assertThat(captor.getValue().type())
@@ -143,6 +152,8 @@ class AdminBoardControllerTest {
         .isEqualTo(AdminBoardPostModerationStatus.BLOCKED);
     org.assertj.core.api.Assertions.assertThat(captor.getValue().page()).isEqualTo(2);
     org.assertj.core.api.Assertions.assertThat(captor.getValue().size()).isEqualTo(30);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().sortKey().name())
+        .isEqualTo("TYPE");
   }
 
   @Test
@@ -150,6 +161,141 @@ class AdminBoardControllerTest {
   void getPosts_invalidSort_returns400() throws Exception {
     mockMvc
         .perform(get("/admin/boards/posts").param("sort", "title").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/posts postId 가 양수가 아니면 400")
+  void getPosts_nonPositivePostId_returns400() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/posts").param("postId", "0").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/posts userId 가 양수가 아니면 400")
+  void getPosts_nonPositiveUserId_returns400() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/posts").param("userId", "0").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/posts size 가 100을 초과하면 400")
+  void getPosts_sizeOverMax_returns400() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/posts").param("size", "101").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments ADMIN 이면 전역 댓글 검색 페이지 응답을 반환한다")
+  void getAllComments_admin_returns200() throws Exception {
+    given(
+            getAdminBoardCommentsUseCase.execute(
+                org.mockito.ArgumentMatchers.any(GetAdminBoardCommentsCommand.class)))
+        .willReturn(
+            new PageImpl<>(
+                List.of(
+                    new AdminBoardCommentSearchResult(
+                        31L,
+                        21L,
+                        41L,
+                        30L,
+                        AdminBoardCommentTargetType.ANSWER,
+                        7L,
+                        "writer",
+                        "comment",
+                        true,
+                        LocalDateTime.parse("2025-01-02T10:00:00"),
+                        LocalDateTime.parse("2025-01-03T10:00:00")))));
+
+    mockMvc
+        .perform(get("/admin/boards/comments").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.content[0].commentId").value(31))
+        .andExpect(jsonPath("$.data.content[0].postId").value(21))
+        .andExpect(jsonPath("$.data.content[0].answerId").value(41))
+        .andExpect(jsonPath("$.data.content[0].parentId").value(30))
+        .andExpect(jsonPath("$.data.content[0].targetType").value("ANSWER"))
+        .andExpect(jsonPath("$.data.content[0].userId").value(7))
+        .andExpect(jsonPath("$.data.content[0].nickname").value("writer"))
+        .andExpect(jsonPath("$.data.content[0].isDeleted").value(true));
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments 검색 필터와 페이지 조건을 command 로 전달한다")
+  void getAllComments_withSearchFilters_passesCommand() throws Exception {
+    given(
+            getAdminBoardCommentsUseCase.execute(
+                org.mockito.ArgumentMatchers.any(GetAdminBoardCommentsCommand.class)))
+        .willReturn(new PageImpl<>(List.of()));
+
+    mockMvc
+        .perform(
+            get("/admin/boards/comments")
+                .param("search", "  comment  ")
+                .param("commentId", "31")
+                .param("userId", "7")
+                .param("targetType", "ANSWER")
+                .param("page", "2")
+                .param("size", "30")
+                .param("sort", "commentId")
+                .with(adminPrincipal(9L)))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<GetAdminBoardCommentsCommand> captor =
+        ArgumentCaptor.forClass(GetAdminBoardCommentsCommand.class);
+    org.mockito.Mockito.verify(getAdminBoardCommentsUseCase).execute(captor.capture());
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().search()).isEqualTo("comment");
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().commentId()).isEqualTo(31L);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().userId()).isEqualTo(7L);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().targetType())
+        .isEqualTo(AdminBoardCommentTargetType.ANSWER);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().page()).isEqualTo(2);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().size()).isEqualTo(30);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().sortKey().name())
+        .isEqualTo("COMMENT_ID");
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments whitelist 밖 sort 값이면 400")
+  void getAllComments_invalidSort_returns400() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/comments").param("sort", "postId").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments commentId 가 양수가 아니면 400")
+  void getAllComments_nonPositiveCommentId_returns400() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/comments").param("commentId", "0").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments userId 가 양수가 아니면 400")
+  void getAllComments_nonPositiveUserId_returns400() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/comments").param("userId", "0").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments size 가 100을 초과하면 400")
+  void getAllComments_sizeOverMax_returns400() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/comments").param("size", "101").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments targetType 이 enum 밖이면 400")
+  void getAllComments_invalidTargetType_returns400() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/comments").param("targetType", "BAD").with(adminPrincipal(9L)))
         .andExpect(status().isBadRequest());
   }
 
@@ -201,6 +347,14 @@ class AdminBoardControllerTest {
   void getPosts_userForbidden_returns403() throws Exception {
     mockMvc
         .perform(get("/admin/boards/posts").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments USER 권한이면 403")
+  void getAllComments_userForbidden_returns403() throws Exception {
+    mockMvc
+        .perform(get("/admin/boards/comments").with(userPrincipal(1L)))
         .andExpect(status().isForbidden());
   }
 

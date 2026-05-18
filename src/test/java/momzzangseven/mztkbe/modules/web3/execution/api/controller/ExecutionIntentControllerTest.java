@@ -10,12 +10,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -34,14 +35,17 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
 @TestPropertySource(properties = {"web3.reward-token.enabled=true", "web3.eip7702.enabled=true"})
 @SpringBootTest
 @AutoConfigureMockMvc
+@Transactional
 @DisplayName("ExecutionIntentController 컨트롤러 계약 테스트 (MockMvc + H2)")
 class ExecutionIntentControllerTest {
 
   private static final String INTENT_ID = "intent-abc-123";
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
 
   @Autowired private MockMvc mockMvc;
 
@@ -88,13 +92,15 @@ class ExecutionIntentControllerTest {
                 INTENT_ID,
                 ExecutionIntentStatus.AWAITING_SIGNATURE,
                 expiresAt,
+                expiresAt.atZone(APP_ZONE).toEpochSecond(),
                 ExecutionMode.EIP7702,
                 2,
                 SignRequestBundle.forEip7702(
                     new SignRequestBundle.AuthorizationSignRequest(
                         11155420L, "0x" + "1".repeat(40), 0L, "0x" + "a".repeat(64)),
                     new SignRequestBundle.SubmitSignRequest(
-                        "0x" + "b".repeat(64), expiresAt.toEpochSecond(ZoneOffset.UTC))),
+                        "0x" + "b".repeat(64), expiresAt.atZone(APP_ZONE).toEpochSecond())),
+                null,
                 null,
                 null,
                 null));
@@ -108,10 +114,14 @@ class ExecutionIntentControllerTest {
         .andExpect(jsonPath("$.data.resource.status").value("PENDING_EXECUTION"))
         .andExpect(jsonPath("$.data.executionIntent.id").value(INTENT_ID))
         .andExpect(jsonPath("$.data.executionIntent.status").value("AWAITING_SIGNATURE"))
+        .andExpect(
+            jsonPath("$.data.executionIntent.expiresAtEpochSeconds")
+                .value(expiresAt.atZone(APP_ZONE).toEpochSecond()))
         .andExpect(jsonPath("$.data.execution.mode").value("EIP7702"))
         .andExpect(jsonPath("$.data.execution.signCount").value(2))
         .andExpect(jsonPath("$.data.signRequest.authorization").exists())
         .andExpect(jsonPath("$.data.signRequest.submit").exists())
+        .andExpect(jsonPath("$.data.signRequestUnavailableReason").doesNotExist())
         .andExpect(jsonPath("$.data.transaction").doesNotExist());
 
     verify(getExecutionIntentUseCase).execute(any(GetExecutionIntentQuery.class));
@@ -120,6 +130,7 @@ class ExecutionIntentControllerTest {
   @Test
   @DisplayName("GET /{id} — PENDING_ONCHAIN 상태일 때 transaction 포함 200 반환")
   void getExecutionIntent_returnsTransaction_whenPendingOnchain() throws Exception {
+    LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(5);
     BDDMockito.given(getExecutionIntentUseCase.execute(any(GetExecutionIntentQuery.class)))
         .willReturn(
             new GetExecutionIntentResult(
@@ -131,9 +142,11 @@ class ExecutionIntentControllerTest {
                 "{}",
                 INTENT_ID,
                 ExecutionIntentStatus.PENDING_ONCHAIN,
-                LocalDateTime.now().plusMinutes(5),
+                expiresAt,
+                expiresAt.atZone(APP_ZONE).toEpochSecond(),
                 ExecutionMode.EIP7702,
                 2,
+                null,
                 null,
                 42L,
                 ExecutionTransactionStatus.PENDING,
@@ -145,9 +158,45 @@ class ExecutionIntentControllerTest {
         .andExpect(jsonPath("$.data.executionIntent.status").value("PENDING_ONCHAIN"))
         .andExpect(jsonPath("$.data.transaction.id").value(42))
         .andExpect(jsonPath("$.data.transaction.status").value("PENDING"))
+        .andExpect(jsonPath("$.data.signRequestUnavailableReason").doesNotExist())
         .andExpect(jsonPath("$.data.signRequest").doesNotExist());
 
     verify(getExecutionIntentUseCase).execute(any(GetExecutionIntentQuery.class));
+  }
+
+  @Test
+  @DisplayName("GET /{id} — AWAITING_SIGNATURE signRequest 미노출 사유를 반환")
+  void getExecutionIntent_returnsUnavailableReason_whenAwaitingSignatureWithoutSignRequest()
+      throws Exception {
+    LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(20);
+    BDDMockito.given(getExecutionIntentUseCase.execute(any(GetExecutionIntentQuery.class)))
+        .willReturn(
+            new GetExecutionIntentResult(
+                ExecutionResourceType.QUESTION,
+                "web3:QUESTION:101",
+                ExecutionResourceStatus.PENDING_EXECUTION,
+                ExecutionActionType.QNA_QUESTION_CREATE,
+                "0x" + "f".repeat(64),
+                "{}",
+                INTENT_ID,
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                expiresAt,
+                expiresAt.atZone(APP_ZONE).toEpochSecond(),
+                ExecutionMode.EIP7702,
+                2,
+                null,
+                SignRequestUnavailableReason.EIP7702_DEADLINE_TOO_CLOSE,
+                null,
+                null,
+                null));
+
+    mockMvc
+        .perform(get("/users/me/web3/execution-intents/{id}", INTENT_ID).with(userPrincipal(7L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.executionIntent.status").value("AWAITING_SIGNATURE"))
+        .andExpect(jsonPath("$.data.signRequest").doesNotExist())
+        .andExpect(
+            jsonPath("$.data.signRequestUnavailableReason").value("EIP7702_DEADLINE_TOO_CLOSE"));
   }
 
   @Test

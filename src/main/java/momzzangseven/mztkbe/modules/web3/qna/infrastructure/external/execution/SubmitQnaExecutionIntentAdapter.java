@@ -22,6 +22,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswe
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswerExecutionIntentRefPort.QnaAnswerExecutionIntentRef;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
@@ -33,16 +34,38 @@ public class SubmitQnaExecutionIntentAdapter implements SubmitQnaExecutionDraftP
   private final CreateExecutionIntentUseCase createExecutionIntentUseCase;
   private final ObjectMapper objectMapper;
   private final ManageQnaAnswerExecutionIntentRefPort refPersistencePort;
+  private final QnaEscrowProperties qnaEscrowProperties;
 
   @Override
   public QnaExecutionIntentResult submit(QnaExecutionDraft draft) {
     CreateExecutionIntentResult result =
         createExecutionIntentUseCase.execute(
             new CreateExecutionIntentCommand(toExecutionDraft(draft)));
+    Long surfaceSignedAt = resolveSurfaceSignedAt(draft, result);
+    Integer sigValidityDuration =
+        surfaceSignedAt == null ? null : qnaEscrowProperties.getSigValidityDuration();
     QnaExecutionIntentResult qnaResult =
-        QnaExecutionIntentResult.from(draft.actionType().name(), result);
+        QnaExecutionIntentResult.from(
+            draft.actionType().name(), result, surfaceSignedAt, sigValidityDuration);
     upsertAnswerExecutionRef(draft, qnaResult);
     return qnaResult;
+  }
+
+  /**
+   * Resolves the {@code signedAt} that should be surfaced to the client.
+   *
+   * <p>When the underlying use case returns an existing intent ({@code result.existing() == true}),
+   * the in-memory {@code draft} carries a freshly signed (signedAt, sig) pair that was discarded by
+   * reuse; surfacing {@code draft.signedAt()} would advertise a later expiry than the stored
+   * calldata's on-chain deadline, risking {@code SignatureExpired} reverts during the t2−t1 window.
+   * For reuse, surface the stored payload's {@code signedAt} so the response matches the server-sig
+   * that will actually be broadcast.
+   */
+  private Long resolveSurfaceSignedAt(QnaExecutionDraft draft, CreateExecutionIntentResult result) {
+    if (!result.existing() || result.payloadSnapshotJson() == null) {
+      return draft.signedAt();
+    }
+    return readPayload(result.payloadSnapshotJson()).signedAt();
   }
 
   private void upsertAnswerExecutionRef(QnaExecutionDraft draft, QnaExecutionIntentResult result) {

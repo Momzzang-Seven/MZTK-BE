@@ -167,6 +167,7 @@ class QuestionEscrowAdminExecutionServiceTest {
             BigInteger.valueOf(2_000_000_000L),
             BigInteger.valueOf(30_000_000_000L)),
         "0x" + "b".repeat(64),
+        null,
         LocalDateTime.of(2026, 4, 20, 12, 0));
   }
 
@@ -175,7 +176,7 @@ class QuestionEscrowAdminExecutionServiceTest {
         new QnaExecutionIntentResult.Resource("QUESTION", "101", "PENDING_EXECUTION"),
         "QNA_ADMIN_SETTLE",
         new QnaExecutionIntentResult.ExecutionIntent(
-            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 20, 12, 0)),
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 20, 12, 0), 1_776_653_200L),
         new QnaExecutionIntentResult.Execution("EIP1559", 1),
         null,
         false);

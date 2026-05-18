@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.event;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
+import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.ConditionalOnExecutionModeEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionSucceededEvent;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -14,7 +14,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnAnyExecutionEnabled
+@ConditionalOnExecutionModeEnabled
 public class ExecutionIntentSucceededEventHandler {
 
   private final MarkExecutionIntentSucceededUseCase markExecutionIntentSucceededUseCase;

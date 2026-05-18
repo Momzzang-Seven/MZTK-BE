@@ -3,12 +3,12 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter;
 import java.math.BigInteger;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.ExecutionEip712Properties;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.utils.Numeric;
 
 @Component
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class Eip7702ExecutionDigestAdapter implements BuildExecutionDigestPort {
 
   private final ExecutionEip712Properties executionEip712Properties;

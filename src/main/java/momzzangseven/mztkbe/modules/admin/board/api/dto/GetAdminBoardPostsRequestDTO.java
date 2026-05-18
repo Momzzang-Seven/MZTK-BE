@@ -13,6 +13,8 @@ import momzzangseven.mztkbe.modules.admin.common.application.dto.AdminPageQueryN
 /** Query DTO for {@code GET /admin/boards/posts}. */
 public record GetAdminBoardPostsRequestDTO(
     String search,
+    Long postId,
+    Long userId,
     AdminBoardPostStatus status,
     AdminBoardPostType type,
     AdminBoardPostPublicationStatus publicationStatus,
@@ -27,6 +29,8 @@ public record GetAdminBoardPostsRequestDTO(
     return new GetAdminBoardPostsCommand(
         operatorUserId,
         pageQuery.search(),
+        postId,
+        userId,
         status,
         type,
         publicationStatus,

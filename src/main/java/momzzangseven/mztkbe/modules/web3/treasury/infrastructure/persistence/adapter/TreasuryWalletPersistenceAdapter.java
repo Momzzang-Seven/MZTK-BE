@@ -41,10 +41,11 @@ public class TreasuryWalletPersistenceAdapter
   }
 
   @Override
-  public boolean existsAddressOwnedByOther(String walletAlias, String walletAddress) {
+  public Optional<TreasuryWallet> loadByAliasForUpdate(String walletAlias) {
     requireNonBlank(walletAlias, "walletAlias");
-    requireNonBlank(walletAddress, "walletAddress");
-    return repository.existsByTreasuryAddressAndWalletAliasNot(walletAddress, walletAlias);
+    return repository
+        .findByWalletAliasForUpdate(walletAlias)
+        .map(TreasuryWalletPersistenceAdapter::toDomain);
   }
 
   @Override

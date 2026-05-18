@@ -22,6 +22,8 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
         .execute(
             new GetManagedBoardPostsQuery(
                 query.search(),
+                query.postId(),
+                query.userId(),
                 AdminBoardPostEnumMapper.toPostStatus(query.status()),
                 AdminBoardPostEnumMapper.toPostType(query.type()),
                 AdminBoardPostEnumMapper.toPostPublicationStatus(query.publicationStatus()),
@@ -36,6 +38,8 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
     return getManagedBoardPostsUseCase.count(
         new GetManagedBoardPostsQuery(
             query.search(),
+            query.postId(),
+            query.userId(),
             AdminBoardPostEnumMapper.toPostStatus(query.status()),
             AdminBoardPostEnumMapper.toPostType(query.type()),
             AdminBoardPostEnumMapper.toPostPublicationStatus(query.publicationStatus()),
@@ -48,6 +52,8 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
         .executePage(
             new GetManagedBoardPostsPageQuery(
                 query.search(),
+                query.postId(),
+                query.userId(),
                 AdminBoardPostEnumMapper.toPostStatus(query.status()),
                 AdminBoardPostEnumMapper.toPostType(query.type()),
                 AdminBoardPostEnumMapper.toPostPublicationStatus(query.publicationStatus()),

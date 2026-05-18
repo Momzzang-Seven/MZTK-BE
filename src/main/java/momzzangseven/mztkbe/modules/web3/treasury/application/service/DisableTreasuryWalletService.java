@@ -56,9 +56,12 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
       operatorId = "#command.operatorUserId()",
       targetId = "#result != null ? #result.walletAddress() : null")
   public TreasuryWalletView execute(DisableTreasuryWalletCommand command) {
+    // PESSIMISTIC_WRITE — without this, an interleaved provision/replace that mints a new
+    // kms_key_id would be silently overwritten by this method's UPDATE of the stale row snapshot
+    // (the disable transition only changes status, but `save(...)` writes the whole row).
     TreasuryWallet wallet =
         loadTreasuryWalletPort
-            .loadByAlias(command.walletAlias())
+            .loadByAliasForUpdate(command.walletAlias())
             .orElseThrow(
                 () ->
                     new TreasuryWalletStateException(

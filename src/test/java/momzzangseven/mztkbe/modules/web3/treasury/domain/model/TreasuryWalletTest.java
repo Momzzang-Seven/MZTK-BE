@@ -227,7 +227,8 @@ class TreasuryWalletTest {
     @DisplayName("[M-42] backfill — id/walletAddress/createdAt 보존, KMS 필드 + updatedAt만 갱신")
     void backfill_legacyRow_preservesIdentityAndStampsKmsFields() {
       // when
-      TreasuryWallet result = TreasuryWallet.backfill(legacyRow(), "fresh-kms-id", LATER_CLOCK);
+      TreasuryWallet result =
+          TreasuryWallet.backfill(legacyRow(), "fresh-kms-id", WALLET_ADDRESS, LATER_CLOCK);
 
       // then
       assertThat(result.getId()).isEqualTo(7L);
@@ -246,7 +247,9 @@ class TreasuryWalletTest {
       TreasuryWallet alreadyProvisioned = legacyRow().toBuilder().kmsKeyId("prev-id").build();
 
       assertThatThrownBy(
-              () -> TreasuryWallet.backfill(alreadyProvisioned, "fresh-kms-id", LATER_CLOCK))
+              () ->
+                  TreasuryWallet.backfill(
+                      alreadyProvisioned, "fresh-kms-id", WALLET_ADDRESS, LATER_CLOCK))
           .isInstanceOf(TreasuryWalletStateException.class)
           .satisfies(
               ex -> {
@@ -258,29 +261,10 @@ class TreasuryWalletTest {
     }
 
     @Test
-    @DisplayName("[M-44a] backfill — existing.walletAddress가 null이면 TreasuryWalletStateException")
-    void backfill_existingHasNullAddress_throwsState() {
-      TreasuryWallet noAddress = legacyRow().toBuilder().walletAddress(null).build();
-
-      assertThatThrownBy(() -> TreasuryWallet.backfill(noAddress, "fresh-kms-id", LATER_CLOCK))
-          .isInstanceOf(TreasuryWalletStateException.class)
-          .hasMessageContaining("no walletAddress on file");
-    }
-
-    @Test
-    @DisplayName("[M-44b] backfill — existing.walletAddress가 blank이면 TreasuryWalletStateException")
-    void backfill_existingHasBlankAddress_throwsState() {
-      TreasuryWallet blankAddress = legacyRow().toBuilder().walletAddress("  ").build();
-
-      assertThatThrownBy(() -> TreasuryWallet.backfill(blankAddress, "fresh-kms-id", LATER_CLOCK))
-          .isInstanceOf(TreasuryWalletStateException.class)
-          .hasMessageContaining("no walletAddress on file");
-    }
-
-    @Test
     @DisplayName("[M-45a] backfill — null existing → NullPointerException")
     void backfill_nullExisting_throwsNpe() {
-      assertThatThrownBy(() -> TreasuryWallet.backfill(null, "fresh-kms-id", LATER_CLOCK))
+      assertThatThrownBy(
+              () -> TreasuryWallet.backfill(null, "fresh-kms-id", WALLET_ADDRESS, LATER_CLOCK))
           .isInstanceOf(NullPointerException.class)
           .hasMessage("existing must not be null");
     }
@@ -288,15 +272,26 @@ class TreasuryWalletTest {
     @Test
     @DisplayName("[M-45b] backfill — null kmsKeyId → NullPointerException")
     void backfill_nullKmsKeyId_throwsNpe() {
-      assertThatThrownBy(() -> TreasuryWallet.backfill(legacyRow(), null, LATER_CLOCK))
+      assertThatThrownBy(
+              () -> TreasuryWallet.backfill(legacyRow(), null, WALLET_ADDRESS, LATER_CLOCK))
           .isInstanceOf(NullPointerException.class)
-          .hasMessage("kmsKeyId must not be null");
+          .hasMessage("newKmsKeyId must not be null");
+    }
+
+    @Test
+    @DisplayName("[M-45d] backfill — null newWalletAddress → NullPointerException")
+    void backfill_nullNewWalletAddress_throwsNpe() {
+      assertThatThrownBy(
+              () -> TreasuryWallet.backfill(legacyRow(), "fresh-kms-id", null, LATER_CLOCK))
+          .isInstanceOf(NullPointerException.class)
+          .hasMessage("newWalletAddress must not be null");
     }
 
     @Test
     @DisplayName("[M-45c] backfill — null clock → NullPointerException")
     void backfill_nullClock_throwsNpe() {
-      assertThatThrownBy(() -> TreasuryWallet.backfill(legacyRow(), "fresh-kms-id", null))
+      assertThatThrownBy(
+              () -> TreasuryWallet.backfill(legacyRow(), "fresh-kms-id", WALLET_ADDRESS, null))
           .isInstanceOf(NullPointerException.class)
           .hasMessage("clock must not be null");
     }
@@ -307,39 +302,12 @@ class TreasuryWalletTest {
       TreasuryWallet activeLegacy =
           legacyRow().toBuilder().status(TreasuryWalletStatus.ACTIVE).build();
 
-      TreasuryWallet result = TreasuryWallet.backfill(activeLegacy, "fresh-kms-id", LATER_CLOCK);
+      TreasuryWallet result =
+          TreasuryWallet.backfill(activeLegacy, "fresh-kms-id", WALLET_ADDRESS, LATER_CLOCK);
 
       assertThat(result.getKmsKeyId()).isEqualTo("fresh-kms-id");
       assertThat(result.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
       assertThat(result.getKeyOrigin()).isEqualTo(TreasuryKeyOrigin.IMPORTED);
-    }
-
-    @Test
-    @DisplayName("[M-46b] backfill — DISABLED 상태 행은 TreasuryWalletStateException — ACTIVE 우회 차단")
-    void backfill_existingDisabled_throwsState() {
-      TreasuryWallet disabledLegacy =
-          legacyRow().toBuilder().status(TreasuryWalletStatus.DISABLED).build();
-
-      assertThatThrownBy(() -> TreasuryWallet.backfill(disabledLegacy, "fresh-kms-id", LATER_CLOCK))
-          .isInstanceOf(TreasuryWalletStateException.class)
-          .satisfies(
-              ex -> {
-                TreasuryWalletStateException twse = (TreasuryWalletStateException) ex;
-                assertThat(twse.getCode()).isEqualTo("TREASURY_001");
-                assertThat(twse.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
-                assertThat(twse.getMessage()).contains("DISABLED").contains(REWARD_ALIAS);
-              });
-    }
-
-    @Test
-    @DisplayName("[M-46c] backfill — ARCHIVED 상태 행은 TreasuryWalletStateException")
-    void backfill_existingArchived_throwsState() {
-      TreasuryWallet archivedLegacy =
-          legacyRow().toBuilder().status(TreasuryWalletStatus.ARCHIVED).build();
-
-      assertThatThrownBy(() -> TreasuryWallet.backfill(archivedLegacy, "fresh-kms-id", LATER_CLOCK))
-          .isInstanceOf(TreasuryWalletStateException.class)
-          .hasMessageContaining("ARCHIVED");
     }
   }
 
@@ -556,6 +524,252 @@ class TreasuryWalletTest {
                 assertThat(twse.getCode()).isEqualTo("TREASURY_001");
                 assertThat(twse.getMessage()).contains("ARCHIVED");
               });
+    }
+  }
+
+  // =========================================================================
+  // Section G — replaceKey factory (MOM-444)
+  // =========================================================================
+
+  @Nested
+  @DisplayName("G. replaceKey factory")
+  class ReplaceKeyFactory {
+
+    private static final String NEW_KMS = "arn:aws:kms:us-east-1:123456789012:key/new";
+    private static final String NEW_ADDRESS = "0xCafeBabeCafeBabeCafeBabeCafeBabeCafeBabe";
+
+    @Test
+    @DisplayName("ACTIVE row 에 대해 kms_key_id / address 교체 + disabledAt null + status ACTIVE 유지")
+    void replaceKey_fromActive_swapsKeyAndAddress() {
+      TreasuryWallet existing = activeWallet();
+
+      TreasuryWallet rotated =
+          TreasuryWallet.replaceKey(existing, NEW_KMS, NEW_ADDRESS, LATER_CLOCK);
+
+      assertThat(rotated.getKmsKeyId()).isEqualTo(NEW_KMS);
+      assertThat(rotated.getWalletAddress()).isEqualTo(NEW_ADDRESS);
+      assertThat(rotated.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+      assertThat(rotated.getDisabledAt()).isNull();
+      assertThat(rotated.getKeyOrigin()).isEqualTo(TreasuryKeyOrigin.IMPORTED);
+      assertThat(rotated.getId()).isEqualTo(existing.getId());
+      assertThat(rotated.getWalletAlias()).isEqualTo(existing.getWalletAlias());
+      assertThat(rotated.getCreatedAt()).isEqualTo(existing.getCreatedAt());
+      assertThat(rotated.getUpdatedAt()).isEqualTo(LATER_NOW);
+    }
+
+    @Test
+    @DisplayName("DISABLED row 도 ACTIVE 로 전이하고 disabledAt 을 null 로 리셋")
+    void replaceKey_fromDisabled_clearsDisabledAtAndPromotesToActive() {
+      TreasuryWallet disabled = activeWallet().disable(LATER_CLOCK);
+      assertThat(disabled.getStatus()).isEqualTo(TreasuryWalletStatus.DISABLED);
+      assertThat(disabled.getDisabledAt()).isNotNull();
+
+      TreasuryWallet rotated =
+          TreasuryWallet.replaceKey(disabled, NEW_KMS, NEW_ADDRESS, LATER_CLOCK);
+
+      assertThat(rotated.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+      assertThat(rotated.getDisabledAt()).isNull();
+      assertThat(rotated.getKmsKeyId()).isEqualTo(NEW_KMS);
+    }
+
+    @Test
+    @DisplayName("ARCHIVED row 도 ACTIVE 로 전이")
+    void replaceKey_fromArchived_promotesToActive() {
+      TreasuryWallet archived = activeWallet().disable(LATER_CLOCK).archive(LATER_CLOCK);
+      assertThat(archived.getStatus()).isEqualTo(TreasuryWalletStatus.ARCHIVED);
+
+      TreasuryWallet rotated =
+          TreasuryWallet.replaceKey(archived, NEW_KMS, NEW_ADDRESS, LATER_CLOCK);
+
+      assertThat(rotated.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+      assertThat(rotated.getKmsKeyId()).isEqualTo(NEW_KMS);
+    }
+
+    @Test
+    @DisplayName("existing.kmsKeyId == null 이면 거부 (backfill 경로를 사용해야 함)")
+    void replaceKey_rejectsNullExistingKmsKeyId() {
+      TreasuryWallet legacy = activeWallet().toBuilder().kmsKeyId(null).build();
+
+      assertThatThrownBy(() -> TreasuryWallet.replaceKey(legacy, NEW_KMS, NEW_ADDRESS, LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("no kmsKeyId")
+          .hasMessageContaining("backfill");
+    }
+
+    @Test
+    @DisplayName("newKmsKeyId == existing.kmsKeyId 이면 거부")
+    void replaceKey_rejectsSameKmsKeyId() {
+      TreasuryWallet existing = activeWallet();
+
+      assertThatThrownBy(
+              () ->
+                  TreasuryWallet.replaceKey(
+                      existing, existing.getKmsKeyId(), NEW_ADDRESS, LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("same kmsKeyId");
+    }
+
+    @Test
+    @DisplayName("null 인자는 모두 NullPointerException")
+    void replaceKey_nullArgs_throw() {
+      TreasuryWallet existing = activeWallet();
+
+      assertThatThrownBy(() -> TreasuryWallet.replaceKey(null, NEW_KMS, NEW_ADDRESS, LATER_CLOCK))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(() -> TreasuryWallet.replaceKey(existing, null, NEW_ADDRESS, LATER_CLOCK))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(() -> TreasuryWallet.replaceKey(existing, NEW_KMS, null, LATER_CLOCK))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(() -> TreasuryWallet.replaceKey(existing, NEW_KMS, NEW_ADDRESS, null))
+          .isInstanceOf(NullPointerException.class);
+    }
+  }
+
+  // =========================================================================
+  // Section H — reEnable factory (MOM-444)
+  // =========================================================================
+
+  @Nested
+  @DisplayName("H. reEnable factory")
+  class ReEnableFactory {
+
+    @Test
+    @DisplayName("DISABLED → ACTIVE 로 전이, disabledAt null, kmsKeyId/address 불변")
+    void reEnable_fromDisabled_promotesToActiveAndClearsDisabledAt() {
+      TreasuryWallet disabled = activeWallet().disable(LATER_CLOCK);
+
+      TreasuryWallet reactivated = TreasuryWallet.reEnable(disabled, LATER_CLOCK);
+
+      assertThat(reactivated.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+      assertThat(reactivated.getDisabledAt()).isNull();
+      assertThat(reactivated.getKmsKeyId()).isEqualTo(disabled.getKmsKeyId());
+      assertThat(reactivated.getWalletAddress()).isEqualTo(disabled.getWalletAddress());
+      assertThat(reactivated.getUpdatedAt()).isEqualTo(LATER_NOW);
+    }
+
+    @Test
+    @DisplayName("ACTIVE status 는 거부")
+    void reEnable_rejectsActive() {
+      TreasuryWallet active = activeWallet();
+
+      assertThatThrownBy(() -> TreasuryWallet.reEnable(active, LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("ARCHIVED status 는 거부 (replaceKey 사용해야 함)")
+    void reEnable_rejectsArchived() {
+      TreasuryWallet archived = activeWallet().disable(LATER_CLOCK).archive(LATER_CLOCK);
+
+      assertThatThrownBy(() -> TreasuryWallet.reEnable(archived, LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("ARCHIVED");
+    }
+
+    @Test
+    @DisplayName("existing.kmsKeyId == null 은 거부")
+    void reEnable_rejectsNullKmsKeyId() {
+      TreasuryWallet legacy =
+          activeWallet().disable(LATER_CLOCK).toBuilder().kmsKeyId(null).build();
+
+      assertThatThrownBy(() -> TreasuryWallet.reEnable(legacy, LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("no kmsKeyId");
+    }
+  }
+
+  // =========================================================================
+  // Section I — backfill factory: non-cohort-v2 case coverage (MOM-444)
+  // =========================================================================
+
+  @Nested
+  @DisplayName("I. backfill factory — 시그니처 확장 (MOM-444)")
+  class BackfillFactoryExtended {
+
+    private static final String NEW_KMS = "arn:aws:kms:us-east-1:123456789012:key/new";
+
+    @Test
+    @DisplayName("derived address 가 stored address 와 다르면 derived 로 덮어쓴다 (C10)")
+    void backfill_differentAddress_overwritesStoredAddress() {
+      TreasuryWallet legacy =
+          TreasuryWallet.builder()
+              .id(42L)
+              .walletAlias(REWARD_ALIAS)
+              .kmsKeyId(null)
+              .walletAddress("0x0000000000000000000000000000000000000001")
+              .status(TreasuryWalletStatus.ACTIVE)
+              .keyOrigin(TreasuryKeyOrigin.IMPORTED)
+              .createdAt(FIXED_NOW)
+              .updatedAt(FIXED_NOW)
+              .build();
+      String derived = "0x0000000000000000000000000000000000000002";
+
+      TreasuryWallet backfilled = TreasuryWallet.backfill(legacy, NEW_KMS, derived, LATER_CLOCK);
+
+      assertThat(backfilled.getWalletAddress()).isEqualTo(derived);
+      assertThat(backfilled.getKmsKeyId()).isEqualTo(NEW_KMS);
+      assertThat(backfilled.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("DISABLED legacy row 도 ACTIVE 로 전이 + disabledAt null (C2/C11)")
+    void backfill_disabledLegacyRow_promotesToActive() {
+      TreasuryWallet legacyDisabled =
+          TreasuryWallet.builder()
+              .id(42L)
+              .walletAlias(REWARD_ALIAS)
+              .kmsKeyId(null)
+              .walletAddress("0x0000000000000000000000000000000000000001")
+              .status(TreasuryWalletStatus.DISABLED)
+              .keyOrigin(TreasuryKeyOrigin.IMPORTED)
+              .disabledAt(FIXED_NOW)
+              .createdAt(FIXED_NOW)
+              .updatedAt(FIXED_NOW)
+              .build();
+
+      TreasuryWallet backfilled =
+          TreasuryWallet.backfill(
+              legacyDisabled, NEW_KMS, legacyDisabled.getWalletAddress(), LATER_CLOCK);
+
+      assertThat(backfilled.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+      assertThat(backfilled.getDisabledAt()).isNull();
+      assertThat(backfilled.getKmsKeyId()).isEqualTo(NEW_KMS);
+    }
+
+    @Test
+    @DisplayName("ARCHIVED legacy row 도 ACTIVE 로 전이 (C3/C12)")
+    void backfill_archivedLegacyRow_promotesToActive() {
+      TreasuryWallet legacyArchived =
+          TreasuryWallet.builder()
+              .id(42L)
+              .walletAlias(REWARD_ALIAS)
+              .kmsKeyId(null)
+              .walletAddress("0x0000000000000000000000000000000000000001")
+              .status(TreasuryWalletStatus.ARCHIVED)
+              .keyOrigin(TreasuryKeyOrigin.IMPORTED)
+              .createdAt(FIXED_NOW)
+              .updatedAt(FIXED_NOW)
+              .build();
+
+      TreasuryWallet backfilled =
+          TreasuryWallet.backfill(
+              legacyArchived, NEW_KMS, legacyArchived.getWalletAddress(), LATER_CLOCK);
+
+      assertThat(backfilled.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+      assertThat(backfilled.getKmsKeyId()).isEqualTo(NEW_KMS);
+    }
+
+    @Test
+    @DisplayName("existing.kmsKeyId != null 이면 거부 (replaceKey 사용해야 함)")
+    void backfill_rejectsExistingKmsKeyId() {
+      TreasuryWallet alreadyProvisioned = activeWallet();
+
+      assertThatThrownBy(
+              () ->
+                  TreasuryWallet.backfill(
+                      alreadyProvisioned, NEW_KMS, "0x" + "b".repeat(40), LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class);
     }
   }
 }

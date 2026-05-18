@@ -12,6 +12,7 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
@@ -80,6 +81,14 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             loadQnaExecutionIntentStatePort,
             qnaQuestionUpdateStatePersistencePort,
             qnaLocalDeleteSyncPort);
+  }
+
+  @Test
+  @DisplayName("supports intent distinguishes qna escrow accept payload from legacy reward payload")
+  void supportsIntent_distinguishesQnaEscrowPayloadFromLegacyRewardPayload() throws Exception {
+    assertThat(adapter.supports(intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L)))
+        .isTrue();
+    assertThat(adapter.supports(legacyRewardIntent())).isFalse();
   }
 
   @Test
@@ -687,6 +696,54 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         .confirm(LocalDateTime.of(2026, 4, 12, 10, 2));
   }
 
+  private ExecutionIntent legacyRewardIntent() throws Exception {
+    String payload =
+        objectMapper.writeValueAsString(
+            Map.of(
+                "postId",
+                101L,
+                "acceptedCommentId",
+                201L,
+                "fromUserId",
+                7L,
+                "toUserId",
+                22L,
+                "authorityAddress",
+                "0x" + "1".repeat(40),
+                "toAddress",
+                "0x" + "2".repeat(40),
+                "tokenContractAddress",
+                "0x" + "3".repeat(40),
+                "amountWei",
+                BigInteger.valueOf(500),
+                "transferData",
+                "0x1234"));
+
+    return ExecutionIntent.create(
+        "intent-legacy",
+        "domain:QUESTION_REWARD:101:7",
+        1,
+        ExecutionResourceType.QUESTION,
+        "101",
+        ExecutionActionType.QNA_ANSWER_ACCEPT,
+        7L,
+        22L,
+        ExecutionMode.EIP7702,
+        "0x" + "e".repeat(64),
+        payload,
+        "0x" + "1".repeat(40),
+        1L,
+        "0x" + "2".repeat(40),
+        LocalDateTime.of(2026, 4, 12, 10, 5),
+        "0x" + "3".repeat(64),
+        "0x" + "4".repeat(64),
+        null,
+        null,
+        BigInteger.ZERO,
+        LocalDate.of(2026, 4, 12),
+        LocalDateTime.of(2026, 4, 12, 10, 0));
+  }
+
   private QnaEscrowExecutionPayload acceptPayload() {
     return new QnaEscrowExecutionPayload(
         QnaExecutionActionType.QNA_ANSWER_ACCEPT,
@@ -731,6 +788,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         updateVersion,
         updateToken,
         null,
+        null,
+        null,
         null);
   }
 
@@ -749,7 +808,9 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         null,
         null,
         updateVersion,
-        updateToken);
+        updateToken,
+        null,
+        null);
   }
 
   private QnaQuestionUpdateState updateState(

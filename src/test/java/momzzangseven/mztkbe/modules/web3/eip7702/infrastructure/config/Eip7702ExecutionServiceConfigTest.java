@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.ManageExecutionEip7702UseCase;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.PrepareEip7702AuthorizationUseCase;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.PrepareTokenTransferExecutionSupportUseCase;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
@@ -35,6 +36,7 @@ class Eip7702ExecutionServiceConfigTest {
             context -> {
               assertThat(context).hasSingleBean(ManageExecutionEip7702UseCase.class);
               assertThat(context).hasSingleBean(PrepareTokenTransferExecutionSupportUseCase.class);
+              assertThat(context).hasSingleBean(PrepareEip7702AuthorizationUseCase.class);
             });
   }
 
@@ -48,6 +50,7 @@ class Eip7702ExecutionServiceConfigTest {
               assertThat(context).doesNotHaveBean(ManageExecutionEip7702UseCase.class);
               assertThat(context)
                   .doesNotHaveBean(PrepareTokenTransferExecutionSupportUseCase.class);
+              assertThat(context).doesNotHaveBean(PrepareEip7702AuthorizationUseCase.class);
             });
   }
 }

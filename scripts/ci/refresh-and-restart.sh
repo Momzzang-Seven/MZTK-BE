@@ -166,6 +166,7 @@ docker run -d \
   --name mztk-prod \
   --restart unless-stopped \
   -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
   -e SPRING_PROFILES_ACTIVE=prod \
   --env-file ~/apps/.env \
   ${DOCKER_HUB_USERNAME}/mztk-be:latest

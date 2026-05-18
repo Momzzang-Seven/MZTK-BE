@@ -54,6 +54,30 @@ external call fails afterward, the DB remains the source of truth and the read p
 consistent. The residual failure mode "DB committed, external not yet mutated" is recorded in
 a dedicated audit table (e.g. `web3_treasury_kms_audits`) for idempotent operator retry.
 
+### Rule 1 exception — calldata-bound external signatures
+
+When the external mutation's output bytes must be embedded into the DB row's own snapshot —
+i.e. the row is meaningless without those bytes — the AFTER_COMMIT split is impossible.
+The output cannot be produced after the commit because the row cannot be persisted in a
+broadcastable form until the output exists.
+
+**Canonical reference:** the QnA `prepare*` flow (modules/web3/qna). `signedAt` and
+`signatureBytes` are appended into the calldata `Uint256` and `bytes` parameters of the
+on-chain contract. Splitting sign to AFTER_COMMIT would persist a 7-arg calldata that
+mismatches the 9-arg on-chain function signature → contract revert. See
+`modules/web3/qna/AGENTS.md` §"lock-held 외부 호출 — Rule 1 예외 (calldata-bound server signature)".
+
+**Rule 2 does not apply either.** KMS sign is a stateless EIP-712 digest signature — no
+external state is created. Therefore no `TransactionSynchronization` cleanup is needed
+on rollback; Rule 5 (idempotent recovery) is trivially satisfied because a fresh prepare
+yields a fresh `(signedAt, signature)` pair.
+
+**Discipline.** Modules wishing to claim this exception MUST:
+- Document the calldata-binding constraint in their AGENTS.md.
+- Show that the external call is read-only/idempotent (no external state to clean up).
+- Provide operational monitoring for the external system (rate limits, latency, failure rate),
+  since a degraded external call now also degrades transaction commit throughput.
+
 ---
 
 ## Rule 2 — Pre-Commit External Calls Need `TransactionSynchronization`

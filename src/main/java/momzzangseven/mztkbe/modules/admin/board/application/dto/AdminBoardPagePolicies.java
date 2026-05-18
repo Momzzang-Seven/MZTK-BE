@@ -13,4 +13,7 @@ public final class AdminBoardPagePolicies {
 
   public static final AdminPagePolicy POST_COMMENTS =
       new AdminPagePolicy(0, 20, 100, 100, Set.of("createdAt", "commentId"));
+
+  public static final AdminPagePolicy COMMENTS =
+      new AdminPagePolicy(0, 20, 100, 100, Set.of("createdAt", "commentId"));
 }

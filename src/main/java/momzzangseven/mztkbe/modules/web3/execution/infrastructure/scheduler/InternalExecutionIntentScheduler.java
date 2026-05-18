@@ -4,14 +4,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.RunInternalExecutionBatchResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnInternalExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.execution.internal", name = "enabled", havingValue = "true")
 public class InternalExecutionIntentScheduler {
 
   private final RunInternalExecutionBatchUseCase runInternalExecutionBatchUseCase;

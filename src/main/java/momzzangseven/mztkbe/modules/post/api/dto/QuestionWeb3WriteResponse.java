@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.post.api.dto;
 
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 
 /** Public API projection of question lifecycle write payload. */
 public record QuestionWeb3WriteResponse(
@@ -9,7 +9,43 @@ public record QuestionWeb3WriteResponse(
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequest signRequest,
-    boolean existing) {
+    String signRequestUnavailableReason,
+    boolean existing,
+    SignatureMeta signatureMeta) {
+
+  /**
+   * Backward-compatible constructor for tests that carry sign-request availability but not
+   * server-sig metadata.
+   */
+  public QuestionWeb3WriteResponse(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequest signRequest,
+      String signRequestUnavailableReason,
+      boolean existing) {
+    this(
+        resource,
+        actionType,
+        executionIntent,
+        execution,
+        signRequest,
+        signRequestUnavailableReason,
+        existing,
+        null);
+  }
+
+  /** Backward-compatible 6-arg constructor for tests that don't carry server-sig metadata. */
+  public QuestionWeb3WriteResponse(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequest signRequest,
+      boolean existing) {
+    this(resource, actionType, executionIntent, execution, signRequest, null, existing, null);
+  }
 
   /** Returns {@code null} when no new question execution intent was prepared. */
   public static QuestionWeb3WriteResponse from(QuestionExecutionWriteView view) {
@@ -22,15 +58,19 @@ public record QuestionWeb3WriteResponse(
         new ExecutionIntent(
             view.executionIntent().id(),
             view.executionIntent().status(),
-            view.executionIntent().expiresAt()),
+            view.executionIntent().expiresAt(),
+            view.executionIntent().expiresAtEpochSeconds()),
         new Execution(view.execution().mode(), view.execution().signCount()),
         SignRequest.from(view.signRequest()),
-        view.existing());
+        view.signRequestUnavailableReason(),
+        view.existing(),
+        SignatureMeta.from(view.signatureMeta()));
   }
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, java.time.LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, java.time.LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 
@@ -99,6 +139,16 @@ public record QuestionWeb3WriteResponse(
           request.maxPriorityFeePerGasHex(),
           request.maxFeePerGasHex(),
           request.expectedNonce());
+    }
+  }
+
+  public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {
+
+    static SignatureMeta from(QuestionExecutionWriteView.SignatureMeta meta) {
+      if (meta == null) {
+        return null;
+      }
+      return new SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
     }
   }
 }

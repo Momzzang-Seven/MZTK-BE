@@ -13,7 +13,9 @@ public class AnswerPublicationReconciliationScheduler {
 
   private final ReconcileAnswerPublicationUseCase reconcileAnswerPublicationUseCase;
 
-  @Scheduled(fixedDelayString = "${answer.lifecycle.reconciliation.fixed-delay-ms:300000}")
+  @Scheduled(
+      initialDelayString = "${answer.lifecycle.reconciliation.initial-delay-ms:0}",
+      fixedDelayString = "${answer.lifecycle.reconciliation.fixed-delay-ms:300000}")
   public void reconcileAnswerPublication() {
     try {
       var result = reconcileAnswerPublicationUseCase.reconcile(100);

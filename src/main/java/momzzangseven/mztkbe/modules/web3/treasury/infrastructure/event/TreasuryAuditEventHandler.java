@@ -5,7 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.treasury.application.service.TreasuryAuditRecorder;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletArchivedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletDisabledEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletKeyReplacedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletProvisionedEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletReactivatedEvent;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -75,6 +77,34 @@ public class TreasuryAuditEventHandler {
       log.warn(
           "Success audit failed post-commit for archived wallet (alias={}, operator={});"
               + " wallet row already committed, downstream AFTER_COMMIT handlers must still run",
+          event.walletAlias(),
+          event.operatorUserId(),
+          ex);
+    }
+  }
+
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+  public void onKeyReplaced(TreasuryWalletKeyReplacedEvent event) {
+    try {
+      treasuryAuditRecorder.record(event.operatorUserId(), event.walletAddress(), true, null);
+    } catch (RuntimeException ex) {
+      log.warn(
+          "Success audit failed post-commit for replaced-key wallet (alias={}, operator={});"
+              + " wallet row already committed",
+          event.walletAlias(),
+          event.operatorUserId(),
+          ex);
+    }
+  }
+
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+  public void onReactivated(TreasuryWalletReactivatedEvent event) {
+    try {
+      treasuryAuditRecorder.record(event.operatorUserId(), event.walletAddress(), true, null);
+    } catch (RuntimeException ex) {
+      log.warn(
+          "Success audit failed post-commit for reactivated wallet (alias={}, operator={});"
+              + " wallet row already committed",
           event.walletAlias(),
           event.operatorUserId(),
           ex);

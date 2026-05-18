@@ -36,9 +36,7 @@ public class RunExecutionTerminationHookService implements RunExecutionTerminati
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {
-    return executionActionHandlerPorts.stream()
-        .filter(handler -> handler.supports(intent.getActionType()))
-        .findFirst()
+    return ExecutionActionHandlerPort.findMatching(executionActionHandlerPorts, intent)
         .orElseThrow(
             () ->
                 new IllegalStateException(

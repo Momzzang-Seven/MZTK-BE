@@ -47,7 +47,10 @@ class QuestionExecutionResumeAdapterTest {
             QnaExecutionResourceType.QUESTION, "10", QnaExecutionResourceStatus.PENDING_EXECUTION),
         "QNA_QUESTION_UPDATE",
         new QnaExecutionResumeViewResult.ExecutionIntent(
-            "intent-10", "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+            "intent-10",
+            "AWAITING_SIGNATURE",
+            LocalDateTime.of(2026, 4, 14, 10, 0),
+            1_776_129_600L),
         new QnaExecutionResumeViewResult.Execution("EIP7702", 2),
         new QnaExecutionResumeViewResult.Transaction(501L, "SUBMITTED", "0xabc"));
   }

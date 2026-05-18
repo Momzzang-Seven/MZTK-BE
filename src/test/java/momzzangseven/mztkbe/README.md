@@ -19,7 +19,8 @@ momzzangseven.mztkbe (test root)
 │
 └── modules/
     └── {모듈명}/
-        ├── api/          ← 전체 통합 테스트 (MockMVC + H2)
+        ├── api/controller/ ← Controller 통합 테스트 (MockMVC + H2)
+        ├── api/dto/      ← HTTP DTO 매핑 단위 테스트 (순수 JUnit)
         ├── application/  ← Service/DTO 단위 테스트 (Mockito)
         ├── domain/       ← 도메인 모델/VO 단위 테스트
         └── infrastructure/ ← Adapter 단위 테스트 (Mockito)
@@ -31,7 +32,8 @@ momzzangseven.mztkbe (test root)
 |------------|------|----------------|
 | `integration/e2e/` | HTTP → DB 전체 플로우 (외부 API는 `@MockitoBean`) | `E2ETestBase` 상속 필수 |
 | `integration/play_wright/` | 카카오/Google 등 실외부 API 포함 E2E | TypeScript + Playwright |
-| `modules/.../api/` | MockMVC + H2, Security 필터 포함 | `@SpringBootTest`, `@Transactional` |
+| `modules/.../api/controller/` | MockMVC + H2, Security 필터 포함 | `@SpringBootTest`, `@Transactional` |
+| `modules/.../api/dto/` | HTTP request/response DTO 정적 팩토리 및 JSON shape 매핑 | 순수 JUnit5 |
 | `modules/.../application/` | Service 비즈니스 로직 (Port Mock) | `@ExtendWith(MockitoExtension.class)` |
 | `modules/.../domain/` | 도메인 규칙 (의존성 없음) | 순수 JUnit5 |
 | `modules/.../infrastructure/` | Adapter 변환/위임 (JPA Mock) | `@ExtendWith(MockitoExtension.class)` |

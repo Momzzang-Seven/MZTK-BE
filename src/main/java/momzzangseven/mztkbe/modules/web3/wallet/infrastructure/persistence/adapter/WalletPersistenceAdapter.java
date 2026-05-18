@@ -6,8 +6,10 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletAndFlushPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletAndFlushPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
@@ -21,7 +23,12 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort, DeleteWalletPort {
+public class WalletPersistenceAdapter
+    implements LoadWalletPort,
+        SaveWalletPort,
+        SaveWalletAndFlushPort,
+        DeleteWalletPort,
+        DeleteWalletAndFlushPort {
 
   private final UserWalletJpaRepository repository;
 
@@ -90,10 +97,23 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
     return mapToDomain(savedEntity);
   }
 
+  @Override
+  public UserWallet saveAndFlush(UserWallet wallet) {
+    UserWalletEntity entity = mapToEntity(wallet);
+    UserWalletEntity savedEntity = repository.saveAndFlush(entity);
+    return mapToDomain(savedEntity);
+  }
+
   // ====== Delete Wallet Port Implementation ======//
   @Override
   public void deleteById(Long id) {
     repository.deleteById(id);
+  }
+
+  @Override
+  public void deleteByIdAndFlush(Long id) {
+    repository.deleteById(id);
+    repository.flush();
   }
 
   @Override

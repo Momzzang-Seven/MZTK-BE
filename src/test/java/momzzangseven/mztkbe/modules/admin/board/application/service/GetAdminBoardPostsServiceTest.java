@@ -46,6 +46,8 @@ class GetAdminBoardPostsServiceTest {
         new GetAdminBoardPostsCommand(
             9L,
             "hello",
+            null,
+            null,
             AdminBoardPostStatus.OPEN,
             AdminBoardPostType.QUESTION,
             AdminBoardPostPublicationStatus.FAILED,
@@ -56,6 +58,8 @@ class GetAdminBoardPostsServiceTest {
     var postQuery =
         new LoadAdminBoardPostsPort.AdminBoardPostQuery(
             "hello",
+            null,
+            null,
             AdminBoardPostStatus.OPEN,
             AdminBoardPostType.QUESTION,
             AdminBoardPostPublicationStatus.FAILED,
@@ -93,6 +97,8 @@ class GetAdminBoardPostsServiceTest {
         new GetAdminBoardPostsCommand(
             9L,
             "hello",
+            null,
+            null,
             AdminBoardPostStatus.OPEN,
             null,
             null,
@@ -103,7 +109,7 @@ class GetAdminBoardPostsServiceTest {
     String content = "a".repeat(119) + "😀" + "b";
     var postQuery =
         new LoadAdminBoardPostsPort.AdminBoardPostQuery(
-            "hello", AdminBoardPostStatus.OPEN, null, null, null);
+            "hello", null, null, AdminBoardPostStatus.OPEN, null, null, null);
     given(loadAdminBoardPostsPort.count(postQuery)).willReturn(1L);
     given(loadAdminBoardPostListPolicyPort.maxCommentCountSortScanSize()).willReturn(100);
     given(loadAdminBoardPostsPort.load(postQuery))
@@ -125,6 +131,8 @@ class GetAdminBoardPostsServiceTest {
         new GetAdminBoardPostsCommand(
             9L,
             "hello",
+            null,
+            null,
             AdminBoardPostStatus.OPEN,
             AdminBoardPostType.FREE,
             AdminBoardPostPublicationStatus.VISIBLE,
@@ -138,6 +146,8 @@ class GetAdminBoardPostsServiceTest {
             loadAdminBoardPostsPort.loadPage(
                 new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
                     "hello",
+                    null,
+                    null,
                     AdminBoardPostStatus.OPEN,
                     AdminBoardPostType.FREE,
                     AdminBoardPostPublicationStatus.VISIBLE,
@@ -165,12 +175,12 @@ class GetAdminBoardPostsServiceTest {
   void execute_typeSort_usesPagedPostQuery() {
     GetAdminBoardPostsCommand command =
         new GetAdminBoardPostsCommand(
-            9L, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.TYPE);
+            9L, null, null, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.TYPE);
     var post = post(10L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00"));
     given(
             loadAdminBoardPostsPort.loadPage(
                 new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
-                    null, null, null, null, null, 0, 1, AdminBoardPostSortKey.TYPE)))
+                    null, null, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.TYPE)))
         .willReturn(new PageImpl<>(List.of(post), PageRequest.of(0, 1), 3));
     given(loadAdminBoardPostCommentCountsPort.load(List.of(10L))).willReturn(Map.of(10L, 4L));
     given(loadAdminBoardWriterNicknamesPort.load(List.of(1L))).willReturn(Map.of(1L, "alpha"));
@@ -187,12 +197,12 @@ class GetAdminBoardPostsServiceTest {
   void execute_postIdSort_usesPagedPostQuery() {
     GetAdminBoardPostsCommand command =
         new GetAdminBoardPostsCommand(
-            9L, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.POST_ID);
+            9L, null, null, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.POST_ID);
     var post = post(12L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00"));
     given(
             loadAdminBoardPostsPort.loadPage(
                 new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
-                    null, null, null, null, null, 0, 1, AdminBoardPostSortKey.POST_ID)))
+                    null, null, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.POST_ID)))
         .willReturn(new PageImpl<>(List.of(post), PageRequest.of(0, 1), 3));
     given(loadAdminBoardPostCommentCountsPort.load(List.of(12L))).willReturn(Map.of(12L, 2L));
     given(loadAdminBoardWriterNicknamesPort.load(List.of(1L))).willReturn(Map.of(1L, "alpha"));
@@ -209,12 +219,12 @@ class GetAdminBoardPostsServiceTest {
   void execute_statusSort_usesPagedPostQuery() {
     GetAdminBoardPostsCommand command =
         new GetAdminBoardPostsCommand(
-            9L, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.STATUS);
+            9L, null, null, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.STATUS);
     var post = post(10L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00"));
     given(
             loadAdminBoardPostsPort.loadPage(
                 new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
-                    null, null, null, null, null, 0, 1, AdminBoardPostSortKey.STATUS)))
+                    null, null, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.STATUS)))
         .willReturn(new PageImpl<>(List.of(post), PageRequest.of(0, 1), 3));
     given(loadAdminBoardPostCommentCountsPort.load(List.of(10L))).willReturn(Map.of(10L, 1L));
     given(loadAdminBoardWriterNicknamesPort.load(List.of(1L))).willReturn(Map.of(1L, "alpha"));
@@ -233,6 +243,8 @@ class GetAdminBoardPostsServiceTest {
         new GetAdminBoardPostsCommand(
             9L,
             null,
+            null,
+            null,
             AdminBoardPostStatus.OPEN,
             null,
             null,
@@ -242,7 +254,7 @@ class GetAdminBoardPostsServiceTest {
             AdminBoardPostSortKey.COMMENT_COUNT);
     var postQuery =
         new LoadAdminBoardPostsPort.AdminBoardPostQuery(
-            null, AdminBoardPostStatus.OPEN, null, null, null);
+            null, null, null, AdminBoardPostStatus.OPEN, null, null, null);
     given(loadAdminBoardPostsPort.count(postQuery)).willReturn(2L);
     given(loadAdminBoardPostListPolicyPort.maxCommentCountSortScanSize()).willReturn(100);
     given(loadAdminBoardPostsPort.load(postQuery))
@@ -268,6 +280,8 @@ class GetAdminBoardPostsServiceTest {
         new GetAdminBoardPostsCommand(
             9L,
             null,
+            null,
+            null,
             AdminBoardPostStatus.OPEN,
             null,
             null,
@@ -277,7 +291,7 @@ class GetAdminBoardPostsServiceTest {
             AdminBoardPostSortKey.COMMENT_COUNT);
     var postQuery =
         new LoadAdminBoardPostsPort.AdminBoardPostQuery(
-            null, AdminBoardPostStatus.OPEN, null, null, null);
+            null, null, null, AdminBoardPostStatus.OPEN, null, null, null);
     given(loadAdminBoardPostsPort.count(postQuery)).willReturn(2L);
     given(loadAdminBoardPostListPolicyPort.maxCommentCountSortScanSize()).willReturn(100);
     given(loadAdminBoardPostsPort.load(postQuery))
@@ -303,6 +317,8 @@ class GetAdminBoardPostsServiceTest {
         new GetAdminBoardPostsCommand(
             9L,
             null,
+            null,
+            null,
             AdminBoardPostStatus.OPEN,
             null,
             null,
@@ -312,7 +328,7 @@ class GetAdminBoardPostsServiceTest {
             AdminBoardPostSortKey.COMMENT_COUNT);
     var postQuery =
         new LoadAdminBoardPostsPort.AdminBoardPostQuery(
-            null, AdminBoardPostStatus.OPEN, null, null, null);
+            null, null, null, AdminBoardPostStatus.OPEN, null, null, null);
     given(loadAdminBoardPostsPort.count(postQuery)).willReturn(3L);
     given(loadAdminBoardPostListPolicyPort.maxCommentCountSortScanSize()).willReturn(2);
 

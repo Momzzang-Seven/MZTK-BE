@@ -16,13 +16,14 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunInternalExecutionBatchService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteInternalExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -30,7 +31,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnInternalExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.execution.internal", name = "enabled", havingValue = "true")
 public class InternalExecutionServiceConfig {
 
   @Bean
@@ -55,6 +56,7 @@ public class InternalExecutionServiceConfig {
           LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
           List<ExecutionActionHandlerPort> executionActionHandlerPorts,
           PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
+          RunAfterCommitPort runAfterCommitPort,
           Clock appClock) {
     return new TransactionalExecuteInternalExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -64,6 +66,7 @@ public class InternalExecutionServiceConfig {
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
+        runAfterCommitPort,
         appClock);
   }
 

@@ -4,6 +4,8 @@ spring:
   ai:
     model:
       chat: none
+  application:
+    name: mztk-be
 
   datasource:
     url: ${DB_URL}
@@ -109,6 +111,15 @@ answer:
     cron: "0 30 * * * *"
     zone: Asia/Seoul
 
+post:
+  publication-reconciliation:
+    enabled: false
+    cron: "0 */10 * * * *"
+    zone: "Asia/Seoul"
+    batch-size: 100
+    dry-run: true
+    max-batches-per-run: 10
+
 logging:
   level:
     root: INFO
@@ -130,11 +141,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info
+        include: health, info, prometheus
   endpoint:
     health:
       show-details: when_authorized
       roles: ROLE_ADMIN
+  tracing:
+    sampling:
+      enabled: true
+      probability: 1.0                      # 부하테스트 중 전수 수집 (운영 시 0.1로 낮출 것)
+  zipkin:
+    tracing:
+      endpoint: http://host.docker.internal:9411/api/v2/spans
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 jwt:
   secret: ${JWT_SECRET}
@@ -181,6 +202,23 @@ web3:
       batch-size: 200
       cron: "0 0 4 * * *"
       zone: "Asia/Seoul"
+    registration:
+      session:
+        ttl-seconds: 1800
+      recovery:
+        batch-size: 100
+        cron: "0 */5 * * * *"
+        zone: "Asia/Seoul"
+      finalization:
+        retry-backoff-seconds: 60
+      approval:
+        enabled: true
+        chain-id: ${WEB3_CHAIN_ID}
+        delegation-batch-impl-address: ${WEB3_EIP7702_BATCH_IMPL_ADDRESS}
+        token-contract-address: ${MZTK_TOKEN_CONTRACT_ADDRESS}
+        qna-escrow-spender-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+        marketplace-escrow-spender-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
+        ttl-seconds: 300
 
   # 보상 토큰(트레저리 → 유저)
   reward-token:
@@ -198,9 +236,10 @@ web3:
       eth-critical-threshold: ${TREASURY_ETH_CRITICAL_THRESHOLD}
 
     gas:
-      default-gas-limit: 120000
+      default-gas-limit: 300000
       default-max-priority-fee-per-gas-wei: 1000000000
       max-fee-multiplier: 2
+      estimated-gas-buffer-percent: 200
 
     worker:
       claim-ttl-seconds: 120
@@ -227,12 +266,13 @@ web3:
       max-max-fee-gwei: 60
       max-priority-fee-gwei: 2
       max-transfer-amount-eth: 5000
-      per-tx-cap-eth: 0.002
+      per-tx-cap-eth: 0.05
       daily-sponsor-cap-eth: 0.5
-      per-day-user-cap-eth: 0.02
+      per-day-user-cap-eth: 0.1
 
     authorization:
       ttl-seconds: 300
+      min-remaining-ttl-seconds: 30
       eip1559-ttl-seconds: 90
       nonce-policy: ONCHAIN
       require-chain-id-match: true
@@ -243,6 +283,9 @@ web3:
         - ${WEB3_EIP7702_BATCH_IMPL_ADDRESS}
       allowed-call-targets:
         - ${MZTK_TOKEN_CONTRACT_ADDRESS}
+        - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+        - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
+      allowed-approve-spenders:                 # approve는 spender allowlist + uint256.max 정책으로 검증
         - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
         - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
       allowed-target-contracts: []               # deprecated fallback. use split allowlists above
@@ -286,6 +329,10 @@ web3:
   escrow:
     marketplace-contract-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
     qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+    eip712-domain-name: "QnAEscrow"
+    eip712-domain-version: "1"
+    signed-at-skew-seconds: 0
+    sig-validity-duration: 900
   transfer:
     legacy-question-reward-handler-enabled: false
 

@@ -66,7 +66,8 @@ class DisableTreasuryWalletServiceTest {
 
   @Test
   void execute_savesDisabledRowAndPublishesEvent() {
-    when(loadTreasuryWalletPort.loadByAlias(ALIAS)).thenReturn(Optional.of(activeWallet()));
+    when(loadTreasuryWalletPort.loadByAliasForUpdate(ALIAS))
+        .thenReturn(Optional.of(activeWallet()));
     when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     TreasuryWalletView view = service.execute(new DisableTreasuryWalletCommand(ALIAS, OPERATOR_ID));
@@ -85,7 +86,7 @@ class DisableTreasuryWalletServiceTest {
 
   @Test
   void execute_throws_andRecordsFailureAudit_whenWalletMissing() {
-    when(loadTreasuryWalletPort.loadByAlias(ALIAS)).thenReturn(Optional.empty());
+    when(loadTreasuryWalletPort.loadByAliasForUpdate(ALIAS)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.execute(new DisableTreasuryWalletCommand(ALIAS, OPERATOR_ID)))
         .isInstanceOf(TreasuryWalletStateException.class);

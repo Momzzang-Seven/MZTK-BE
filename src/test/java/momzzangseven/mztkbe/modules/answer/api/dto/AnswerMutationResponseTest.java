@@ -3,8 +3,8 @@ package momzzangseven.mztkbe.modules.answer.api.dto;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerMutationResult;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -23,7 +23,10 @@ class AnswerMutationResponseTest {
                     new AnswerExecutionWriteView.Resource("ANSWER", "20", "PENDING_EXECUTION"),
                     "QNA_ANSWER_UPDATE",
                     new AnswerExecutionWriteView.ExecutionIntent(
-                        "intent-20", "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+                        "intent-20",
+                        "AWAITING_SIGNATURE",
+                        LocalDateTime.of(2026, 4, 14, 10, 0),
+                        1_776_129_600L),
                     new AnswerExecutionWriteView.Execution("EIP7702", 2),
                     null,
                     false)));

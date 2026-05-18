@@ -57,6 +57,7 @@ class QuestionRewardIntentEventHandlersTest {
                 "intent-1",
                 TransferExecutionIntentStatus.AWAITING_SIGNATURE,
                 LocalDateTime.now().plusMinutes(5),
+                1L,
                 TransferExecutionMode.EIP7702,
                 2,
                 TransferSignRequestBundle.forEip7702(
@@ -67,6 +68,7 @@ class QuestionRewardIntentEventHandlersTest {
                         LocalDateTime.now()
                             .plusMinutes(5)
                             .toEpochSecond(java.time.ZoneOffset.UTC))),
+                null,
                 false,
                 null,
                 null,

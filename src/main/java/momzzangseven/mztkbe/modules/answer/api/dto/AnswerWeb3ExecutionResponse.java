@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.answer.api.dto;
 
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionResumeView;
 
 public record AnswerWeb3ExecutionResponse(
     Resource resource,
@@ -19,7 +19,8 @@ public record AnswerWeb3ExecutionResponse(
         new ExecutionIntent(
             view.executionIntent().id(),
             view.executionIntent().status(),
-            view.executionIntent().expiresAt()),
+            view.executionIntent().expiresAt(),
+            view.executionIntent().expiresAtEpochSeconds()),
         new Execution(view.execution().mode(), view.execution().signCount()),
         view.transaction() == null
             ? null
@@ -29,7 +30,8 @@ public record AnswerWeb3ExecutionResponse(
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, java.time.LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, java.time.LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 

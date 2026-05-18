@@ -5,7 +5,7 @@ import lombok.Getter;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.InternalExecutionActionPolicy;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 @Getter
 @Component
-@ConditionalOnInternalExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.execution.internal", name = "enabled", havingValue = "true")
 public class InternalExecutionIssuerProperties implements LoadInternalExecutionIssuerPolicyPort {
 
   private static final String NEW_PREFIX = "web3.execution.internal";

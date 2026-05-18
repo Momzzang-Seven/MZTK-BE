@@ -6,11 +6,13 @@ import java.util.Arrays;
 import java.util.List;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardCommentService;
 import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardPostService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardCommentsService;
 import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardPostCommentsService;
 import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardPostsService;
 import momzzangseven.mztkbe.modules.admin.board.application.service.UnblockAdminBoardPostService;
@@ -51,6 +53,19 @@ class AdminOnlyAnnotationTest {
 
     assertThat(annotation).isNotNull();
     assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POSTS_VIEW");
+    assertThat(annotation.audit()).isFalse();
+  }
+
+  @Test
+  @DisplayName("관리자 전역 댓글 검색은 admin guard는 유지하되 audit=false 로 설정한다")
+  void getAdminBoardCommentsService_isGuardedWithoutAudit() throws NoSuchMethodException {
+    AdminOnly annotation =
+        GetAdminBoardCommentsService.class
+            .getMethod("execute", GetAdminBoardCommentsCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_COMMENTS_VIEW");
     assertThat(annotation.audit()).isFalse();
   }
 

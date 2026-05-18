@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
-import java.time.ZoneOffset;
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -9,9 +9,11 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionInte
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCleanupViewUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -34,6 +36,8 @@ public class GetExecutionIntentService
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
+  private final LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort;
+  private final Clock appClock;
 
   /** Loads an execution intent visible to the requester and maps it to read DTO contract. */
   @Override
@@ -56,6 +60,8 @@ public class GetExecutionIntentService
             : loadExecutionTransactionPort.findById(intent.getSubmittedTxId());
     ExecutionIntentViewMapper.ExecutionTransactionView transactionView =
         ExecutionIntentViewMapper.toTransactionView(transaction);
+    SignRequestUnavailableReason signRequestUnavailableReason =
+        signRequestUnavailableReason(intent);
 
     return new GetExecutionIntentResult(
         intent.getResourceType(),
@@ -67,9 +73,13 @@ public class GetExecutionIntentService
         intent.getPublicId(),
         intent.getStatus(),
         intent.getExpiresAt(),
+        ExecutionDeadlineEpoch.toEpochSecondsLong(intent.getExpiresAt(), appClock),
         intent.getMode(),
         intent.getMode().requiredSignCount(),
-        intent.shouldExposeSignRequest() ? buildSignRequest(intent) : null,
+        signRequestUnavailableReason == null && intent.shouldExposeSignRequest()
+            ? buildSignRequest(intent)
+            : null,
+        signRequestUnavailableReason,
         transactionView.transactionId(),
         transactionView.transactionStatus(),
         transactionView.txHash());
@@ -102,7 +112,8 @@ public class GetExecutionIntentService
               intent.getAuthorityNonce(),
               intent.getAuthorizationPayloadHash()),
           new SignRequestBundle.SubmitSignRequest(
-              intent.getExecutionDigest(), intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC)));
+              intent.getExecutionDigest(),
+              ExecutionDeadlineEpoch.toEpochSecondsLong(intent.getExpiresAt(), appClock)));
     }
 
     if (intent.getUnsignedTxSnapshot() == null) {
@@ -121,5 +132,12 @@ public class GetExecutionIntentService
             Numeric.encodeQuantity(intent.getUnsignedTxSnapshot().maxPriorityFeePerGas()),
             Numeric.encodeQuantity(intent.getUnsignedTxSnapshot().maxFeePerGas()),
             intent.getUnsignedTxSnapshot().expectedNonce()));
+  }
+
+  private SignRequestUnavailableReason signRequestUnavailableReason(ExecutionIntent intent) {
+    return ExecutionSignRequestAvailability.unavailableReason(
+        intent,
+        java.time.LocalDateTime.now(appClock),
+        loadEip7702AuthorizationTtlPort.loadMinimumRemainingSeconds());
   }
 }

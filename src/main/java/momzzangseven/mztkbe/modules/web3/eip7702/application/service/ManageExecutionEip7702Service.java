@@ -89,13 +89,19 @@ public class ManageExecutionEip7702Service implements ManageExecutionEip7702UseC
   }
 
   @Override
-  public String encodeExecute(List<Eip7702ExecutionBatchCall> calls, byte[] executionSignature) {
+  public String encodeExecute(
+      List<Eip7702ExecutionBatchCall> calls,
+      String prepareId,
+      BigInteger deadlineEpochSeconds,
+      byte[] executionSignature) {
     return eip7702TransactionCodecPort.encodeExecute(
         calls.stream()
             .map(
                 call ->
                     new Eip7702TransactionCodecPort.BatchCall(call.to(), call.value(), call.data()))
             .toList(),
+        prepareId,
+        deadlineEpochSeconds,
         executionSignature);
   }
 
