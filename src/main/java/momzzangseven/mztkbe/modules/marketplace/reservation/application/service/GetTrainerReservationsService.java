@@ -160,7 +160,7 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
 
     while (matching.size() <= initialRequest.size()) {
       ReservationStatus storedStatus =
-          ReservationListStatusFilterMapper.toStoredStatus(query.status());
+          ReservationListStatusFilterMapper.toReadRepairQueryStatus(query.status());
       List<Reservation> loaded =
           loadReservationPort.findByTrainerIdCursor(query.trainerId(), storedStatus, request);
       if (loaded.isEmpty()) {

@@ -43,12 +43,25 @@ class ReservationViewerActionPolicyTest {
   }
 
   @Test
-  @DisplayName("buyer approved reservation exposes confirm top-level action")
-  void buyerApprovedReservationExposesConfirm() {
-    ReservationViewerActions actions = resolve(reservation(ReservationStatus.APPROVED), 1L, null);
+  @DisplayName("buyer approved reservation exposes confirm top-level action after session end")
+  void buyerApprovedReservationExposesConfirmAfterSessionEnd() {
+    Reservation ended =
+        reservation(ReservationStatus.APPROVED).toBuilder()
+            .reservationDate(LocalDate.of(2026, 5, 18))
+            .build();
+
+    ReservationViewerActions actions = resolve(ended, 1L, null);
 
     assertThat(actions.viewerAction()).isEqualTo("CONFIRM");
     assertThat(actions.viewerCanComplete()).isTrue();
+  }
+
+  @Test
+  @DisplayName("buyer approved reservation before session end does not expose confirm CTA")
+  void buyerApprovedReservationBeforeSessionEndDoesNotExposeConfirm() {
+    ReservationViewerActions actions = resolve(reservation(ReservationStatus.APPROVED), 1L, null);
+
+    assertThat(actions).isEqualTo(ReservationViewerActions.none());
   }
 
   @Test

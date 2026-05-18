@@ -1,6 +1,9 @@
 -- MOM-313: marketplace user-managed EIP-7702 escrow foundation.
 -- This migration only adds user-flow state storage and guards. It does not add scheduler/admin
 -- actions or reconciliation jobs.
+-- Operational note: this file creates several normal indexes inside the default Flyway
+-- transaction. If V074 is ever applied to a large production dataset, split index creation into
+-- a maintenance-window migration or a separate non-transactional CONCURRENTLY migration.
 
 -- Preflight: duplicate active reservation rows would break the new natural guard.
 DO $$

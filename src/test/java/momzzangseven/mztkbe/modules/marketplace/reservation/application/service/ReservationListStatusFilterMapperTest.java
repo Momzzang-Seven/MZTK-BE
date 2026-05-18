@@ -33,6 +33,23 @@ class ReservationListStatusFilterMapperTest {
   }
 
   @Test
+  @DisplayName("read-repair 목록 조회는 PENDING/APPROVED 필터를 넓게 로드한 뒤 display status로 재필터링한다")
+  void pendingAndApprovedFiltersUseBroadQueryForReadRepair() {
+    assertThat(
+            ReservationListStatusFilterMapper.toReadRepairQueryStatus(
+                ReservationListStatusFilter.PENDING))
+        .isNull();
+    assertThat(
+            ReservationListStatusFilterMapper.toReadRepairQueryStatus(
+                ReservationListStatusFilter.APPROVED))
+        .isNull();
+    assertThat(
+            ReservationListStatusFilterMapper.toReadRepairQueryStatus(
+                ReservationListStatusFilter.PURCHASE_PENDING))
+        .isEqualTo(ReservationStatus.HOLDING);
+  }
+
+  @Test
   @DisplayName("purchase public filters are matched against display status, not raw HOLDING status")
   void purchaseFiltersMatchDisplayStatus() {
     Reservation preparing =

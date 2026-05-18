@@ -33,7 +33,7 @@ public final class ReservationViewerActionPolicy {
     if (buyer && status == ReservationDisplayStatus.DEADLINE_REFUND_AVAILABLE) {
       return new ReservationViewerActions("DEADLINE_REFUND", false, false, false, true, false);
     }
-    if (buyer && status == ReservationDisplayStatus.APPROVED) {
+    if (buyer && status == ReservationDisplayStatus.APPROVED && sessionEnded(reservation, clock)) {
       return new ReservationViewerActions("CONFIRM", false, false, true, false, false);
     }
     if (buyer && status == ReservationDisplayStatus.PENDING) {
@@ -54,6 +54,13 @@ public final class ReservationViewerActionPolicy {
     return reservation.getContractDeadlineAt() != null
         && LocalDateTime.now(Objects.requireNonNull(clock, "clock"))
             .isAfter(reservation.getContractDeadlineAt());
+  }
+
+  private static boolean sessionEnded(Reservation reservation, Clock clock) {
+    LocalDateTime sessionEnd =
+        LocalDateTime.of(reservation.getReservationDate(), reservation.getReservationTime())
+            .plusMinutes(reservation.getDurationMinutes());
+    return !LocalDateTime.now(Objects.requireNonNull(clock, "clock")).isBefore(sessionEnd);
   }
 
   private static ReservationViewerActions fromActiveExecution(

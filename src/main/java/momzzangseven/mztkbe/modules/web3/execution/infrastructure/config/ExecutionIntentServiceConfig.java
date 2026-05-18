@@ -3,8 +3,6 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.config;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
@@ -55,6 +53,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
@@ -222,6 +221,7 @@ public class ExecutionIntentServiceConfig {
   CreateExecutionIntentUseCase createExecutionIntentUseCase(
       CreateExecutionIntentService delegate, PlatformTransactionManager transactionManager) {
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     return new TransactionalCreateExecutionIntentUseCase(delegate, transactionTemplate);
   }
 
@@ -349,15 +349,5 @@ public class ExecutionIntentServiceConfig {
         loadExecutionTransactionPort,
         executionActionHandlerPorts,
         appClock);
-  }
-
-  private record TransactionalCreateExecutionIntentUseCase(
-      CreateExecutionIntentService delegate, TransactionTemplate transactionTemplate)
-      implements CreateExecutionIntentUseCase {
-
-    @Override
-    public CreateExecutionIntentResult execute(CreateExecutionIntentCommand command) {
-      return transactionTemplate.execute(status -> delegate.execute(command));
-    }
   }
 }

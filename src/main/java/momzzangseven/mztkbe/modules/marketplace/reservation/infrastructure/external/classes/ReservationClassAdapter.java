@@ -2,10 +2,10 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.exte
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassReservationProjection;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSlotReservationProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort;
 import org.springframework.stereotype.Component;
 
@@ -21,31 +21,33 @@ public class ReservationClassAdapter implements LoadReservationClassPort {
 
   @Override
   public Optional<ReservationClassSlotView> findSlotByIdWithLock(Long slotId) {
-    return getClassSlotInfoUseCase.findByIdWithLock(slotId).map(this::toSlotView);
+    return getClassSlotInfoUseCase
+        .findReservationProjectionByIdWithLock(slotId)
+        .map(this::toSlotView);
   }
 
   @Override
   public Optional<ReservationClassView> findClassById(Long classId) {
-    return getClassInfoUseCase.findById(classId).map(this::toClassView);
+    return getClassInfoUseCase.findReservationProjectionById(classId).map(this::toClassView);
   }
 
-  private ReservationClassSlotView toSlotView(ClassSlot slot) {
+  private ReservationClassSlotView toSlotView(ClassSlotReservationProjection slot) {
     return new ReservationClassSlotView(
-        slot.getId(),
-        slot.getClassId(),
-        slot.getDaysOfWeek(),
-        slot.getStartTime(),
-        slot.getCapacity(),
-        slot.isActive());
+        slot.slotId(),
+        slot.classId(),
+        slot.daysOfWeek(),
+        slot.startTime(),
+        slot.capacity(),
+        slot.active());
   }
 
-  private ReservationClassView toClassView(MarketplaceClass cls) {
+  private ReservationClassView toClassView(ClassReservationProjection cls) {
     return new ReservationClassView(
-        cls.getId(),
-        cls.getTrainerId(),
-        cls.getPriceAmount(),
-        cls.getDurationMinutes(),
-        cls.getTitle(),
-        cls.isActive());
+        cls.classId(),
+        cls.trainerId(),
+        cls.priceAmount(),
+        cls.durationMinutes(),
+        cls.title(),
+        cls.active());
   }
 }

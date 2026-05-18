@@ -217,7 +217,7 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
     if (executionIntent.getId() != null) {
       throw new Web3InvalidInputException("create requires id to be null");
     }
-    return toDomain(repository.save(toEntity(executionIntent)));
+    return toDomain(repository.saveAndFlush(toEntity(executionIntent)));
   }
 
   @Override

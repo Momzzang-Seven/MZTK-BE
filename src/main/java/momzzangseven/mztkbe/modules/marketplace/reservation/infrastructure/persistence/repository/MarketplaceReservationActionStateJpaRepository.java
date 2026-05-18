@@ -98,7 +98,7 @@ public interface MarketplaceReservationActionStateJpaRepository
       @Param("attemptToken") String attemptToken,
       @Param("statuses") Collection<String> statuses);
 
-  @Modifying
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       """
       UPDATE MarketplaceReservationActionStateEntity a

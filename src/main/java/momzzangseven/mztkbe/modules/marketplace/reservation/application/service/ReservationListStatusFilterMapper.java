@@ -19,6 +19,14 @@ public final class ReservationListStatusFilterMapper {
     };
   }
 
+  public static ReservationStatus toReadRepairQueryStatus(ReservationListStatusFilter filter) {
+    if (filter == ReservationListStatusFilter.PENDING
+        || filter == ReservationListStatusFilter.APPROVED) {
+      return null;
+    }
+    return toStoredStatus(filter);
+  }
+
   public static boolean matchesDisplayStatus(
       Reservation reservation, ReservationListStatusFilter filter) {
     return filter == null

@@ -12,14 +12,18 @@ import java.util.List;
 import momzzangseven.mztkbe.global.time.TimeConfig;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.ClassSlotEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionCleanupProtectionQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowActorType;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.MarketplaceReservationActionStatePersistenceAdapter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.MarketplaceReservationEscrowPersistenceAdapter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.ReservationCreateIdempotencyPersistenceAdapter;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter.ReservationExecutionCleanupProtectionPersistenceAdapter;
@@ -38,6 +42,7 @@ import org.springframework.test.context.ActiveProfiles;
 @Import({
   ReservationPersistenceAdapter.class,
   MarketplaceReservationEscrowPersistenceAdapter.class,
+  MarketplaceReservationActionStatePersistenceAdapter.class,
   ReservationCreateIdempotencyPersistenceAdapter.class,
   ReservationExecutionCleanupProtectionPersistenceAdapter.class,
   TimeConfig.class
@@ -47,6 +52,7 @@ class ReservationPersistenceAdapterTest {
   @Autowired private EntityManager entityManager;
   @Autowired private ReservationPersistenceAdapter reservationAdapter;
   @Autowired private MarketplaceReservationEscrowPersistenceAdapter escrowAdapter;
+  @Autowired private MarketplaceReservationActionStatePersistenceAdapter actionStateAdapter;
   @Autowired private ReservationCreateIdempotencyPersistenceAdapter idempotencyAdapter;
 
   @Autowired
@@ -303,6 +309,44 @@ class ReservationPersistenceAdapterTest {
     assertThat(protectedPublicIds).containsExactlyInAnyOrder("intent-current", "intent-unbound");
   }
 
+  @Test
+  @DisplayName(
+      "action state bind only succeeds for matching PREPARING attempt token and empty intent")
+  void actionStateBindRequiresPreparingTokenAndUnboundIntent() {
+    MarketplaceReservationActionState preparing =
+        actionStateAdapter.save(
+            actionState(
+                10L, 20L, 1, "attempt-token", ReservationActionStateStatus.PREPARING, null));
+
+    assertThat(
+            actionStateAdapter.bindExecutionIntent(
+                preparing.getId(), "wrong-token", "intent-wrong-token"))
+        .isEmpty();
+
+    MarketplaceReservationActionState bound =
+        actionStateAdapter
+            .bindExecutionIntent(preparing.getId(), "attempt-token", "intent-bound")
+            .orElseThrow();
+
+    assertThat(bound.getExecutionIntentPublicId()).isEqualTo("intent-bound");
+    assertThat(bound.getStatus()).isEqualTo(ReservationActionStateStatus.INTENT_BOUND);
+    assertThat(
+            actionStateAdapter.bindExecutionIntent(preparing.getId(), "attempt-token", "intent-2"))
+        .isEmpty();
+
+    MarketplaceReservationActionState failed =
+        actionStateAdapter.save(
+            actionState(
+                11L,
+                21L,
+                1,
+                "failed-token",
+                ReservationActionStateStatus.PREPARATION_FAILED,
+                null));
+    assertThat(actionStateAdapter.bindExecutionIntent(failed.getId(), "failed-token", "intent-3"))
+        .isEmpty();
+  }
+
   private String marketplacePayload(
       Long reservationId,
       Long escrowId,
@@ -320,6 +364,34 @@ class ReservationPersistenceAdapterTest {
         }
         """
         .formatted(reservationId, escrowId, actionStateId, attemptToken, actionType);
+  }
+
+  private MarketplaceReservationActionState actionState(
+      Long reservationId,
+      Long escrowId,
+      int attemptNo,
+      String attemptToken,
+      ReservationActionStateStatus status,
+      String executionIntentPublicId) {
+    LocalDateTime now = LocalDateTime.of(2026, 5, 16, 10, 0).plusMinutes(attemptNo);
+    return MarketplaceReservationActionState.builder()
+        .reservationId(reservationId)
+        .escrowId(escrowId)
+        .actionType(ReservationEscrowAction.BUYER_CANCEL)
+        .actorType(ReservationEscrowActorType.BUYER)
+        .actorUserId(1L)
+        .attemptNo(attemptNo)
+        .attemptToken(attemptToken)
+        .executionIntentPublicId(executionIntentPublicId)
+        .rootIdempotencyKey("root-" + reservationId)
+        .payloadHash("0x" + "a".repeat(64))
+        .status(status)
+        .expectedReservationStatus(ReservationStatus.PENDING)
+        .expectedEscrowStatus(ReservationEscrowStatus.LOCKED)
+        .preparationExpiresAt(now.plusMinutes(10))
+        .createdAt(now)
+        .updatedAt(now)
+        .build();
   }
 
   @Test

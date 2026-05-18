@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.web3;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionI
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayConfirmedExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentStateUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
@@ -92,6 +94,22 @@ class ReservationExecutionWriteAdapterTest {
     assertThat(state.transactionId()).isEqualTo(99L);
     assertThat(state.transactionStatus()).isEqualTo("SUCCEEDED");
     assertThat(state.txHash()).isEqualTo("0xhash");
+  }
+
+  @Test
+  void replayConfirmed_delegatesExpectedActionTypeAndResult() {
+    when(replayConfirmedExecutionIntentUseCase.execute(
+            new ReplayConfirmedExecutionIntentCommand(
+                "intent-public-1", "MARKETPLACE_CLASS_CANCEL")))
+        .thenReturn(true);
+
+    boolean replayed = adapter.replayConfirmed("intent-public-1", "MARKETPLACE_CLASS_CANCEL");
+
+    assertThat(replayed).isTrue();
+    verify(replayConfirmedExecutionIntentUseCase)
+        .execute(
+            new ReplayConfirmedExecutionIntentCommand(
+                "intent-public-1", "MARKETPLACE_CLASS_CANCEL"));
   }
 
   private GetExecutionIntentResult result(String payloadSnapshotJson) {

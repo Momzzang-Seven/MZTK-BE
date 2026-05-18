@@ -161,7 +161,7 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
 
     while (matching.size() <= initialRequest.size()) {
       ReservationStatus storedStatus =
-          ReservationListStatusFilterMapper.toStoredStatus(query.status());
+          ReservationListStatusFilterMapper.toReadRepairQueryStatus(query.status());
       List<Reservation> loaded =
           loadReservationPort.findByUserIdCursor(query.userId(), storedStatus, request);
       if (loaded.isEmpty()) {
