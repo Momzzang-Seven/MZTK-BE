@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationViewerActions;
@@ -36,11 +37,17 @@ public final class ReservationViewerActionPolicy {
     if (trainer && status == ReservationDisplayStatus.PENDING) {
       return new ReservationViewerActions("TRAINER_REJECT", false, true, false, false, false);
     }
-    if (status == ReservationDisplayStatus.DEADLINE_RECOVERY_REQUIRED
-        || status == ReservationDisplayStatus.DEADLINE_SYNC_REQUIRED) {
+    if (buyer
+        && status == ReservationDisplayStatus.DEADLINE_RECOVERY_REQUIRED
+        && deadlineExpired(reservation)) {
       return new ReservationViewerActions("RECOVER", false, false, false, false, true);
     }
     return ReservationViewerActions.none();
+  }
+
+  private static boolean deadlineExpired(Reservation reservation) {
+    return reservation.getContractDeadlineAt() != null
+        && LocalDateTime.now().isAfter(reservation.getContractDeadlineAt());
   }
 
   private static ReservationViewerActions fromActiveExecution(

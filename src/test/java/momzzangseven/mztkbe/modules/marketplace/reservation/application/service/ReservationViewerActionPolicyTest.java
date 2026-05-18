@@ -72,6 +72,48 @@ class ReservationViewerActionPolicyTest {
     assertThat(actions).isEqualTo(ReservationViewerActions.none());
   }
 
+  @Test
+  @DisplayName("DEADLINE_SYNC_REQUIRED does not expose recover CTA")
+  void deadlineSyncRequiredDoesNotExposeRecover() {
+    ReservationViewerActions actions =
+        ReservationViewerActionPolicy.resolve(
+            reservation(ReservationStatus.DEADLINE_SYNC_REQUIRED), 1L, null);
+
+    assertThat(actions).isEqualTo(ReservationViewerActions.none());
+  }
+
+  @Test
+  @DisplayName("DEADLINE_RECOVERY_REQUIRED before contract deadline does not expose recover CTA")
+  void deadlineRecoveryRequiredBeforeDeadlineDoesNotExposeRecover() {
+    Reservation reservation =
+        reservation(ReservationStatus.DEADLINE_RECOVERY_REQUIRED).toBuilder()
+            .contractDeadlineAt(LocalDateTime.now().plusDays(1))
+            .build();
+
+    ReservationViewerActions actions = ReservationViewerActionPolicy.resolve(reservation, 1L, null);
+
+    assertThat(actions).isEqualTo(ReservationViewerActions.none());
+  }
+
+  @Test
+  @DisplayName(
+      "DEADLINE_RECOVERY_REQUIRED after contract deadline exposes recover CTA only to buyer")
+  void expiredDeadlineRecoveryRequiredExposesRecoverToBuyerOnly() {
+    Reservation reservation =
+        reservation(ReservationStatus.DEADLINE_RECOVERY_REQUIRED).toBuilder()
+            .contractDeadlineAt(LocalDateTime.now().minusDays(1))
+            .build();
+
+    ReservationViewerActions buyerActions =
+        ReservationViewerActionPolicy.resolve(reservation, 1L, null);
+    ReservationViewerActions trainerActions =
+        ReservationViewerActionPolicy.resolve(reservation, 2L, null);
+
+    assertThat(buyerActions.viewerAction()).isEqualTo("RECOVER");
+    assertThat(buyerActions.viewerCanRecover()).isTrue();
+    assertThat(trainerActions).isEqualTo(ReservationViewerActions.none());
+  }
+
   private Reservation reservation(ReservationStatus status) {
     return Reservation.builder()
         .id(10L)

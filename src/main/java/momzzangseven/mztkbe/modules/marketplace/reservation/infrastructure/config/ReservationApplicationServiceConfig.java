@@ -4,6 +4,7 @@ import java.time.Clock;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApplyReservationEscrowExecutionHookUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApproveReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CancelPendingReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CheckReservationExecutionCleanupProtectionUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ClaimExpiredRefundReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CompleteReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
@@ -24,6 +25,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCleanupProtectionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
@@ -42,6 +44,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApplyReservationEscrowExecutionHookService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApproveReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CancelPendingReservationService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CheckReservationExecutionCleanupProtectionService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ClaimExpiredRefundReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CompleteReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CreateReservationService;
@@ -386,6 +389,15 @@ public class ReservationApplicationServiceConfig {
     service.setEscrowProjectionPorts(loadReservationEscrowPort, saveReservationEscrowPort);
     service.setTransactionPort(transactionPort);
     return service;
+  }
+
+  @Bean
+  CheckReservationExecutionCleanupProtectionUseCase
+      checkReservationExecutionCleanupProtectionUseCase(
+          LoadReservationExecutionCleanupProtectionPort
+              loadReservationExecutionCleanupProtectionPort) {
+    return new CheckReservationExecutionCleanupProtectionService(
+        loadReservationExecutionCleanupProtectionPort);
   }
 
   @Bean
