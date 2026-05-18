@@ -4,6 +4,8 @@ spring:
   ai:
     model:
       chat: none
+  application:
+    name: mztk-be
 
   datasource:
     url: ${DB_URL}
@@ -139,11 +141,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info
+        include: health, info, prometheus
   endpoint:
     health:
       show-details: when_authorized
       roles: ROLE_ADMIN
+  tracing:
+    sampling:
+      enabled: true
+      probability: 1.0                      # 부하테스트 중 전수 수집 (운영 시 0.1로 낮출 것)
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 jwt:
   secret: ${JWT_SECRET}
