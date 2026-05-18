@@ -9,9 +9,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +104,8 @@ class ClassReservationControllerTest {
   // ── fixtures ────────────────────────────────────────────────────────────
 
   private static final LocalDate FUTURE_DATE = LocalDate.now().plusDays(7);
+  private static final Clock TEST_CLOCK =
+      Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), ZoneId.of("Asia/Seoul"));
 
   /** Non-null class/user summary fixtures to validate the enrichment response contract. */
   private static final momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
@@ -143,7 +148,9 @@ class ClassReservationControllerTest {
         SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
         SAMPLE_TRAINER_SUMMARY.nickname(),
         null, // userNickname not exposed on user-list path
-        web3ExecutionView("MARKETPLACE_CLASS_PURCHASE", "PURCHASE", true, true));
+        50L,
+        web3ExecutionView("MARKETPLACE_CLASS_PURCHASE", "PURCHASE", true, true),
+        TEST_CLOCK);
   }
 
   private ReservationSummaryResult repairedSummaryResult() {
@@ -168,12 +175,14 @@ class ClassReservationControllerTest {
         SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
         SAMPLE_TRAINER_SUMMARY.nickname(),
         null,
+        50L,
         web3ExecutionView(
             "DEADLINE_REFUNDED",
             "MARKETPLACE_CLASS_EXPIRED_REFUND",
             "DEADLINE_REFUND",
             false,
-            false));
+            false),
+        TEST_CLOCK);
   }
 
   private GetReservationResult detailResult(Long viewerId) {
@@ -202,7 +211,9 @@ class ClassReservationControllerTest {
         SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
         SAMPLE_TRAINER_SUMMARY.nickname(),
         SAMPLE_USER_SUMMARY.nickname(),
-        web3ExecutionView("MARKETPLACE_CLASS_PURCHASE", "PURCHASE", true, true));
+        viewerId,
+        web3ExecutionView("MARKETPLACE_CLASS_PURCHASE", "PURCHASE", true, true),
+        TEST_CLOCK);
   }
 
   private GetReservationResult repairedDetailResult(Long viewerId) {
@@ -231,12 +242,14 @@ class ClassReservationControllerTest {
         SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
         SAMPLE_TRAINER_SUMMARY.nickname(),
         SAMPLE_USER_SUMMARY.nickname(),
+        viewerId,
         web3ExecutionView(
             "DEADLINE_REFUNDED",
             "MARKETPLACE_CLASS_EXPIRED_REFUND",
             "DEADLINE_REFUND",
             false,
-            false));
+            false),
+        TEST_CLOCK);
   }
 
   private ReservationExecutionResumeView web3ExecutionView(

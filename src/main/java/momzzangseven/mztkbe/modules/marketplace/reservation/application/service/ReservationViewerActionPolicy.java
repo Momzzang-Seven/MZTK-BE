@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
@@ -11,7 +12,10 @@ public final class ReservationViewerActionPolicy {
   private ReservationViewerActionPolicy() {}
 
   public static ReservationViewerActions resolve(
-      Reservation reservation, Long viewerId, ReservationExecutionResumeView web3Execution) {
+      Reservation reservation,
+      Long viewerId,
+      ReservationExecutionResumeView web3Execution,
+      Clock clock) {
     if (viewerId == null
         || (!reservation.isOwnedByUser(viewerId) && !reservation.isOwnedByTrainer(viewerId))) {
       return ReservationViewerActions.none();
@@ -39,15 +43,16 @@ public final class ReservationViewerActionPolicy {
     }
     if (buyer
         && status == ReservationDisplayStatus.DEADLINE_RECOVERY_REQUIRED
-        && deadlineExpired(reservation)) {
+        && deadlineExpired(reservation, clock)) {
       return new ReservationViewerActions("RECOVER", false, false, false, false, true);
     }
     return ReservationViewerActions.none();
   }
 
-  private static boolean deadlineExpired(Reservation reservation) {
+  private static boolean deadlineExpired(Reservation reservation, Clock clock) {
+    Clock effectiveClock = clock == null ? Clock.systemDefaultZone() : clock;
     return reservation.getContractDeadlineAt() != null
-        && LocalDateTime.now().isAfter(reservation.getContractDeadlineAt());
+        && LocalDateTime.now(effectiveClock).isAfter(reservation.getContractDeadlineAt());
   }
 
   private static ReservationViewerActions fromActiveExecution(

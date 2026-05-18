@@ -66,13 +66,15 @@ public class ReservationApplicationServiceConfig {
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
       LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase,
+      Clock clock) {
     return new GetUserReservationsService(
         loadReservationPort,
         loadClassSummaryPort,
         loadUserSummaryPort,
         loadReservationExecutionResumePort,
-        repairReservationChainReadUseCase);
+        repairReservationChainReadUseCase,
+        clock);
   }
 
   @Bean
@@ -81,13 +83,15 @@ public class ReservationApplicationServiceConfig {
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
       LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase,
+      Clock clock) {
     return new GetTrainerReservationsService(
         loadReservationPort,
         loadClassSummaryPort,
         loadUserSummaryPort,
         loadReservationExecutionResumePort,
-        repairReservationChainReadUseCase);
+        repairReservationChainReadUseCase,
+        clock);
   }
 
   @Bean
@@ -97,14 +101,16 @@ public class ReservationApplicationServiceConfig {
       LoadUserSummaryPort loadUserSummaryPort,
       LoadReservationExecutionResumePort loadReservationExecutionResumePort,
       RepairReservationChainReadUseCase repairReservationChainReadUseCase,
-      LoadReservationEscrowPort loadReservationEscrowPort) {
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      Clock clock) {
     return new GetReservationDetailService(
         loadReservationPort,
         loadClassSummaryPort,
         loadUserSummaryPort,
         loadReservationExecutionResumePort,
         repairReservationChainReadUseCase,
-        loadReservationEscrowPort);
+        loadReservationEscrowPort,
+        clock);
   }
 
   @Bean

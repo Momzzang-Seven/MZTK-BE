@@ -9,9 +9,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
@@ -97,6 +100,8 @@ class ReservationTrainerControllerTest {
   private static final String SAMPLE_THUMB = "thumb/stretch.jpg";
   private static final String SAMPLE_TRAINER_NICK = "trainer-nick";
   private static final String SAMPLE_USER_NICK = "user-nick";
+  private static final Clock TEST_CLOCK =
+      Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), ZoneId.of("Asia/Seoul"));
 
   private ReservationSummaryResult summaryResult() {
     return ReservationDisplayStatusMapper.summaryResult(
@@ -120,7 +125,9 @@ class ReservationTrainerControllerTest {
         SAMPLE_THUMB,
         SAMPLE_TRAINER_NICK,
         SAMPLE_USER_NICK,
-        web3ExecutionView("MARKETPLACE_CLASS_CANCEL", "TRAINER_REJECT", true, false));
+        100L,
+        web3ExecutionView("MARKETPLACE_CLASS_CANCEL", "TRAINER_REJECT", true, false),
+        TEST_CLOCK);
   }
 
   private ReservationSummaryResult repairedSummaryResult() {
@@ -145,8 +152,10 @@ class ReservationTrainerControllerTest {
         SAMPLE_THUMB,
         SAMPLE_TRAINER_NICK,
         SAMPLE_USER_NICK,
+        100L,
         web3ExecutionView(
-            "USER_CANCELLED", "MARKETPLACE_CLASS_CANCEL", "TRAINER_REJECT", false, false));
+            "USER_CANCELLED", "MARKETPLACE_CLASS_CANCEL", "TRAINER_REJECT", false, false),
+        TEST_CLOCK);
   }
 
   private GetReservationResult detailResult() {
@@ -175,7 +184,9 @@ class ReservationTrainerControllerTest {
         SAMPLE_THUMB,
         SAMPLE_TRAINER_NICK,
         SAMPLE_USER_NICK,
-        web3ExecutionView("MARKETPLACE_CLASS_CANCEL", "TRAINER_REJECT", true, false));
+        100L,
+        web3ExecutionView("MARKETPLACE_CLASS_CANCEL", "TRAINER_REJECT", true, false),
+        TEST_CLOCK);
   }
 
   private GetReservationResult repairedDetailResult() {
@@ -204,8 +215,10 @@ class ReservationTrainerControllerTest {
         SAMPLE_THUMB,
         SAMPLE_TRAINER_NICK,
         SAMPLE_USER_NICK,
+        100L,
         web3ExecutionView(
-            "USER_CANCELLED", "MARKETPLACE_CLASS_CANCEL", "TRAINER_REJECT", false, false));
+            "USER_CANCELLED", "MARKETPLACE_CLASS_CANCEL", "TRAINER_REJECT", false, false),
+        TEST_CLOCK);
   }
 
   private ReservationExecutionResumeView web3ExecutionView(

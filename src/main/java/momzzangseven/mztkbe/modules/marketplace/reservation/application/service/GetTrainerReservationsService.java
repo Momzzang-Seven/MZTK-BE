@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -54,13 +55,15 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
   private final LoadUserSummaryPort loadUserSummaryPort;
   private final LoadReservationExecutionResumePort loadReservationExecutionResumePort;
   private final RepairReservationChainReadUseCase repairReservationChainReadUseCase;
+  private final Clock clock;
 
   public GetTrainerReservationsService(
       LoadReservationPort loadReservationPort,
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
       LoadReservationExecutionResumePort loadReservationExecutionResumePort,
-      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase,
+      Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.loadClassSummaryPort = loadClassSummaryPort;
     this.loadUserSummaryPort = loadUserSummaryPort;
@@ -72,6 +75,22 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
         repairReservationChainReadUseCase == null
             ? noOpRepairUseCase()
             : repairReservationChainReadUseCase;
+    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
+  }
+
+  public GetTrainerReservationsService(
+      LoadReservationPort loadReservationPort,
+      LoadClassSummaryPort loadClassSummaryPort,
+      LoadUserSummaryPort loadUserSummaryPort,
+      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase) {
+    this(
+        loadReservationPort,
+        loadClassSummaryPort,
+        loadUserSummaryPort,
+        loadReservationExecutionResumePort,
+        repairReservationChainReadUseCase,
+        Clock.systemDefaultZone());
   }
 
   public GetTrainerReservationsService(
@@ -143,7 +162,8 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
                       userSummary != null ? userSummary.nickname() : null,
                       query.trainerId(),
                       ReservationExecutionResumeViewer.hydrate(
-                          r, query.trainerId(), web3ByReservationId.get(r.getId())));
+                          r, query.trainerId(), web3ByReservationId.get(r.getId())),
+                      clock);
                 })
             .toList();
 

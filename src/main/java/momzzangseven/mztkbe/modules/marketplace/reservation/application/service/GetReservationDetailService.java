@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
@@ -41,6 +42,7 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
   private final LoadReservationExecutionResumePort loadReservationExecutionResumePort;
   private final RepairReservationChainReadUseCase repairReservationChainReadUseCase;
   private final LoadReservationEscrowPort loadReservationEscrowPort;
+  private final Clock clock;
 
   public GetReservationDetailService(
       LoadReservationPort loadReservationPort,
@@ -48,7 +50,8 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
       LoadUserSummaryPort loadUserSummaryPort,
       LoadReservationExecutionResumePort loadReservationExecutionResumePort,
       RepairReservationChainReadUseCase repairReservationChainReadUseCase,
-      LoadReservationEscrowPort loadReservationEscrowPort) {
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.loadClassSummaryPort = loadClassSummaryPort;
     this.loadUserSummaryPort = loadUserSummaryPort;
@@ -61,6 +64,24 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
             ? noOpRepairUseCase()
             : repairReservationChainReadUseCase;
     this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
+  }
+
+  public GetReservationDetailService(
+      LoadReservationPort loadReservationPort,
+      LoadClassSummaryPort loadClassSummaryPort,
+      LoadUserSummaryPort loadUserSummaryPort,
+      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase,
+      LoadReservationEscrowPort loadReservationEscrowPort) {
+    this(
+        loadReservationPort,
+        loadClassSummaryPort,
+        loadUserSummaryPort,
+        loadReservationExecutionResumePort,
+        repairReservationChainReadUseCase,
+        loadReservationEscrowPort,
+        Clock.systemDefaultZone());
   }
 
   public GetReservationDetailService(
@@ -184,7 +205,8 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
         ReservationExecutionResumeViewer.hydrate(
             reservation,
             requesterId,
-            loadReservationExecutionResumePort.loadLatest(reservation.getId()).orElse(null)));
+            loadReservationExecutionResumePort.loadLatest(reservation.getId()).orElse(null)),
+        clock);
   }
 
   private Reservation applyEscrowTxHashOverride(Reservation reservation) {

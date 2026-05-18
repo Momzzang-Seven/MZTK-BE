@@ -2,9 +2,12 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationViewerActions;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
@@ -16,11 +19,13 @@ import org.junit.jupiter.api.Test;
 
 class ReservationViewerActionPolicyTest {
 
+  private static final Clock CLOCK =
+      Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
   @Test
   @DisplayName("buyer pending reservation exposes buyer cancel top-level action")
   void buyerPendingReservationExposesCancel() {
-    ReservationViewerActions actions =
-        ReservationViewerActionPolicy.resolve(reservation(ReservationStatus.PENDING), 1L, null);
+    ReservationViewerActions actions = resolve(reservation(ReservationStatus.PENDING), 1L, null);
 
     assertThat(actions.viewerAction()).isEqualTo("BUYER_CANCEL");
     assertThat(actions.viewerCanCancel()).isTrue();
@@ -30,8 +35,7 @@ class ReservationViewerActionPolicyTest {
   @Test
   @DisplayName("trainer pending reservation exposes trainer reject top-level action")
   void trainerPendingReservationExposesReject() {
-    ReservationViewerActions actions =
-        ReservationViewerActionPolicy.resolve(reservation(ReservationStatus.PENDING), 2L, null);
+    ReservationViewerActions actions = resolve(reservation(ReservationStatus.PENDING), 2L, null);
 
     assertThat(actions.viewerAction()).isEqualTo("TRAINER_REJECT");
     assertThat(actions.viewerCanReject()).isTrue();
@@ -41,8 +45,7 @@ class ReservationViewerActionPolicyTest {
   @Test
   @DisplayName("buyer approved reservation exposes confirm top-level action")
   void buyerApprovedReservationExposesConfirm() {
-    ReservationViewerActions actions =
-        ReservationViewerActionPolicy.resolve(reservation(ReservationStatus.APPROVED), 1L, null);
+    ReservationViewerActions actions = resolve(reservation(ReservationStatus.APPROVED), 1L, null);
 
     assertThat(actions.viewerAction()).isEqualTo("CONFIRM");
     assertThat(actions.viewerCanComplete()).isTrue();
@@ -55,8 +58,7 @@ class ReservationViewerActionPolicyTest {
         resumeView("MARKETPLACE_CLASS_CANCEL", "BUYER_CANCEL", true, false);
 
     ReservationViewerActions actions =
-        ReservationViewerActionPolicy.resolve(
-            reservation(ReservationStatus.PENDING), 1L, activeCancel);
+        resolve(reservation(ReservationStatus.PENDING), 1L, activeCancel);
 
     assertThat(actions.viewerAction()).isEqualTo("BUYER_CANCEL");
     assertThat(actions.viewerCanCancel()).isTrue();
@@ -66,8 +68,7 @@ class ReservationViewerActionPolicyTest {
   @Test
   @DisplayName("non participant receives no top-level marketplace action")
   void nonParticipantReceivesNoAction() {
-    ReservationViewerActions actions =
-        ReservationViewerActionPolicy.resolve(reservation(ReservationStatus.PENDING), 99L, null);
+    ReservationViewerActions actions = resolve(reservation(ReservationStatus.PENDING), 99L, null);
 
     assertThat(actions).isEqualTo(ReservationViewerActions.none());
   }
@@ -76,8 +77,7 @@ class ReservationViewerActionPolicyTest {
   @DisplayName("DEADLINE_SYNC_REQUIRED does not expose recover CTA")
   void deadlineSyncRequiredDoesNotExposeRecover() {
     ReservationViewerActions actions =
-        ReservationViewerActionPolicy.resolve(
-            reservation(ReservationStatus.DEADLINE_SYNC_REQUIRED), 1L, null);
+        resolve(reservation(ReservationStatus.DEADLINE_SYNC_REQUIRED), 1L, null);
 
     assertThat(actions).isEqualTo(ReservationViewerActions.none());
   }
@@ -87,10 +87,10 @@ class ReservationViewerActionPolicyTest {
   void deadlineRecoveryRequiredBeforeDeadlineDoesNotExposeRecover() {
     Reservation reservation =
         reservation(ReservationStatus.DEADLINE_RECOVERY_REQUIRED).toBuilder()
-            .contractDeadlineAt(LocalDateTime.now().plusDays(1))
+            .contractDeadlineAt(LocalDateTime.now(CLOCK).plusDays(1))
             .build();
 
-    ReservationViewerActions actions = ReservationViewerActionPolicy.resolve(reservation, 1L, null);
+    ReservationViewerActions actions = resolve(reservation, 1L, null);
 
     assertThat(actions).isEqualTo(ReservationViewerActions.none());
   }
@@ -101,17 +101,20 @@ class ReservationViewerActionPolicyTest {
   void expiredDeadlineRecoveryRequiredExposesRecoverToBuyerOnly() {
     Reservation reservation =
         reservation(ReservationStatus.DEADLINE_RECOVERY_REQUIRED).toBuilder()
-            .contractDeadlineAt(LocalDateTime.now().minusDays(1))
+            .contractDeadlineAt(LocalDateTime.now(CLOCK).minusDays(1))
             .build();
 
-    ReservationViewerActions buyerActions =
-        ReservationViewerActionPolicy.resolve(reservation, 1L, null);
-    ReservationViewerActions trainerActions =
-        ReservationViewerActionPolicy.resolve(reservation, 2L, null);
+    ReservationViewerActions buyerActions = resolve(reservation, 1L, null);
+    ReservationViewerActions trainerActions = resolve(reservation, 2L, null);
 
     assertThat(buyerActions.viewerAction()).isEqualTo("RECOVER");
     assertThat(buyerActions.viewerCanRecover()).isTrue();
     assertThat(trainerActions).isEqualTo(ReservationViewerActions.none());
+  }
+
+  private ReservationViewerActions resolve(
+      Reservation reservation, Long viewerId, ReservationExecutionResumeView web3Execution) {
+    return ReservationViewerActionPolicy.resolve(reservation, viewerId, web3Execution, CLOCK);
   }
 
   private Reservation reservation(ReservationStatus status) {

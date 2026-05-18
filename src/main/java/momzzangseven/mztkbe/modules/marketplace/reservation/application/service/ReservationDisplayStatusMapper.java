@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
@@ -53,9 +54,10 @@ public final class ReservationDisplayStatusMapper {
       String trainerNickname,
       String userNickname,
       Long viewerId,
-      ReservationExecutionResumeView web3Execution) {
+      ReservationExecutionResumeView web3Execution,
+      Clock clock) {
     ReservationViewerActions viewerActions =
-        ReservationViewerActionPolicy.resolve(reservation, viewerId, web3Execution);
+        ReservationViewerActionPolicy.resolve(reservation, viewerId, web3Execution, clock);
     return new GetReservationResult(
         reservation.getId(),
         reservation.getUserId(),
@@ -84,25 +86,6 @@ public final class ReservationDisplayStatusMapper {
         web3Execution);
   }
 
-  public static GetReservationResult detailResult(
-      Reservation reservation,
-      String classTitle,
-      Integer priceAmount,
-      String thumbnailFinalObjectKey,
-      String trainerNickname,
-      String userNickname,
-      ReservationExecutionResumeView web3Execution) {
-    return detailResult(
-        reservation,
-        classTitle,
-        priceAmount,
-        thumbnailFinalObjectKey,
-        trainerNickname,
-        userNickname,
-        null,
-        web3Execution);
-  }
-
   public static ReservationSummaryResult summaryResult(
       Reservation reservation,
       String classTitle,
@@ -111,9 +94,10 @@ public final class ReservationDisplayStatusMapper {
       String trainerNickname,
       String userNickname,
       Long viewerId,
-      ReservationExecutionResumeView web3Execution) {
+      ReservationExecutionResumeView web3Execution,
+      Clock clock) {
     ReservationViewerActions viewerActions =
-        ReservationViewerActionPolicy.resolve(reservation, viewerId, web3Execution);
+        ReservationViewerActionPolicy.resolve(reservation, viewerId, web3Execution, clock);
     return new ReservationSummaryResult(
         reservation.getId(),
         reservation.getSlotId(),
@@ -135,25 +119,6 @@ public final class ReservationDisplayStatusMapper {
         userNickname,
         thumbnailFinalObjectKey,
         viewerActions,
-        web3Execution);
-  }
-
-  public static ReservationSummaryResult summaryResult(
-      Reservation reservation,
-      String classTitle,
-      Integer priceAmount,
-      String thumbnailFinalObjectKey,
-      String trainerNickname,
-      String userNickname,
-      ReservationExecutionResumeView web3Execution) {
-    return summaryResult(
-        reservation,
-        classTitle,
-        priceAmount,
-        thumbnailFinalObjectKey,
-        trainerNickname,
-        userNickname,
-        null,
         web3Execution);
   }
 }
