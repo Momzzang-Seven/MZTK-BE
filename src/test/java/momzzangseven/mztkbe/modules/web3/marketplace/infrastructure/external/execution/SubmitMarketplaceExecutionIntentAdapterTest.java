@@ -259,7 +259,10 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
     }
 
     @Override
-    protected void doBegin(Object transaction, TransactionDefinition definition) {}
+    protected void doBegin(Object transaction, TransactionDefinition definition) {
+      assertThat(definition.getPropagationBehavior())
+          .isEqualTo(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
 
     @Override
     protected void doCommit(DefaultTransactionStatus status) {}
