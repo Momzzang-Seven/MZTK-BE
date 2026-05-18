@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
 /**
@@ -55,9 +56,13 @@ public record GetReservationResult(
     LocalTime reservationTime,
     int durationMinutes,
     ReservationStatus status,
+    ReservationEscrowStatus escrowStatus,
     String userRequest,
     String orderId,
+    String orderKey,
     String txHash,
+    LocalDateTime contractDeadlineAt,
+    Long contractDeadlineEpochSeconds,
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     String classTitle,
@@ -119,9 +124,13 @@ public record GetReservationResult(
         reservation.getReservationTime(),
         reservation.getDurationMinutes(),
         reservation.getStatus(),
+        reservation.getEffectiveEscrowStatus(),
         reservation.getUserRequest(),
         reservation.getOrderId(),
+        reservation.getOrderKey(),
         reservation.getTxHash(),
+        reservation.getContractDeadlineAt(),
+        reservation.getContractDeadlineEpochSeconds(),
         reservation.getCreatedAt(),
         reservation.getUpdatedAt(),
         classTitle,

@@ -147,6 +147,22 @@ class ReservationChainReadRepairServiceTest {
   }
 
   @Test
+  @DisplayName("batch repair는 RPC read 실패에서도 조회 API를 깨지 않고 원본 예약을 반환한다")
+  void repairBatch_rpcFailure_returnsOriginalReservations() {
+    Reservation reservation = syncRequiredReservation(1L, "0x" + "0".repeat(63) + "1");
+    given(loadReservationEscrowOrderPort.getOrders(List.of(reservation.getOrderKey())))
+        .willThrow(new IllegalStateException("rpc unavailable"));
+    ReservationChainReadRepairService sut =
+        new ReservationChainReadRepairService(
+            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+
+    List<Reservation> repaired = sut.repairBatch(List.of(reservation));
+
+    assertThat(repaired).containsExactly(reservation);
+    then(saveReservationPort).shouldHaveNoInteractions();
+  }
+
+  @Test
   @DisplayName("repairOne은 단건 상세 조회에서 getOrder를 사용한다")
   void repairOne_usesGetOrder() {
     Reservation reservation = syncRequiredReservation(1L, "0x" + "0".repeat(63) + "1");
@@ -165,6 +181,22 @@ class ReservationChainReadRepairServiceTest {
 
     assertThat(repaired.getStatus()).isEqualTo(ReservationStatus.PENDING);
     then(loadReservationEscrowOrderPort).should().getOrder(reservation.getOrderKey());
+  }
+
+  @Test
+  @DisplayName("repairOne은 RPC read 실패에서도 원본 예약을 반환한다")
+  void repairOne_rpcFailure_returnsOriginalReservation() {
+    Reservation reservation = syncRequiredReservation(1L, "0x" + "0".repeat(63) + "1");
+    given(loadReservationEscrowOrderPort.getOrder(reservation.getOrderKey()))
+        .willThrow(new IllegalStateException("rpc unavailable"));
+    ReservationChainReadRepairService sut =
+        new ReservationChainReadRepairService(
+            loadReservationPort, loadReservationEscrowOrderPort, saveReservationPort, CLOCK);
+
+    Reservation repaired = sut.repairOne(reservation);
+
+    assertThat(repaired).isSameAs(reservation);
+    then(saveReservationPort).shouldHaveNoInteractions();
   }
 
   private Reservation syncRequiredReservation(Long id, String orderKey) {

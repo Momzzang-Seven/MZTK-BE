@@ -1,8 +1,10 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
 /**
@@ -45,7 +47,11 @@ public record ReservationSummaryResult(
     LocalTime reservationTime,
     int durationMinutes,
     ReservationStatus status,
+    ReservationEscrowStatus escrowStatus,
     String userRequest,
+    String orderKey,
+    LocalDateTime contractDeadlineAt,
+    Long contractDeadlineEpochSeconds,
     String classTitle,
     Integer priceAmount,
     String trainerNickname,
@@ -98,7 +104,11 @@ public record ReservationSummaryResult(
         reservation.getReservationTime(),
         reservation.getDurationMinutes(),
         reservation.getStatus(),
+        reservation.getEffectiveEscrowStatus(),
         reservation.getUserRequest(),
+        reservation.getOrderKey(),
+        reservation.getContractDeadlineAt(),
+        reservation.getContractDeadlineEpochSeconds(),
         classTitle,
         priceAmount,
         trainerNickname,

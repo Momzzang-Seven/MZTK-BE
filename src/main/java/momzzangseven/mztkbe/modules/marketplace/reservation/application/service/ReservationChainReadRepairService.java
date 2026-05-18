@@ -70,6 +70,14 @@ public class ReservationChainReadRepairService implements RepairReservationChain
       return repairFromOrder(reservation, order);
     } catch (MarketplaceWeb3DisabledException e) {
       return reservation;
+    } catch (RuntimeException e) {
+      log.warn(
+          "Skipping reservation chain read repair after getOrder failure: reservationId={},"
+              + " orderKey={}",
+          reservation.getId(),
+          reservation.getOrderKey(),
+          e);
+      return reservation;
     }
   }
 
@@ -90,6 +98,12 @@ public class ReservationChainReadRepairService implements RepairReservationChain
                       (left, ignored) -> left,
                       LinkedHashMap::new));
     } catch (MarketplaceWeb3DisabledException e) {
+      return reservations;
+    } catch (RuntimeException e) {
+      log.warn(
+          "Skipping reservation chain read repair batch after getOrders failure: reservationIds={}",
+          candidates.stream().map(Reservation::getId).toList(),
+          e);
       return reservations;
     }
     return reservations.stream()

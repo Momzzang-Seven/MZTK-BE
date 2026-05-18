@@ -356,6 +356,62 @@ class CreateReservationServiceTest {
     }
 
     @Test
+    @DisplayName("[CR-14] Phase B 전에 purchase hold가 만료되면 intent를 취소하고 HOLD_EXPIRED로 정리한다")
+    void phase_b_전에_hold가_만료되면_intent를_취소하고_hold_expired로_정리한다() {
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(Optional.empty());
+      given(
+              loadReservationPort.findActiveByBuyerAndSlotDateTimeWithLock(
+                  any(), any(), any(), any()))
+          .willReturn(Optional.empty());
+      given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
+          .willReturn(0);
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0, ReservationCreateIdempotency.class));
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved =
+                    invocation.getArgument(0, Reservation.class).toBuilder()
+                        .id(1L)
+                        .version(0L)
+                        .build();
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationPort.findByIdWithLock(1L))
+          .willAnswer(
+              invocation ->
+                  Optional.of(
+                      latestSaved.get().toBuilder()
+                          .holdExpiresAt(LocalDateTime.now(FIXED_CLOCK).minusSeconds(1))
+                          .build()));
+      given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+      given(cancelReservationEscrowExecutionPort.cancelSignableIntent(any(), any(), any()))
+          .willReturn(true);
+
+      assertThatThrownBy(() -> sut.execute(command))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_STALE_SIGN_REQUEST.getCode()));
+
+      then(cancelReservationEscrowExecutionPort)
+          .should()
+          .cancelSignableIntent(
+              org.mockito.ArgumentMatchers.eq("intent-1"),
+              org.mockito.ArgumentMatchers.eq("MARKETPLACE_PHASE_B_BIND_FAILED"),
+              any());
+      assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.HOLD_EXPIRED);
+    }
+
+    @Test
     @DisplayName("[CR-08] 같은 슬롯의 만료된 unbound hold는 HOLD_EXPIRED로 전환하고 새 예약을 진행한다")
     void 만료된_홀드_정리_후_예약_생성() {
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));

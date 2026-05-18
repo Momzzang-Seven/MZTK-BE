@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -106,7 +107,11 @@ class ReservationTrainerControllerTest {
             .reservationTime(LocalTime.of(10, 0))
             .durationMinutes(60)
             .status(ReservationStatus.PENDING)
+            .escrowStatus(ReservationEscrowStatus.LOCKED)
             .userRequest("부탁드립니다")
+            .orderKey("0x" + "1".repeat(64))
+            .contractDeadlineAt(LocalDateTime.of(2025, 6, 10, 10, 0))
+            .contractDeadlineEpochSeconds(1_749_528_000L)
             .build(),
         SAMPLE_CLASS_TITLE,
         SAMPLE_PRICE,
@@ -127,7 +132,11 @@ class ReservationTrainerControllerTest {
             .reservationTime(LocalTime.of(10, 0))
             .durationMinutes(60)
             .status(ReservationStatus.USER_CANCELLED)
+            .escrowStatus(ReservationEscrowStatus.REFUNDED)
             .userRequest("부탁드립니다")
+            .orderKey("0x" + "2".repeat(64))
+            .contractDeadlineAt(LocalDateTime.of(2025, 6, 10, 10, 0))
+            .contractDeadlineEpochSeconds(1_749_528_000L)
             .build(),
         SAMPLE_CLASS_TITLE,
         SAMPLE_PRICE,
@@ -149,9 +158,13 @@ class ReservationTrainerControllerTest {
             .reservationTime(LocalTime.of(10, 0))
             .durationMinutes(60)
             .status(ReservationStatus.PENDING)
+            .escrowStatus(ReservationEscrowStatus.LOCKED)
             .userRequest("부탁드립니다")
             .orderId("order-abc")
+            .orderKey("0x" + "1".repeat(64))
             .txHash(null)
+            .contractDeadlineAt(LocalDateTime.of(2025, 6, 10, 10, 0))
+            .contractDeadlineEpochSeconds(1_749_528_000L)
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
             .build(),
@@ -174,9 +187,13 @@ class ReservationTrainerControllerTest {
             .reservationTime(LocalTime.of(10, 0))
             .durationMinutes(60)
             .status(ReservationStatus.USER_CANCELLED)
+            .escrowStatus(ReservationEscrowStatus.REFUNDED)
             .userRequest("부탁드립니다")
             .orderId("order-abc")
+            .orderKey("0x" + "2".repeat(64))
             .txHash("0xcancel")
+            .contractDeadlineAt(LocalDateTime.of(2025, 6, 10, 10, 0))
+            .contractDeadlineEpochSeconds(1_749_528_000L)
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
             .build(),
@@ -257,6 +274,12 @@ class ReservationTrainerControllerTest {
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservations[0].reservationId").value(1))
           .andExpect(jsonPath("$.data.reservations[0].status").value("PENDING"))
+          .andExpect(jsonPath("$.data.reservations[0].escrowStatus").value("LOCKED"))
+          .andExpect(jsonPath("$.data.reservations[0].orderKey").value("0x" + "1".repeat(64)))
+          .andExpect(
+              jsonPath("$.data.reservations[0].contractDeadlineAt").value("2025-06-10T10:00:00"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].contractDeadlineEpochSeconds").value(1_749_528_000L))
           // enrichment contract — trainer sees class info, own nickname, and booker nickname
           .andExpect(jsonPath("$.data.reservations[0].classTitle").value(SAMPLE_CLASS_TITLE))
           .andExpect(jsonPath("$.data.reservations[0].priceAmount").value(SAMPLE_PRICE))
@@ -299,6 +322,8 @@ class ReservationTrainerControllerTest {
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservations[0].reservationId").value(1))
           .andExpect(jsonPath("$.data.reservations[0].status").value("USER_CANCELLED"))
+          .andExpect(jsonPath("$.data.reservations[0].escrowStatus").value("REFUNDED"))
+          .andExpect(jsonPath("$.data.reservations[0].orderKey").value("0x" + "2".repeat(64)))
           .andExpect(
               jsonPath("$.data.reservations[0].web3Execution.resource.status")
                   .value("USER_CANCELLED"))
@@ -375,6 +400,10 @@ class ReservationTrainerControllerTest {
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservationId").value(1))
           .andExpect(jsonPath("$.data.trainerId").value(100))
+          .andExpect(jsonPath("$.data.escrowStatus").value("LOCKED"))
+          .andExpect(jsonPath("$.data.orderKey").value("0x" + "1".repeat(64)))
+          .andExpect(jsonPath("$.data.contractDeadlineAt").value("2025-06-10T10:00:00"))
+          .andExpect(jsonPath("$.data.contractDeadlineEpochSeconds").value(1_749_528_000L))
           // enrichment contract
           .andExpect(jsonPath("$.data.classTitle").value(SAMPLE_CLASS_TITLE))
           .andExpect(jsonPath("$.data.priceAmount").value(SAMPLE_PRICE))
@@ -406,6 +435,8 @@ class ReservationTrainerControllerTest {
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservationId").value(1))
           .andExpect(jsonPath("$.data.status").value("USER_CANCELLED"))
+          .andExpect(jsonPath("$.data.escrowStatus").value("REFUNDED"))
+          .andExpect(jsonPath("$.data.orderKey").value("0x" + "2".repeat(64)))
           .andExpect(jsonPath("$.data.txHash").value("0xcancel"))
           .andExpect(jsonPath("$.data.web3Execution.resource.status").value("USER_CANCELLED"))
           .andExpect(jsonPath("$.data.web3Execution.actionType").value("MARKETPLACE_CLASS_CANCEL"))

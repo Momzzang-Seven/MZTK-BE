@@ -33,6 +33,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -129,7 +130,11 @@ class ClassReservationControllerTest {
             .reservationTime(LocalTime.of(10, 0))
             .durationMinutes(60)
             .status(ReservationStatus.PENDING)
+            .escrowStatus(ReservationEscrowStatus.LOCKED)
             .userRequest(null)
+            .orderKey("0x" + "1".repeat(64))
+            .contractDeadlineAt(LocalDateTime.of(2025, 6, 10, 10, 0))
+            .contractDeadlineEpochSeconds(1_749_528_000L)
             .build(),
         SAMPLE_CLASS_SUMMARY.title(),
         SAMPLE_CLASS_SUMMARY.priceAmount(),
@@ -150,7 +155,11 @@ class ClassReservationControllerTest {
             .reservationTime(LocalTime.of(10, 0))
             .durationMinutes(60)
             .status(ReservationStatus.DEADLINE_REFUNDED)
+            .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUNDED)
             .userRequest(null)
+            .orderKey("0x" + "2".repeat(64))
+            .contractDeadlineAt(LocalDateTime.of(2025, 6, 10, 10, 0))
+            .contractDeadlineEpochSeconds(1_749_528_000L)
             .build(),
         SAMPLE_CLASS_SUMMARY.title(),
         SAMPLE_CLASS_SUMMARY.priceAmount(),
@@ -176,9 +185,13 @@ class ClassReservationControllerTest {
             .reservationTime(LocalTime.of(10, 0))
             .durationMinutes(60)
             .status(ReservationStatus.PENDING)
+            .escrowStatus(ReservationEscrowStatus.LOCKED)
             .userRequest(null)
             .orderId("order-abc")
+            .orderKey("0x" + "1".repeat(64))
             .txHash(null)
+            .contractDeadlineAt(LocalDateTime.of(2025, 6, 10, 10, 0))
+            .contractDeadlineEpochSeconds(1_749_528_000L)
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
             .build(),
@@ -201,9 +214,13 @@ class ClassReservationControllerTest {
             .reservationTime(LocalTime.of(10, 0))
             .durationMinutes(60)
             .status(ReservationStatus.DEADLINE_REFUNDED)
+            .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUNDED)
             .userRequest(null)
             .orderId("order-abc")
+            .orderKey("0x" + "2".repeat(64))
             .txHash("0xrefund")
+            .contractDeadlineAt(LocalDateTime.of(2025, 6, 10, 10, 0))
+            .contractDeadlineEpochSeconds(1_749_528_000L)
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
             .build(),
@@ -341,6 +358,12 @@ class ClassReservationControllerTest {
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservations[0].reservationId").value(1))
           .andExpect(jsonPath("$.data.reservations[0].status").value("PENDING"))
+          .andExpect(jsonPath("$.data.reservations[0].escrowStatus").value("LOCKED"))
+          .andExpect(jsonPath("$.data.reservations[0].orderKey").value("0x" + "1".repeat(64)))
+          .andExpect(
+              jsonPath("$.data.reservations[0].contractDeadlineAt").value("2025-06-10T10:00:00"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].contractDeadlineEpochSeconds").value(1_749_528_000L))
           // enrichment contract — new fields must be present in the response
           .andExpect(jsonPath("$.data.reservations[0].classTitle").value("요가 기초"))
           .andExpect(jsonPath("$.data.reservations[0].priceAmount").value(50000))
@@ -453,6 +476,10 @@ class ClassReservationControllerTest {
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservationId").value(1))
           .andExpect(jsonPath("$.data.orderId").value("order-abc"))
+          .andExpect(jsonPath("$.data.escrowStatus").value("LOCKED"))
+          .andExpect(jsonPath("$.data.orderKey").value("0x" + "1".repeat(64)))
+          .andExpect(jsonPath("$.data.contractDeadlineAt").value("2025-06-10T10:00:00"))
+          .andExpect(jsonPath("$.data.contractDeadlineEpochSeconds").value(1_749_528_000L))
           // enrichment contract
           .andExpect(jsonPath("$.data.classTitle").value("요가 기초"))
           .andExpect(jsonPath("$.data.priceAmount").value(50000))

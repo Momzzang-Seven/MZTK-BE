@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.web3;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
@@ -15,6 +17,8 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecut
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -36,6 +40,7 @@ public class ReservationExecutionWriteAdapter
   private final GetExecutionIntentUseCase getExecutionIntentUseCase;
   private final GetExecutionIntentStateUseCase getExecutionIntentStateUseCase;
   private final ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase;
+  private final ObjectMapper objectMapper;
 
   @Override
   public ReservationExecutionWriteView load(Long requesterUserId, String executionIntentId) {
@@ -58,6 +63,7 @@ public class ReservationExecutionWriteAdapter
   }
 
   private ReservationExecutionWriteView toView(GetExecutionIntentResult result) {
+    MarketplaceEscrowExecutionPayload payload = marketplacePayload(result.payloadSnapshotJson());
     return new ReservationExecutionWriteView(
         new ReservationExecutionWriteView.Resource(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
@@ -74,8 +80,45 @@ public class ReservationExecutionWriteAdapter
             ? null
             : result.signRequestUnavailableReason().name(),
         false,
-        null,
-        null);
+        toSignatureMeta(payload, result),
+        toTokenMovement(payload == null ? null : payload.tokenMovement()));
+  }
+
+  private MarketplaceEscrowExecutionPayload marketplacePayload(String payloadSnapshotJson) {
+    if (payloadSnapshotJson == null || payloadSnapshotJson.isBlank()) {
+      return null;
+    }
+    try {
+      return objectMapper.readValue(payloadSnapshotJson, MarketplaceEscrowExecutionPayload.class);
+    } catch (JsonProcessingException e) {
+      return null;
+    }
+  }
+
+  private ReservationExecutionWriteView.SignatureMeta toSignatureMeta(
+      MarketplaceEscrowExecutionPayload payload, GetExecutionIntentResult result) {
+    if (payload == null || payload.signedAt() == null) {
+      return null;
+    }
+    long expiresAt = result.expiresAtEpochSeconds();
+    if (expiresAt <= payload.signedAt()) {
+      return null;
+    }
+    return new ReservationExecutionWriteView.SignatureMeta(payload.signedAt(), expiresAt);
+  }
+
+  private ReservationExecutionWriteView.TokenMovement toTokenMovement(
+      MarketplaceTokenMovement movement) {
+    if (movement == null) {
+      return null;
+    }
+    return new ReservationExecutionWriteView.TokenMovement(
+        movement.tokenAddress(),
+        movement.amountBaseUnits().toString(),
+        movement.fromRole(),
+        movement.fromAddress(),
+        movement.toRole(),
+        movement.toAddress());
   }
 
   private ReservationExecutionStateView toStateView(GetExecutionIntentStateResult result) {

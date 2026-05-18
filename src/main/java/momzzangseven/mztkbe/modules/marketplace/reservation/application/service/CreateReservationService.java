@@ -472,6 +472,7 @@ public class CreateReservationService implements CreateReservationUseCase {
                         ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
                         "Reservation not found: " + phaseA.reservation().getId()));
     validatePurchaseBindSnapshot(current, phaseA.reservation());
+    validatePurchaseHoldStillActive(current);
     Reservation bound =
         saveReservationPort.save(
             current.bindPurchaseIntent(prepared.web3().executionIntent().id()));
@@ -566,6 +567,15 @@ public class CreateReservationService implements CreateReservationUseCase {
     }
   }
 
+  private void validatePurchaseHoldStillActive(Reservation current) {
+    if (current.getHoldExpiresAt() != null
+        && !LocalDateTime.now(clock).isBefore(current.getHoldExpiresAt())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_STALE_SIGN_REQUEST,
+          "marketplace purchase hold expired before execution intent bind");
+    }
+  }
+
   private void markPurchasePrepareFailed(PhaseAResult phaseA, RuntimeException cause) {
     runInTransaction(
         () -> {
@@ -591,7 +601,32 @@ public class CreateReservationService implements CreateReservationUseCase {
     if (!cancelSignablePreparedIntent(prepared, cause)) {
       return;
     }
+    if (isExpiredPurchaseHold(cause)) {
+      markPurchaseHoldExpired(phaseA);
+      return;
+    }
     markPurchasePrepareFailed(phaseA, cause);
+  }
+
+  private boolean isExpiredPurchaseHold(RuntimeException cause) {
+    return cause instanceof BusinessException businessException
+        && ErrorCode.MARKETPLACE_STALE_SIGN_REQUEST.getCode().equals(businessException.getCode());
+  }
+
+  private void markPurchaseHoldExpired(PhaseAResult phaseA) {
+    runInTransaction(
+        () -> {
+          loadReservationPort
+              .findByIdWithLock(phaseA.reservation().getId())
+              .filter(
+                  reservation ->
+                      reservation.getStatus() == ReservationStatus.PURCHASE_PREPARING
+                          && reservation.getCurrentExecutionIntentPublicId() == null)
+              .ifPresent(reservation -> saveReservationPort.save(reservation.markHoldExpired()));
+          saveReservationCreateIdempotencyPort.save(
+              phaseA.idempotency().markFailed("{\"status\":\"HOLD_EXPIRED\"}"));
+          return null;
+        });
   }
 
   private boolean cancelSignablePreparedIntent(
