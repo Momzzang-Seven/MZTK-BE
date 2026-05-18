@@ -6,13 +6,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Per-item transaction processor for the auto-settle batch job.
@@ -21,8 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
  * on-chain or persistence failure does not prevent other candidates from being settled in the same
  * scheduler run.
  *
- * <p>Must be a separate Spring bean to cross the proxy boundary required for AOP transaction
- * interception.
+ * <p>Transaction boundaries are delegated to {@link RunReservationTransactionPort} so this
+ * application service does not depend on Spring transaction infrastructure.
  *
  * <p><b>Transaction ordering (DB-first, escrow-after):</b><br>
  * The reservation status is persisted as AUTO_SETTLED first. Then the on-chain {@code adminSettle}
@@ -30,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
  * AUTO_SETTLED (correct terminal state) and the missing txHash can be reconciled separately.
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class AutoSettleBatchItemProcessor {
 
@@ -39,6 +36,7 @@ public class AutoSettleBatchItemProcessor {
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  private final RunReservationTransactionPort runReservationTransactionPort;
   private final RunReservationPostCommitPort runReservationPostCommitPort;
   private final Clock clock;
 
@@ -54,8 +52,15 @@ public class AutoSettleBatchItemProcessor {
    * adminSettle on-chain → update txHash in a new short transaction. This prevents successful
    * on-chain settlement from being rolled back locally by a commit failure.
    */
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void process(Reservation staleReservation) {
+    runReservationTransactionPort.requiresNew(
+        () -> {
+          processInTransaction(staleReservation);
+          return null;
+        });
+  }
+
+  private void processInTransaction(Reservation staleReservation) {
     // Re-fetch with pessimistic write lock to prevent concurrent state conflicts.
     Reservation reservation =
         loadReservationPort

@@ -587,27 +587,32 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     if (flow.action() != RecoveryAction.DEADLINE_REFUND) {
       MarketplaceReservationActionState actionState =
           findMatchingActionState(reservation, toEscrowAction(flow.action())).orElse(null);
-      if (actionState == null && flow.action() != RecoveryAction.PURCHASE) {
-        actionState =
-            createActionState(
-                reservation,
-                escrow,
-                toEscrowAction(flow.action()),
-                actorType(flow.action()),
-                actorUserId(reservation, flow),
-                expectedReservationStatus(flow.action()),
-                ReservationEscrowStatus.LOCKED,
-                reservation.getRejectionReason());
-        return PreparedLocalState.unchangedWithNewActionState(reservation, escrow, actionState);
+      if (actionState != null && !isBindablePreparingActionState(actionState)) {
+        return rotateRetryActionState(reservation, escrow, flow, actionState);
       }
-      return PreparedLocalState.unchanged(reservation, escrow, actionState);
+      if (actionState != null) {
+        return PreparedLocalState.unchanged(reservation, escrow, actionState);
+      }
+      actionState =
+          createActionState(
+              reservation,
+              escrow,
+              toEscrowAction(flow.action()),
+              actorType(flow.action()),
+              actorUserId(reservation, flow),
+              expectedReservationStatus(flow.action()),
+              expectedEscrowStatus(flow.action()),
+              reservation.getRejectionReason());
+      return PreparedLocalState.unchangedWithNewActionState(reservation, escrow, actionState);
     }
     if (reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING) {
-      return PreparedLocalState.unchanged(
-          reservation,
-          escrow,
+      MarketplaceReservationActionState actionState =
           findMatchingActionState(reservation, ReservationEscrowAction.DEADLINE_REFUND)
-              .orElse(null));
+              .orElse(null);
+      if (actionState != null && !isBindablePreparingActionState(actionState)) {
+        return rotateRetryActionState(reservation, escrow, flow, actionState);
+      }
+      return PreparedLocalState.unchanged(reservation, escrow, actionState);
     }
     if (reservation.getContractDeadlineAt() == null) {
       throw new MarketplaceReservationStateException(
@@ -636,6 +641,53 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
             ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE,
             null);
     return PreparedLocalState.newPending(pending, escrow, actionState);
+  }
+
+  private boolean isBindablePreparingActionState(MarketplaceReservationActionState actionState) {
+    return actionState.getStatus() == ReservationActionStateStatus.PREPARING
+        && actionState.getExecutionIntentPublicId() == null;
+  }
+
+  private PreparedLocalState rotateRetryActionState(
+      Reservation reservation,
+      MarketplaceReservationEscrow escrow,
+      RecoveryFlow flow,
+      MarketplaceReservationActionState staleActionState) {
+    saveReservationActionStatePort.save(
+        staleActionState.toBuilder()
+            .status(ReservationActionStateStatus.STALE)
+            .retryable(false)
+            .errorCode("RETRY_SUPERSEDED")
+            .errorReason("marketplace recovery created a newer action-state")
+            .build());
+    Reservation retrying = saveReservationPort.save(resetPendingAttemptForRetry(reservation, flow));
+    MarketplaceReservationActionState nextActionState =
+        createActionState(
+            retrying,
+            escrow,
+            toEscrowAction(flow.action()),
+            actorType(flow.action()),
+            actorUserId(retrying, flow),
+            expectedReservationStatus(flow.action()),
+            expectedEscrowStatus(flow.action()),
+            retrying.getRejectionReason());
+    return PreparedLocalState.unchangedWithNewActionState(retrying, escrow, nextActionState);
+  }
+
+  private Reservation resetPendingAttemptForRetry(Reservation reservation, RecoveryFlow flow) {
+    String attemptToken = UUID.randomUUID().toString();
+    Reservation.ReservationBuilder builder =
+        reservation.toBuilder()
+            .currentExecutionIntentPublicId(null)
+            .pendingAttemptToken(attemptToken)
+            .pendingAction(toEscrowAction(flow.action()));
+    if (flow.action() == RecoveryAction.PURCHASE) {
+      builder
+          .status(ReservationStatus.HOLDING)
+          .escrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
+          .holdExpiresAt(LocalDateTime.now(clock).plusMinutes(10));
+    }
+    return builder.build();
   }
 
   private Reservation bind(
@@ -995,9 +1047,18 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
   private ReservationStatus expectedReservationStatus(RecoveryAction action) {
     return switch (action) {
+      case PURCHASE -> ReservationStatus.HOLDING;
       case BUYER_CONFIRM -> ReservationStatus.APPROVED;
       case DEADLINE_REFUND -> ReservationStatus.DEADLINE_REFUND_AVAILABLE;
       default -> ReservationStatus.PENDING;
+    };
+  }
+
+  private ReservationEscrowStatus expectedEscrowStatus(RecoveryAction action) {
+    return switch (action) {
+      case PURCHASE -> ReservationEscrowStatus.PURCHASE_PREPARING;
+      case DEADLINE_REFUND -> ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE;
+      default -> ReservationEscrowStatus.LOCKED;
     };
   }
 

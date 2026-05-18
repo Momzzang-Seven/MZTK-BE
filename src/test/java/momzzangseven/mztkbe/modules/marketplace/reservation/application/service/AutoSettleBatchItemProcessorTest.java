@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
@@ -37,6 +38,7 @@ class AutoSettleBatchItemProcessorTest {
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  @Mock private RunReservationTransactionPort runReservationTransactionPort;
   @Mock private RunReservationPostCommitPort runReservationPostCommitPort;
   @Mock private Clock clock;
 
@@ -46,6 +48,14 @@ class AutoSettleBatchItemProcessorTest {
   void setUpClock() {
     given(clock.instant()).willReturn(Instant.parse("2026-05-16T00:00:00Z"));
     given(clock.getZone()).willReturn(ZoneId.of("Asia/Seoul"));
+    given(
+            runReservationTransactionPort.requiresNew(
+                org.mockito.ArgumentMatchers.<java.util.function.Supplier<Void>>any()))
+        .willAnswer(
+            invocation -> {
+              invocation.<java.util.function.Supplier<Void>>getArgument(0).get();
+              return null;
+            });
   }
 
   @Test

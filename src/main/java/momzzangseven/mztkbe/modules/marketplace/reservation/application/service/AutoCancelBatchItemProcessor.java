@@ -7,14 +7,12 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Per-item transaction processor for the auto-cancel batch job.
@@ -23,8 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
  * failures: if on-chain refund or strike recording fails for one reservation, the others in the
  * same scheduler run are not rolled back.
  *
- * <p>This class must be a separate Spring bean (not a private inner class) because Spring AOP
- * proxy-based transaction management only intercepts calls that cross bean boundaries.
+ * <p>Transaction boundaries are delegated to {@link RunReservationTransactionPort} so this
+ * application service does not depend on Spring transaction infrastructure.
  *
  * <p><b>Transaction ordering (DB-first, escrow-after):</b><br>
  * The reservation status is persisted first. Then the on-chain {@code adminRefund} call is made. If
@@ -34,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
  * detect and recover from.
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class AutoCancelBatchItemProcessor {
 
@@ -44,6 +41,7 @@ public class AutoCancelBatchItemProcessor {
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
   private final RecordTrainerStrikePort recordTrainerStrikePort;
+  private final RunReservationTransactionPort runReservationTransactionPort;
   private final RunReservationPostCommitPort runReservationPostCommitPort;
   private final Clock clock;
 
@@ -60,8 +58,15 @@ public class AutoCancelBatchItemProcessor {
    * submit adminRefund on-chain → update txHash in a new short transaction. This prevents
    * successful on-chain refund from being rolled back locally by a commit failure.
    */
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void process(Reservation staleReservation) {
+    runReservationTransactionPort.requiresNew(
+        () -> {
+          processInTransaction(staleReservation);
+          return null;
+        });
+  }
+
+  private void processInTransaction(Reservation staleReservation) {
     // Re-fetch with pessimistic write lock to prevent concurrent state conflicts.
     // A USER_CANCELLED committed between the batch read and here would be invisible
     // in the stale object, causing a duplicate on-chain refund.

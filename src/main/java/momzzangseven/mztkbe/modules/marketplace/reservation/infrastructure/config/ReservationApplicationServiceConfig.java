@@ -36,13 +36,17 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApplyReservationEscrowExecutionHookService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApproveReservationService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.AutoCancelBatchItemProcessor;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.AutoSettleBatchItemProcessor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CancelPendingReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CheckReservationExecutionCleanupProtectionService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ClaimExpiredRefundReservationService;
@@ -59,6 +63,42 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ReservationApplicationServiceConfig {
+
+  @Bean
+  AutoCancelBatchItemProcessor autoCancelBatchItemProcessor(
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      SubmitEscrowTransactionPort submitEscrowTransactionPort,
+      RecordTrainerStrikePort recordTrainerStrikePort,
+      RunReservationTransactionPort transactionPort,
+      RunReservationPostCommitPort postCommitPort,
+      Clock clock) {
+    return new AutoCancelBatchItemProcessor(
+        loadReservationPort,
+        saveReservationPort,
+        submitEscrowTransactionPort,
+        recordTrainerStrikePort,
+        transactionPort,
+        postCommitPort,
+        clock);
+  }
+
+  @Bean
+  AutoSettleBatchItemProcessor autoSettleBatchItemProcessor(
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      SubmitEscrowTransactionPort submitEscrowTransactionPort,
+      RunReservationTransactionPort transactionPort,
+      RunReservationPostCommitPort postCommitPort,
+      Clock clock) {
+    return new AutoSettleBatchItemProcessor(
+        loadReservationPort,
+        saveReservationPort,
+        submitEscrowTransactionPort,
+        transactionPort,
+        postCommitPort,
+        clock);
+  }
 
   @Bean
   GetUserReservationsUseCase getUserReservationsUseCase(
@@ -140,6 +180,7 @@ public class ReservationApplicationServiceConfig {
       SaveReservationPort saveReservationPort,
       LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort,
       SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
       SaveReservationEscrowPort saveReservationEscrowPort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       LoadReservationActionStatePort loadReservationActionStatePort,
@@ -163,6 +204,7 @@ public class ReservationApplicationServiceConfig {
             saveReservationPort,
             loadReservationCreateIdempotencyPort,
             saveReservationCreateIdempotencyPort,
+            loadReservationEscrowPort,
             saveReservationEscrowPort,
             saveReservationActionStatePort,
             loadReservationActionStatePort,

@@ -36,6 +36,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort.ReservationClassView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
@@ -79,6 +80,7 @@ class CreateReservationServiceTest {
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
   @Mock private SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
+  @Mock private LoadReservationEscrowPort loadReservationEscrowPort;
   @Mock private SaveReservationEscrowPort saveReservationEscrowPort;
   @Mock private SaveReservationActionStatePort saveReservationActionStatePort;
   @Mock private LoadReservationActionStatePort loadReservationActionStatePort;
@@ -131,6 +133,7 @@ class CreateReservationServiceTest {
             saveReservationPort,
             loadReservationCreateIdempotencyPort,
             saveReservationCreateIdempotencyPort,
+            loadReservationEscrowPort,
             saveReservationEscrowPort,
             saveReservationActionStatePort,
             loadReservationActionStatePort,
@@ -703,6 +706,15 @@ class CreateReservationServiceTest {
               loadReservationExecutionCandidatePort.findByReservationResource(
                   existingReservation.getId(), existingReservation.getOrderKey()))
           .willReturn(List.of());
+      given(loadReservationEscrowPort.findByReservationIdWithLock(existingReservation.getId()))
+          .willReturn(
+              Optional.of(
+                  MarketplaceReservationEscrow.builder()
+                      .id(10L)
+                      .reservationId(existingReservation.getId())
+                      .escrowStatus(ReservationEscrowStatus.NONE)
+                      .holdExpiresAt(existingReservation.getHoldExpiresAt())
+                      .build()));
       given(saveReservationPort.save(any()))
           .willAnswer(
               invocation -> {
@@ -710,6 +722,10 @@ class CreateReservationServiceTest {
                 latestSaved.set(saved);
                 return saved;
               });
+      org.mockito.BDDMockito.willAnswer(
+              invocation -> invocation.getArgument(0, MarketplaceReservationEscrow.class))
+          .given(saveReservationEscrowPort)
+          .save(any());
       org.mockito.BDDMockito.willAnswer(
               invocation -> {
                 MarketplaceReservationActionState action =
@@ -730,6 +746,11 @@ class CreateReservationServiceTest {
 
       assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PURCHASE_PENDING);
       then(precheckReservationPurchasePort).shouldHaveNoInteractions();
+      org.mockito.ArgumentCaptor<MarketplaceReservationEscrow> escrowCaptor =
+          org.mockito.ArgumentCaptor.forClass(MarketplaceReservationEscrow.class);
+      then(saveReservationEscrowPort).should().save(escrowCaptor.capture());
+      assertThat(escrowCaptor.getValue().getHoldExpiresAt())
+          .isAfter(existingReservation.getHoldExpiresAt());
       then(saveReservationCreateIdempotencyPort)
           .should()
           .replaceActionStateIfCurrent(501L, 20L, 21L);

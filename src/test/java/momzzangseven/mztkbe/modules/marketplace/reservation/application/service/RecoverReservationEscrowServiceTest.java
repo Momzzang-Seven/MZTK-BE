@@ -25,9 +25,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Rese
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionWriteView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BindReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -35,9 +38,14 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowActorType;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -873,6 +881,150 @@ class RecoverReservationEscrowServiceTest {
         .cancelSignableIntent(eq("intent-1"), eq("MARKETPLACE_RECOVERY_BIND_FAILED"), any());
     assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.PAYMENT_FAILED);
     assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isNull();
+  }
+
+  @Test
+  @DisplayName(
+      "retryable terminal intent recovery는 기존 action-state를 stale 처리하고 새 action-state에 bind한다")
+  void retryableTerminalRecovery_rotatesActionStateBeforeBindingNewIntent() {
+    LoadReservationEscrowPort escrowPort =
+        org.mockito.Mockito.mock(LoadReservationEscrowPort.class);
+    LoadReservationActionStatePort actionStatePort =
+        org.mockito.Mockito.mock(LoadReservationActionStatePort.class);
+    SaveReservationActionStatePort saveActionStatePort =
+        org.mockito.Mockito.mock(SaveReservationActionStatePort.class);
+    BindReservationActionStatePort bindActionStatePort =
+        org.mockito.Mockito.mock(BindReservationActionStatePort.class);
+    RecoverReservationEscrowService serviceWithActionState =
+        new RecoverReservationEscrowService(
+            loadReservationPort,
+            saveReservationPort,
+            prepareReservationEscrowExecutionPort,
+            cancelReservationEscrowExecutionPort,
+            loadReservationExecutionWritePort,
+            loadReservationExecutionStatePort,
+            replayConfirmedReservationExecutionPort,
+            loadReservationWalletPort,
+            loadReservationEscrowPaymentConfigPort,
+            loadReservationEscrowOrderPort,
+            escrowPort,
+            saveActionStatePort,
+            actionStatePort,
+            bindActionStatePort,
+            recordTrainerStrikePort,
+            FIXED_CLOCK);
+    serviceWithActionState.setTransactionPort(ReservationTestTransactionPort.direct());
+
+    Reservation reservation =
+        reservation(ReservationStatus.CANCEL_PENDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.CANCEL_PENDING)
+            .currentExecutionIntentPublicId("intent-old")
+            .pendingAction(ReservationEscrowAction.BUYER_CANCEL)
+            .pendingAttemptToken("attempt-old")
+            .priorStatus(ReservationStatus.PENDING)
+            .priorEscrowStatus(ReservationEscrowStatus.LOCKED)
+            .contractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+            .contractDeadlineEpochSeconds(FIXED_CLOCK.instant().plusSeconds(600).getEpochSecond())
+            .build();
+    MarketplaceReservationEscrow escrow =
+        MarketplaceReservationEscrow.builder()
+            .id(10L)
+            .reservationId(reservation.getId())
+            .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+            .escrowStatus(ReservationEscrowStatus.LOCKED)
+            .orderKey(reservation.getOrderKey())
+            .buyerWalletAddress(reservation.getBuyerWalletAddress())
+            .trainerWalletAddress(reservation.getTrainerWalletAddress())
+            .tokenAddress(reservation.getTokenAddress())
+            .priceBaseUnits(new java.math.BigInteger(reservation.getPriceBaseUnits()))
+            .build();
+    MarketplaceReservationActionState staleAction =
+        MarketplaceReservationActionState.builder()
+            .id(20L)
+            .reservationId(reservation.getId())
+            .escrowId(10L)
+            .actionType(ReservationEscrowAction.BUYER_CANCEL)
+            .actorType(ReservationEscrowActorType.BUYER)
+            .actorUserId(BUYER_ID)
+            .attemptNo(1)
+            .attemptToken("attempt-old")
+            .executionIntentPublicId("intent-old")
+            .status(ReservationActionStateStatus.TERMINATED)
+            .rootIdempotencyKey("root-old")
+            .build();
+    AtomicReference<Reservation> latestSaved = new AtomicReference<>(reservation);
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation))
+        .willReturn(Optional.of(reservation))
+        .willAnswer(invocation -> Optional.of(latestSaved.get()));
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0, Reservation.class);
+              latestSaved.set(saved);
+              return saved;
+            });
+    given(loadReservationExecutionStatePort.loadState("intent-old"))
+        .willReturn(state("MARKETPLACE_CLASS_CANCEL", "FAILED_ONCHAIN", "intent-old", BUYER_ID));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, 1_900_000_000L));
+    given(escrowPort.findByReservationIdWithLock(RESERVATION_ID)).willReturn(Optional.of(escrow));
+    given(
+            actionStatePort.findLatestByReservationIdAndActionType(
+                RESERVATION_ID, ReservationEscrowAction.BUYER_CANCEL))
+        .willReturn(Optional.of(staleAction));
+    given(actionStatePort.findLatestByReservationId(RESERVATION_ID))
+        .willReturn(Optional.of(staleAction));
+    given(saveActionStatePort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationActionState saved =
+                  invocation.getArgument(0, MarketplaceReservationActionState.class);
+              return saved.getId() == null ? saved.toBuilder().id(21L).build() : saved;
+            });
+    given(loadReservationEscrowPaymentConfigPort.load())
+        .willReturn(
+            new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                "0x3333333333333333333333333333333333333333", 18, 2_592_000L));
+    given(prepareReservationEscrowExecutionPort.prepareCancel(any()))
+        .willReturn(new PrepareReservationEscrowResult(web3("MARKETPLACE_CLASS_CANCEL")));
+    given(
+            bindActionStatePort.bindExecutionIntent(
+                org.mockito.ArgumentMatchers.eq(21L),
+                any(),
+                org.mockito.ArgumentMatchers.eq("intent-1")))
+        .willAnswer(
+            invocation ->
+                Optional.of(
+                    staleAction.toBuilder()
+                        .id(21L)
+                        .attemptToken(invocation.getArgument(1, String.class))
+                        .executionIntentPublicId("intent-1")
+                        .status(ReservationActionStateStatus.INTENT_BOUND)
+                        .build()));
+
+    RecoverReservationEscrowResult result =
+        serviceWithActionState.execute(
+            new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.web3()).isNotNull();
+    assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("intent-1");
+    assertThat(latestSaved.get().getPendingAttemptToken()).isNotEqualTo("attempt-old");
+    org.mockito.ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+        org.mockito.ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveActionStatePort).should(org.mockito.Mockito.times(3)).save(actionCaptor.capture());
+    assertThat(actionCaptor.getAllValues())
+        .extracting(MarketplaceReservationActionState::getStatus)
+        .contains(
+            ReservationActionStateStatus.STALE,
+            ReservationActionStateStatus.PREPARING,
+            ReservationActionStateStatus.PREPARING);
+    then(bindActionStatePort)
+        .should()
+        .bindExecutionIntent(
+            org.mockito.ArgumentMatchers.eq(21L),
+            org.mockito.ArgumentMatchers.eq(latestSaved.get().getPendingAttemptToken()),
+            org.mockito.ArgumentMatchers.eq("intent-1"));
   }
 
   private Reservation reservation(ReservationStatus status) {

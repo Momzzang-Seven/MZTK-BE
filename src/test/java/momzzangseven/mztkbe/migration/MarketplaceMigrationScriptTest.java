@@ -13,24 +13,21 @@ class MarketplaceMigrationScriptTest {
   private static final Path MIGRATION_DIR = Path.of("src/main/resources/db/migration");
 
   @Test
-  @DisplayName("marketplace indexes on existing tables are created concurrently in V074")
-  void marketplaceExistingTableIndexesUseConcurrentCreation() throws IOException {
+  @DisplayName("V074 keeps marketplace indexes in the same transactional migration before deploy")
+  void marketplaceIndexesStayInTransactionalV074BeforeDeploy() throws IOException {
     String v074 = migration("V074__add_marketplace_user_escrow_state.sql");
 
-    assertThat(v074).contains("-- flyway:executeInTransaction=false");
+    assertThat(v074).doesNotContain("CONCURRENTLY").doesNotContain("executeInTransaction=false");
     assertThat(v074)
-        .contains("CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_class_reservations_order_key")
+        .contains("CREATE UNIQUE INDEX IF NOT EXISTS uk_class_reservations_order_key")
         .contains(
-            "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
                 + "uk_class_reservations_current_execution_intent_public_id")
+        .contains("CREATE INDEX IF NOT EXISTS " + "idx_class_reservations_escrow_flow_status")
         .contains(
-            "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
-                + "idx_class_reservations_escrow_flow_status")
-        .contains(
-            "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
                 + "uk_class_reservations_active_buyer_slot_datetime")
-        .contains(
-            "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_trainer_strike_records_source");
+        .contains("CREATE UNIQUE INDEX IF NOT EXISTS uk_trainer_strike_records_source");
   }
 
   @Test
@@ -54,7 +51,11 @@ class MarketplaceMigrationScriptTest {
         .contains("ADD COLUMN IF NOT EXISTS escrow_status")
         .contains("ADD CONSTRAINT chk_class_reservations_status CHECK")
         .contains(") NOT VALID")
-        .contains("VALIDATE CONSTRAINT chk_class_reservations_status");
+        .contains("VALIDATE CONSTRAINT chk_class_reservations_status")
+        .contains("CREATE INDEX IF NOT EXISTS idx_marketplace_reservation_escrows_flow_status")
+        .contains(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uk_marketplace_reservation_action_states_active")
+        .contains("CREATE INDEX IF NOT EXISTS idx_reservation_create_idempotency_reservation_id");
   }
 
   private String migration(String filename) throws IOException {

@@ -34,6 +34,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort.ReservationClassView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPaymentConfigPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionWritePort;
@@ -88,6 +89,7 @@ public class CreateReservationService implements CreateReservationUseCase {
   private final SaveReservationPort saveReservationPort;
   private final LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
   private final SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
+  private final LoadReservationEscrowPort loadReservationEscrowPort;
   private final SaveReservationEscrowPort saveReservationEscrowPort;
   private final SaveReservationActionStatePort saveReservationActionStatePort;
   private final LoadReservationActionStatePort loadReservationActionStatePort;
@@ -112,6 +114,7 @@ public class CreateReservationService implements CreateReservationUseCase {
       SaveReservationPort saveReservationPort,
       LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort,
       SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
       SaveReservationEscrowPort saveReservationEscrowPort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       LoadReservationActionStatePort loadReservationActionStatePort,
@@ -132,6 +135,7 @@ public class CreateReservationService implements CreateReservationUseCase {
         saveReservationPort,
         loadReservationCreateIdempotencyPort,
         saveReservationCreateIdempotencyPort,
+        loadReservationEscrowPort,
         saveReservationEscrowPort,
         saveReservationActionStatePort,
         loadReservationActionStatePort,
@@ -155,6 +159,7 @@ public class CreateReservationService implements CreateReservationUseCase {
       SaveReservationPort saveReservationPort,
       LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort,
       SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
       SaveReservationEscrowPort saveReservationEscrowPort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       LoadReservationActionStatePort loadReservationActionStatePort,
@@ -175,6 +180,7 @@ public class CreateReservationService implements CreateReservationUseCase {
     this.saveReservationPort = saveReservationPort;
     this.loadReservationCreateIdempotencyPort = loadReservationCreateIdempotencyPort;
     this.saveReservationCreateIdempotencyPort = saveReservationCreateIdempotencyPort;
+    this.loadReservationEscrowPort = loadReservationEscrowPort;
     this.saveReservationEscrowPort = saveReservationEscrowPort;
     this.saveReservationActionStatePort = saveReservationActionStatePort;
     this.loadReservationActionStatePort = loadReservationActionStatePort;
@@ -564,6 +570,18 @@ public class CreateReservationService implements CreateReservationUseCase {
     Reservation retrying =
         saveReservationPort.save(
             reservation.retryPurchasePreparing(nextAttemptToken, nextHoldExpiresAt));
+    MarketplaceReservationEscrow retryingEscrow =
+        saveReservationEscrowPort.save(
+            loadReservationEscrowPort
+                .findByReservationIdWithLock(retrying.getId())
+                .orElseThrow(
+                    () ->
+                        new MarketplaceReservationStateException(
+                            ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+                            "marketplace reservation escrow projection is missing before retry"))
+                .toBuilder()
+                .holdExpiresAt(retrying.getHoldExpiresAt())
+                .build());
     MarketplaceReservationActionState staleAction =
         saveReservationActionStatePort.save(
             latestAction.toBuilder()
@@ -576,7 +594,7 @@ public class CreateReservationService implements CreateReservationUseCase {
         saveReservationActionStatePort.save(
             MarketplaceReservationActionState.builder()
                 .reservationId(retrying.getId())
-                .escrowId(staleAction.getEscrowId())
+                .escrowId(retryingEscrow.getId())
                 .actionType(ReservationEscrowAction.PURCHASE)
                 .actorType(ReservationEscrowActorType.BUYER)
                 .actorUserId(retrying.getUserId())
@@ -605,14 +623,7 @@ public class CreateReservationService implements CreateReservationUseCase {
         staleAction.getId(),
         nextAction.getId());
     return PhaseAResult.pending(
-        retrying,
-        MarketplaceReservationEscrow.builder()
-            .id(staleAction.getEscrowId())
-            .reservationId(retrying.getId())
-            .build(),
-        nextAction,
-        updatedIdempotency,
-        prepareCommand);
+        retrying, retryingEscrow, nextAction, updatedIdempotency, prepareCommand);
   }
 
   private ReservationCreateIdempotency replaceCreateIdempotencyActionState(

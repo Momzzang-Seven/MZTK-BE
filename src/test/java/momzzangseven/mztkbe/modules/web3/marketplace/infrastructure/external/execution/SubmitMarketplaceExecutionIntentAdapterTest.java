@@ -7,6 +7,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,15 +22,19 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceSignatureMeta;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceUnsignedTxSnapshot;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceActorType;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAllowanceStrategy;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -49,18 +56,20 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
   private static final String ESCROW = "0x" + "4".repeat(40);
   private static final String TOKEN = "0x" + "5".repeat(40);
   private static final String CALLDATA = "0xabcdef01";
+  private static final ObjectMapper OBJECT_MAPPER =
+      new ObjectMapper().registerModule(new JavaTimeModule());
 
   @Mock private CreateExecutionIntentUseCase createExecutionIntentUseCase;
 
   @Test
-  void submit_mapsMarketplaceDraftToSharedExecutionCommandAndEip7702Result() {
-    SubmitMarketplaceExecutionIntentAdapter adapter =
-        new SubmitMarketplaceExecutionIntentAdapter(
-            createExecutionIntentUseCase, new NoOpTransactionManager());
+  void submit_mapsMarketplaceDraftToSharedExecutionCommandAndEip7702Result()
+      throws JsonProcessingException {
+    SubmitMarketplaceExecutionIntentAdapter adapter = adapter();
     ArgumentCaptor<CreateExecutionIntentCommand> commandCaptor =
         ArgumentCaptor.forClass(CreateExecutionIntentCommand.class);
     MarketplaceExecutionDraft draft = eip7702Draft();
-    when(createExecutionIntentUseCase.execute(any())).thenReturn(eip7702Result(true));
+    when(createExecutionIntentUseCase.execute(any()))
+        .thenReturn(eip7702Result(true, storedPayloadJson()));
 
     MarketplaceExecutionIntentResult result = adapter.submit(draft);
 
@@ -101,15 +110,14 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
     assertThat(result.signRequest().authorization().delegateTarget()).isEqualTo(DELEGATE);
     assertThat(result.signRequest().submit().executionDigest()).isEqualTo("0x" + "d".repeat(64));
     assertThat(result.existing()).isTrue();
-    assertThat(result.signatureMeta()).isEqualTo(draft.signatureMeta());
-    assertThat(result.tokenMovement()).isEqualTo(draft.tokenMovement());
+    assertThat(result.signatureMeta())
+        .isEqualTo(new MarketplaceSignatureMeta(1_699_999_000L, 1_699_999_900L));
+    assertThat(result.tokenMovement().amountBaseUnits()).isEqualTo(BigInteger.valueOf(99L));
   }
 
   @Test
   void submit_mapsEip1559SignRequest() {
-    SubmitMarketplaceExecutionIntentAdapter adapter =
-        new SubmitMarketplaceExecutionIntentAdapter(
-            createExecutionIntentUseCase, new NoOpTransactionManager());
+    SubmitMarketplaceExecutionIntentAdapter adapter = adapter();
     when(createExecutionIntentUseCase.execute(any())).thenReturn(eip1559Result());
 
     MarketplaceExecutionIntentResult result = adapter.submit(eip1559Draft());
@@ -125,9 +133,7 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
 
   @Test
   void submit_retriesOnceWhenSharedRootAttemptUniqueRaceOccurs() {
-    SubmitMarketplaceExecutionIntentAdapter adapter =
-        new SubmitMarketplaceExecutionIntentAdapter(
-            createExecutionIntentUseCase, new NoOpTransactionManager());
+    SubmitMarketplaceExecutionIntentAdapter adapter = adapter();
     MarketplaceExecutionDraft draft = eip7702Draft();
     when(createExecutionIntentUseCase.execute(any()))
         .thenThrow(new DataIntegrityViolationException("uk_web3_execution_intents_root_attempt"))
@@ -141,9 +147,7 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
 
   @Test
   void submit_doesNotRetryOtherDataIntegrityFailures() {
-    SubmitMarketplaceExecutionIntentAdapter adapter =
-        new SubmitMarketplaceExecutionIntentAdapter(
-            createExecutionIntentUseCase, new NoOpTransactionManager());
+    SubmitMarketplaceExecutionIntentAdapter adapter = adapter();
     when(createExecutionIntentUseCase.execute(any()))
         .thenThrow(new DataIntegrityViolationException("some_other_constraint"));
 
@@ -218,6 +222,10 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
   }
 
   private CreateExecutionIntentResult eip7702Result(boolean existing) {
+    return eip7702Result(existing, null);
+  }
+
+  private CreateExecutionIntentResult eip7702Result(boolean existing, String payloadSnapshotJson) {
     return new CreateExecutionIntentResult(
         ExecutionResourceType.ORDER,
         "order-resource-1",
@@ -231,7 +239,8 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
         SignRequestBundle.forEip7702(
             new SignRequestBundle.AuthorizationSignRequest(10L, DELEGATE, 3L, "0xauth"),
             new SignRequestBundle.SubmitSignRequest("0x" + "d".repeat(64), 1_765_021_500L)),
-        existing);
+        existing,
+        payloadSnapshotJson);
   }
 
   private CreateExecutionIntentResult eip1559Result() {
@@ -249,6 +258,52 @@ class SubmitMarketplaceExecutionIntentAdapterTest {
             new SignRequestBundle.TransactionSignRequest(
                 10L, AUTHORITY, ESCROW, "0x0", CALLDATA, 9L, "0x186a0", "0x3e8", "0x7d0", 9L)),
         false);
+  }
+
+  private SubmitMarketplaceExecutionIntentAdapter adapter() {
+    MarketplaceEscrowProperties properties = new MarketplaceEscrowProperties();
+    properties.setSigValidityDuration(900);
+    return new SubmitMarketplaceExecutionIntentAdapter(
+        createExecutionIntentUseCase, OBJECT_MAPPER, properties, new NoOpTransactionManager());
+  }
+
+  private String storedPayloadJson() throws JsonProcessingException {
+    return OBJECT_MAPPER.writeValueAsString(
+        new MarketplaceEscrowExecutionPayload(
+            MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE,
+            MarketplaceActorType.BUYER,
+            1L,
+            "1",
+            ORDER_ID,
+            ORDER_KEY,
+            7L,
+            7L,
+            8L,
+            7L,
+            8L,
+            1L,
+            "HOLDING",
+            "PURCHASE_PENDING",
+            AUTHORITY,
+            "0x" + "6".repeat(40),
+            TOKEN,
+            BigInteger.TEN,
+            MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
+            EXPIRES_AT,
+            1_765_021_500L,
+            null,
+            "attempt-stored",
+            "PENDING",
+            ESCROW,
+            CALLDATA,
+            new MarketplaceTokenMovement(
+                TOKEN, BigInteger.valueOf(99L), "BUYER", AUTHORITY, "ESCROW", ESCROW),
+            1_699_999_000L,
+            "0x" + "7".repeat(130),
+            1,
+            10L,
+            20L,
+            "root-marketplace-1"));
   }
 
   private static class NoOpTransactionManager extends AbstractPlatformTransactionManager {
