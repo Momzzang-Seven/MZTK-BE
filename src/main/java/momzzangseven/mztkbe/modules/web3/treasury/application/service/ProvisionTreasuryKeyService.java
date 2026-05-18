@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProvisionTreasuryKeyUseCase;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.Credentials;
@@ -38,6 +39,15 @@ import org.web3j.crypto.Credentials;
 @Slf4j
 @RequiredArgsConstructor
 public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase {
+
+  // PR #177 R11 — narrow the fresh-INSERT race retry to the only DIV cause that is actually a
+  // race. Other DIV causes on this path (treasury_address CHECK from V069's
+  // ck_web3_treasury_wallets_kms_key_id_required, the kms_key_id UNIQUE
+  // uk_web3_treasury_wallets_kms_key_id from V069) are input/state errors that must surface as
+  // their own failure audit, not be silently replayed as ALREADY_PROVISIONED.
+  // The wallet_alias UNIQUE index keeps its original V014 name across the V059 table rename, so
+  // the value below maps directly to Flyway V014__evolve_web3_treasury_keys.sql:28.
+  private static final String WALLET_ALIAS_UNIQUE_CONSTRAINT = "uk_web3_treasury_keys_wallet_alias";
 
   private final ProvisionTreasuryKeyTransactionalDelegate delegate;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
@@ -70,6 +80,19 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       // race-retry flag so handleExistingProvisionedRow short-circuits to a deterministic 409
       // ALREADY_PROVISIONED (TREASURY_004) instead of the generic DATA_INTEGRITY_VIOLATION
       // mapping the GlobalExceptionHandler would otherwise apply.
+      // PR #177 R11 — restrict the retry to the wallet_alias UNIQUE cause; other DIV causes on
+      // this path (treasury_address CHECK, kms_key_id UNIQUE) are not races and must escalate
+      // through the generic RuntimeException handler below with their own failure audit.
+      if (!isWalletAliasUniqueViolation(raceLoser)) {
+        if (failureAuditWritten.compareAndSet(false, true)) {
+          treasuryAuditRecorder.record(
+              command.operatorUserId(),
+              derivedAddress,
+              false,
+              raceLoser.getClass().getSimpleName());
+        }
+        throw raceLoser;
+      }
       log.warn(
           "Fresh-provision race detected for alias={}, replaying as race-retry",
           command.role().toAlias());
@@ -90,6 +113,19 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       }
       throw e;
     }
+  }
+
+  private static boolean isWalletAliasUniqueViolation(DataIntegrityViolationException ex) {
+    for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+      if (cause instanceof ConstraintViolationException constraint
+          && WALLET_ALIAS_UNIQUE_CONSTRAINT.equals(constraint.getConstraintName())) {
+        return true;
+      }
+      if (cause.getCause() == cause) {
+        break;
+      }
+    }
+    return false;
   }
 
   private static String deriveAddress(String rawPrivateKey) {

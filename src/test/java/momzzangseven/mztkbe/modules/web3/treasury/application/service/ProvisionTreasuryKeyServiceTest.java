@@ -11,6 +11,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -40,6 +41,7 @@ import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -795,7 +797,7 @@ class ProvisionTreasuryKeyServiceTest {
   @Test
   void executionService_onDIV_retriesWithRaceRetryFlag() {
     ProvisionTreasuryKeyTransactionalDelegate spyDelegate = Mockito.spy(delegate);
-    Mockito.doThrow(new DataIntegrityViolationException("UNIQUE alias violation"))
+    Mockito.doThrow(walletAliasUniqueViolation())
         .when(spyDelegate)
         .lockedCommit(any(), anyString(), any(), eq(false));
     Mockito.doAnswer(
@@ -832,7 +834,7 @@ class ProvisionTreasuryKeyServiceTest {
   @Test
   void executionService_onDIV_retryThrowsUnexpected_escalatesWithAudit() {
     ProvisionTreasuryKeyTransactionalDelegate spyDelegate = Mockito.spy(delegate);
-    Mockito.doThrow(new DataIntegrityViolationException("UNIQUE alias violation"))
+    Mockito.doThrow(walletAliasUniqueViolation())
         .when(spyDelegate)
         .lockedCommit(any(), anyString(), any(), eq(false));
     Mockito.doThrow(new IllegalStateException("unexpected during retry"))
@@ -850,6 +852,51 @@ class ProvisionTreasuryKeyServiceTest {
 
     verify(treasuryAuditRecorder)
         .record(eq(1L), eq(DERIVED_ADDRESS), eq(false), eq("IllegalStateException"));
+  }
+
+  /**
+   * PR #177 R11 — only {@code uk_web3_treasury_keys_wallet_alias} UNIQUE violations are races. A
+   * different {@link DataIntegrityViolationException} (e.g. the {@code treasury_address} CHECK
+   * constraint added in Flyway V069) is an input/state failure and must NOT trigger the race-retry
+   * path. The outer catch is expected to write a failure audit and re-throw the original DIV.
+   */
+  @Test
+  void executionService_onDIV_nonAliasConstraint_doesNotRetry_writesAuditAndRethrows() {
+    ProvisionTreasuryKeyTransactionalDelegate spyDelegate = Mockito.spy(delegate);
+    DataIntegrityViolationException nonAliasDiv =
+        new DataIntegrityViolationException(
+            "CHECK treasury_address violation",
+            new ConstraintViolationException(
+                "check constraint violated",
+                new SQLException("23514"),
+                "ck_web3_treasury_wallets_kms_key_id_required"));
+    Mockito.doThrow(nonAliasDiv)
+        .when(spyDelegate)
+        .lockedCommit(any(), anyString(), any(), eq(false));
+
+    ProvisionTreasuryKeyService spyService =
+        new ProvisionTreasuryKeyService(spyDelegate, treasuryAuditRecorder);
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    assertThatThrownBy(() -> spyService.execute(command))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessage("CHECK treasury_address violation");
+
+    // The retry overload must never be invoked.
+    verify(spyDelegate, never()).lockedCommit(any(), anyString(), any(), eq(true));
+    // The outer catch must record a failure audit keyed on the DIV class name.
+    verify(treasuryAuditRecorder)
+        .record(eq(1L), eq(DERIVED_ADDRESS), eq(false), eq("DataIntegrityViolationException"));
+  }
+
+  private static DataIntegrityViolationException walletAliasUniqueViolation() {
+    return new DataIntegrityViolationException(
+        "UNIQUE alias violation",
+        new ConstraintViolationException(
+            "duplicate key value violates unique constraint",
+            new SQLException("23505"),
+            "uk_web3_treasury_keys_wallet_alias"));
   }
 
   /**
