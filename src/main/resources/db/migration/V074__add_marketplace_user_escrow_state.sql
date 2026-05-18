@@ -33,40 +33,46 @@ BEGIN
 END $$;
 
 ALTER TABLE class_reservations
-    ADD COLUMN escrow_status VARCHAR(40),
-    ADD COLUMN escrow_flow VARCHAR(30) DEFAULT 'LEGACY_DISPATCH',
-    ADD COLUMN order_key VARCHAR(66),
-    ADD COLUMN current_execution_intent_public_id VARCHAR(36),
-    ADD COLUMN buyer_wallet_address VARCHAR(42),
-    ADD COLUMN trainer_wallet_address VARCHAR(42),
-    ADD COLUMN token_address VARCHAR(42),
-    ADD COLUMN price_base_units VARCHAR(100),
-    ADD COLUMN hold_expires_at TIMESTAMP,
-    ADD COLUMN pending_action_expires_at TIMESTAMP,
-    ADD COLUMN expected_contract_deadline_epoch_seconds BIGINT,
-    ADD COLUMN expected_contract_deadline_at TIMESTAMP,
-    ADD COLUMN contract_deadline_epoch_seconds BIGINT,
-    ADD COLUMN contract_deadline_at TIMESTAMP,
-    ADD COLUMN pending_action VARCHAR(40),
-    ADD COLUMN pending_attempt_token VARCHAR(100),
-    ADD COLUMN pending_expected_version BIGINT,
-    ADD COLUMN pending_expected_status VARCHAR(30),
-    ADD COLUMN pending_expected_escrow_status VARCHAR(40),
-    ADD COLUMN prior_status VARCHAR(30),
-    ADD COLUMN prior_escrow_status VARCHAR(40),
-    ADD COLUMN create_idempotency_key_hash VARCHAR(128),
-    ADD COLUMN create_payload_hash VARCHAR(128),
-    ADD COLUMN server_signature_signed_at TIMESTAMP,
-    ADD COLUMN server_signature_expires_at TIMESTAMP,
-    ADD COLUMN escrow_failure_code VARCHAR(100),
-    ADD COLUMN escrow_failure_message VARCHAR(500);
+    ADD COLUMN IF NOT EXISTS escrow_status VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS escrow_flow VARCHAR(30) DEFAULT 'LEGACY_DISPATCH',
+    ADD COLUMN IF NOT EXISTS order_key VARCHAR(66),
+    ADD COLUMN IF NOT EXISTS current_execution_intent_public_id VARCHAR(36),
+    ADD COLUMN IF NOT EXISTS buyer_wallet_address VARCHAR(42),
+    ADD COLUMN IF NOT EXISTS trainer_wallet_address VARCHAR(42),
+    ADD COLUMN IF NOT EXISTS token_address VARCHAR(42),
+    ADD COLUMN IF NOT EXISTS price_base_units VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS hold_expires_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS pending_action_expires_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS expected_contract_deadline_epoch_seconds BIGINT,
+    ADD COLUMN IF NOT EXISTS expected_contract_deadline_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS contract_deadline_epoch_seconds BIGINT,
+    ADD COLUMN IF NOT EXISTS contract_deadline_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS pending_action VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS pending_attempt_token VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS pending_expected_version BIGINT,
+    ADD COLUMN IF NOT EXISTS pending_expected_status VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS pending_expected_escrow_status VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS prior_status VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS prior_escrow_status VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS create_idempotency_key_hash VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS create_payload_hash VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS server_signature_signed_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS server_signature_expires_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS escrow_failure_code VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS escrow_failure_message VARCHAR(500);
 
 UPDATE class_reservations
 SET escrow_flow = 'LEGACY_DISPATCH'
 WHERE escrow_flow IS NULL;
 
 ALTER TABLE class_reservations
-    DROP CONSTRAINT IF EXISTS chk_class_reservations_status;
+    DROP CONSTRAINT IF EXISTS chk_class_reservations_status,
+    DROP CONSTRAINT IF EXISTS chk_class_reservations_escrow_status,
+    DROP CONSTRAINT IF EXISTS chk_class_reservations_escrow_flow,
+    DROP CONSTRAINT IF EXISTS chk_class_reservations_order_key,
+    DROP CONSTRAINT IF EXISTS chk_class_reservations_contract_deadline_pair,
+    DROP CONSTRAINT IF EXISTS chk_class_reservations_expected_deadline_pair,
+    DROP CONSTRAINT IF EXISTS chk_class_reservations_pending_action;
 
 ALTER TABLE class_reservations
     ADD CONSTRAINT chk_class_reservations_status CHECK (
@@ -81,7 +87,7 @@ ALTER TABLE class_reservations
             'MANUAL_SYNC_REQUIRED', 'HOLD_EXPIRED', 'PAYMENT_FAILED',
             'DEADLINE_REFUNDED'
         )
-    ),
+    ) NOT VALID,
     ADD CONSTRAINT chk_class_reservations_escrow_status CHECK (
         escrow_status IS NULL OR escrow_status IN (
             'NONE', 'PURCHASE_PREPARING', 'PURCHASE_PENDING', 'LOCKED',
@@ -91,29 +97,38 @@ ALTER TABLE class_reservations
             'DEADLINE_RECOVERY_REQUIRED', 'DEADLINE_SYNC_REQUIRED',
             'MANUAL_SYNC_REQUIRED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'FAILED'
         )
-    ),
+    ) NOT VALID,
     ADD CONSTRAINT chk_class_reservations_escrow_flow CHECK (
         escrow_flow IS NULL OR escrow_flow IN ('LEGACY_DISPATCH', 'USER_EIP7702')
-    ),
+    ) NOT VALID,
     ADD CONSTRAINT chk_class_reservations_order_key CHECK (
         order_key IS NULL OR order_key ~ '^0x[0-9a-f]{64}$'
-    ),
+    ) NOT VALID,
     ADD CONSTRAINT chk_class_reservations_contract_deadline_pair CHECK (
         (contract_deadline_epoch_seconds IS NULL AND contract_deadline_at IS NULL)
         OR (contract_deadline_epoch_seconds IS NOT NULL AND contract_deadline_at IS NOT NULL
             AND contract_deadline_epoch_seconds >= 0)
-    ),
+    ) NOT VALID,
     ADD CONSTRAINT chk_class_reservations_expected_deadline_pair CHECK (
         (expected_contract_deadline_epoch_seconds IS NULL AND expected_contract_deadline_at IS NULL)
         OR (expected_contract_deadline_epoch_seconds IS NOT NULL
             AND expected_contract_deadline_at IS NOT NULL
             AND expected_contract_deadline_epoch_seconds >= 0)
-    ),
+    ) NOT VALID,
     ADD CONSTRAINT chk_class_reservations_pending_action CHECK (
         pending_action IS NULL OR pending_action IN (
             'PURCHASE', 'BUYER_CANCEL', 'TRAINER_REJECT', 'BUYER_CONFIRM', 'DEADLINE_REFUND'
         )
-    );
+    ) NOT VALID;
+
+ALTER TABLE class_reservations
+    VALIDATE CONSTRAINT chk_class_reservations_status,
+    VALIDATE CONSTRAINT chk_class_reservations_escrow_status,
+    VALIDATE CONSTRAINT chk_class_reservations_escrow_flow,
+    VALIDATE CONSTRAINT chk_class_reservations_order_key,
+    VALIDATE CONSTRAINT chk_class_reservations_contract_deadline_pair,
+    VALIDATE CONSTRAINT chk_class_reservations_expected_deadline_pair,
+    VALIDATE CONSTRAINT chk_class_reservations_pending_action;
 
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_class_reservations_order_key
     ON class_reservations (order_key)
@@ -134,7 +149,7 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_class_reservations_active_buye
         'PAYMENT_FAILED', 'DEADLINE_REFUNDED'
     );
 
-CREATE TABLE reservation_slot_date_locks (
+CREATE TABLE IF NOT EXISTS reservation_slot_date_locks (
     id BIGSERIAL PRIMARY KEY,
     class_slot_id BIGINT NOT NULL REFERENCES class_slots(id),
     reservation_date DATE NOT NULL,
@@ -143,7 +158,7 @@ CREATE TABLE reservation_slot_date_locks (
         UNIQUE (class_slot_id, reservation_date)
 );
 
-CREATE TABLE marketplace_reservation_escrows (
+CREATE TABLE IF NOT EXISTS marketplace_reservation_escrows (
     id BIGSERIAL PRIMARY KEY,
     reservation_id BIGINT NOT NULL UNIQUE REFERENCES class_reservations(id) ON DELETE CASCADE,
     escrow_flow VARCHAR(30) NOT NULL,
@@ -214,7 +229,7 @@ CREATE INDEX idx_marketplace_reservation_escrows_hold_expires_at
     ON marketplace_reservation_escrows (hold_expires_at)
     WHERE hold_expires_at IS NOT NULL;
 
-CREATE TABLE marketplace_reservation_action_states (
+CREATE TABLE IF NOT EXISTS marketplace_reservation_action_states (
     id BIGSERIAL PRIMARY KEY,
     reservation_id BIGINT NOT NULL REFERENCES class_reservations(id) ON DELETE CASCADE,
     escrow_id BIGINT NOT NULL,
@@ -291,7 +306,7 @@ CREATE INDEX idx_marketplace_reservation_action_states_root_status_latest
     ON marketplace_reservation_action_states (root_idempotency_key, status, attempt_no DESC)
     WHERE root_idempotency_key IS NOT NULL;
 
-CREATE TABLE reservation_create_idempotency_keys (
+CREATE TABLE IF NOT EXISTS reservation_create_idempotency_keys (
     id BIGSERIAL PRIMARY KEY,
     buyer_id BIGINT NOT NULL,
     key_hash VARCHAR(128) NOT NULL,
@@ -329,8 +344,8 @@ CREATE INDEX idx_reservation_create_idempotency_expires_at
     ON reservation_create_idempotency_keys (status, expires_at);
 
 ALTER TABLE trainer_strike_records
-    ADD COLUMN source_type VARCHAR(80),
-    ADD COLUMN source_id VARCHAR(120);
+    ADD COLUMN IF NOT EXISTS source_type VARCHAR(80),
+    ADD COLUMN IF NOT EXISTS source_id VARCHAR(120);
 
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_trainer_strike_records_source
     ON trainer_strike_records (source_type, source_id)

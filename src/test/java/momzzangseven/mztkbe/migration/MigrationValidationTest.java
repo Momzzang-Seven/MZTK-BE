@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import momzzangseven.mztkbe.MztkBeApplication;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataAccessException;
@@ -16,14 +16,14 @@ import org.springframework.test.context.ActiveProfiles;
 /**
  * Guards Flyway migration correctness in the real PostgreSQL integration test tier.
  *
- * <p>This test uses the {@code integration} profile, so it belongs to the {@code e2eTest} task with
- * the other real PostgreSQL tests. Booting the Spring context runs Flyway end-to-end with {@code
- * validate-on-migrate=true}, and Hibernate re-checks every {@code @Entity} against the resulting
- * schema via {@code ddl-auto=validate}. Any checksum mismatch, out-of-order version, missing
- * migration, or entity/column drift fails context startup — which fails this test.
+ * <p>This test intentionally has no {@code e2e} tag. When {@code DB_URL_E2E} is present, the
+ * default {@code test} task runs it against real PostgreSQL. Booting the Spring context runs Flyway
+ * end-to-end with {@code validate-on-migrate=true}, and Hibernate re-checks every {@code @Entity}
+ * against the resulting schema via {@code ddl-auto=validate}. Any checksum mismatch, out-of-order
+ * version, missing migration, or entity/column drift fails context startup — which fails this test.
  */
 @DisplayName("[Migration] Flyway migrations apply cleanly and match JPA entities")
-@Tag("e2e")
+@EnabledIfEnvironmentVariable(named = "DB_URL_E2E", matches = ".+")
 @ActiveProfiles("integration")
 @SpringBootTest(
     classes = MztkBeApplication.class,

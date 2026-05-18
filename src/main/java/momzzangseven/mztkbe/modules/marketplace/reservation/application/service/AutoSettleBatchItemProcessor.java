@@ -5,20 +5,14 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionOperations;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Per-item transaction processor for the auto-settle batch job.
@@ -45,15 +39,8 @@ public class AutoSettleBatchItemProcessor {
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  private final RunReservationPostCommitPort runReservationPostCommitPort;
   private final Clock clock;
-  private TransactionOperations postCommitTransactionOperations;
-
-  @Autowired
-  void setTransactionManager(PlatformTransactionManager transactionManager) {
-    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-    this.postCommitTransactionOperations = transactionTemplate;
-  }
 
   /**
    * Settles a single approved reservation in its own isolated transaction.
@@ -98,7 +85,8 @@ public class AutoSettleBatchItemProcessor {
     Reservation settled = reservation.autoSettle(PENDING_TX_HASH);
     saveReservationPort.save(settled);
 
-    runAfterCommit(
+    runReservationPostCommitPort.afterCommit(
+        "AutoSettle",
         () -> submitAdminSettleAndWriteBack(reservation.getId(), reservation.getOrderId()));
 
     log.info(
@@ -117,7 +105,7 @@ public class AutoSettleBatchItemProcessor {
       return;
     }
 
-    runPostCommitTransaction(
+    runReservationPostCommitPort.requiresNew(
         () ->
             loadReservationPort
                 .findByIdWithLock(reservationId)
@@ -144,35 +132,5 @@ public class AutoSettleBatchItemProcessor {
         "AutoSettle on-chain settle recorded: reservationId={}, txHash={}",
         current.getId(),
         settleTxHash);
-  }
-
-  private void runAfterCommit(Runnable action) {
-    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-      runAfterCommitSafely(action);
-      return;
-    }
-    TransactionSynchronizationManager.registerSynchronization(
-        new TransactionSynchronization() {
-          @Override
-          public void afterCommit() {
-            runAfterCommitSafely(action);
-          }
-        });
-  }
-
-  private void runAfterCommitSafely(Runnable action) {
-    try {
-      action.run();
-    } catch (RuntimeException e) {
-      log.error("AutoSettle after-commit callback failed", e);
-    }
-  }
-
-  private void runPostCommitTransaction(Runnable action) {
-    if (postCommitTransactionOperations == null) {
-      action.run();
-      return;
-    }
-    postCommitTransactionOperations.executeWithoutResult(status -> action.run());
   }
 }

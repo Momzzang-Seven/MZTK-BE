@@ -117,6 +117,26 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
+  @DisplayName("HOLDING + PURCHASE_PENDING 저장 모델도 purchase recovery로 인식한다")
+  void purchase_recovery_recognizesHoldingWithPurchasePendingEscrowStatus() {
+    Reservation reservation =
+        reservation(ReservationStatus.HOLDING).toBuilder()
+            .escrowStatus(ReservationEscrowStatus.PURCHASE_PENDING)
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, 1_900_000_000L));
+
+    RecoverReservationEscrowResult result =
+        sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID));
+
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PENDING);
+    assertThat(result.escrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED.name());
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
   @DisplayName("purchase recovery 전에 order가 terminal이면 local terminal outcome으로 동기화한다")
   void purchase_recovery_syncs_terminal_order_without_new_intent() {
     Reservation reservation = reservation(ReservationStatus.PURCHASE_PENDING);

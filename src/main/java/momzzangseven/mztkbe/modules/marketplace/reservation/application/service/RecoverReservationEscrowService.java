@@ -641,19 +641,21 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   private Reservation bind(
       Reservation reservation, RecoveryFlow flow, PrepareReservationEscrowResult prepared) {
     String intentId = prepared.web3().executionIntent().id();
-    if (flow.action() == RecoveryAction.PURCHASE
-        && reservation.getStatus() == ReservationStatus.PURCHASE_PREPARING) {
-      return reservation.bindPurchaseIntent(intentId);
-    }
     if (flow.action() == RecoveryAction.PURCHASE) {
+      if (reservation.getStatus() == ReservationStatus.HOLDING
+          || reservation.getStatus() == ReservationStatus.PURCHASE_PREPARING) {
+        return reservation.bindPurchaseIntent(intentId);
+      }
       return reservation.toBuilder().currentExecutionIntentPublicId(intentId).build();
     }
     return reservation.bindPendingExecutionIntent(intentId);
   }
 
   private RecoveryFlow resolveFlow(Reservation reservation) {
+    if (isPurchaseRecoveryState(reservation)) {
+      return new RecoveryFlow(RecoveryAction.PURCHASE, true);
+    }
     return switch (reservation.getStatus()) {
-      case PURCHASE_PREPARING, PURCHASE_PENDING -> new RecoveryFlow(RecoveryAction.PURCHASE, true);
       case CANCEL_PENDING -> new RecoveryFlow(RecoveryAction.BUYER_CANCEL, true);
       case REJECT_PENDING -> new RecoveryFlow(RecoveryAction.TRAINER_REJECT, false);
       case CONFIRM_PENDING -> new RecoveryFlow(RecoveryAction.BUYER_CONFIRM, true);
@@ -669,6 +671,15 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
               "Reservation requires deadline synchronization before recovery");
       default -> throwInvalidRecovery(reservation);
     };
+  }
+
+  private boolean isPurchaseRecoveryState(Reservation reservation) {
+    return reservation.getStatus() == ReservationStatus.PURCHASE_PREPARING
+        || reservation.getStatus() == ReservationStatus.PURCHASE_PENDING
+        || (reservation.getStatus() == ReservationStatus.HOLDING
+            && (reservation.getEffectiveEscrowStatus() == ReservationEscrowStatus.PURCHASE_PREPARING
+                || reservation.getEffectiveEscrowStatus()
+                    == ReservationEscrowStatus.PURCHASE_PENDING));
   }
 
   private RecoveryFlow throwInvalidRecovery(Reservation reservation) {

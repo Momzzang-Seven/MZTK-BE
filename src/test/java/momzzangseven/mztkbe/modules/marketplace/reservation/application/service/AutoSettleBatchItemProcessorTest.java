@@ -1,8 +1,10 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
@@ -12,7 +14,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
@@ -26,8 +30,6 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class AutoSettleBatchItemProcessorTest {
@@ -35,6 +37,7 @@ class AutoSettleBatchItemProcessorTest {
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  @Mock private RunReservationPostCommitPort runReservationPostCommitPort;
   @Mock private Clock clock;
 
   @InjectMocks private AutoSettleBatchItemProcessor sut;
@@ -83,21 +86,15 @@ class AutoSettleBatchItemProcessorTest {
     Reservation settledWithRealTxHash = org.mockito.Mockito.mock(Reservation.class);
     given(settledWithSentinel.updateTxHash(realTxHash)).willReturn(settledWithRealTxHash);
     given(saveReservationPort.save(settledWithRealTxHash)).willReturn(settledWithRealTxHash);
+    AtomicReference<Runnable> afterCommit = captureAfterCommitCallback();
+    runRequiresNewImmediately();
 
     // Act
-    TransactionSynchronizationManager.initSynchronization();
-    try {
-      sut.process(stale);
+    sut.process(stale);
 
-      // External mutation is deferred until the local DB transaction commits.
-      then(submitEscrowTransactionPort).shouldHaveNoInteractions();
-      for (TransactionSynchronization synchronization :
-          TransactionSynchronizationManager.getSynchronizations()) {
-        synchronization.afterCommit();
-      }
-    } finally {
-      TransactionSynchronizationManager.clearSynchronization();
-    }
+    // External mutation is deferred until the local DB transaction commits.
+    then(submitEscrowTransactionPort).shouldHaveNoInteractions();
+    afterCommit.get().run();
 
     // Assert — re-fetch with lock, then DB save before escrow call
     verify(loadReservationPort, times(2)).findByIdWithLock(reservationId);
@@ -136,17 +133,21 @@ class AutoSettleBatchItemProcessorTest {
     willThrow(new IllegalStateException("db down"))
         .given(settledWithSentinel)
         .updateTxHash("0xhash");
+    AtomicReference<Runnable> afterCommit = captureAfterCommitCallback();
+    willAnswer(
+            invocation -> {
+              try {
+                invocation.<Runnable>getArgument(0).run();
+              } catch (RuntimeException ignored) {
+                // infrastructure adapter owns post-commit exception isolation.
+              }
+              return null;
+            })
+        .given(runReservationPostCommitPort)
+        .requiresNew(any());
 
-    TransactionSynchronizationManager.initSynchronization();
-    try {
-      sut.process(stale);
-      for (TransactionSynchronization synchronization :
-          TransactionSynchronizationManager.getSynchronizations()) {
-        synchronization.afterCommit();
-      }
-    } finally {
-      TransactionSynchronizationManager.clearSynchronization();
-    }
+    sut.process(stale);
+    afterCommit.get().run();
 
     then(submitEscrowTransactionPort).should().submitAdminSettle(orderId);
     then(saveReservationPort).should(times(1)).save(settledWithSentinel);
@@ -190,5 +191,27 @@ class AutoSettleBatchItemProcessorTest {
     sut.process(stale);
 
     org.mockito.Mockito.verifyNoInteractions(saveReservationPort, submitEscrowTransactionPort);
+  }
+
+  private AtomicReference<Runnable> captureAfterCommitCallback() {
+    AtomicReference<Runnable> callback = new AtomicReference<>();
+    willAnswer(
+            invocation -> {
+              callback.set(invocation.getArgument(1, Runnable.class));
+              return null;
+            })
+        .given(runReservationPostCommitPort)
+        .afterCommit(eq("AutoSettle"), any());
+    return callback;
+  }
+
+  private void runRequiresNewImmediately() {
+    willAnswer(
+            invocation -> {
+              invocation.<Runnable>getArgument(0).run();
+              return null;
+            })
+        .given(runReservationPostCommitPort)
+        .requiresNew(any());
   }
 }

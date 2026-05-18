@@ -33,6 +33,30 @@ class MarketplaceMigrationScriptTest {
             "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_trainer_strike_records_source");
   }
 
+  @Test
+  @DisplayName("V074 preflight blocks dirty marketplace rows before adding constraints")
+  void marketplaceMigrationPreflightBlocksDirtyData() throws IOException {
+    String v074 = migration("V074__add_marketplace_user_escrow_state.sql");
+
+    assertThat(v074)
+        .contains("Duplicate active class_reservations must be repaired before V074")
+        .contains("GROUP BY user_id, class_slot_id, reservation_date, reservation_time")
+        .contains("Active ESCROW_DISPATCH_PENDING rows require manual repair before V074")
+        .contains("tx_hash = 'ESCROW_DISPATCH_PENDING'");
+  }
+
+  @Test
+  @DisplayName("V074 large-table checks are added before validation")
+  void marketplaceMigrationClassReservationChecksAreNotValidBeforeValidation() throws IOException {
+    String v074 = migration("V074__add_marketplace_user_escrow_state.sql");
+
+    assertThat(v074)
+        .contains("ADD COLUMN IF NOT EXISTS escrow_status")
+        .contains("ADD CONSTRAINT chk_class_reservations_status CHECK")
+        .contains(") NOT VALID")
+        .contains("VALIDATE CONSTRAINT chk_class_reservations_status");
+  }
+
   private String migration(String filename) throws IOException {
     return Files.readString(MIGRATION_DIR.resolve(filename));
   }

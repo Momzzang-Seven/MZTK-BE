@@ -135,6 +135,66 @@ class ApplyReservationEscrowExecutionHookServiceTest {
     assertThat(escrowCaptor.getValue().getLastFailureCode()).isEqualTo("FAILED_ONCHAIN");
   }
 
+  @Test
+  void terminatedHook_ignoresUnboundPurchaseIntent() {
+    Reservation reservation =
+        Reservation.builder()
+            .id(123L)
+            .userId(7L)
+            .trainerId(9L)
+            .slotId(11L)
+            .reservationDate(LocalDate.of(2026, 5, 20))
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.HOLDING)
+            .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+            .escrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
+            .orderId("00000000-0000-0000-0000-000000000123")
+            .orderKey("0x" + "0".repeat(61) + "123")
+            .pendingAttemptToken("attempt-purchase")
+            .bookedPriceAmount(50_000)
+            .version(1L)
+            .build();
+    MarketplaceReservationActionState actionState =
+        MarketplaceReservationActionState.builder()
+            .id(21L)
+            .reservationId(123L)
+            .escrowId(10L)
+            .actionType(ReservationEscrowAction.PURCHASE)
+            .actorType(ReservationEscrowActorType.BUYER)
+            .actorUserId(7L)
+            .attemptNo(1)
+            .attemptToken("attempt-purchase")
+            .status(ReservationActionStateStatus.PREPARING)
+            .build();
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-unbound"))
+        .willReturn(Optional.empty());
+    given(loadReservationPort.findByIdWithLock(123L)).willReturn(Optional.of(reservation));
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-unbound"))
+        .willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findByIdWithLock(21L))
+        .willReturn(Optional.of(actionState));
+
+    service.afterExecutionTerminated(
+        new ReservationEscrowExecutionTerminatedCommand(
+            "intent-unbound",
+            "MARKETPLACE_CLASS_PURCHASE",
+            "BUYER",
+            reservation.getId(),
+            "attempt-purchase",
+            21L,
+            "CANCELED",
+            "phase b compensation"));
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(saveReservationEscrowPort).shouldHaveNoInteractions();
+    ArgumentCaptor<MarketplaceReservationActionState> captor =
+        ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveReservationActionStatePort).should().save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(ReservationActionStateStatus.TERMINATED);
+    assertThat(captor.getValue().getErrorCode()).isEqualTo("CANCELED");
+  }
+
   private Reservation pendingCancelReservation() {
     return Reservation.builder()
         .id(123L)

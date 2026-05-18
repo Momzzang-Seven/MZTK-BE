@@ -126,6 +126,14 @@ public class ApplyReservationEscrowExecutionHookService
         command.executionIntentPublicId(), command.pendingAttemptToken(), reservation)) {
       return;
     }
+    if (isUnboundPurchaseTermination(command, reservation)) {
+      log.info(
+          "Skipping unbound marketplace purchase termination: intentId={}, reservationId={}",
+          command.executionIntentPublicId(),
+          reservation.getId());
+      markActionStateTerminated(command, reservation);
+      return;
+    }
     Reservation updated =
         PURCHASE.equals(command.actionType())
             ? reservation.markPaymentFailed(command.terminalStatus(), command.failureReason())
@@ -134,6 +142,14 @@ public class ApplyReservationEscrowExecutionHookService
     syncEscrowProjection(updated, null, command.terminalStatus(), command.failureReason());
     markActionStateTerminated(command, updated);
     markPurchaseCreateIdempotencyFailedIfNeeded(command, reservation);
+  }
+
+  private boolean isUnboundPurchaseTermination(
+      ReservationEscrowExecutionTerminatedCommand command, Reservation reservation) {
+    return PURCHASE.equals(command.actionType())
+        && reservation.getCurrentExecutionIntentPublicId() == null
+        && command.pendingAttemptToken() != null
+        && command.pendingAttemptToken().equals(reservation.getPendingAttemptToken());
   }
 
   private Reservation loadReservationForHook(

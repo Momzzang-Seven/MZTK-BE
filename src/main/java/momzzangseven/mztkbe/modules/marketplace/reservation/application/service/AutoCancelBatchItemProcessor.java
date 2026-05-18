@@ -6,21 +6,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionOperations;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Per-item transaction processor for the auto-cancel batch job.
@@ -50,15 +44,8 @@ public class AutoCancelBatchItemProcessor {
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
   private final RecordTrainerStrikePort recordTrainerStrikePort;
+  private final RunReservationPostCommitPort runReservationPostCommitPort;
   private final Clock clock;
-  private TransactionOperations postCommitTransactionOperations;
-
-  @Autowired
-  void setTransactionManager(PlatformTransactionManager transactionManager) {
-    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-    this.postCommitTransactionOperations = transactionTemplate;
-  }
 
   /**
    * Processes a single auto-cancel item in its own isolated transaction.
@@ -109,7 +96,8 @@ public class AutoCancelBatchItemProcessor {
     recordTrainerStrikePort.recordStrike(
         reservation.getTrainerId(), TrainerStrikeEvent.REASON_TIMEOUT);
 
-    runAfterCommit(
+    runReservationPostCommitPort.afterCommit(
+        "AutoCancel",
         () ->
             submitAdminRefundAndWriteBack(
                 reservation.getId(), reservation.getOrderId(), reservation.getTrainerId()));
@@ -133,7 +121,7 @@ public class AutoCancelBatchItemProcessor {
       return;
     }
 
-    runPostCommitTransaction(
+    runReservationPostCommitPort.requiresNew(
         () ->
             loadReservationPort
                 .findByIdWithLock(reservationId)
@@ -160,35 +148,5 @@ public class AutoCancelBatchItemProcessor {
         "AutoCancel on-chain refund recorded: reservationId={}, txHash={}",
         current.getId(),
         refundTxHash);
-  }
-
-  private void runAfterCommit(Runnable action) {
-    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-      runAfterCommitSafely(action);
-      return;
-    }
-    TransactionSynchronizationManager.registerSynchronization(
-        new TransactionSynchronization() {
-          @Override
-          public void afterCommit() {
-            runAfterCommitSafely(action);
-          }
-        });
-  }
-
-  private void runAfterCommitSafely(Runnable action) {
-    try {
-      action.run();
-    } catch (RuntimeException e) {
-      log.error("AutoCancel after-commit callback failed", e);
-    }
-  }
-
-  private void runPostCommitTransaction(Runnable action) {
-    if (postCommitTransactionOperations == null) {
-      action.run();
-      return;
-    }
-    postCommitTransactionOperations.executeWithoutResult(status -> action.run());
   }
 }
