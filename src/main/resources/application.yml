@@ -152,7 +152,7 @@ management:
       probability: 1.0                      # 부하테스트 중 전수 수집 (운영 시 0.1로 낮출 것)
   zipkin:
     tracing:
-      endpoint: http://localhost:9411/api/v2/spans
+      endpoint: http://host.docker.internal:9411/api/v2/spans
   metrics:
     tags:
       application: ${spring.application.name}
