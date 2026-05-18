@@ -156,8 +156,7 @@ class TreasuryAuditEventHandlerTest {
     assertThatCode(
             () ->
                 handler.onReactivated(
-                    new TreasuryWalletReactivatedEvent(
-                        ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID)))
+                    new TreasuryWalletReactivatedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID)))
         .doesNotThrowAnyException();
   }
 }
