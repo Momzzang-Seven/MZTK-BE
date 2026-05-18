@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -30,6 +31,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   private final ReservationJpaRepository reservationJpaRepository;
   private final ReservationSlotDateLockJpaRepository slotDateLockJpaRepository;
   private final JdbcTemplate jdbcTemplate;
+  private final Clock clock;
 
   @Override
   public Optional<Reservation> findById(Long reservationId) {
@@ -63,13 +65,14 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
 
   @Override
   public int countActiveReservationsBySlotId(Long slotId) {
-    return reservationJpaRepository.countActiveBySlotId(slotId);
+    return reservationJpaRepository.countActiveBySlotId(slotId, activeCountNow());
   }
 
   @Override
   public Map<Long, Integer> countActiveReservationsBySlotIds(List<Long> slotIds) {
     if (slotIds == null || slotIds.isEmpty()) return new HashMap<>();
-    List<Object[]> results = reservationJpaRepository.countActiveBySlotIdIn(slotIds);
+    List<Object[]> results =
+        reservationJpaRepository.countActiveBySlotIdIn(slotIds, activeCountNow());
     Map<Long, Integer> map = new HashMap<>();
     for (Object[] row : results) {
       map.put((Long) row[0], ((Long) row[1]).intValue());
@@ -79,12 +82,13 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
 
   @Override
   public int countActiveReservationsBySlotIdAndDate(Long slotId, java.time.LocalDate date) {
-    return reservationJpaRepository.countActiveBySlotIdAndDate(slotId, date);
+    return reservationJpaRepository.countActiveBySlotIdAndDate(slotId, date, activeCountNow());
   }
 
   @Override
   public int countActiveReservationsBySlotIdAndDateWithLock(Long slotId, java.time.LocalDate date) {
-    return reservationJpaRepository.countActiveBySlotIdAndDateWithLock(slotId, date);
+    return reservationJpaRepository.countActiveBySlotIdAndDateWithLock(
+        slotId, date, activeCountNow());
   }
 
   @Override
@@ -129,7 +133,8 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   public Map<java.time.LocalDate, Integer> countActiveReservationsBySlotIdAndDateRange(
       Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate) {
     List<Object[]> rows =
-        reservationJpaRepository.countActiveBySlotIdAndDateRange(slotId, startDate, endDate);
+        reservationJpaRepository.countActiveBySlotIdAndDateRange(
+            slotId, startDate, endDate, activeCountNow());
     Map<java.time.LocalDate, Integer> result = new HashMap<>();
     for (Object[] row : rows) {
       // JPA might return Date or LocalDate, assuming it returns LocalDate or java.sql.Date
@@ -141,6 +146,10 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
       result.put(date, ((Long) row[1]).intValue());
     }
     return result;
+  }
+
+  private LocalDateTime activeCountNow() {
+    return LocalDateTime.now(clock);
   }
 
   @Override

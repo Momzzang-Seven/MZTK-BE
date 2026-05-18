@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.global.pagination.CursorCodec;
@@ -17,6 +18,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
@@ -95,13 +97,9 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
     query.validate();
     CursorPageRequest pageRequest = query.pageRequest();
 
-    // Fetch size+1 rows to determine hasNext without a COUNT query.
-    List<Reservation> loaded =
-        loadReservationPort.findByTrainerIdCursor(query.trainerId(), query.status(), pageRequest);
-
-    boolean hasNext = loaded.size() > pageRequest.size();
-    List<Reservation> page = hasNext ? loaded.subList(0, pageRequest.size()) : loaded;
-    page = repairReservationChainReadUseCase.repairBatch(page);
+    RepairedPage repairedPage = loadRepairedPage(query, pageRequest);
+    boolean hasNext = repairedPage.hasNext();
+    List<Reservation> page = repairedPage.reservations();
 
     if (page.isEmpty()) {
       return new CursorSlice<>(List.of(), false, null);
@@ -165,6 +163,56 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
 
     return new CursorSlice<>(items, hasNext, nextCursor);
   }
+
+  private RepairedPage loadRepairedPage(
+      GetTrainerReservationsQuery query, CursorPageRequest initialRequest) {
+    List<Reservation> matching = new ArrayList<>();
+    CursorPageRequest request = initialRequest;
+
+    while (matching.size() <= initialRequest.size()) {
+      List<Reservation> loaded =
+          loadReservationPort.findByTrainerIdCursor(query.trainerId(), query.status(), request);
+      if (loaded.isEmpty()) {
+        break;
+      }
+
+      List<Reservation> repaired = repairReservationChainReadUseCase.repairBatch(loaded);
+      for (Reservation reservation : repaired) {
+        if (matchesStatus(reservation, query.status())) {
+          matching.add(reservation);
+          if (matching.size() > initialRequest.size()) {
+            break;
+          }
+        }
+      }
+
+      if (matching.size() > initialRequest.size() || loaded.size() <= request.size()) {
+        break;
+      }
+      request = nextRequestAfter(loaded.getLast(), request);
+    }
+
+    boolean hasNext = matching.size() > initialRequest.size();
+    List<Reservation> page = hasNext ? matching.subList(0, initialRequest.size()) : matching;
+    return new RepairedPage(List.copyOf(page), hasNext);
+  }
+
+  private static boolean matchesStatus(Reservation reservation, ReservationStatus status) {
+    return status == null || reservation.getStatus() == status;
+  }
+
+  private static CursorPageRequest nextRequestAfter(
+      Reservation reservation, CursorPageRequest currentRequest) {
+    return new CursorPageRequest(
+        new KeysetCursor(
+            reservation.getReservationDate().atTime(reservation.getReservationTime()),
+            reservation.getId(),
+            currentRequest.scope()),
+        currentRequest.size(),
+        currentRequest.scope());
+  }
+
+  private record RepairedPage(List<Reservation> reservations, boolean hasNext) {}
 
   private static LoadReservationExecutionResumePort emptyResumePort() {
     return new LoadReservationExecutionResumePort() {

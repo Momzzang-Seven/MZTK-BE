@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
@@ -113,6 +114,78 @@ class GetUserReservationsServiceTest {
     assertThat(result.items()).hasSize(1);
     assertThat(result.items().getFirst().status()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
     then(repairUseCase).should().repairBatch(List.of(original));
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - 상태 필터가 있으면 chain repair 이후에도 필터 조건을 유지한다")
+  void execute_StatusFilter_RemovesRowsChangedByChainReadRepair() {
+    Reservation original =
+        sampleReservation(1L).toBuilder().status(ReservationStatus.DEADLINE_SYNC_REQUIRED).build();
+    Reservation repaired = original.toBuilder().status(ReservationStatus.DEADLINE_REFUNDED).build();
+    RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
+    GetUserReservationsService repairingSut =
+        new GetUserReservationsService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+    given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
+        .willReturn(List.of(original));
+    given(repairUseCase.repairBatch(List.of(original))).willReturn(List.of(repaired));
+
+    CursorSlice<ReservationSummaryResult> result =
+        repairingSut.execute(
+            new GetUserReservationsQuery(1L, ReservationStatus.DEADLINE_SYNC_REQUIRED));
+
+    assertThat(result.items()).isEmpty();
+    assertThat(result.hasNext()).isFalse();
+    assertThat(result.nextCursor()).isNull();
+    then(repairUseCase).should().repairBatch(List.of(original));
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - repair 후 필터링으로 페이지가 비면 다음 raw page에서 보충한다")
+  void execute_StatusFilter_SupplementsPageAfterRepairFiltering() {
+    ReservationStatus status = ReservationStatus.DEADLINE_SYNC_REQUIRED;
+    Reservation first =
+        sampleReservation(1L).toBuilder()
+            .id(30L)
+            .reservationDate(LocalDate.of(2025, 6, 3))
+            .status(status)
+            .build();
+    Reservation second =
+        sampleReservation(1L).toBuilder()
+            .id(20L)
+            .reservationDate(LocalDate.of(2025, 6, 2))
+            .status(status)
+            .build();
+    Reservation third =
+        sampleReservation(1L).toBuilder()
+            .id(10L)
+            .reservationDate(LocalDate.of(2025, 6, 1))
+            .status(status)
+            .build();
+    Reservation repairedFirst =
+        first.toBuilder().status(ReservationStatus.DEADLINE_REFUNDED).build();
+    RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
+    GetUserReservationsService repairingSut =
+        new GetUserReservationsService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(null, 1, 20, 100, GetUserReservationsQuery.cursorScope(status));
+    given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
+        .willReturn(List.of(first, second), List.of(third));
+    given(repairUseCase.repairBatch(List.of(first, second)))
+        .willReturn(List.of(repairedFirst, second));
+    given(repairUseCase.repairBatch(List.of(third))).willReturn(List.of(third));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    CursorSlice<ReservationSummaryResult> result =
+        repairingSut.execute(new GetUserReservationsQuery(1L, status, pageRequest));
+
+    assertThat(result.items())
+        .singleElement()
+        .satisfies(item -> assertThat(item.reservationId()).isEqualTo(20L));
+    assertThat(result.hasNext()).isTrue();
+    assertThat(result.nextCursor()).isNotBlank();
   }
 
   @Test

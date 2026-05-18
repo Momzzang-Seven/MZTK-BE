@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import momzzangseven.mztkbe.global.time.TimeConfig;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.ClassSlotEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionCleanupProtectionQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
@@ -32,7 +33,8 @@ import org.springframework.test.context.ActiveProfiles;
 @Import({
   ReservationPersistenceAdapter.class,
   ReservationCreateIdempotencyPersistenceAdapter.class,
-  ReservationExecutionCleanupProtectionPersistenceAdapter.class
+  ReservationExecutionCleanupProtectionPersistenceAdapter.class,
+  TimeConfig.class
 })
 class ReservationPersistenceAdapterTest {
 

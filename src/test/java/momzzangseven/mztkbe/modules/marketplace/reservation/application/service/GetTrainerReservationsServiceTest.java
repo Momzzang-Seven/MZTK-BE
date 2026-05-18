@@ -124,6 +124,30 @@ class GetTrainerReservationsServiceTest {
   }
 
   @Test
+  @DisplayName("트레이너 수강 신청 목록 조회 - 상태 필터가 있으면 chain repair 이후에도 필터 조건을 유지한다")
+  void execute_StatusFilter_RemovesRowsChangedByChainReadRepair() {
+    Reservation original =
+        sampleReservation(2L).toBuilder().status(ReservationStatus.DEADLINE_SYNC_REQUIRED).build();
+    Reservation repaired = original.toBuilder().status(ReservationStatus.DEADLINE_REFUNDED).build();
+    RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
+    GetTrainerReservationsService repairingSut =
+        new GetTrainerReservationsService(
+            loadReservationPort, loadClassSummaryPort, loadUserSummaryPort, null, repairUseCase);
+    given(loadReservationPort.findByTrainerIdCursor(any(), any(), any()))
+        .willReturn(List.of(original));
+    given(repairUseCase.repairBatch(List.of(original))).willReturn(List.of(repaired));
+
+    CursorSlice<ReservationSummaryResult> result =
+        repairingSut.execute(
+            new GetTrainerReservationsQuery(2L, ReservationStatus.DEADLINE_SYNC_REQUIRED));
+
+    assertThat(result.items()).isEmpty();
+    assertThat(result.hasNext()).isFalse();
+    assertThat(result.nextCursor()).isNull();
+    then(repairUseCase).should().repairBatch(List.of(original));
+  }
+
+  @Test
   @DisplayName("트레이너 수강 신청 목록 조회 - 수강 신청이 없으면 빈 리스트 반환")
   void execute_NoReservations_ReturnsEmptyList() {
     // given

@@ -67,24 +67,27 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "WHERE r.slotId = :slotId "
           + "AND r.reservationDate = :reservationDate "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= CURRENT_TIMESTAMP)")
+          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= :now)")
   int countActiveBySlotIdAndDate(
-      @Param("slotId") Long slotId, @Param("reservationDate") LocalDate reservationDate);
+      @Param("slotId") Long slotId,
+      @Param("reservationDate") LocalDate reservationDate,
+      @Param("now") LocalDateTime now);
 
   @Query(
       "SELECT COUNT(r) FROM ReservationEntity r "
           + "WHERE r.slotId = :slotId "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= CURRENT_TIMESTAMP)")
-  int countActiveBySlotId(@Param("slotId") Long slotId);
+          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= :now)")
+  int countActiveBySlotId(@Param("slotId") Long slotId, @Param("now") LocalDateTime now);
 
   @Query(
       "SELECT r.slotId, COUNT(r) FROM ReservationEntity r "
           + "WHERE r.slotId IN :slotIds "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= CURRENT_TIMESTAMP) "
+          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= :now) "
           + "GROUP BY r.slotId")
-  List<Object[]> countActiveBySlotIdIn(@Param("slotIds") List<Long> slotIds);
+  List<Object[]> countActiveBySlotIdIn(
+      @Param("slotIds") List<Long> slotIds, @Param("now") LocalDateTime now);
 
   /** Counts active reservations after the slot/date capacity key has been locked by the caller. */
   @Query(
@@ -92,9 +95,11 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "WHERE r.slotId = :slotId "
           + "AND r.reservationDate = :reservationDate "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= CURRENT_TIMESTAMP)")
+          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= :now)")
   int countActiveBySlotIdAndDateWithLock(
-      @Param("slotId") Long slotId, @Param("reservationDate") LocalDate reservationDate);
+      @Param("slotId") Long slotId,
+      @Param("reservationDate") LocalDate reservationDate,
+      @Param("now") LocalDateTime now);
 
   // NOTE: Keep 'PENDING' / 'APPROVED' literals in sync with ReservationStatus enum.
   @Query(
@@ -103,12 +108,13 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "AND r.reservationDate >= :startDate "
           + "AND r.reservationDate < :endDate "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= CURRENT_TIMESTAMP) "
+          + "AND NOT (r.status = 'PURCHASE_PREPARING' AND r.holdExpiresAt IS NOT NULL AND r.holdExpiresAt <= :now) "
           + "GROUP BY r.reservationDate")
   List<Object[]> countActiveBySlotIdAndDateRange(
       @Param("slotId") Long slotId,
       @Param("startDate") LocalDate startDate,
-      @Param("endDate") LocalDate endDate);
+      @Param("endDate") LocalDate endDate,
+      @Param("now") LocalDateTime now);
 
   /**
    * Fetch PENDING reservations eligible for auto-cancellation.
