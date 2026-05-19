@@ -52,6 +52,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
 @ConditionalOnExecutionModeEnabled
@@ -337,11 +338,14 @@ public class ExecutionIntentServiceConfig {
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       LoadExecutionTransactionPort loadExecutionTransactionPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      PlatformTransactionManager transactionManager,
       Clock appClock) {
-    return new ReplayConfirmedExecutionIntentService(
-        executionIntentPersistencePort,
-        loadExecutionTransactionPort,
-        executionActionHandlerPorts,
-        appClock);
+    ReplayConfirmedExecutionIntentService delegate =
+        new ReplayConfirmedExecutionIntentService(
+            executionIntentPersistencePort,
+            loadExecutionTransactionPort,
+            executionActionHandlerPorts,
+            appClock);
+    return new TransactionalReplayConfirmedExecutionIntentUseCase(delegate, transactionManager);
   }
 }

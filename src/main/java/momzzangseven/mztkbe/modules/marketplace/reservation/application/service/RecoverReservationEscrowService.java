@@ -34,6 +34,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
@@ -63,6 +64,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   private final LoadReservationEscrowPort loadReservationEscrowPort;
+  private final SaveReservationEscrowPort saveReservationEscrowPort;
   private final SaveReservationActionStatePort saveReservationActionStatePort;
   private final LoadReservationActionStatePort loadReservationActionStatePort;
   private final BindReservationActionStatePort bindReservationActionStatePort;
@@ -98,6 +100,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
         null,
         null,
         null,
+        null,
         recordTrainerStrikePort,
         clock);
   }
@@ -114,6 +117,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
       LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
       LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
       LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationEscrowPort saveReservationEscrowPort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       BindReservationActionStatePort bindReservationActionStatePort,
@@ -137,6 +141,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     this.loadReservationEscrowOrderPort =
         java.util.Objects.requireNonNull(loadReservationEscrowOrderPort);
     this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.saveReservationEscrowPort = saveReservationEscrowPort;
     this.saveReservationActionStatePort = saveReservationActionStatePort;
     this.loadReservationActionStatePort = loadReservationActionStatePort;
     this.bindReservationActionStatePort = bindReservationActionStatePort;
@@ -661,17 +666,33 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
             .errorReason("marketplace recovery created a newer action-state")
             .build());
     Reservation retrying = saveReservationPort.save(resetPendingAttemptForRetry(reservation, flow));
+    MarketplaceReservationEscrow retryingEscrow = syncRetryEscrowProjection(escrow, retrying, flow);
     MarketplaceReservationActionState nextActionState =
         createActionState(
             retrying,
-            escrow,
+            retryingEscrow,
             toEscrowAction(flow.action()),
             actorType(flow.action()),
             actorUserId(retrying, flow),
             expectedReservationStatus(flow.action()),
             expectedEscrowStatus(flow.action()),
             retrying.getRejectionReason());
-    return PreparedLocalState.unchangedWithNewActionState(retrying, escrow, nextActionState);
+    return PreparedLocalState.unchangedWithNewActionState(
+        retrying, retryingEscrow, nextActionState);
+  }
+
+  private MarketplaceReservationEscrow syncRetryEscrowProjection(
+      MarketplaceReservationEscrow escrow, Reservation retrying, RecoveryFlow flow) {
+    if (flow.action() != RecoveryAction.PURCHASE
+        || escrow == null
+        || saveReservationEscrowPort == null) {
+      return escrow;
+    }
+    return saveReservationEscrowPort.save(
+        escrow.toBuilder()
+            .escrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
+            .holdExpiresAt(retrying.getHoldExpiresAt())
+            .build());
   }
 
   private Reservation resetPendingAttemptForRetry(Reservation reservation, RecoveryFlow flow) {

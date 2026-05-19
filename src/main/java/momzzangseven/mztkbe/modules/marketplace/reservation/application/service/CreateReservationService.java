@@ -1165,16 +1165,7 @@ public class CreateReservationService implements CreateReservationUseCase {
   }
 
   private String createIdempotencyKey(CreateReservationCommand command) {
-    if (command.idempotencyKey() != null && !command.idempotencyKey().isBlank()) {
-      return command.userId() + ":" + command.idempotencyKey().trim();
-    }
-    return String.join(
-        ":",
-        "natural",
-        String.valueOf(command.userId()),
-        String.valueOf(command.slotId()),
-        command.reservationDate().toString(),
-        command.reservationTime().toString());
+    return command.userId() + ":" + command.idempotencyKey().trim();
   }
 
   private String createPayload(

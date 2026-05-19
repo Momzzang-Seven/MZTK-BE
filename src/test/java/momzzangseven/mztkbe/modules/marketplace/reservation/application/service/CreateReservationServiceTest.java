@@ -155,7 +155,7 @@ class CreateReservationServiceTest {
 
     command =
         new CreateReservationCommand(
-            USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, PRICE_BASE_UNITS);
+            USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, "create-key", PRICE_BASE_UNITS);
 
     given(saveReservationCreateIdempotencyPort.reservePreparing(any(), any(), any(), any()))
         .willAnswer(
@@ -1205,7 +1205,14 @@ class CreateReservationServiceTest {
       // given: 서명 금액이 실제 수업 가격과 다름
       CreateReservationCommand wrongAmountCmd =
           new CreateReservationCommand(
-              USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, BigInteger.valueOf(99_999L));
+              USER_ID,
+              CLASS_ID,
+              SLOT_ID,
+              MONDAY,
+              START_TIME,
+              null,
+              "wrong-amount",
+              BigInteger.valueOf(99_999L));
 
       given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
@@ -1223,6 +1230,21 @@ class CreateReservationServiceTest {
               ex ->
                   assertThat(((BusinessException) ex).getCode())
                       .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH.getCode()));
+    }
+
+    @Test
+    @DisplayName("[CR-03A] create idempotency key가 없으면 외부 precheck 전에 거절한다")
+    void create_idempotency_key가_없으면_거절() {
+      CreateReservationCommand missingKey =
+          new CreateReservationCommand(
+              USER_ID, CLASS_ID, SLOT_ID, MONDAY, START_TIME, null, " ", PRICE_BASE_UNITS);
+
+      assertThatThrownBy(() -> sut.execute(missingKey))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("idempotencyKey");
+
+      then(precheckReservationPurchasePort).shouldHaveNoInteractions();
+      then(saveReservationPort).shouldHaveNoInteractions();
     }
 
     @Test
@@ -1281,7 +1303,7 @@ class CreateReservationServiceTest {
       LocalDate tuesday = MONDAY.plusDays(1);
       CreateReservationCommand wrongDayCmd =
           new CreateReservationCommand(
-              USER_ID, CLASS_ID, SLOT_ID, tuesday, START_TIME, null, PRICE_BASE_UNITS);
+              USER_ID, CLASS_ID, SLOT_ID, tuesday, START_TIME, null, "wrong-day", PRICE_BASE_UNITS);
 
       given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
 
@@ -1324,7 +1346,7 @@ class CreateReservationServiceTest {
 
       CreateReservationCommand pastCmd =
           new CreateReservationCommand(
-              USER_ID, CLASS_ID, SLOT_ID, today, pastTime, null, PRICE_BASE_UNITS);
+              USER_ID, CLASS_ID, SLOT_ID, today, pastTime, null, "past-time", PRICE_BASE_UNITS);
 
       given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID))
           .willReturn(Optional.of(mondaySlot));

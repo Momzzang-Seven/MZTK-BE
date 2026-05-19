@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.external.web3;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceEscrowOrderView;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdCodec;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +29,7 @@ import org.web3j.abi.datatypes.generated.Uint48;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.Request;
+import org.web3j.protocol.core.Response;
 import org.web3j.protocol.core.methods.request.Transaction;
 import org.web3j.protocol.core.methods.response.EthCall;
 
@@ -92,15 +95,61 @@ class MarketplaceEscrowOrderReaderAdapterTest {
     assertThat(results.get(1).state()).isEqualTo(MarketplaceEscrowOrderView.STATE_CANCELLED);
   }
 
+  @Test
+  void getOrder_usesSubRpcWhenMainRpcFails() throws Exception {
+    stubEthCall(mainWeb3j, rpcError(-32_000, "main failed"));
+    stubEthCall(subWeb3j, success(encodeReturn(order(FIRST_ORDER_KEY, 1_000L, 123_456L, 1000))));
+
+    MarketplaceEscrowOrderView result = adapter.getOrder(FIRST_ORDER_KEY);
+
+    assertThat(result.orderKey()).isEqualTo(FIRST_ORDER_KEY);
+    assertThat(result.state()).isEqualTo(MarketplaceEscrowOrderView.STATE_CREATED);
+  }
+
+  @Test
+  void getOrder_throwsWhenBothRpcEndpointsFail() throws Exception {
+    stubEthCall(mainWeb3j, rpcError(-32_000, "main failed"));
+    stubEthCall(subWeb3j, rpcError(-32_001, "sub failed"));
+
+    assertThatThrownBy(() -> adapter.getOrder(FIRST_ORDER_KEY))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("getOrder failed")
+        .hasMessageContaining("main=")
+        .hasMessageContaining("sub=");
+  }
+
+  @Test
+  void getOrder_throwsWhenReturnDataIsMalformed() throws Exception {
+    stubMainEthCall("0x1234");
+
+    assertThatThrownBy(() -> adapter.getOrder(FIRST_ORDER_KEY))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("malformed data");
+  }
+
   private void stubMainEthCall(String encodedReturnData) throws Exception {
-    EthCall response = new EthCall();
-    response.setResult(encodedReturnData);
+    stubEthCall(mainWeb3j, success(encodedReturnData));
+  }
+
+  private void stubEthCall(Web3j web3j, EthCall response) throws Exception {
     @SuppressWarnings("rawtypes")
     Request request = mock(Request.class);
     when(request.send()).thenReturn(response);
     doReturn(request)
-        .when(mainWeb3j)
+        .when(web3j)
         .ethCall(any(Transaction.class), eq(DefaultBlockParameterName.LATEST));
+  }
+
+  private EthCall success(String encodedReturnData) {
+    EthCall response = new EthCall();
+    response.setResult(encodedReturnData);
+    return response;
+  }
+
+  private EthCall rpcError(int code, String message) {
+    EthCall response = new EthCall();
+    response.setError(new Response.Error(code, message));
+    return response;
   }
 
   private String encodeReturn(Type<?> value) {

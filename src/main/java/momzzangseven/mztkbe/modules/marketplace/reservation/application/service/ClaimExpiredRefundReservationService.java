@@ -274,6 +274,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
     Reservation refundable = ensureRefundAvailable(reservation, currentState != null);
     MarketplaceReservationEscrow escrow = loadEscrowProjection(refundable);
+    staleRetryableCurrentActionStateIfNeeded(reservation, currentState);
     if (escrow != null) {
       ReservationEscrowActionGuard.requireActiveWalletMatchesSnapshot(
           loadReservationWalletPort, command.userId(), escrow.getBuyerWalletAddress());
@@ -294,6 +295,36 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     return BeginDeadlineRefundResult.pending(
         new PendingPreparation(
             pending, commandFor(pending, escrow, actionState, command.userId()), actionState));
+  }
+
+  private void staleRetryableCurrentActionStateIfNeeded(
+      Reservation reservation, ReservationExecutionStateView currentState) {
+    if (currentState == null
+        || !isRetryableTerminal(currentState.status())
+        || loadReservationActionStatePort == null
+        || saveReservationActionStatePort == null) {
+      return;
+    }
+    loadReservationActionStatePort
+        .findLatestByReservationIdWithLock(reservation.getId())
+        .filter(state -> state.getStatus().isActive())
+        .filter(
+            state ->
+                equalsNullable(
+                        state.getExecutionIntentPublicId(),
+                        reservation.getCurrentExecutionIntentPublicId())
+                    || equalsNullable(
+                        state.getExecutionIntentPublicId(), currentState.executionIntentId()))
+        .ifPresent(
+            state ->
+                saveReservationActionStatePort.save(
+                    state.toBuilder()
+                        .status(ReservationActionStateStatus.STALE)
+                        .retryable(false)
+                        .errorCode("RETRY_SUPERSEDED")
+                        .errorReason(
+                            "marketplace deadline refund retry created a newer action-state")
+                        .build()));
   }
 
   private ClaimExpiredRefundReservationResult replayConfirmedState(

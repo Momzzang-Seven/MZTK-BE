@@ -16,6 +16,8 @@ import java.time.LocalTime;
  * @param reservationDate requested session date
  * @param reservationTime requested session start time
  * @param userRequest optional note from the user (nullable)
+ * @param idempotencyKey client supplied create idempotency key; required to separate retries from
+ *     new attempts after terminal preparation failures
  * @param signedAmount the amount the user signed (used for price-mismatch validation)
  */
 public record CreateReservationCommand(
@@ -27,18 +29,6 @@ public record CreateReservationCommand(
     String userRequest,
     String idempotencyKey,
     BigInteger signedAmount) {
-
-  public CreateReservationCommand(
-      Long userId,
-      Long classId,
-      Long slotId,
-      LocalDate reservationDate,
-      LocalTime reservationTime,
-      String userRequest,
-      BigInteger signedAmount) {
-    this(
-        userId, classId, slotId, reservationDate, reservationTime, userRequest, null, signedAmount);
-  }
 
   /**
    * Validates structural preconditions of the command.
@@ -67,6 +57,9 @@ public record CreateReservationCommand(
     }
     if (signedAmount == null || signedAmount.signum() <= 0) {
       throw new IllegalArgumentException("signedAmount must be a positive value");
+    }
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+      throw new IllegalArgumentException("idempotencyKey must not be blank");
     }
   }
 }

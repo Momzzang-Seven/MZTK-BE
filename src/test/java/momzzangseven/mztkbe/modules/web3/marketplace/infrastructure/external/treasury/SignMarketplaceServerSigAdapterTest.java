@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.external.treasury;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -10,6 +11,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletNotProvisionedException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigPreimage;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.MarketplaceServerSigResult;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignDigestCommand;
@@ -93,16 +96,62 @@ class SignMarketplaceServerSigAdapterTest {
     assertThat(result.signatureBytes()[64]).isEqualTo(V);
   }
 
+  @Test
+  @DisplayName("preimage가 null이면 digest 생성 전에 거부한다")
+  void sign_rejectsNullPreimage() {
+    assertThatThrownBy(() -> sut.sign(null))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("preimage");
+
+    then(loadTreasuryWalletByRoleUseCase).shouldHaveNoInteractions();
+    then(signDigestUseCase).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("MARKETPLACE_SIGNER가 없으면 서명하지 않는다")
+  void sign_rejectsMissingMarketplaceSigner() {
+    given(loadTreasuryWalletByRoleUseCase.execute(TreasuryRole.MARKETPLACE_SIGNER))
+        .willReturn(Optional.empty());
+
+    assertThatThrownBy(() -> sut.sign(purchasePreimage()))
+        .isInstanceOf(TreasuryWalletNotProvisionedException.class)
+        .hasMessageContaining("MARKETPLACE_SIGNER");
+
+    then(signDigestUseCase).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("MARKETPLACE_SIGNER가 ACTIVE가 아니면 서명하지 않는다")
+  void sign_rejectsInactiveMarketplaceSigner() {
+    given(loadTreasuryWalletByRoleUseCase.execute(TreasuryRole.MARKETPLACE_SIGNER))
+        .willReturn(Optional.of(marketplaceSigner(TreasuryWalletStatus.DISABLED)));
+
+    assertThatThrownBy(() -> sut.sign(purchasePreimage()))
+        .isInstanceOf(TreasuryWalletNotProvisionedException.class)
+        .hasMessageContaining("DISABLED");
+
+    then(signDigestUseCase).shouldHaveNoInteractions();
+  }
+
   private static TreasuryWalletView activeMarketplaceSigner() {
+    return marketplaceSigner(TreasuryWalletStatus.ACTIVE);
+  }
+
+  private static TreasuryWalletView marketplaceSigner(TreasuryWalletStatus status) {
     return new TreasuryWalletView(
         TreasuryRole.MARKETPLACE_SIGNER.toAlias(),
         TreasuryRole.MARKETPLACE_SIGNER,
         KMS_KEY_ID,
         SIGNER,
-        TreasuryWalletStatus.ACTIVE,
+        status,
         TreasuryKeyOrigin.IMPORTED,
         null,
         null);
+  }
+
+  private static MarketplaceServerSigPreimage purchasePreimage() {
+    return new MarketplaceServerSigPreimage.PurchaseClassPreimage(
+        BUYER, ORDER_KEY, TOKEN, TRAINER, BigInteger.valueOf(50_000));
   }
 
   private static byte[] filled(byte value) {

@@ -322,6 +322,7 @@ class ClassReservationControllerTest {
     body.put("slotId", 10);
     body.put("reservationDate", FUTURE_DATE.toString());
     body.put("reservationTime", "10:00:00");
+    body.put("idempotencyKey", "create-reservation-key");
     body.put("signedAmount", 1000);
     return body;
   }
@@ -600,6 +601,21 @@ class ClassReservationControllerTest {
     void create_missingSlotId_returns400() throws Exception {
       Map<String, Object> body = validCreateBody();
       body.remove("slotId");
+
+      mockMvc
+          .perform(
+              post("/marketplace/classes/1/reservations")
+                  .with(userPrincipal(50L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(body)))
+          .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("[CR-11B] idempotencyKey가 없으면 400을 반환한다 (@NotBlank)")
+    void create_missingIdempotencyKey_returns400() throws Exception {
+      Map<String, Object> body = new LinkedHashMap<>(validCreateBody());
+      body.remove("idempotencyKey");
 
       mockMvc
           .perform(
