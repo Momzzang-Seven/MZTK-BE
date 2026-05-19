@@ -183,6 +183,14 @@ public enum ReservationStatus {
       case DEADLINE_REFUND_PENDING ->
           next == DEADLINE_REFUNDED || next == DEADLINE_REFUND_AVAILABLE;
       case DEADLINE_RECOVERY_REQUIRED, DEADLINE_SYNC_REQUIRED -> next == DEADLINE_REFUND_AVAILABLE;
+      case MANUAL_SYNC_REQUIRED ->
+          next == USER_CANCELLED
+              || next == REJECTED
+              || next == TIMEOUT_CANCELLED
+              || next == SETTLED
+              || next == AUTO_SETTLED
+              || next == DEADLINE_REFUNDED
+              || next == DEADLINE_REFUND_AVAILABLE;
       default -> false;
     };
   }

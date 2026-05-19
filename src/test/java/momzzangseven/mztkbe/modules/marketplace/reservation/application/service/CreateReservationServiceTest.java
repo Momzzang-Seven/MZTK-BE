@@ -355,8 +355,8 @@ class CreateReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[CR-11] Phase B 보상에서 intent 취소가 불가하면 purchase hold를 즉시 실패 처리하지 않는다")
-    void phase_b_보상_취소_불가_시_즉시_실패처리하지_않음() {
+    @DisplayName("[CR-11] Phase B 보상에서 intent 취소가 불가하면 기존 intent를 추적 가능하게 보존한다")
+    void phase_b_보상_취소_불가_시_기존_intent를_추적_가능하게_보존() {
       given(loadReservationClassPort.findSlotByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(loadReservationClassPort.findClassById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
@@ -400,10 +400,32 @@ class CreateReservationServiceTest {
           .willReturn(new PrepareReservationEscrowResult(web3()));
       given(cancelReservationEscrowExecutionPort.cancelSignableIntent(any(), any(), any()))
           .willReturn(false);
+      given(loadReservationActionStatePort.findByIdWithLock(20L))
+          .willAnswer(
+              invocation ->
+                  Optional.of(
+                      MarketplaceReservationActionState.builder()
+                          .id(20L)
+                          .reservationId(1L)
+                          .escrowId(10L)
+                          .actionType(ReservationEscrowAction.PURCHASE)
+                          .actorType(ReservationEscrowActorType.BUYER)
+                          .actorUserId(USER_ID)
+                          .attemptNo(1)
+                          .attemptToken(latestSaved.get().getPendingAttemptToken())
+                          .status(ReservationActionStateStatus.PREPARING)
+                          .build()));
+      given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+          .willReturn(
+              Optional.of(
+                  MarketplaceReservationEscrow.builder().id(10L).reservationId(1L).build()));
 
       assertThatThrownBy(() -> sut.execute(command)).isInstanceOf(BusinessException.class);
 
       assertThat(latestSaved.get().getStatus()).isEqualTo(ReservationStatus.HOLDING);
+      assertThat(latestSaved.get().getEffectiveEscrowStatus())
+          .isEqualTo(ReservationEscrowStatus.PURCHASE_PENDING);
+      assertThat(latestSaved.get().getCurrentExecutionIntentPublicId()).isEqualTo("intent-1");
     }
 
     @Test

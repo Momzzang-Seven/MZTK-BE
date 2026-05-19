@@ -924,6 +924,7 @@ public class CreateReservationService implements CreateReservationUseCase {
   private void compensatePurchaseBindFailure(
       PhaseAResult phaseA, PrepareReservationEscrowResult prepared, RuntimeException cause) {
     if (!cancelSignablePreparedIntent(prepared, cause)) {
+      trackUncancelledPurchaseIntent(phaseA, prepared);
       return;
     }
     if (isExpiredPurchaseHold(cause)) {
@@ -931,6 +932,77 @@ public class CreateReservationService implements CreateReservationUseCase {
       return;
     }
     markPurchasePrepareFailed(phaseA, cause);
+  }
+
+  private void trackUncancelledPurchaseIntent(
+      PhaseAResult phaseA, PrepareReservationEscrowResult prepared) {
+    String executionIntentId = prepared.web3().executionIntent().id();
+    runInTransaction(
+        () -> {
+          Reservation current =
+              loadReservationPort
+                  .findByIdWithLock(phaseA.reservation().getId())
+                  .orElseThrow(
+                      () -> new ReservationNotFoundException(phaseA.reservation().getId()));
+          if (!isPurchaseHolding(current)
+              || current.getCurrentExecutionIntentPublicId() != null
+              || !equalsNullable(
+                  current.getPendingAttemptToken(),
+                  phaseA.reservation().getPendingAttemptToken())) {
+            log.warn(
+                "Skipping marketplace purchase bind compensation because reservation changed: id={}, intentId={}",
+                phaseA.reservation().getId(),
+                executionIntentId);
+            return null;
+          }
+          MarketplaceReservationActionState actionState =
+              loadReservationActionStatePort
+                  .findByIdWithLock(phaseA.actionState().getId())
+                  .orElse(null);
+          if (!isCompensatablePurchaseActionState(actionState, phaseA)) {
+            log.warn(
+                "Skipping marketplace purchase bind compensation because action-state changed: actionStateId={}, intentId={}",
+                phaseA.actionState().getId(),
+                executionIntentId);
+            return null;
+          }
+          saveReservationActionStatePort.save(
+              actionState.toBuilder()
+                  .executionIntentPublicId(executionIntentId)
+                  .status(ReservationActionStateStatus.INTENT_BOUND)
+                  .retryable(false)
+                  .errorCode(null)
+                  .errorReason(null)
+                  .build());
+          Reservation bound =
+              saveReservationPort.save(current.bindPurchaseIntent(executionIntentId));
+          loadReservationEscrowPort
+              .findByReservationIdWithLock(bound.getId())
+              .map(
+                  escrow ->
+                      escrow.toBuilder()
+                          .escrowStatus(ReservationEscrowStatus.PURCHASE_PENDING)
+                          .holdExpiresAt(bound.getHoldExpiresAt())
+                          .build())
+              .ifPresent(saveReservationEscrowPort::save);
+          saveReservationCreateIdempotencyPort.save(
+              phaseA.idempotency().markBound("{\"status\":\"BOUND_AFTER_BIND_COMPENSATION\"}"));
+          log.warn(
+              "Tracked uncancelled marketplace purchase intent after Phase B bind failure: reservationId={}, intentId={}",
+              bound.getId(),
+              executionIntentId);
+          return null;
+        });
+  }
+
+  private boolean isCompensatablePurchaseActionState(
+      MarketplaceReservationActionState actionState, PhaseAResult phaseA) {
+    return actionState != null
+        && actionState.getActionType() == ReservationEscrowAction.PURCHASE
+        && actionState.getStatus() == ReservationActionStateStatus.PREPARING
+        && actionState.getExecutionIntentPublicId() == null
+        && equalsNullable(actionState.getReservationId(), phaseA.reservation().getId())
+        && equalsNullable(actionState.getAttemptToken(), phaseA.actionState().getAttemptToken());
   }
 
   private boolean isExpiredPurchaseHold(RuntimeException cause) {

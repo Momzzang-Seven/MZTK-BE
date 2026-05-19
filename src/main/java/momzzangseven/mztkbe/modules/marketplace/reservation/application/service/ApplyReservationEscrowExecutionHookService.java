@@ -209,7 +209,13 @@ public class ApplyReservationEscrowExecutionHookService
     return switch (actionType) {
       case PURCHASE ->
           reservation.getStatus() == ReservationStatus.PENDING
-              || reservation.getStatus() == ReservationStatus.DEADLINE_RECOVERY_REQUIRED;
+              || reservation.getStatus() == ReservationStatus.DEADLINE_RECOVERY_REQUIRED
+              || reservation.getStatus() == ReservationStatus.DEADLINE_SYNC_REQUIRED
+              || reservation.getStatus() == ReservationStatus.SETTLED
+              || reservation.getStatus() == ReservationStatus.MANUAL_SYNC_REQUIRED
+              || reservation.getStatus() == ReservationStatus.AUTO_SETTLED
+              || reservation.getStatus() == ReservationStatus.TIMEOUT_CANCELLED
+              || reservation.getStatus() == ReservationStatus.DEADLINE_REFUNDED;
       case CANCEL ->
           TRAINER.equals(actorType)
               ? reservation.getStatus() == ReservationStatus.REJECTED

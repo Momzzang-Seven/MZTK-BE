@@ -223,6 +223,19 @@ class ReservationTest {
   }
 
   @Test
+  @DisplayName("manual sync status allows explicit repair exits")
+  void manualSyncRequired_allowsExplicitRepairExits() {
+    assertThat(ReservationStatus.MANUAL_SYNC_REQUIRED.canTransitionTo(ReservationStatus.SETTLED))
+        .isTrue();
+    assertThat(
+            ReservationStatus.MANUAL_SYNC_REQUIRED.canTransitionTo(
+                ReservationStatus.DEADLINE_REFUND_AVAILABLE))
+        .isTrue();
+    assertThat(ReservationStatus.MANUAL_SYNC_REQUIRED.canTransitionTo(ReservationStatus.PENDING))
+        .isFalse();
+  }
+
+  @Test
   @DisplayName("confirmed cancel/reject/confirm transitions close pending execution state")
   void confirmedTerminalTransitions_clearPendingExecutionState() {
     Reservation locked =
