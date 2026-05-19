@@ -1,7 +1,7 @@
 -- MOM-313: marketplace user-managed EIP-7702 escrow foundation.
 -- This migration only adds user-flow state storage and guards. It does not add scheduler/admin
 -- actions or reconciliation jobs.
--- MOM-313 has not been deployed yet, so V074 stays as a single transactional clean-schema
+-- MOM-313 has not been deployed yet, so V078 stays as a single transactional clean-schema
 -- migration instead of splitting index creation into separate non-transactional migrations.
 
 -- Preflight: duplicate active reservation rows would break the new natural guard.
@@ -17,7 +17,7 @@ BEGIN
         GROUP BY user_id, class_slot_id, reservation_date, reservation_time
         HAVING COUNT(*) > 1
     ) THEN
-        RAISE EXCEPTION 'Duplicate active class_reservations must be repaired before V074';
+        RAISE EXCEPTION 'Duplicate active class_reservations must be repaired before V078';
     END IF;
 
     IF EXISTS (
@@ -26,7 +26,7 @@ BEGIN
         WHERE status IN ('PENDING', 'APPROVED')
           AND tx_hash = 'ESCROW_DISPATCH_PENDING'
     ) THEN
-        RAISE EXCEPTION 'Active ESCROW_DISPATCH_PENDING rows require manual repair before V074';
+        RAISE EXCEPTION 'Active ESCROW_DISPATCH_PENDING rows require manual repair before V078';
     END IF;
 END $$;
 

@@ -13,12 +13,12 @@ class MarketplaceMigrationScriptTest {
   private static final Path MIGRATION_DIR = Path.of("src/main/resources/db/migration");
 
   @Test
-  @DisplayName("V074 keeps marketplace indexes in the same transactional migration before deploy")
-  void marketplaceIndexesStayInTransactionalV074BeforeDeploy() throws IOException {
-    String v074 = migration("V074__add_marketplace_user_escrow_state.sql");
+  @DisplayName("V078 keeps marketplace indexes in the same transactional migration before deploy")
+  void marketplaceIndexesStayInTransactionalV078BeforeDeploy() throws IOException {
+    String v078 = migration("V078__add_marketplace_user_escrow_state.sql");
 
-    assertThat(v074).doesNotContain("CONCURRENTLY").doesNotContain("executeInTransaction=false");
-    assertThat(v074)
+    assertThat(v078).doesNotContain("CONCURRENTLY").doesNotContain("executeInTransaction=false");
+    assertThat(v078)
         .contains("CREATE UNIQUE INDEX IF NOT EXISTS uk_class_reservations_order_key")
         .contains(
             "CREATE UNIQUE INDEX IF NOT EXISTS "
@@ -31,23 +31,23 @@ class MarketplaceMigrationScriptTest {
   }
 
   @Test
-  @DisplayName("V074 preflight blocks dirty marketplace rows before adding constraints")
+  @DisplayName("V078 preflight blocks dirty marketplace rows before adding constraints")
   void marketplaceMigrationPreflightBlocksDirtyData() throws IOException {
-    String v074 = migration("V074__add_marketplace_user_escrow_state.sql");
+    String v078 = migration("V078__add_marketplace_user_escrow_state.sql");
 
-    assertThat(v074)
-        .contains("Duplicate active class_reservations must be repaired before V074")
+    assertThat(v078)
+        .contains("Duplicate active class_reservations must be repaired before V078")
         .contains("GROUP BY user_id, class_slot_id, reservation_date, reservation_time")
-        .contains("Active ESCROW_DISPATCH_PENDING rows require manual repair before V074")
+        .contains("Active ESCROW_DISPATCH_PENDING rows require manual repair before V078")
         .contains("tx_hash = 'ESCROW_DISPATCH_PENDING'");
   }
 
   @Test
-  @DisplayName("V074 large-table checks are added before validation")
+  @DisplayName("V078 large-table checks are added before validation")
   void marketplaceMigrationClassReservationChecksAreNotValidBeforeValidation() throws IOException {
-    String v074 = migration("V074__add_marketplace_user_escrow_state.sql");
+    String v078 = migration("V078__add_marketplace_user_escrow_state.sql");
 
-    assertThat(v074)
+    assertThat(v078)
         .contains("ADD COLUMN IF NOT EXISTS escrow_status")
         .contains("ADD CONSTRAINT chk_class_reservations_status CHECK")
         .contains(") NOT VALID")
