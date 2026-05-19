@@ -226,6 +226,53 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
   }
 
   @Test
+  @DisplayName("buyer active wallet이 reservation snapshot과 다르면 sign 전에 차단한다")
+  void build_buyerWalletSnapshotMismatch_isBlockedBeforeSigning() {
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
+        .willReturn(Optional.of(TRAINER));
+
+    assertThatThrownBy(
+            () -> sut.build(request(MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_SWITCH_WALLET_REQUIRED.getCode()));
+
+    then(loadMarketplaceEip7702DraftContextPort).shouldHaveNoInteractions();
+    then(signMarketplaceServerSigPort).shouldHaveNoInteractions();
+    then(buildMarketplaceEscrowCallDataPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  @DisplayName("trainer active wallet이 reservation snapshot과 다르면 sign 전에 차단한다")
+  void build_trainerWalletSnapshotMismatch_isBlockedBeforeSigning() {
+    given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(20L))
+        .willReturn(Optional.of(BUYER));
+
+    assertThatThrownBy(
+            () ->
+                sut.build(
+                    request(
+                        MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+                        MarketplaceAllowanceStrategy.PRE_EXISTING_ALLOWANCE,
+                        1_800L,
+                        MarketplaceActorType.TRAINER,
+                        20L,
+                        20L,
+                        10L)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_SWITCH_WALLET_REQUIRED.getCode()));
+
+    then(loadMarketplaceEip7702DraftContextPort).shouldHaveNoInteractions();
+    then(signMarketplaceServerSigPort).shouldHaveNoInteractions();
+    then(buildMarketplaceEscrowCallDataPort).shouldHaveNoInteractions();
+  }
+
+  @Test
   @DisplayName("payload hash는 signedAt/signature/callData 같은 volatile calldata material을 제외한다")
   void build_payloadHash_excludesVolatileSignatureAndCallData() {
     given(loadMarketplaceActiveWalletPort.loadActiveWalletAddress(10L))
@@ -273,16 +320,34 @@ class MarketplaceUserExecutionDraftBuilderAdapterTest {
       MarketplaceExecutionActionType actionType,
       MarketplaceAllowanceStrategy strategy,
       Long contractDeadlineEpochSeconds) {
+    return request(
+        actionType,
+        strategy,
+        contractDeadlineEpochSeconds,
+        MarketplaceActorType.BUYER,
+        10L,
+        10L,
+        20L);
+  }
+
+  private MarketplaceEscrowExecutionRequest request(
+      MarketplaceExecutionActionType actionType,
+      MarketplaceAllowanceStrategy strategy,
+      Long contractDeadlineEpochSeconds,
+      MarketplaceActorType actorType,
+      Long authorityUserId,
+      Long requesterUserId,
+      Long counterpartyUserId) {
     return new MarketplaceEscrowExecutionRequest(
         actionType,
         123L,
         "123",
         ORDER_ID,
         ORDER_KEY,
-        MarketplaceActorType.BUYER,
-        10L,
-        10L,
-        20L,
+        actorType,
+        authorityUserId,
+        requesterUserId,
+        counterpartyUserId,
         10L,
         20L,
         3L,

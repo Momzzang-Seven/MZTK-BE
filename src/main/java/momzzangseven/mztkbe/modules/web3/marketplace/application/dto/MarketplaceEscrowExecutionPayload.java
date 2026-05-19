@@ -1,7 +1,5 @@
 package momzzangseven.mztkbe.modules.web3.marketplace.application.dto;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -193,14 +191,6 @@ public record MarketplaceEscrowExecutionPayload(
         escrowId,
         actionStateId,
         rootIdempotencyKey);
-  }
-
-  public String idempotencyJson(ObjectMapper objectMapper) {
-    try {
-      return objectMapper.writeValueAsString(idempotencyView());
-    } catch (JsonProcessingException e) {
-      throw new Web3InvalidInputException("failed to serialize marketplace idempotency payload");
-    }
   }
 
   private static void requirePositive(Long value, String fieldName) {

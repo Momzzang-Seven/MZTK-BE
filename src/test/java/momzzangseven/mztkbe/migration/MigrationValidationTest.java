@@ -191,11 +191,15 @@ class MigrationValidationTest {
         checkClause(
             "marketplace_reservation_escrows", "chk_marketplace_reservation_escrows_status");
     assertThat(escrowStatusConstraint)
+        .contains("PURCHASE_PREPARING")
+        .contains("PURCHASE_PENDING")
         .contains("LOCKED")
+        .contains("CANCEL_PENDING")
+        .contains("REJECT_PENDING")
+        .contains("CONFIRM_PENDING")
         .contains("DEADLINE_REFUND_AVAILABLE")
-        .contains("DEADLINE_REFUNDED")
-        .doesNotContain("PURCHASE_PREPARING")
-        .doesNotContain("CANCEL_PENDING");
+        .contains("DEADLINE_REFUND_PENDING")
+        .contains("DEADLINE_REFUNDED");
 
     String actionStateStatusConstraint =
         checkClause(

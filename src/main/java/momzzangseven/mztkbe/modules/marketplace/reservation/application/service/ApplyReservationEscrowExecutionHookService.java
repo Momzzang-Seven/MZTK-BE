@@ -445,9 +445,7 @@ public class ApplyReservationEscrowExecutionHookService
   }
 
   private boolean isRetryableTerminal(String terminalStatus) {
-    return "FAILED_ONCHAIN".equals(terminalStatus)
-        || "EXPIRED".equals(terminalStatus)
-        || "NONCE_STALE".equals(terminalStatus);
+    return ReservationExecutionTerminalStatusPolicy.isRetryableTerminal(terminalStatus);
   }
 
   private Reservation repairTxHashIfNeeded(Reservation reservation, String txHash) {

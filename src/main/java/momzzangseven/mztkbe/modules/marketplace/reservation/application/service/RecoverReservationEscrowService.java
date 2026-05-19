@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -49,9 +48,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStr
 /** Resumes or recreates user-owned marketplace execution intents for app re-entry. */
 @Slf4j
 public class RecoverReservationEscrowService implements RecoverReservationEscrowUseCase {
-
-  private static final Set<String> RETRYABLE_TERMINAL_STATUSES =
-      Set.of("FAILED_ONCHAIN", "EXPIRED", "CANCELED", "NONCE_STALE");
 
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
@@ -775,7 +771,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
   }
 
   private boolean isRetryableTerminal(String status) {
-    return RETRYABLE_TERMINAL_STATUSES.contains(status);
+    return ReservationExecutionTerminalStatusPolicy.isRetryableTerminal(status);
   }
 
   private boolean isConfirmed(String status) {

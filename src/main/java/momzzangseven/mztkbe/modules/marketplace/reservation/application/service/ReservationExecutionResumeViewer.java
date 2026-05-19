@@ -1,15 +1,11 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
-import java.util.Set;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
 final class ReservationExecutionResumeViewer {
-
-  private static final Set<String> RECOVERABLE_STATUSES =
-      Set.of("FAILED_ONCHAIN", "EXPIRED", "CANCELED", "NONCE_STALE");
 
   private ReservationExecutionResumeViewer() {}
 
@@ -31,7 +27,8 @@ final class ReservationExecutionResumeViewer {
     return view.withViewer(
         viewerAction,
         owner && "AWAITING_SIGNATURE".equals(status),
-        confirmedReplayAvailable || (owner && RECOVERABLE_STATUSES.contains(status)));
+        confirmedReplayAvailable
+            || (owner && ReservationExecutionTerminalStatusPolicy.isRetryableTerminal(status)));
   }
 
   private static boolean transactionSucceeded(ReservationExecutionResumeView view) {

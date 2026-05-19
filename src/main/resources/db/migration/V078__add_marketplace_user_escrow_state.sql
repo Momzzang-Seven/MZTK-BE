@@ -185,8 +185,11 @@ CREATE TABLE IF NOT EXISTS marketplace_reservation_escrows (
     ),
     CONSTRAINT chk_marketplace_reservation_escrows_status CHECK (
         escrow_status IN (
-            'NONE', 'LOCKED',
-            'DEADLINE_REFUND_AVAILABLE',
+            'NONE',
+            'PURCHASE_PREPARING', 'PURCHASE_PENDING',
+            'LOCKED',
+            'CANCEL_PENDING', 'REJECT_PENDING', 'CONFIRM_PENDING',
+            'DEADLINE_REFUND_AVAILABLE', 'DEADLINE_REFUND_PENDING',
             'REFUNDED', 'SETTLED', 'DEADLINE_REFUNDED',
             'DEADLINE_RECOVERY_REQUIRED', 'DEADLINE_SYNC_REQUIRED',
             'MANUAL_SYNC_REQUIRED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'FAILED'

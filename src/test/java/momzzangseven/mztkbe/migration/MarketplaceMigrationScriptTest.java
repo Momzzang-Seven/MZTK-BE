@@ -52,6 +52,8 @@ class MarketplaceMigrationScriptTest {
         .contains("ADD CONSTRAINT chk_class_reservations_status CHECK")
         .contains(") NOT VALID")
         .contains("VALIDATE CONSTRAINT chk_class_reservations_status")
+        .contains("'PURCHASE_PREPARING', 'PURCHASE_PENDING'")
+        .contains("'DEADLINE_REFUND_AVAILABLE', 'DEADLINE_REFUND_PENDING'")
         .contains("CREATE INDEX IF NOT EXISTS idx_marketplace_reservation_escrows_flow_status")
         .contains(
             "CREATE UNIQUE INDEX IF NOT EXISTS uk_marketplace_reservation_action_states_active")
