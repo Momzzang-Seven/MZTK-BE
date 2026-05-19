@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationWalletPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
@@ -37,6 +38,7 @@ public class ApproveReservationService implements ApproveReservationUseCase {
   private final SaveReservationPort saveReservationPort;
   private final LoadReservationEscrowPort loadReservationEscrowPort;
   private final LoadReservationActionStatePort loadReservationActionStatePort;
+  private final LoadReservationWalletPort loadReservationWalletPort;
   private final Clock clock;
   private RunReservationTransactionPort transactionPort;
 
@@ -44,7 +46,22 @@ public class ApproveReservationService implements ApproveReservationUseCase {
       LoadReservationPort loadReservationPort,
       SaveReservationPort saveReservationPort,
       Clock clock) {
-    this(loadReservationPort, saveReservationPort, null, null, clock);
+    this(loadReservationPort, saveReservationPort, null, null, null, clock);
+  }
+
+  public ApproveReservationService(
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      LoadReservationWalletPort loadReservationWalletPort,
+      Clock clock) {
+    this.loadReservationPort = loadReservationPort;
+    this.saveReservationPort = saveReservationPort;
+    this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.loadReservationActionStatePort = loadReservationActionStatePort;
+    this.loadReservationWalletPort = loadReservationWalletPort;
+    this.clock = clock;
   }
 
   public ApproveReservationService(
@@ -53,11 +70,13 @@ public class ApproveReservationService implements ApproveReservationUseCase {
       LoadReservationEscrowPort loadReservationEscrowPort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       Clock clock) {
-    this.loadReservationPort = loadReservationPort;
-    this.saveReservationPort = saveReservationPort;
-    this.loadReservationEscrowPort = loadReservationEscrowPort;
-    this.loadReservationActionStatePort = loadReservationActionStatePort;
-    this.clock = clock;
+    this(
+        loadReservationPort,
+        saveReservationPort,
+        loadReservationEscrowPort,
+        loadReservationActionStatePort,
+        null,
+        clock);
   }
 
   public void setTransactionPort(RunReservationTransactionPort transactionPort) {
@@ -93,6 +112,7 @@ public class ApproveReservationService implements ApproveReservationUseCase {
     if (reservation.getEffectiveEscrowFlow().isUserEip7702()) {
       escrow = loadEscrowProjection(reservation);
       validateNoActiveActionState(reservation);
+      validateTrainerWalletSnapshot(command.authenticatedTrainerId(), reservation, escrow);
     }
     if ("ESCROW_DISPATCH_PENDING".equals(reservation.getTxHash())) {
       throw new MarketplaceReservationStateException(
@@ -160,6 +180,17 @@ public class ApproveReservationService implements ApproveReservationUseCase {
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "Cannot approve reservation while marketplace execution is active");
     }
+  }
+
+  private void validateTrainerWalletSnapshot(
+      Long trainerId, Reservation reservation, MarketplaceReservationEscrow escrow) {
+    if (loadReservationWalletPort == null) {
+      return;
+    }
+    String trainerWallet =
+        escrow == null ? reservation.getTrainerWalletAddress() : escrow.getTrainerWalletAddress();
+    ReservationEscrowActionGuard.requireActiveWalletMatchesSnapshot(
+        loadReservationWalletPort, trainerId, trainerWallet);
   }
 
   private void requireBeforeContractDeadline(

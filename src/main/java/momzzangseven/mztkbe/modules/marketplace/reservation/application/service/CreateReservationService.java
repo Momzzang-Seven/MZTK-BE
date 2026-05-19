@@ -580,16 +580,11 @@ public class CreateReservationService implements CreateReservationUseCase {
                             ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
                             "marketplace reservation escrow projection is missing before retry"))
                 .toBuilder()
+                .escrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
                 .holdExpiresAt(retrying.getHoldExpiresAt())
                 .build());
-    MarketplaceReservationActionState staleAction =
-        saveReservationActionStatePort.save(
-            latestAction.toBuilder()
-                .status(ReservationActionStateStatus.STALE)
-                .retryable(false)
-                .errorCode("RETRY_SUPERSEDED")
-                .errorReason("marketplace purchase retry created a newer action-state")
-                .build());
+    saveReservationActionStatePort.markStaleForRetry(
+        latestAction.getId(), "marketplace purchase retry created a newer action-state");
     MarketplaceReservationActionState nextAction =
         saveReservationActionStatePort.save(
             MarketplaceReservationActionState.builder()
@@ -598,29 +593,29 @@ public class CreateReservationService implements CreateReservationUseCase {
                 .actionType(ReservationEscrowAction.PURCHASE)
                 .actorType(ReservationEscrowActorType.BUYER)
                 .actorUserId(retrying.getUserId())
-                .attemptNo(staleAction.getAttemptNo() + 1)
+                .attemptNo(latestAction.getAttemptNo() + 1)
                 .attemptToken(nextAttemptToken)
                 .status(ReservationActionStateStatus.PREPARING)
-                .rootIdempotencyKey(staleAction.getRootIdempotencyKey())
-                .payloadHash(staleAction.getPayloadHash())
+                .rootIdempotencyKey(latestAction.getRootIdempotencyKey())
+                .payloadHash(latestAction.getPayloadHash())
                 .expectedReservationVersion(retrying.getVersion())
                 .expectedReservationStatus(ReservationStatus.HOLDING)
-                .expectedEscrowStatus(staleAction.getExpectedEscrowStatus())
+                .expectedEscrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
                 .priorReservationStatus(ReservationStatus.PENDING)
-                .priorEscrowStatus(staleAction.getPriorEscrowStatus())
+                .priorEscrowStatus(latestAction.getPriorEscrowStatus())
                 .preparationExpiresAt(retrying.getHoldExpiresAt())
                 .build());
     ReservationCreateIdempotency updatedIdempotency =
-        replaceCreateIdempotencyActionState(idempotency, staleAction.getId(), nextAction.getId());
+        replaceCreateIdempotencyActionState(idempotency, latestAction.getId(), nextAction.getId());
     PrepareReservationEscrowCommand prepareCommand =
-        preparePurchaseCommand(retrying, staleAction.getEscrowId(), nextAction);
+        preparePurchaseCommand(retrying, latestAction.getEscrowId(), nextAction);
     log.info(
         "Reservation purchase retry prepared: id={}, userId={}, classId={}, previousActionStateId={},"
             + " nextActionStateId={}",
         retrying.getId(),
         retrying.getUserId(),
         command.classId(),
-        staleAction.getId(),
+        latestAction.getId(),
         nextAction.getId());
     return PhaseAResult.pending(
         retrying, retryingEscrow, nextAction, updatedIdempotency, prepareCommand);
@@ -632,13 +627,16 @@ public class CreateReservationService implements CreateReservationUseCase {
       return saveReservationCreateIdempotencyPort.save(
           idempotency.replaceActionState(newActionStateId).markBound("{\"status\":\"BOUND\"}"));
     }
-    return saveReservationCreateIdempotencyPort
-        .replaceActionStateIfCurrent(idempotency.getId(), expectedActionStateId, newActionStateId)
-        .orElseThrow(
-            () ->
-                new MarketplaceReservationStateException(
-                    ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
-                    "marketplace purchase idempotency pointer changed before retry"));
+    ReservationCreateIdempotency replaced =
+        saveReservationCreateIdempotencyPort
+            .replaceActionStateIfCurrent(
+                idempotency.getId(), expectedActionStateId, newActionStateId)
+            .orElseThrow(
+                () ->
+                    new MarketplaceReservationStateException(
+                        ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+                        "marketplace purchase idempotency pointer changed before retry"));
+    return saveReservationCreateIdempotencyPort.save(replaced.markBound("{\"status\":\"BOUND\"}"));
   }
 
   private boolean isRetryablePurchaseAttemptFailure(

@@ -66,7 +66,15 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "WHERE r.slotId = :slotId "
           + "AND r.reservationDate = :reservationDate "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now)")
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  ))")
   int countActiveBySlotIdAndDate(
       @Param("slotId") Long slotId,
       @Param("reservationDate") LocalDate reservationDate,
@@ -77,7 +85,15 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "LEFT JOIN MarketplaceReservationEscrowEntity e ON e.reservationId = r.id "
           + "WHERE r.slotId = :slotId "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now)")
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  ))")
   int countActiveBySlotId(@Param("slotId") Long slotId, @Param("now") LocalDateTime now);
 
   @Query(
@@ -85,7 +101,15 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "LEFT JOIN MarketplaceReservationEscrowEntity e ON e.reservationId = r.id "
           + "WHERE r.slotId IN :slotIds "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now) "
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  )) "
           + "GROUP BY r.slotId")
   List<Object[]> countActiveBySlotIdIn(
       @Param("slotIds") List<Long> slotIds, @Param("now") LocalDateTime now);
@@ -97,7 +121,15 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "WHERE r.slotId = :slotId "
           + "AND r.reservationDate = :reservationDate "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now)")
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  ))")
   int countActiveBySlotIdAndDateWithLock(
       @Param("slotId") Long slotId,
       @Param("reservationDate") LocalDate reservationDate,
@@ -111,7 +143,15 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "AND r.reservationDate >= :startDate "
           + "AND r.reservationDate < :endDate "
           + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
-          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now) "
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  )) "
           + "GROUP BY r.reservationDate")
   List<Object[]> countActiveBySlotIdAndDateRange(
       @Param("slotId") Long slotId,

@@ -159,6 +159,7 @@ public class ReservationApplicationServiceConfig {
       SaveReservationPort saveReservationPort,
       LoadReservationEscrowPort loadReservationEscrowPort,
       LoadReservationActionStatePort loadReservationActionStatePort,
+      LoadReservationWalletPort loadReservationWalletPort,
       RunReservationTransactionPort transactionPort,
       Clock clock) {
     ApproveReservationService service =
@@ -167,6 +168,7 @@ public class ReservationApplicationServiceConfig {
             saveReservationPort,
             loadReservationEscrowPort,
             loadReservationActionStatePort,
+            loadReservationWalletPort,
             clock);
     service.setTransactionPort(transactionPort);
     return service;
@@ -232,6 +234,7 @@ public class ReservationApplicationServiceConfig {
       LoadReservationWalletPort loadReservationWalletPort,
       LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
       LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationEscrowPort saveReservationEscrowPort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       BindReservationActionStatePort bindReservationActionStatePort,
@@ -248,6 +251,7 @@ public class ReservationApplicationServiceConfig {
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
             loadReservationEscrowPort,
+            saveReservationEscrowPort,
             saveReservationActionStatePort,
             loadReservationActionStatePort,
             bindReservationActionStatePort,
@@ -302,6 +306,7 @@ public class ReservationApplicationServiceConfig {
       LoadReservationWalletPort loadReservationWalletPort,
       LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
       LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationEscrowPort saveReservationEscrowPort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       BindReservationActionStatePort bindReservationActionStatePort,
@@ -318,6 +323,7 @@ public class ReservationApplicationServiceConfig {
             loadReservationWalletPort,
             loadReservationEscrowPaymentConfigPort,
             loadReservationEscrowPort,
+            saveReservationEscrowPort,
             saveReservationActionStatePort,
             loadReservationActionStatePort,
             bindReservationActionStatePort,
@@ -425,6 +431,7 @@ public class ReservationApplicationServiceConfig {
       LoadReservationEscrowPort loadReservationEscrowPort,
       SaveReservationEscrowPort saveReservationEscrowPort,
       RunReservationTransactionPort transactionPort,
+      RunReservationPostCommitPort postCommitPort,
       Clock clock) {
     ApplyReservationEscrowExecutionHookService service =
         new ApplyReservationEscrowExecutionHookService(
@@ -438,6 +445,7 @@ public class ReservationApplicationServiceConfig {
     service.setActionStatePorts(loadReservationActionStatePort, saveReservationActionStatePort);
     service.setEscrowProjectionPorts(loadReservationEscrowPort, saveReservationEscrowPort);
     service.setTransactionPort(transactionPort);
+    service.setPostCommitPort(postCommitPort);
     return service;
   }
 

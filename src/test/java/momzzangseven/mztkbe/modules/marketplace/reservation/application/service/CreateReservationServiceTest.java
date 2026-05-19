@@ -739,6 +739,8 @@ class CreateReservationServiceTest {
           .save(any());
       given(saveReservationCreateIdempotencyPort.replaceActionStateIfCurrent(501L, 20L, 21L))
           .willReturn(Optional.of(idempotency.replaceActionState(21L)));
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0));
       given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
           .willReturn(new PrepareReservationEscrowResult(web3()));
 
@@ -757,13 +759,13 @@ class CreateReservationServiceTest {
       org.mockito.ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
           org.mockito.ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
       then(saveReservationActionStatePort)
-          .should(org.mockito.Mockito.times(2))
-          .save(actionCaptor.capture());
+          .should()
+          .markStaleForRetry(20L, "marketplace purchase retry created a newer action-state");
+      then(saveReservationActionStatePort).should().save(actionCaptor.capture());
       assertThat(actionCaptor.getAllValues())
           .extracting(MarketplaceReservationActionState::getStatus)
-          .containsExactly(
-              ReservationActionStateStatus.STALE, ReservationActionStateStatus.PREPARING);
-      assertThat(actionCaptor.getAllValues().get(1).getAttemptNo()).isEqualTo(2);
+          .containsExactly(ReservationActionStateStatus.PREPARING);
+      assertThat(actionCaptor.getValue().getAttemptNo()).isEqualTo(2);
     }
 
     @Test
@@ -865,6 +867,8 @@ class CreateReservationServiceTest {
           .save(any());
       given(saveReservationCreateIdempotencyPort.replaceActionStateIfCurrent(501L, 20L, 21L))
           .willReturn(Optional.of(idempotency.replaceActionState(21L)));
+      given(saveReservationCreateIdempotencyPort.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0));
       given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
           .willReturn(new PrepareReservationEscrowResult(web3()));
 
@@ -884,12 +888,12 @@ class CreateReservationServiceTest {
       org.mockito.ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
           org.mockito.ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
       then(saveReservationActionStatePort)
-          .should(org.mockito.Mockito.times(2))
-          .save(actionCaptor.capture());
+          .should()
+          .markStaleForRetry(20L, "marketplace purchase retry created a newer action-state");
+      then(saveReservationActionStatePort).should().save(actionCaptor.capture());
       assertThat(actionCaptor.getAllValues())
           .extracting(MarketplaceReservationActionState::getStatus)
-          .containsExactly(
-              ReservationActionStateStatus.STALE, ReservationActionStateStatus.PREPARING);
+          .containsExactly(ReservationActionStateStatus.PREPARING);
     }
 
     @Test

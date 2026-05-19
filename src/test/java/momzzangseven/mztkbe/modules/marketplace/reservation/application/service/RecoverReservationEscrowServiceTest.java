@@ -1039,13 +1039,13 @@ class RecoverReservationEscrowServiceTest {
     assertThat(latestSaved.get().getPendingAttemptToken()).isNotEqualTo("attempt-old");
     org.mockito.ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
         org.mockito.ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
-    then(saveActionStatePort).should(org.mockito.Mockito.times(3)).save(actionCaptor.capture());
+    then(saveActionStatePort)
+        .should()
+        .markStaleForRetry(20L, "marketplace recovery created a newer action-state");
+    then(saveActionStatePort).should(org.mockito.Mockito.times(2)).save(actionCaptor.capture());
     assertThat(actionCaptor.getAllValues())
         .extracting(MarketplaceReservationActionState::getStatus)
-        .contains(
-            ReservationActionStateStatus.STALE,
-            ReservationActionStateStatus.PREPARING,
-            ReservationActionStateStatus.PREPARING);
+        .contains(ReservationActionStateStatus.PREPARING, ReservationActionStateStatus.PREPARING);
     then(bindActionStatePort)
         .should()
         .bindExecutionIntent(

@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -214,6 +215,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     }
 
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
+    requireNoBlockingActiveActionState(reservation, currentState);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
       if (isConfirmedOutcome(currentState)) {
         return DeadlineRefundInspection.confirmed(reservation, currentState);
@@ -255,6 +257,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     }
 
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
+    requireNoBlockingActiveActionState(reservation, currentState);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
       if (isConfirmedOutcome(currentState)) {
         return BeginDeadlineRefundResult.confirmed(reservation, currentState);
@@ -313,14 +316,40 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
                         state.getExecutionIntentPublicId(), currentState.executionIntentId()))
         .ifPresent(
             state ->
-                saveReservationActionStatePort.save(
-                    state.toBuilder()
-                        .status(ReservationActionStateStatus.STALE)
-                        .retryable(false)
-                        .errorCode("RETRY_SUPERSEDED")
-                        .errorReason(
-                            "marketplace deadline refund retry created a newer action-state")
-                        .build()));
+                saveReservationActionStatePort.markStaleForRetry(
+                    state.getId(),
+                    "marketplace deadline refund retry created a newer action-state"));
+  }
+
+  private void requireNoBlockingActiveActionState(
+      Reservation reservation, ReservationExecutionStateView currentState) {
+    if (loadReservationActionStatePort == null) {
+      return;
+    }
+    List<MarketplaceReservationActionState> activeActions =
+        loadReservationActionStatePort.findByReservationIdAndStatuses(
+            reservation.getId(),
+            List.of(
+                ReservationActionStateStatus.PREPARING, ReservationActionStateStatus.INTENT_BOUND));
+    if (activeActions == null || activeActions.isEmpty()) {
+      return;
+    }
+    if (currentState != null
+        && isRetryableTerminal(currentState.status())
+        && activeActions.stream()
+            .anyMatch(
+                action ->
+                    equalsNullable(
+                            action.getExecutionIntentPublicId(),
+                            reservation.getCurrentExecutionIntentPublicId())
+                        || equalsNullable(
+                            action.getExecutionIntentPublicId(),
+                            currentState.executionIntentId()))) {
+      return;
+    }
+    throw new MarketplaceReservationStateException(
+        ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+        "another marketplace action is already active for this reservation");
   }
 
   private ClaimExpiredRefundReservationResult replayConfirmedState(

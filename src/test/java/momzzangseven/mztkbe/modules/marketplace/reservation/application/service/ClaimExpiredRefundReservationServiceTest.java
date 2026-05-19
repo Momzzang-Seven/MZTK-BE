@@ -514,9 +514,10 @@ class ClaimExpiredRefundReservationServiceTest {
       assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
       ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
           ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
-      then(saveActionStatePort).should(org.mockito.Mockito.times(3)).save(actionCaptor.capture());
-      assertThat(actionCaptor.getAllValues().get(0).getStatus())
-          .isEqualTo(ReservationActionStateStatus.STALE);
+      then(saveActionStatePort)
+          .should()
+          .markStaleForRetry(21L, "marketplace deadline refund retry created a newer action-state");
+      then(saveActionStatePort).should(org.mockito.Mockito.times(2)).save(actionCaptor.capture());
       then(bindActionStatePort)
           .should()
           .bindExecutionIntent(

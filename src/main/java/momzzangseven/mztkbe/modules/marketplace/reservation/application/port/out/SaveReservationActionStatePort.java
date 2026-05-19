@@ -5,4 +5,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Marketp
 public interface SaveReservationActionStatePort {
 
   MarketplaceReservationActionState save(MarketplaceReservationActionState actionState);
+
+  void markStaleForRetry(Long actionStateId, String errorReason);
 }

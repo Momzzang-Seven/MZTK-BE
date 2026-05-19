@@ -60,7 +60,7 @@ final class ReservationEscrowActionGuard {
 
   static boolean isAfterContractDeadline(Reservation reservation, Clock clock) {
     return reservation.getContractDeadlineAt() != null
-        && LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt());
+        && !LocalDateTime.now(clock).isBefore(reservation.getContractDeadlineAt());
   }
 
   private static String activeWalletOrThrow(LoadReservationWalletPort walletPort, Long userId) {

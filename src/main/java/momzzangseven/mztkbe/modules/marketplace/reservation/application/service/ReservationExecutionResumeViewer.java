@@ -28,7 +28,9 @@ final class ReservationExecutionResumeViewer {
         viewerAction,
         owner && "AWAITING_SIGNATURE".equals(status),
         confirmedReplayAvailable
-            || (owner && ReservationExecutionTerminalStatusPolicy.isRetryableTerminal(status)));
+            || (owner
+                && canRecoverRetryableTerminal(reservation, view.actionType())
+                && ReservationExecutionTerminalStatusPolicy.isRetryableTerminal(status)));
   }
 
   private static boolean transactionSucceeded(ReservationExecutionResumeView view) {
@@ -57,6 +59,24 @@ final class ReservationExecutionResumeViewer {
       return "BUYER_CANCEL";
     }
     return null;
+  }
+
+  private static boolean canRecoverRetryableTerminal(Reservation reservation, String actionType) {
+    return switch (actionType) {
+      case "MARKETPLACE_CLASS_PURCHASE" ->
+          reservation.getStatus() == ReservationStatus.HOLDING
+              || reservation.getStatus() == ReservationStatus.PURCHASE_PREPARING
+              || reservation.getStatus() == ReservationStatus.PURCHASE_PENDING;
+      case "MARKETPLACE_CLASS_CANCEL" ->
+          reservation.getStatus() == ReservationStatus.CANCEL_PENDING
+              || reservation.getStatus() == ReservationStatus.REJECT_PENDING;
+      case "MARKETPLACE_CLASS_CONFIRM" ->
+          reservation.getStatus() == ReservationStatus.CONFIRM_PENDING;
+      case "MARKETPLACE_CLASS_EXPIRED_REFUND" ->
+          reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING
+              || reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_AVAILABLE;
+      default -> false;
+    };
   }
 
   private static boolean isViewerOwner(

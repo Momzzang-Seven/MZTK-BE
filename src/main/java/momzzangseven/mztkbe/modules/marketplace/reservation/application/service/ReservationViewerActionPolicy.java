@@ -22,7 +22,7 @@ public final class ReservationViewerActionPolicy {
       return ReservationViewerActions.none();
     }
 
-    if (web3Execution != null && web3Execution.viewerAction() != null) {
+    if (isActionableWeb3Execution(web3Execution)) {
       return fromActiveExecution(web3Execution);
     }
 
@@ -60,6 +60,12 @@ public final class ReservationViewerActionPolicy {
   private static boolean canClaimDeadlineRefundFromStableStatus(ReservationDisplayStatus status) {
     return status == ReservationDisplayStatus.PENDING
         || status == ReservationDisplayStatus.APPROVED;
+  }
+
+  private static boolean isActionableWeb3Execution(ReservationExecutionResumeView web3Execution) {
+    return web3Execution != null
+        && web3Execution.viewerAction() != null
+        && (web3Execution.viewerCanExecute() || web3Execution.viewerCanRecover());
   }
 
   private static boolean deadlineExpired(Reservation reservation, Clock clock) {

@@ -659,13 +659,8 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
       MarketplaceReservationEscrow escrow,
       RecoveryFlow flow,
       MarketplaceReservationActionState staleActionState) {
-    saveReservationActionStatePort.save(
-        staleActionState.toBuilder()
-            .status(ReservationActionStateStatus.STALE)
-            .retryable(false)
-            .errorCode("RETRY_SUPERSEDED")
-            .errorReason("marketplace recovery created a newer action-state")
-            .build());
+    saveReservationActionStatePort.markStaleForRetry(
+        staleActionState.getId(), "marketplace recovery created a newer action-state");
     Reservation retrying = saveReservationPort.save(resetPendingAttemptForRetry(reservation, flow));
     MarketplaceReservationEscrow retryingEscrow = syncRetryEscrowProjection(escrow, retrying, flow);
     MarketplaceReservationActionState nextActionState =

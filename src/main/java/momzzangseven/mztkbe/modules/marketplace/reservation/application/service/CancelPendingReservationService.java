@@ -24,6 +24,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
@@ -55,6 +56,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
   private final LoadReservationWalletPort loadReservationWalletPort;
   private final LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort;
   private final LoadReservationEscrowPort loadReservationEscrowPort;
+  private final SaveReservationEscrowPort saveReservationEscrowPort;
   private final SaveReservationActionStatePort saveReservationActionStatePort;
   private final LoadReservationActionStatePort loadReservationActionStatePort;
   private final BindReservationActionStatePort bindReservationActionStatePort;
@@ -83,6 +85,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
         null,
         null,
         null,
+        null,
         clock);
   }
 
@@ -94,6 +97,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
       LoadReservationWalletPort loadReservationWalletPort,
       LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
       LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationEscrowPort saveReservationEscrowPort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       BindReservationActionStatePort bindReservationActionStatePort,
@@ -110,6 +114,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
     this.loadReservationEscrowPaymentConfigPort =
         java.util.Objects.requireNonNull(loadReservationEscrowPaymentConfigPort);
     this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.saveReservationEscrowPort = saveReservationEscrowPort;
     this.saveReservationActionStatePort = saveReservationActionStatePort;
     this.loadReservationActionStatePort = loadReservationActionStatePort;
     this.bindReservationActionStatePort = bindReservationActionStatePort;
@@ -122,6 +127,37 @@ public class CancelPendingReservationService implements CancelPendingReservation
                 : new ReservationExecutionCandidateGuard(
                     loadReservationExecutionStatePort, loadReservationExecutionCandidatePort));
     this.clock = clock;
+  }
+
+  public CancelPendingReservationService(
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      PrepareReservationEscrowExecutionPort prepareReservationEscrowExecutionPort,
+      CancelReservationEscrowExecutionPort cancelReservationEscrowExecutionPort,
+      LoadReservationWalletPort loadReservationWalletPort,
+      LoadReservationEscrowPaymentConfigPort loadReservationEscrowPaymentConfigPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationActionStatePort saveReservationActionStatePort,
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      BindReservationActionStatePort bindReservationActionStatePort,
+      LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+      LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort,
+      Clock clock) {
+    this(
+        loadReservationPort,
+        saveReservationPort,
+        prepareReservationEscrowExecutionPort,
+        cancelReservationEscrowExecutionPort,
+        loadReservationWalletPort,
+        loadReservationEscrowPaymentConfigPort,
+        loadReservationEscrowPort,
+        null,
+        saveReservationActionStatePort,
+        loadReservationActionStatePort,
+        bindReservationActionStatePort,
+        loadReservationExecutionStatePort,
+        loadReservationExecutionCandidatePort,
+        clock);
   }
 
   public void setTransactionPort(RunReservationTransactionPort transactionPort) {
@@ -294,7 +330,23 @@ public class CancelPendingReservationService implements CancelPendingReservation
     if (!ReservationEscrowActionGuard.isAfterContractDeadline(reservation, clock)) {
       return null;
     }
-    return saveReservationPort.save(reservation.markDeadlineRefundAvailable());
+    Reservation marked = saveReservationPort.save(reservation.markDeadlineRefundAvailable());
+    syncDeadlineRefundAvailableProjection(marked);
+    return marked;
+  }
+
+  private void syncDeadlineRefundAvailableProjection(Reservation reservation) {
+    if (loadReservationEscrowPort == null || saveReservationEscrowPort == null) {
+      return;
+    }
+    loadReservationEscrowPort
+        .findByReservationIdWithLock(reservation.getId())
+        .map(
+            escrow ->
+                escrow.toBuilder()
+                    .escrowStatus(ReservationEscrowStatus.DEADLINE_REFUND_AVAILABLE)
+                    .build())
+        .ifPresent(saveReservationEscrowPort::save);
   }
 
   private MarketplaceReservationStateException deadlineRefundRequired() {

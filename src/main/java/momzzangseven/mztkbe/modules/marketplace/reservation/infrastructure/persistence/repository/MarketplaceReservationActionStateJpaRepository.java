@@ -115,4 +115,20 @@ public interface MarketplaceReservationActionStateJpaRepository
       @Param("attemptToken") String attemptToken,
       @Param("executionIntentPublicId") String executionIntentPublicId,
       @Param("updatedAt") LocalDateTime updatedAt);
+
+  @Modifying(flushAutomatically = true)
+  @Query(
+      """
+      UPDATE MarketplaceReservationActionStateEntity a
+      SET a.status = 'STALE',
+          a.retryable = false,
+          a.errorCode = 'RETRY_SUPERSEDED',
+          a.errorReason = :errorReason,
+          a.updatedAt = :updatedAt
+      WHERE a.id = :actionStateId
+      """)
+  int markStaleForRetry(
+      @Param("actionStateId") Long actionStateId,
+      @Param("errorReason") String errorReason,
+      @Param("updatedAt") LocalDateTime updatedAt);
 }

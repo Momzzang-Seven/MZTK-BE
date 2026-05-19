@@ -104,6 +104,12 @@ public class MarketplaceReservationActionStatePersistenceAdapter
 
   @Override
   @Transactional
+  public void markStaleForRetry(Long actionStateId, String errorReason) {
+    repository.markStaleForRetry(actionStateId, errorReason, LocalDateTime.now(clock));
+  }
+
+  @Override
+  @Transactional
   public Optional<MarketplaceReservationActionState> bindExecutionIntent(
       Long actionStateId, String attemptToken, String executionIntentPublicId) {
     int updated =

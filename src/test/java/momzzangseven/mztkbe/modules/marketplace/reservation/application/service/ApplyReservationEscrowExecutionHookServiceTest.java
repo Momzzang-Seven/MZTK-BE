@@ -191,7 +191,7 @@ class ApplyReservationEscrowExecutionHookServiceTest {
         ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
     then(saveReservationActionStatePort).should().save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(ReservationActionStateStatus.TERMINATED);
-    assertThat(captor.getValue().getRetryable()).isTrue();
+    assertThat(captor.getValue().getRetryable()).isFalse();
     assertThat(captor.getValue().getErrorCode()).isEqualTo("FAILED_ONCHAIN");
     ArgumentCaptor<MarketplaceReservationEscrow> escrowCaptor =
         ArgumentCaptor.forClass(MarketplaceReservationEscrow.class);
@@ -294,7 +294,7 @@ class ApplyReservationEscrowExecutionHookServiceTest {
         ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
     then(saveReservationActionStatePort).should().save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(ReservationActionStateStatus.TERMINATED);
-    assertThat(captor.getValue().getRetryable()).isTrue();
+    assertThat(captor.getValue().getRetryable()).isFalse();
     assertThat(captor.getValue().getErrorCode()).isEqualTo("CANCELED");
   }
 

@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
@@ -51,9 +52,14 @@ public class ApplyReservationEscrowExecutionHookService
   private LoadReservationEscrowPort loadReservationEscrowPort;
   private SaveReservationEscrowPort saveReservationEscrowPort;
   private RunReservationTransactionPort transactionPort;
+  private RunReservationPostCommitPort postCommitPort;
 
   public void setTransactionPort(RunReservationTransactionPort transactionPort) {
     this.transactionPort = java.util.Objects.requireNonNull(transactionPort);
+  }
+
+  public void setPostCommitPort(RunReservationPostCommitPort postCommitPort) {
+    this.postCommitPort = java.util.Objects.requireNonNull(postCommitPort);
   }
 
   public void setActionStatePorts(
@@ -78,7 +84,8 @@ public class ApplyReservationEscrowExecutionHookService
       Reservation repaired = repairTxHashIfNeeded(reservation, command.txHash());
       syncEscrowProjection(repaired, command.txHash(), null, null);
       markActionStateConfirmed(command, repaired);
-      recordTrainerRejectStrikeIfNeeded(reservation, command.actionType(), command.actorType());
+      recordTrainerRejectStrikeAfterCommitIfNeeded(
+          reservation, command.actionType(), command.actorType());
       return;
     }
     if (!isCurrentOrRecoverableOrphan(
@@ -116,7 +123,8 @@ public class ApplyReservationEscrowExecutionHookService
     saveReservationPort.save(updated);
     syncEscrowProjection(updated, command.txHash(), null, null);
     markActionStateConfirmed(command, updated);
-    recordTrainerRejectStrikeIfNeeded(updated, command.actionType(), command.actorType());
+    recordTrainerRejectStrikeAfterCommitIfNeeded(
+        updated, command.actionType(), command.actorType());
   }
 
   @Override
@@ -131,12 +139,12 @@ public class ApplyReservationEscrowExecutionHookService
           "Skipping unbound marketplace purchase termination: intentId={}, reservationId={}",
           command.executionIntentPublicId(),
           reservation.getId());
-      markActionStateTerminated(command, reservation);
+      markActionStateTerminated(command, reservation, false);
       return;
     }
     if (isRetryablePurchaseTermination(command)) {
       syncEscrowProjection(reservation, null, command.terminalStatus(), command.failureReason());
-      markActionStateTerminated(command, reservation);
+      markActionStateTerminated(command, reservation, true);
       return;
     }
     Reservation updated =
@@ -145,8 +153,8 @@ public class ApplyReservationEscrowExecutionHookService
             : reservation.rollbackToPriorState();
     saveReservationPort.save(updated);
     syncEscrowProjection(updated, null, command.terminalStatus(), command.failureReason());
-    markActionStateTerminated(command, updated);
-    markPurchaseCreateIdempotencyFailedIfNeeded(command, reservation);
+    markActionStateTerminated(command, updated, false);
+    markPurchaseCreateIdempotencyFailedAfterCommitIfNeeded(command, reservation);
   }
 
   private boolean isRetryablePurchaseTermination(
@@ -212,13 +220,23 @@ public class ApplyReservationEscrowExecutionHookService
     };
   }
 
-  private void recordTrainerRejectStrikeIfNeeded(
+  private void recordTrainerRejectStrikeAfterCommitIfNeeded(
       Reservation reservation, String actionType, String actorType) {
     if (!CANCEL.equals(actionType)
         || !TRAINER.equals(actorType)
         || recordTrainerStrikePort == null) {
       return;
     }
+    if (postCommitPort == null) {
+      recordTrainerRejectStrike(reservation);
+      return;
+    }
+    postCommitPort.afterCommit(
+        "MarketplaceTrainerRejectStrike",
+        () -> postCommitPort.requiresNew(() -> recordTrainerRejectStrike(reservation)));
+  }
+
+  private void recordTrainerRejectStrike(Reservation reservation) {
     try {
       recordTrainerStrikePort.recordStrike(
           reservation.getTrainerId(),
@@ -337,13 +355,26 @@ public class ApplyReservationEscrowExecutionHookService
     return transactionPort.notSupported(supplier);
   }
 
-  private void markPurchaseCreateIdempotencyFailedIfNeeded(
+  private void markPurchaseCreateIdempotencyFailedAfterCommitIfNeeded(
       ReservationEscrowExecutionTerminatedCommand command, Reservation reservation) {
     if (!PURCHASE.equals(command.actionType())
         || loadReservationCreateIdempotencyPort == null
         || saveReservationCreateIdempotencyPort == null) {
       return;
     }
+    if (postCommitPort == null) {
+      markPurchaseCreateIdempotencyFailed(command, reservation);
+      return;
+    }
+    postCommitPort.afterCommit(
+        "MarketplacePurchaseIdempotencyFailure",
+        () ->
+            postCommitPort.requiresNew(
+                () -> markPurchaseCreateIdempotencyFailed(command, reservation)));
+  }
+
+  private void markPurchaseCreateIdempotencyFailed(
+      ReservationEscrowExecutionTerminatedCommand command, Reservation reservation) {
     loadReservationCreateIdempotencyPort
         .findByReservationIdWithLock(reservation.getId())
         .ifPresent(
@@ -404,7 +435,9 @@ public class ApplyReservationEscrowExecutionHookService
   }
 
   private void markActionStateTerminated(
-      ReservationEscrowExecutionTerminatedCommand command, Reservation reservation) {
+      ReservationEscrowExecutionTerminatedCommand command,
+      Reservation reservation,
+      boolean retryable) {
     findActionStateForHook(
             command.executionIntentPublicId(),
             command.actionStateId(),
@@ -416,7 +449,7 @@ public class ApplyReservationEscrowExecutionHookService
                     actionState.toBuilder()
                         .executionIntentPublicId(command.executionIntentPublicId())
                         .status(ReservationActionStateStatus.TERMINATED)
-                        .retryable(isRetryableTerminal(command.terminalStatus()))
+                        .retryable(retryable)
                         .errorCode(command.terminalStatus())
                         .errorReason(command.failureReason())
                         .build()));
