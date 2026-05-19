@@ -557,7 +557,7 @@ public class CreateReservationService implements CreateReservationUseCase {
             .findLatestByReservationIdAndActionTypeWithLock(
                 reservation.getId(), ReservationEscrowAction.PURCHASE)
             .orElse(null);
-    if (!isRetryablePurchasePreparationFailure(idempotency, reservation, latestAction)) {
+    if (!isRetryablePurchaseAttemptFailure(idempotency, reservation, latestAction)) {
       return null;
     }
     validatePurchaseHoldStillActive(reservation);
@@ -641,7 +641,7 @@ public class CreateReservationService implements CreateReservationUseCase {
                     "marketplace purchase idempotency pointer changed before retry"));
   }
 
-  private boolean isRetryablePurchasePreparationFailure(
+  private boolean isRetryablePurchaseAttemptFailure(
       ReservationCreateIdempotency idempotency,
       Reservation reservation,
       MarketplaceReservationActionState actionState) {
@@ -650,10 +650,24 @@ public class CreateReservationService implements CreateReservationUseCase {
         && equalsNullable(idempotency.getReservationId(), actionState.getReservationId())
         && equalsNullable(idempotency.getEscrowId(), actionState.getEscrowId())
         && actionState.getActionType() == ReservationEscrowAction.PURCHASE
-        && actionState.getStatus() == ReservationActionStateStatus.PREPARATION_FAILED
         && Boolean.TRUE.equals(actionState.getRetryable())
-        && isPurchaseHolding(reservation)
-        && reservation.getCurrentExecutionIntentPublicId() == null;
+        && isRetryablePurchaseAttemptState(reservation, actionState);
+  }
+
+  private boolean isRetryablePurchaseAttemptState(
+      Reservation reservation, MarketplaceReservationActionState actionState) {
+    if (actionState.getStatus() == ReservationActionStateStatus.PREPARATION_FAILED) {
+      return isPurchaseHolding(reservation)
+          && reservation.getCurrentExecutionIntentPublicId() == null;
+    }
+    if (actionState.getStatus() == ReservationActionStateStatus.TERMINATED) {
+      return reservation.getStatus() == ReservationStatus.HOLDING
+          && reservation.getEffectiveEscrowStatus() == ReservationEscrowStatus.PURCHASE_PENDING
+          && equalsNullable(
+              reservation.getCurrentExecutionIntentPublicId(),
+              actionState.getExecutionIntentPublicId());
+    }
+    return false;
   }
 
   private void rejectActiveUnboundPurchaseAttempt(

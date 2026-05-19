@@ -107,19 +107,26 @@ class AutoCancelBatchItemProcessorTest {
     // Act
     sut.process(stale);
 
-    // External mutation is deferred until the local DB transaction commits.
+    // External mutation and strike are deferred until the local DB transaction commits.
     then(submitEscrowTransactionPort).shouldHaveNoInteractions();
+    then(recordTrainerStrikePort).shouldHaveNoInteractions();
     afterCommit.get().run();
 
     // Assert — re-fetch with lock, then DB save before escrow call
     verify(loadReservationPort, times(2)).findByIdWithLock(reservationId);
 
-    InOrder order = inOrder(saveReservationPort, submitEscrowTransactionPort);
+    InOrder order =
+        inOrder(saveReservationPort, recordTrainerStrikePort, submitEscrowTransactionPort);
     order.verify(saveReservationPort).save(cancelledWithSentinel);
+    order
+        .verify(recordTrainerStrikePort)
+        .recordStrike(
+            trainerId,
+            TrainerStrikeEvent.REASON_TIMEOUT,
+            RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_TIMEOUT,
+            String.valueOf(reservationId));
     order.verify(submitEscrowTransactionPort).submitAdminRefund(orderId);
     order.verify(saveReservationPort).save(cancelledWithRealTxHash);
-
-    verify(recordTrainerStrikePort).recordStrike(trainerId, TrainerStrikeEvent.REASON_TIMEOUT);
   }
 
   @Test

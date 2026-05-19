@@ -282,7 +282,7 @@ CREATE TABLE IF NOT EXISTS marketplace_reservation_action_states (
         payload_hash IS NULL OR payload_hash ~ '^0x[0-9a-f]{64}$'
     ),
     CONSTRAINT chk_marketplace_reservation_action_states_bound_intent CHECK (
-        status IN ('PREPARING', 'PREPARATION_FAILED')
+        status IN ('PREPARING', 'PREPARATION_FAILED', 'STALE')
         OR execution_intent_public_id IS NOT NULL
     )
 );

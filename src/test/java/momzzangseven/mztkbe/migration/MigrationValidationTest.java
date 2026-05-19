@@ -211,6 +211,15 @@ class MigrationValidationTest {
         .contains("PREPARATION_FAILED")
         .contains("STALE");
 
+    String actionStateBoundIntentConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_bound_intent");
+    assertThat(actionStateBoundIntentConstraint)
+        .contains("PREPARING")
+        .contains("PREPARATION_FAILED")
+        .contains("STALE");
+
     String idempotencyStatusConstraint =
         checkClause(
             "reservation_create_idempotency_keys", "chk_reservation_create_idempotency_status");

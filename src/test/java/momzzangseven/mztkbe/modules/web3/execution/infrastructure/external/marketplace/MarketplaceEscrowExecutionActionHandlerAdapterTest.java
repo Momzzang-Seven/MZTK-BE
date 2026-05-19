@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.marketplace;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -25,8 +24,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApplyReservationEscrowExecutionHookService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ReservationTestTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.ReservationCreateIdempotency;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationCreateIdempotencyStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -509,37 +506,18 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
-  @DisplayName("terminated purchase marks the reservation and create idempotency as failed")
-  void afterExecutionTerminated_purchase_marksIdempotencyFailed() throws Exception {
+  @DisplayName("retryable terminated purchase keeps reservation and create idempotency recoverable")
+  void afterExecutionTerminated_retryablePurchase_keepsIdempotencyRecoverable() throws Exception {
     Reservation reservation = purchasePreparing("purchase-token").bindPurchaseIntent("intent-1");
     ExecutionIntent intent = intent("intent-1", payload("purchase-token"));
-    ReservationCreateIdempotency idempotency =
-        ReservationCreateIdempotency.builder()
-            .id(1L)
-            .buyerId(7L)
-            .payloadHash("payload")
-            .status(ReservationCreateIdempotencyStatus.COMPLETED)
-            .reservationId(123L)
-            .expiresAt(LocalDateTime.of(2026, 5, 16, 1, 0))
-            .build();
     given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-1"))
         .willReturn(Optional.of(reservation));
-    given(loadReservationCreateIdempotencyPort.findByReservationIdWithLock(123L))
-        .willReturn(Optional.of(idempotency));
-    given(saveReservationCreateIdempotencyPort.save(any(ReservationCreateIdempotency.class)))
-        .willAnswer(invocation -> invocation.getArgument(0, ReservationCreateIdempotency.class));
 
     sut.afterExecutionTerminated(intent, null, ExecutionIntentStatus.FAILED_ONCHAIN, "REVERTED");
 
-    ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
-    then(saveReservationPort).should().save(reservationCaptor.capture());
-    assertThat(reservationCaptor.getValue().getStatus())
-        .isEqualTo(ReservationStatus.PAYMENT_FAILED);
-    ArgumentCaptor<ReservationCreateIdempotency> idempotencyCaptor =
-        ArgumentCaptor.forClass(ReservationCreateIdempotency.class);
-    then(saveReservationCreateIdempotencyPort).should().save(idempotencyCaptor.capture());
-    assertThat(idempotencyCaptor.getValue().getStatus())
-        .isEqualTo(ReservationCreateIdempotencyStatus.FAILED);
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(loadReservationCreateIdempotencyPort).shouldHaveNoInteractions();
+    then(saveReservationCreateIdempotencyPort).shouldHaveNoInteractions();
   }
 
   private Reservation purchasePreparing(String pendingAttemptToken) {

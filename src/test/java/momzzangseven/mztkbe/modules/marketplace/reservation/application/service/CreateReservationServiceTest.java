@@ -767,6 +767,132 @@ class CreateReservationServiceTest {
     }
 
     @Test
+    @DisplayName("[CR-18] retryable terminal purchase intent는 같은 create key로 새 attempt를 준비한다")
+    void retryable_terminal_purchase_intent는_같은_create_key로_새_attempt를_준비한다() {
+      Reservation existingReservation =
+          replayReservation(ReservationStatus.HOLDING, "intent-terminal").toBuilder()
+              .id(33L)
+              .escrowStatus(ReservationEscrowStatus.PURCHASE_PENDING)
+              .pendingAttemptToken("attempt-old")
+              .holdExpiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(5))
+              .buyerWalletAddress("0x1111111111111111111111111111111111111111")
+              .trainerWalletAddress("0x2222222222222222222222222222222222222222")
+              .tokenAddress("0x3333333333333333333333333333333333333333")
+              .priceBaseUnits(PRICE_BASE_UNITS.toString())
+              .expectedContractDeadlineEpochSeconds(
+                  FIXED_CLOCK.instant().plusSeconds(2_592_000L).getEpochSecond())
+              .expectedContractDeadlineAt(LocalDateTime.now(FIXED_CLOCK).plusDays(30))
+              .version(7L)
+              .build();
+      ReservationCreateIdempotency idempotency =
+          ReservationCreateIdempotency.builder()
+              .id(501L)
+              .buyerId(USER_ID)
+              .keyHash("key-hash")
+              .payloadHash(expectedPayloadHash())
+              .status(ReservationCreateIdempotencyStatus.BOUND)
+              .reservationId(existingReservation.getId())
+              .escrowId(10L)
+              .actionStateId(20L)
+              .expiresAt(LocalDateTime.now(FIXED_CLOCK).plusMinutes(10))
+              .build();
+      MarketplaceReservationActionState retryableAction =
+          MarketplaceReservationActionState.builder()
+              .id(20L)
+              .reservationId(existingReservation.getId())
+              .escrowId(10L)
+              .actionType(ReservationEscrowAction.PURCHASE)
+              .actorType(ReservationEscrowActorType.BUYER)
+              .actorUserId(USER_ID)
+              .attemptNo(1)
+              .attemptToken("attempt-old")
+              .executionIntentPublicId("intent-terminal")
+              .status(ReservationActionStateStatus.TERMINATED)
+              .rootIdempotencyKey("buyer:" + USER_ID + ":create:key-hash")
+              .expectedEscrowStatus(ReservationEscrowStatus.PURCHASE_PENDING)
+              .priorEscrowStatus(ReservationEscrowStatus.NONE)
+              .retryable(true)
+              .build();
+      given(loadReservationCreateIdempotencyPort.findByBuyerIdAndKeyHashWithLock(any(), any()))
+          .willReturn(Optional.of(idempotency));
+      given(loadReservationPort.findById(existingReservation.getId()))
+          .willReturn(Optional.of(existingReservation));
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>(existingReservation);
+      given(loadReservationPort.findByIdWithLock(existingReservation.getId()))
+          .willAnswer(invocation -> Optional.of(latestSaved.get()));
+      given(
+              loadReservationActionStatePort.findLatestByReservationIdAndActionTypeWithLock(
+                  existingReservation.getId(), ReservationEscrowAction.PURCHASE))
+          .willReturn(Optional.of(retryableAction));
+      given(loadReservationExecutionStatePort.loadState("intent-terminal"))
+          .willReturn(
+              new ReservationExecutionStateView(
+                  "intent-terminal", "FAILED_ONCHAIN", "MARKETPLACE_CLASS_PURCHASE", USER_ID));
+      given(
+              loadReservationExecutionCandidatePort.findByReservationResource(
+                  existingReservation.getId(), existingReservation.getOrderKey()))
+          .willReturn(List.of());
+      given(loadReservationEscrowPort.findByReservationIdWithLock(existingReservation.getId()))
+          .willReturn(
+              Optional.of(
+                  MarketplaceReservationEscrow.builder()
+                      .id(10L)
+                      .reservationId(existingReservation.getId())
+                      .escrowStatus(ReservationEscrowStatus.PURCHASE_PENDING)
+                      .holdExpiresAt(existingReservation.getHoldExpiresAt())
+                      .build()));
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      org.mockito.BDDMockito.willAnswer(
+              invocation -> invocation.getArgument(0, MarketplaceReservationEscrow.class))
+          .given(saveReservationEscrowPort)
+          .save(any());
+      org.mockito.BDDMockito.willAnswer(
+              invocation -> {
+                MarketplaceReservationActionState action =
+                    invocation.getArgument(0, MarketplaceReservationActionState.class);
+                if (action.getId() == null) {
+                  return action.toBuilder().id(21L).build();
+                }
+                return action;
+              })
+          .given(saveReservationActionStatePort)
+          .save(any());
+      given(saveReservationCreateIdempotencyPort.replaceActionStateIfCurrent(501L, 20L, 21L))
+          .willReturn(Optional.of(idempotency.replaceActionState(21L)));
+      given(prepareReservationEscrowExecutionPort.preparePurchase(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
+
+      CreateReservationResult result = sut.execute(command);
+
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PURCHASE_PENDING);
+      then(precheckReservationPurchasePort).shouldHaveNoInteractions();
+      org.mockito.ArgumentCaptor<Reservation> reservationCaptor =
+          org.mockito.ArgumentCaptor.forClass(Reservation.class);
+      then(saveReservationPort)
+          .should(org.mockito.Mockito.atLeastOnce())
+          .save(reservationCaptor.capture());
+      assertThat(reservationCaptor.getAllValues().get(0).getEffectiveEscrowStatus())
+          .isEqualTo(ReservationEscrowStatus.PURCHASE_PREPARING);
+      assertThat(reservationCaptor.getAllValues().get(0).getCurrentExecutionIntentPublicId())
+          .isNull();
+      org.mockito.ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+          org.mockito.ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+      then(saveReservationActionStatePort)
+          .should(org.mockito.Mockito.times(2))
+          .save(actionCaptor.capture());
+      assertThat(actionCaptor.getAllValues())
+          .extracting(MarketplaceReservationActionState::getStatus)
+          .containsExactly(
+              ReservationActionStateStatus.STALE, ReservationActionStateStatus.PREPARING);
+    }
+
+    @Test
     @DisplayName("[CR-15] 만료된 hold라도 matching shared execution 후보가 active면 새 예약을 막는다")
     void 만료된_hold에_active_candidate가_있으면_해제하지_않는다() {
       Reservation expiredHold = expiredUnboundHold();

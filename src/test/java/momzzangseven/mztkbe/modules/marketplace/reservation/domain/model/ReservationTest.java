@@ -164,6 +164,9 @@ class ReservationTest {
             null,
             "purchase-token");
     Reservation purchasePending = preparing.bindPurchaseIntent("intent-public-id");
+    Reservation retryPreparing =
+        purchasePending.retryPurchasePreparing(
+            "purchase-token-2", LocalDateTime.of(2026, 5, 16, 10, 5));
     Reservation locked =
         purchasePending.markPurchaseConfirmedLocked(
             1_800_000_000L, LocalDateTime.of(2027, 1, 15, 8, 0));
@@ -177,6 +180,11 @@ class ReservationTest {
     assertThat(purchasePending.getEscrowStatus())
         .isEqualTo(ReservationEscrowStatus.PURCHASE_PENDING);
     assertThat(purchasePending.getCurrentExecutionIntentPublicId()).isEqualTo("intent-public-id");
+    assertThat(retryPreparing.getStatus()).isEqualTo(ReservationStatus.HOLDING);
+    assertThat(retryPreparing.getEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.PURCHASE_PREPARING);
+    assertThat(retryPreparing.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(retryPreparing.getPendingAttemptToken()).isEqualTo("purchase-token-2");
     assertThat(locked.getStatus()).isEqualTo(ReservationStatus.PENDING);
     assertThat(locked.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
     assertThat(locked.getCurrentExecutionIntentPublicId()).isNull();

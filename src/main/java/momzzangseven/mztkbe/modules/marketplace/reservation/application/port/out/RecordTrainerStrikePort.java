@@ -12,6 +12,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.ou
 public interface RecordTrainerStrikePort {
 
   String SOURCE_MARKETPLACE_RESERVATION_REJECT = "MARKETPLACE_RESERVATION_REJECT";
+  String SOURCE_MARKETPLACE_RESERVATION_TIMEOUT = "MARKETPLACE_RESERVATION_TIMEOUT";
 
   default void recordStrike(Long trainerId, String reason) {
     recordStrike(trainerId, reason, null, null);

@@ -201,6 +201,43 @@ class ApplyReservationEscrowExecutionHookServiceTest {
   }
 
   @Test
+  void terminatedPurchaseHook_keepsReservationRecoverableForRetryableTerminal() {
+    Reservation reservation = pendingPurchaseReservation();
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-purchase"))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-purchase"))
+        .willReturn(Optional.of(purchaseActionState()));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(escrowProjection()));
+
+    service.afterExecutionTerminated(
+        new ReservationEscrowExecutionTerminatedCommand(
+            "intent-purchase",
+            "MARKETPLACE_CLASS_PURCHASE",
+            "BUYER",
+            reservation.getId(),
+            "attempt-purchase",
+            20L,
+            "FAILED_ONCHAIN",
+            "temporary revert"));
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+    ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveReservationActionStatePort).should().save(actionCaptor.capture());
+    assertThat(actionCaptor.getValue().getStatus())
+        .isEqualTo(ReservationActionStateStatus.TERMINATED);
+    assertThat(actionCaptor.getValue().getRetryable()).isTrue();
+
+    ArgumentCaptor<MarketplaceReservationEscrow> escrowCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationEscrow.class);
+    then(saveReservationEscrowPort).should().save(escrowCaptor.capture());
+    assertThat(escrowCaptor.getValue().getEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.PURCHASE_PENDING);
+    assertThat(escrowCaptor.getValue().getLastFailureCode()).isEqualTo("FAILED_ONCHAIN");
+  }
+
+  @Test
   void terminatedHook_ignoresUnboundPurchaseIntent() {
     Reservation reservation =
         Reservation.builder()

@@ -24,12 +24,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStr
  * <p>Transaction boundaries are delegated to {@link RunReservationTransactionPort} so this
  * application service does not depend on Spring transaction infrastructure.
  *
- * <p><b>Transaction ordering (DB-first, escrow-after):</b><br>
- * The reservation status is persisted first. Then the on-chain {@code adminRefund} call is made. If
- * the escrow call fails, the status remains TIMEOUT_CANCELLED in DB (correct terminal state) and
- * the strike is still recorded. The missing on-chain refund can be resolved by a reconciliation
- * job. This prevents the inverse failure (on-chain success + DB rollback) which would be harder to
- * detect and recover from.
+ * <p><b>Transaction ordering (DB-first, side-effects-after):</b><br>
+ * The reservation status is persisted first. Trainer strike recording and the on-chain {@code
+ * adminRefund} call run after commit. If either side effect fails, the status remains
+ * TIMEOUT_CANCELLED in DB (correct terminal state). Missing side effects can be resolved by a
+ * reconciliation job. This prevents the inverse failure (side effect success + DB rollback) which
+ * would be harder to detect and recover from.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -54,9 +54,10 @@ public class AutoCancelBatchItemProcessor {
    * be visible — the stale PENDING status would bypass the guard and trigger a duplicate on-chain
    * refund (double-compensation).
    *
-   * <p>Order: re-fetch with lock → validate status → persist TIMEOUT_CANCELLED + strike → commit →
-   * submit adminRefund on-chain → update txHash in a new short transaction. This prevents
-   * successful on-chain refund from being rolled back locally by a commit failure.
+   * <p>Order: re-fetch with lock → validate status → persist TIMEOUT_CANCELLED → commit → record
+   * idempotent timeout strike → submit adminRefund on-chain → update txHash in a new short
+   * transaction. This prevents successful side effects from being rolled back locally by a commit
+   * failure.
    */
   public void process(Reservation staleReservation) {
     runReservationTransactionPort.requiresNew(
@@ -98,19 +99,38 @@ public class AutoCancelBatchItemProcessor {
     Reservation cancelled = reservation.timeoutCancel(PENDING_TX_HASH);
     saveReservationPort.save(cancelled);
 
-    recordTrainerStrikePort.recordStrike(
-        reservation.getTrainerId(), TrainerStrikeEvent.REASON_TIMEOUT);
-
     runReservationPostCommitPort.afterCommit(
         "AutoCancel",
         () ->
-            submitAdminRefundAndWriteBack(
+            recordTimeoutStrikeAndSubmitAdminRefund(
                 reservation.getId(), reservation.getOrderId(), reservation.getTrainerId()));
 
     log.info(
         "AutoCancel committed local timeout state: reservationId={}, trainerId={}",
         reservation.getId(),
         reservation.getTrainerId());
+  }
+
+  private void recordTimeoutStrikeAndSubmitAdminRefund(
+      Long reservationId, String orderId, Long trainerId) {
+    recordTimeoutStrike(reservationId, trainerId);
+    submitAdminRefundAndWriteBack(reservationId, orderId, trainerId);
+  }
+
+  private void recordTimeoutStrike(Long reservationId, Long trainerId) {
+    try {
+      recordTrainerStrikePort.recordStrike(
+          trainerId,
+          TrainerStrikeEvent.REASON_TIMEOUT,
+          RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_TIMEOUT,
+          String.valueOf(reservationId));
+    } catch (RuntimeException e) {
+      log.error(
+          "AutoCancel timeout strike failed after local commit: reservationId={}, trainerId={}",
+          reservationId,
+          trainerId,
+          e);
+    }
   }
 
   private void submitAdminRefundAndWriteBack(Long reservationId, String orderId, Long trainerId) {

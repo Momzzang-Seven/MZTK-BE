@@ -201,6 +201,11 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     ReservationExecutionStateView state =
         loadReservationExecutionStatePort.loadState(
             reservation.getCurrentExecutionIntentPublicId());
+    if (state == null) {
+      throw new MarketplaceReservationStateException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "current marketplace execution state is missing");
+    }
     if (isConfirmedOutcome(state)) {
       validateParticipant(reservation, command.requesterId());
       replayConfirmedReservationExecutionPort.replayConfirmed(

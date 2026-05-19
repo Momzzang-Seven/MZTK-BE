@@ -347,6 +347,29 @@ class RecoverReservationEscrowServiceTest {
   }
 
   @Test
+  @DisplayName("current execution pointer는 있지만 execution state가 없으면 명시적인 conflict로 거절한다")
+  void recovery_currentIntentMissingExecutionState_isRejectedAsConflict() {
+    Reservation reservation =
+        reservation(ReservationStatus.PURCHASE_PENDING).toBuilder()
+            .currentExecutionIntentPublicId("intent-missing")
+            .build();
+    given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationExecutionStatePort.loadState("intent-missing")).willReturn(null);
+
+    assertThatThrownBy(
+            () -> sut.execute(new RecoverReservationEscrowCommand(RESERVATION_ID, BUYER_ID)))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            ex ->
+                assertThat(((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode()));
+
+    then(replayConfirmedReservationExecutionPort).shouldHaveNoInteractions();
+    then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
   @DisplayName("transaction이 SUCCEEDED인 current intent는 intent 상태가 pending이어도 replay repair를 실행한다")
   void recovery_currentSucceededTransaction_replaysConfirmedRepairAndReturnsLatestReservation() {
     Reservation reservation =

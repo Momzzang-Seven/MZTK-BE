@@ -418,14 +418,23 @@ public class Reservation {
 
   public Reservation retryPurchasePreparing(
       String pendingAttemptToken, LocalDateTime holdExpiresAt) {
-    if (status != ReservationStatus.HOLDING
-        || getEffectiveEscrowStatus() != ReservationEscrowStatus.PURCHASE_PREPARING
-        || currentExecutionIntentPublicId != null) {
+    boolean retryablePreparationFailure =
+        status == ReservationStatus.HOLDING
+            && getEffectiveEscrowStatus() == ReservationEscrowStatus.PURCHASE_PREPARING
+            && currentExecutionIntentPublicId == null;
+    boolean retryableTerminalIntent =
+        status == ReservationStatus.HOLDING
+            && getEffectiveEscrowStatus() == ReservationEscrowStatus.PURCHASE_PENDING
+            && currentExecutionIntentPublicId != null;
+    if (!retryablePreparationFailure && !retryableTerminalIntent) {
       throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
           "Cannot retry purchase preparation from " + status);
     }
     return toBuilder()
+        .status(ReservationStatus.HOLDING)
+        .escrowStatus(ReservationEscrowStatus.PURCHASE_PREPARING)
+        .currentExecutionIntentPublicId(null)
         .pendingAction(ReservationEscrowAction.PURCHASE)
         .pendingAttemptToken(pendingAttemptToken)
         .holdExpiresAt(holdExpiresAt)

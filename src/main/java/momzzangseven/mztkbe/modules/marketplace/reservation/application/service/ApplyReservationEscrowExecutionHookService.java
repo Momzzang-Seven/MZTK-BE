@@ -134,6 +134,11 @@ public class ApplyReservationEscrowExecutionHookService
       markActionStateTerminated(command, reservation);
       return;
     }
+    if (isRetryablePurchaseTermination(command)) {
+      syncEscrowProjection(reservation, null, command.terminalStatus(), command.failureReason());
+      markActionStateTerminated(command, reservation);
+      return;
+    }
     Reservation updated =
         PURCHASE.equals(command.actionType())
             ? reservation.markPaymentFailed(command.terminalStatus(), command.failureReason())
@@ -142,6 +147,11 @@ public class ApplyReservationEscrowExecutionHookService
     syncEscrowProjection(updated, null, command.terminalStatus(), command.failureReason());
     markActionStateTerminated(command, updated);
     markPurchaseCreateIdempotencyFailedIfNeeded(command, reservation);
+  }
+
+  private boolean isRetryablePurchaseTermination(
+      ReservationEscrowExecutionTerminatedCommand command) {
+    return PURCHASE.equals(command.actionType()) && isRetryableTerminal(command.terminalStatus());
   }
 
   private boolean isUnboundPurchaseTermination(
