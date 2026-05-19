@@ -2414,6 +2414,7 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
           signedAmount: tokenBaseUnits(99999), // 실제 50000과 불일치
           delegationSignature: "0x" + "a".repeat(130),
           executionSignature: "0x" + "b".repeat(130),
+          idempotencyKey: `tc-rv-06-${Date.now()}`,
         },
       }
     );
@@ -2478,6 +2479,7 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
           signedAmount: tokenBaseUnits(10000),
           delegationSignature: "0x" + "a".repeat(130),
           executionSignature: "0x" + "b".repeat(130),
+          idempotencyKey: `tc-rv-07-${Date.now()}`,
         },
       }
     );

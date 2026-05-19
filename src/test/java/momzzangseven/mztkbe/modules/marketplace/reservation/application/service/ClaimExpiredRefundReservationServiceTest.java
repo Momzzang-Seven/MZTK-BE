@@ -836,21 +836,35 @@ class ClaimExpiredRefundReservationServiceTest {
     }
 
     @Test
-    @DisplayName("[DR-03B] contract deadline과 같은 시각이면 refund intent를 만들지 않는다")
-    void deadline_같은_시각_환불_차단() {
+    @DisplayName("[DR-03B] contract deadline과 같은 시각이면 refund intent를 만들 수 있다")
+    void deadline_같은_시각_환불_허용() {
+      AtomicReference<Reservation> latestSaved = new AtomicReference<>();
+      Reservation reservation = pendingReservation(LocalDateTime.now(FIXED_CLOCK));
       given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
-          .willReturn(Optional.of(pendingReservation(LocalDateTime.now(FIXED_CLOCK))));
+          .willReturn(Optional.of(reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation))
+          .willAnswer(invocation -> savedOr(latestSaved, reservation));
+      given(saveReservationPort.save(any()))
+          .willAnswer(
+              invocation -> {
+                Reservation saved = invocation.getArgument(0, Reservation.class);
+                latestSaved.set(saved);
+                return saved;
+              });
+      given(loadReservationWalletPort.loadActiveWalletAddress(any()))
+          .willReturn(Optional.of("0x1111111111111111111111111111111111111111"));
+      given(loadReservationEscrowPaymentConfigPort.load())
+          .willReturn(
+              new LoadReservationEscrowPaymentConfigPort.ReservationEscrowPaymentConfig(
+                  "0x3333333333333333333333333333333333333333", 18));
+      given(prepareReservationEscrowExecutionPort.prepareDeadlineRefund(any()))
+          .willReturn(new PrepareReservationEscrowResult(web3()));
 
-      assertThatThrownBy(
-              () -> sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID)))
-          .isInstanceOf(BusinessException.class)
-          .satisfies(
-              ex ->
-                  assertThat(((BusinessException) ex).getCode())
-                      .isEqualTo(
-                          ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED.getCode()));
+      ClaimExpiredRefundReservationResult result =
+          sut.execute(new ClaimExpiredRefundReservationCommand(RESERVATION_ID, BUYER_ID));
 
-      then(prepareReservationEscrowExecutionPort).shouldHaveNoInteractions();
+      assertThat(result.status()).isEqualTo(ReservationDisplayStatus.DEADLINE_REFUND_PENDING);
+      assertThat(result.web3()).isNotNull();
     }
 
     @Test

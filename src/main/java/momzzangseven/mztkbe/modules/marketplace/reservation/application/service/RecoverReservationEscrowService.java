@@ -216,7 +216,9 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     if (shouldForceDeadlineRefund(reservation, flow)
         && reservation.isOwnedByUser(command.requesterId())) {
       if (isRetryableTerminal(state.status())) {
-        return CurrentIntentResolution.continueWith(reservation);
+        return CurrentIntentResolution.continueWith(
+            runInTransaction(
+                () -> staleRetryableCurrentActionForDeadlineRefund(reservation, state)));
       }
       if (command.requesterId().equals(state.requesterUserId())) {
         return resolveOwnedCurrentExecution(command, reservation);
@@ -353,7 +355,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
     }
     if (flow.action() == RecoveryAction.DEADLINE_REFUND) {
       guardUnboundDeadlineRefundPending(reservation);
-      if (deadlineAt == null || !LocalDateTime.now(clock).isAfter(deadlineAt)) {
+      if (deadlineAt == null || !deadlineExpired(deadlineAt)) {
         throw new MarketplaceReservationStateException(
             ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
             "Deadline refund is not yet available on the escrow contract");
@@ -625,7 +627,7 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
           ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
           "Contract deadline is not available for this reservation");
     }
-    if (!LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt())) {
+    if (!deadlineExpired(reservation.getContractDeadlineAt())) {
       throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
           "Deadline refund is only available after the contract deadline");
@@ -759,7 +761,33 @@ public class RecoverReservationEscrowService implements RecoverReservationEscrow
 
   private boolean expired(Reservation reservation) {
     return reservation.getContractDeadlineAt() != null
-        && LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt());
+        && deadlineExpired(reservation.getContractDeadlineAt());
+  }
+
+  private boolean deadlineExpired(LocalDateTime deadlineAt) {
+    return !LocalDateTime.now(clock).isBefore(deadlineAt);
+  }
+
+  private Reservation staleRetryableCurrentActionForDeadlineRefund(
+      Reservation reservation, ReservationExecutionStateView state) {
+    Reservation locked =
+        loadReservationPort
+            .findByIdWithLock(reservation.getId())
+            .orElseThrow(() -> new ReservationNotFoundException(reservation.getId()));
+    if (!equalsNullable(locked.getCurrentExecutionIntentPublicId(), state.executionIntentId())
+        || loadReservationActionStatePort == null
+        || saveReservationActionStatePort == null) {
+      return locked;
+    }
+    loadReservationActionStatePort
+        .findByExecutionIntentPublicIdWithLock(state.executionIntentId())
+        .filter(actionState -> actionState.getStatus().isActive())
+        .ifPresent(
+            actionState ->
+                saveReservationActionStatePort.markStaleForRetry(
+                    actionState.getId(),
+                    "marketplace recovery rerouted expired action to deadline refund"));
+    return locked;
   }
 
   private boolean shouldForceDeadlineRefund(Reservation reservation, RecoveryFlow flow) {

@@ -53,6 +53,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
 @ConditionalOnExecutionModeEnabled
@@ -216,8 +217,10 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
-  CreateExecutionIntentUseCase createExecutionIntentUseCase(CreateExecutionIntentService delegate) {
-    return delegate;
+  CreateExecutionIntentUseCase createExecutionIntentUseCase(
+      CreateExecutionIntentService delegate, PlatformTransactionManager transactionManager) {
+    return new TransactionalCreateExecutionIntentUseCase(
+        delegate, new TransactionTemplate(transactionManager));
   }
 
   @Bean

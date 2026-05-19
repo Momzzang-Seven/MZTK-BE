@@ -208,14 +208,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     if (!reservation.isOwnedByUser(command.userId())) {
       throw new MarketplaceUnauthorizedAccessException();
     }
-    if (isUnboundDeadlineRefundPending(reservation)) {
-      throw new MarketplaceReservationStateException(
-          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
-          "Deadline refund preparation is already in progress");
-    }
-
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
     requireNoBlockingActiveActionState(reservation, currentState);
+    requireResolvableUnboundDeadlineRefund(reservation);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
       if (isConfirmedOutcome(currentState)) {
         return DeadlineRefundInspection.confirmed(reservation, currentState);
@@ -250,14 +245,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     if (!reservation.isOwnedByUser(command.userId())) {
       throw new MarketplaceUnauthorizedAccessException();
     }
-    if (isUnboundDeadlineRefundPending(reservation)) {
-      throw new MarketplaceReservationStateException(
-          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
-          "Deadline refund preparation is already in progress");
-    }
-
     ReservationExecutionStateView currentState = loadCurrentExecutionStateIfPresent(reservation);
     requireNoBlockingActiveActionState(reservation, currentState);
+    requireResolvableUnboundDeadlineRefund(reservation);
     if (currentState != null && !isRetryableTerminal(currentState.status())) {
       if (isConfirmedOutcome(currentState)) {
         return BeginDeadlineRefundResult.confirmed(reservation, currentState);
@@ -269,6 +259,12 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
       throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
           "another marketplace execution is still active for this reservation");
+    }
+
+    reservation = resetUnboundDeadlineRefundWithoutActionState(reservation);
+    PendingPreparation reusablePending = reuseUnboundDeadlineRefundIfPossible(command, reservation);
+    if (reusablePending != null) {
+      return BeginDeadlineRefundResult.pending(reusablePending);
     }
 
     Reservation refundable = ensureRefundAvailable(reservation, currentState != null);
@@ -334,6 +330,11 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     if (activeActions == null || activeActions.isEmpty()) {
       return;
     }
+    if (isUnboundDeadlineRefundPending(reservation)
+        && activeActions.stream()
+            .allMatch(action -> isReusableUnboundDeadlineRefund(action, reservation))) {
+      return;
+    }
     if (currentState != null
         && isRetryableTerminal(currentState.status())
         && activeActions.stream()
@@ -350,6 +351,68 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     throw new MarketplaceReservationStateException(
         ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
         "another marketplace action is already active for this reservation");
+  }
+
+  private PendingPreparation reuseUnboundDeadlineRefundIfPossible(
+      ClaimExpiredRefundReservationCommand command, Reservation reservation) {
+    if (!isUnboundDeadlineRefundPending(reservation)) {
+      return null;
+    }
+    MarketplaceReservationEscrow escrow = loadEscrowProjection(reservation);
+    MarketplaceReservationActionState actionState =
+        loadUnboundDeadlineRefundActionState(reservation).orElse(null);
+    if (actionState == null) {
+      return null;
+    }
+    if (escrow != null) {
+      ReservationEscrowActionGuard.requireActiveWalletMatchesSnapshot(
+          loadReservationWalletPort, command.userId(), escrow.getBuyerWalletAddress());
+    }
+    return new PendingPreparation(
+        reservation, commandFor(reservation, escrow, actionState, command.userId()), actionState);
+  }
+
+  private Reservation resetUnboundDeadlineRefundWithoutActionState(Reservation reservation) {
+    if (!isUnboundDeadlineRefundPending(reservation)
+        || loadUnboundDeadlineRefundActionState(reservation).isPresent()) {
+      return reservation;
+    }
+    if (reservation.getPriorStatus() == null) {
+      throw new MarketplaceReservationStateException(
+          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+          "Deadline refund preparation is already in progress");
+    }
+    return saveReservationPort.save(reservation.rollbackToPriorState());
+  }
+
+  private void requireResolvableUnboundDeadlineRefund(Reservation reservation) {
+    if (!isUnboundDeadlineRefundPending(reservation)
+        || loadUnboundDeadlineRefundActionState(reservation).isPresent()
+        || reservation.getPriorStatus() != null) {
+      return;
+    }
+    throw new MarketplaceReservationStateException(
+        ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+        "Deadline refund preparation is already in progress");
+  }
+
+  private java.util.Optional<MarketplaceReservationActionState>
+      loadUnboundDeadlineRefundActionState(Reservation reservation) {
+    if (loadReservationActionStatePort == null) {
+      return java.util.Optional.empty();
+    }
+    return loadReservationActionStatePort
+        .findLatestByReservationIdAndActionTypeWithLock(
+            reservation.getId(), ReservationEscrowAction.DEADLINE_REFUND)
+        .filter(action -> isReusableUnboundDeadlineRefund(action, reservation));
+  }
+
+  private boolean isReusableUnboundDeadlineRefund(
+      MarketplaceReservationActionState action, Reservation reservation) {
+    return action.getActionType() == ReservationEscrowAction.DEADLINE_REFUND
+        && action.getStatus() == ReservationActionStateStatus.PREPARING
+        && action.getExecutionIntentPublicId() == null
+        && equalsNullable(action.getAttemptToken(), reservation.getPendingAttemptToken());
   }
 
   private ClaimExpiredRefundReservationResult replayConfirmedState(
@@ -444,15 +507,18 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
   private ChainSyncResult syncCreatedChainOrder(
       Reservation reservation, ReservationEscrowOrderView order, LocalDateTime deadlineAt) {
-    if (isUnboundDeadlineRefundPending(reservation)) {
-      throw new MarketplaceReservationStateException(
-          ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
-          "Deadline refund preparation is already in progress");
-    }
-    if (deadlineAt == null || !LocalDateTime.now(clock).isAfter(deadlineAt)) {
+    if (deadlineAt == null || !deadlineExpired(deadlineAt)) {
       throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
           "Deadline refund is not yet available on the escrow contract");
+    }
+    if (isUnboundDeadlineRefundPending(reservation)) {
+      return ChainSyncResult.continueWith(
+          saveReservationPort.save(
+              reservation.toBuilder()
+                  .contractDeadlineEpochSeconds(order.deadlineEpochSeconds())
+                  .contractDeadlineAt(deadlineAt)
+                  .build()));
     }
     Reservation available =
         reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_AVAILABLE
@@ -525,7 +591,9 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
 
   private boolean isUnboundDeadlineRefundPending(Reservation reservation) {
     return reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING
-        && reservation.getCurrentExecutionIntentPublicId() == null;
+        && reservation.getCurrentExecutionIntentPublicId() == null
+        && reservation.getPendingAttemptToken() != null
+        && !reservation.getPendingAttemptToken().isBlank();
   }
 
   private void recordTrainerRejectStrikeIfNeeded(Reservation reservation) {
@@ -658,6 +726,10 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
     return isConfirmed(state.status()) || "SUCCEEDED".equals(state.transactionStatus());
   }
 
+  private boolean deadlineExpired(LocalDateTime deadlineAt) {
+    return !LocalDateTime.now(clock).isBefore(deadlineAt);
+  }
+
   private Reservation ensureRefundAvailable(
       Reservation reservation, boolean currentIntentRetryableTerminal) {
     if (reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING) {
@@ -673,7 +745,7 @@ public class ClaimExpiredRefundReservationService implements ClaimExpiredRefundR
           ErrorCode.MARKETPLACE_DEADLINE_SYNC_REQUIRED,
           "Contract deadline is not available for this reservation");
     }
-    if (!LocalDateTime.now(clock).isAfter(reservation.getContractDeadlineAt())) {
+    if (!deadlineExpired(reservation.getContractDeadlineAt())) {
       throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED,
           "Deadline refund is only available after the contract deadline");
