@@ -28,7 +28,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # 지금 단계에선 optimism × testnet 만 쓴다. 나중에 base 로 옮길 때만 덮어쓰면 됨.
-CHAIN="${CHAIN:-optimism}"
+# 이제 base로 바꿈.
+CHAIN="${CHAIN:-base}"
 NETWORK="${NETWORK:-testnet}"
 
 AWS_REGION_DEFAULT="ap-northeast-2"
@@ -168,6 +169,7 @@ docker run -d \
   -p 8080:8080 \
   --add-host=host.docker.internal:host-gateway \
   -e SPRING_PROFILES_ACTIVE=prod \
+  -e JAVA_OPTS="-Xms512m -Xmx5g" \
   --env-file ~/apps/.env \
   ${DOCKER_HUB_USERNAME}/mztk-be:latest
 

@@ -37,9 +37,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", \
-  "-Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:prod}", \
-  "-Xms256m", \
-  "-Xmx512m", \
-  "-jar", \
-  "app.jar"]
+ENV JAVA_OPTS="-Xms256m -Xmx512m"
+
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-prod} -jar app.jar"]
