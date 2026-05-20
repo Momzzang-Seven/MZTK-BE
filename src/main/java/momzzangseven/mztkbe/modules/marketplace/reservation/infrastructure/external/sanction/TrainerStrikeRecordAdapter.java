@@ -25,8 +25,14 @@ public class TrainerStrikeRecordAdapter implements RecordTrainerStrikePort {
   private final RecordTrainerStrikeUseCase recordTrainerStrikeUseCase;
 
   @Override
-  public void recordStrike(Long trainerId, String reason) {
-    log.debug("RecordTrainerStrike via adapter: trainerId={}, reason={}", trainerId, reason);
-    recordTrainerStrikeUseCase.execute(new RecordTrainerStrikeCommand(trainerId, reason));
+  public void recordStrike(Long trainerId, String reason, String sourceType, String sourceId) {
+    log.debug(
+        "RecordTrainerStrike via adapter: trainerId={}, reason={}, sourceType={}, sourceId={}",
+        trainerId,
+        reason,
+        sourceType,
+        sourceId);
+    recordTrainerStrikeUseCase.execute(
+        new RecordTrainerStrikeCommand(trainerId, reason, sourceType, sourceId));
   }
 }

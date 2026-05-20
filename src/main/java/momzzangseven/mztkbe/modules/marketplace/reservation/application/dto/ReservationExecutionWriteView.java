@@ -10,11 +10,14 @@ import java.time.LocalDateTime;
 public record ReservationExecutionWriteView(
     Resource resource,
     String actionType,
+    String orderKey,
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequest signRequest,
     String signRequestUnavailableReason,
-    boolean existing) {
+    boolean existing,
+    SignatureMeta signatureMeta,
+    TokenMovement tokenMovement) {
 
   public ReservationExecutionWriteView {
     if (resource == null) {
@@ -35,6 +38,41 @@ public record ReservationExecutionWriteView(
     }
   }
 
+  public ReservationExecutionWriteView(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequest signRequest,
+      String signRequestUnavailableReason,
+      boolean existing) {
+    this(
+        resource,
+        actionType,
+        null,
+        executionIntent,
+        execution,
+        signRequest,
+        signRequestUnavailableReason,
+        existing,
+        null,
+        null);
+  }
+
+  public ReservationExecutionWriteView asExistingForOrder(String orderKey) {
+    return new ReservationExecutionWriteView(
+        resource,
+        actionType,
+        orderKey,
+        executionIntent,
+        execution,
+        signRequest,
+        signRequestUnavailableReason,
+        true,
+        signatureMeta,
+        tokenMovement);
+  }
+
   /** Resource identity surfaced in the marketplace Web3 write response. */
   public record Resource(String type, String id, String status) {
 
@@ -52,7 +90,8 @@ public record ReservationExecutionWriteView(
   }
 
   /** Execution intent metadata needed by clients to submit user signatures. */
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, Long expiresAtEpochSeconds) {
 
     public ExecutionIntent {
       if (id == null || id.isBlank()) {
@@ -64,6 +103,10 @@ public record ReservationExecutionWriteView(
       if (expiresAt == null) {
         throw new IllegalArgumentException("executionIntent.expiresAt is required");
       }
+    }
+
+    public ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
+      this(id, status, expiresAt, null);
     }
   }
 
@@ -102,4 +145,14 @@ public record ReservationExecutionWriteView(
       String maxPriorityFeePerGasHex,
       String maxFeePerGasHex,
       Long expectedNonce) {}
+
+  public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {}
+
+  public record TokenMovement(
+      String tokenAddress,
+      String amountBaseUnits,
+      String fromRole,
+      String fromAddress,
+      String toRole,
+      String toAddress) {}
 }

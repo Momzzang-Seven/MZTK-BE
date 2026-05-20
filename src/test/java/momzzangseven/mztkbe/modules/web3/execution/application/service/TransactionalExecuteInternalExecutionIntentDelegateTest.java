@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -121,6 +122,22 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
         .thenAnswer(invocation -> invocation.getArgument(0));
   }
 
+  private void stubClaimAndTrackUpdates(ExecutionIntent initial) {
+    AtomicReference<ExecutionIntent> latest = new AtomicReference<>(initial);
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(initial));
+    lenient()
+        .when(executionIntentPersistencePort.findByPublicIdForUpdate(initial.getPublicId()))
+        .thenAnswer(invocation -> Optional.of(latest.get()));
+    when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
+        .thenAnswer(
+            invocation -> {
+              ExecutionIntent updated = invocation.getArgument(0);
+              latest.set(updated);
+              return updated;
+            });
+  }
+
   @Test
   void execute_returnsNotFoundWhenNoEligibleIntentExists() {
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
@@ -140,8 +157,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   void execute_quarantinesIntentWhenNoMatchingActionHandlerExists() {
     // [M-56] handler.supports(actionType) 가 모두 false → INTERNAL_ISSUER_INVALID_INTENT 로 cancel.
     ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     // Default `lenient().when(...).supports(QNA_ADMIN_SETTLE)` returns true; flip it off.
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.QNA_ADMIN_SETTLE))
@@ -203,8 +219,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   @Test
   void execute_rebindsReservedNonceWhenLocalAllocatorAdvances() {
     ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS)).thenReturn(13L);
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
@@ -223,7 +238,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
             gate);
 
     assertThat(result.executed()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
     verify(executionEip1559SigningPort)
         .sign(org.mockito.ArgumentMatchers.argThat(command -> command.nonce() == 13L));
     verify(executionEip1559SigningPort)
@@ -238,8 +253,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   @Test
   void execute_marksPendingOnchainWhenBroadcastSucceeds() {
     ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
         .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
@@ -259,9 +273,9 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
             gate);
 
     assertThat(result.executed()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
     assertThat(result.transactionId()).isEqualTo(77L);
-    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.PENDING);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
     assertThat(result.txHash()).isEqualTo("0xhash");
     verify(executionTransactionGatewayPort).markPending(77L, "0xhash");
     // Happy-path regression: nonce stays consumed; release must NOT be called.
@@ -271,8 +285,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   @Test
   void execute_marksSignedAndSchedulesRetryWhenBroadcastFails() {
     ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
         .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))

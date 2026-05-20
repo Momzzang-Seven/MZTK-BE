@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
@@ -46,6 +47,8 @@ class ExecutionIntentServiceConfigTest {
               () -> mock(PublishExecutionIntentTerminatedPort.class))
           .withBean(RunAfterCommitPort.class, () -> mock(RunAfterCommitPort.class))
           .withBean(LoadExecutionChainIdPort.class, () -> mock(LoadExecutionChainIdPort.class))
+          .withBean(
+              LoadExecutionTransactionPort.class, () -> mock(LoadExecutionTransactionPort.class))
           .withBean(
               LoadSponsorTreasuryWalletPort.class, () -> mock(LoadSponsorTreasuryWalletPort.class))
           .withBean(

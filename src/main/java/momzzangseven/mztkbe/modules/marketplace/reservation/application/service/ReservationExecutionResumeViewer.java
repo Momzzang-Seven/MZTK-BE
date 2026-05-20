@@ -1,0 +1,94 @@
+package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
+
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+
+final class ReservationExecutionResumeViewer {
+
+  private ReservationExecutionResumeViewer() {}
+
+  static ReservationExecutionResumeView hydrate(
+      Reservation reservation, Long viewerId, ReservationExecutionResumeView view) {
+    if (view == null) {
+      return null;
+    }
+    String viewerAction = viewerAction(reservation, view.actionType());
+    boolean owner = isViewerOwner(reservation, viewerId, viewerAction);
+    String status = view.executionIntent().status();
+    boolean participant =
+        reservation.isOwnedByUser(viewerId) || reservation.isOwnedByTrainer(viewerId);
+    boolean confirmedReplayAvailable =
+        participant
+            && reservation.getCurrentExecutionIntentPublicId() != null
+            && reservation.getCurrentExecutionIntentPublicId().equals(view.executionIntent().id())
+            && ("CONFIRMED".equals(status) || transactionSucceeded(view));
+    return view.withViewer(
+        viewerAction,
+        owner && "AWAITING_SIGNATURE".equals(status),
+        confirmedReplayAvailable
+            || (owner
+                && canRecoverRetryableTerminal(reservation, view.actionType())
+                && ReservationExecutionTerminalStatusPolicy.isRetryableTerminal(status)));
+  }
+
+  private static boolean transactionSucceeded(ReservationExecutionResumeView view) {
+    return view.transaction() != null && "SUCCEEDED".equals(view.transaction().status());
+  }
+
+  private static String viewerAction(Reservation reservation, String actionType) {
+    return switch (actionType) {
+      case "MARKETPLACE_CLASS_PURCHASE" -> "PURCHASE";
+      case "MARKETPLACE_CLASS_CONFIRM" -> "CONFIRM";
+      case "MARKETPLACE_CLASS_EXPIRED_REFUND" -> "DEADLINE_REFUND";
+      case "MARKETPLACE_CLASS_CANCEL" -> cancelViewerAction(reservation);
+      default -> null;
+    };
+  }
+
+  private static String cancelViewerAction(Reservation reservation) {
+    if (reservation.getPendingAction() == ReservationEscrowAction.TRAINER_REJECT
+        || reservation.getStatus() == ReservationStatus.REJECT_PENDING
+        || reservation.getStatus() == ReservationStatus.REJECTED) {
+      return "TRAINER_REJECT";
+    }
+    if (reservation.getPendingAction() == ReservationEscrowAction.BUYER_CANCEL
+        || reservation.getStatus() == ReservationStatus.CANCEL_PENDING
+        || reservation.getStatus() == ReservationStatus.USER_CANCELLED) {
+      return "BUYER_CANCEL";
+    }
+    return null;
+  }
+
+  private static boolean canRecoverRetryableTerminal(Reservation reservation, String actionType) {
+    return switch (actionType) {
+      case "MARKETPLACE_CLASS_PURCHASE" ->
+          reservation.getStatus() == ReservationStatus.HOLDING
+              || reservation.getStatus() == ReservationStatus.PURCHASE_PREPARING
+              || reservation.getStatus() == ReservationStatus.PURCHASE_PENDING;
+      case "MARKETPLACE_CLASS_CANCEL" ->
+          reservation.getStatus() == ReservationStatus.CANCEL_PENDING
+              || reservation.getStatus() == ReservationStatus.REJECT_PENDING;
+      case "MARKETPLACE_CLASS_CONFIRM" ->
+          reservation.getStatus() == ReservationStatus.CONFIRM_PENDING;
+      case "MARKETPLACE_CLASS_EXPIRED_REFUND" ->
+          reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_PENDING
+              || reservation.getStatus() == ReservationStatus.DEADLINE_REFUND_AVAILABLE;
+      default -> false;
+    };
+  }
+
+  private static boolean isViewerOwner(
+      Reservation reservation, Long viewerId, String viewerAction) {
+    if (viewerAction == null) {
+      return false;
+    }
+    return switch (viewerAction) {
+      case "TRAINER_REJECT" -> reservation.isOwnedByTrainer(viewerId);
+      case "PURCHASE", "BUYER_CANCEL", "CONFIRM", "DEADLINE_REFUND" ->
+          reservation.isOwnedByUser(viewerId);
+      default -> false;
+    };
+  }
+}

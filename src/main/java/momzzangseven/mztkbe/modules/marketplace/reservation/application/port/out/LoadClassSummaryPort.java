@@ -16,11 +16,10 @@ public interface LoadClassSummaryPort {
    * Summary of a class required for reservation display.
    *
    * <p>{@code priceAmount} must be strictly positive, matching the {@code price_amount > 0} DB
-   * constraint and the {@link
-   * momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass} domain
-   * invariant. A value of zero or below indicates a data-integrity error (e.g. a bug in the class
-   * creation flow or a legacy import) and throws {@link IllegalStateException} at construction time
-   * so corrupt data is caught early at the adapter boundary rather than propagated to callers.
+   * constraint and the class module's domain invariant. A value of zero or below indicates a
+   * data-integrity error (e.g. a bug in the class creation flow or a legacy import) and throws
+   * {@link IllegalStateException} at construction time so corrupt data is caught early at the
+   * adapter boundary rather than propagated to callers.
    *
    * <p>If the product ever introduces free classes, the class creation/update DTOs, domain
    * invariant, and the {@code price_amount > 0} DB constraint must be relaxed in concert before

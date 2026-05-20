@@ -17,7 +17,7 @@ mode = "workspace-write"
 
 # --- Hooks (shared with .claude/settings.json — same scripts) ---
 [features]
-codex_hooks = true
+hooks = true
 
 [[hooks.PostToolUse]]
 matcher = "^(Write|Edit|MultiEdit|apply_patch)$"

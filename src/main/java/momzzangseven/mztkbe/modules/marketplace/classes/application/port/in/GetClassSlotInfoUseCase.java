@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.application.port.in;
 
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSlotReservationProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 
 /**
@@ -21,4 +22,15 @@ public interface GetClassSlotInfoUseCase {
    * @return Optional containing the slot if found (locked)
    */
   Optional<ClassSlot> findByIdWithLock(Long slotId);
+
+  /**
+   * Find a reservation-facing slot projection under a pessimistic write lock.
+   *
+   * <p>Cross-module callers should prefer this method over {@link #findByIdWithLock(Long)} so they
+   * depend only on the classes application DTO surface, not on the internal aggregate.
+   *
+   * @param slotId slot ID
+   * @return Optional containing the slot projection if found
+   */
+  Optional<ClassSlotReservationProjection> findReservationProjectionByIdWithLock(Long slotId);
 }

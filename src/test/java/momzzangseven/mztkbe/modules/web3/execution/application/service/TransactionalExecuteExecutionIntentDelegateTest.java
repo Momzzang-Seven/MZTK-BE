@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
@@ -135,6 +136,19 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     return new SponsorWalletGate(info, signer);
   }
 
+  private void stubFindAndTrackUpdates(ExecutionIntent initial) {
+    AtomicReference<ExecutionIntent> latest = new AtomicReference<>(initial);
+    when(executionIntentPersistencePort.findByPublicIdForUpdate(initial.getPublicId()))
+        .thenAnswer(invocation -> Optional.of(latest.get()));
+    when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
+        .thenAnswer(
+            invocation -> {
+              ExecutionIntent updated = invocation.getArgument(0);
+              latest.set(updated);
+              return updated;
+            });
+  }
+
   @Test
   void execute_returnsExistingTransaction_whenIntentAlreadyHasSubmittedTxId() throws Exception {
     ExecutionIntent intent = existingEip1559Intent().toBuilder().submittedTxId(99L).build();
@@ -166,16 +180,13 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             intent.getUnsignedTxSnapshot(),
             intent.getUnsignedTxFingerprint());
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
+    stubFindAndTrackUpdates(intent);
     when(eip1559TransactionCodecPort.decodeAndVerify(
             "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
         .thenReturn(decoded);
     when(executionEip7702GatewayPort.loadPendingAccountNonce(
             intent.getUnsignedTxSnapshot().fromAddress()))
         .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce() + 1));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
 
     assertThatThrownBy(
             () ->
@@ -201,8 +212,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         new ExecutionTransactionGatewayPort.TransactionRecord(
             101L, ExecutionTransactionStatus.CREATED, null);
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
+    stubFindAndTrackUpdates(intent);
     when(eip1559TransactionCodecPort.decodeAndVerify(
             "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
         .thenReturn(decoded);
@@ -212,8 +222,6 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     when(executionTransactionGatewayPort.createAndFlush(any())).thenReturn(created);
     when(executionTransactionGatewayPort.broadcast("0xsigned"))
         .thenReturn(new ExecutionTransactionGatewayPort.BroadcastResult(false, null, null, null));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
 
     ExecuteExecutionIntentResult result =
         delegate.execute(
@@ -259,8 +267,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         new ExecutionTransactionGatewayPort.TransactionRecord(
             201L, ExecutionTransactionStatus.CREATED, null);
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
+    stubFindAndTrackUpdates(intent);
     when(eip1559TransactionCodecPort.decodeAndVerify(
             "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
         .thenReturn(decoded);
@@ -271,16 +278,16 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     when(executionTransactionGatewayPort.broadcast("0xsigned"))
         .thenReturn(
             new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", "rpc-1", null));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
 
     ExecuteExecutionIntentResult result =
         delegate.execute(
             new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
             /* gate */ null);
 
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
     assertThat(result.transactionId()).isEqualTo(201L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
+    verify(executionTransactionGatewayPort).markPending(201L, "0xhash");
   }
 
   @Test
@@ -297,8 +304,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         new ExecutionTransactionGatewayPort.TransactionRecord(
             202L, ExecutionTransactionStatus.CREATED, null);
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
+    stubFindAndTrackUpdates(intent);
     when(eip1559TransactionCodecPort.decodeAndVerify(
             "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
         .thenReturn(decoded);
@@ -309,8 +315,6 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     when(executionTransactionGatewayPort.broadcast("0xsigned"))
         .thenReturn(
             new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", "rpc-1", null));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
     doThrow(new RuntimeException("hook failed"))
         .when(executionActionHandlerPort)
         .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
@@ -320,7 +324,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
             /* gate */ null);
 
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
     assertThat(result.transactionId()).isEqualTo(202L);
     verify(executionTransactionGatewayPort).markPending(202L, "0xhash");
     verify(executionIntentPersistencePort)
@@ -745,18 +749,17 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     when(usage.release(any())).thenReturn(usage);
     when(usage.consume(any())).thenReturn(usage);
     when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(anyLong(), any())).thenReturn(usage);
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    stubFindAndTrackUpdates(intent);
 
     ExecuteExecutionIntentResult result =
         delegate.execute(
             new ExecuteExecutionIntentCommand(7L, "intent-7702", "0xauth", "0xsubmit", null),
             sponsorGate());
 
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
     assertThat(result.transactionId()).isEqualTo(501L);
-    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.PENDING);
-    assertThat(result.txHash()).isEqualTo("0xchainhash");
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
+    assertThat(result.txHash()).isEqualTo("0xexpectedhash");
     verify(executionTransactionGatewayPort).markPending(501L, "0xchainhash");
     // Happy path must NOT release the nonce — it is consumed.
     verify(executionTransactionGatewayPort, never()).releaseReservedNonce(any(), anyLong());

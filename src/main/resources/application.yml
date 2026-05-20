@@ -339,6 +339,9 @@ web3:
     qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
     eip712-domain-name: "QnAEscrow"
     eip712-domain-version: "1"
+    marketplace-eip712-domain-name: "MarketplaceEscrow"
+    marketplace-eip712-domain-version: "1"
+    default-deadline-duration-seconds: ${WEB3_ESCROW_MARKETPLACE_DEFAULT_DEADLINE_SECONDS}
     signed-at-skew-seconds: 0
     sig-validity-duration: 900
   transfer:

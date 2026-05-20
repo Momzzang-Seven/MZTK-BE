@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -13,10 +14,16 @@ import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationJpaRepository;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationSlotDateLockJpaRepository;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.ConnectionCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -25,28 +32,48 @@ import org.springframework.stereotype.Component;
 public class ReservationPersistenceAdapter implements LoadReservationPort, SaveReservationPort {
 
   private final ReservationJpaRepository reservationJpaRepository;
+  private final ReservationSlotDateLockJpaRepository slotDateLockJpaRepository;
+  private final JdbcTemplate jdbcTemplate;
+  private final Clock clock;
 
   @Override
   public Optional<Reservation> findById(Long reservationId) {
-    return reservationJpaRepository.findById(reservationId).map(ReservationEntity::toDomain);
+    return reservationJpaRepository.findById(reservationId).map(this::toDomain);
   }
 
   @Override
   public Optional<Reservation> findByIdWithLock(Long reservationId) {
+    return reservationJpaRepository.findByIdWithLock(reservationId).map(this::toDomain);
+  }
+
+  @Override
+  public Optional<Reservation> findByCurrentExecutionIntentPublicIdWithLock(String publicId) {
     return reservationJpaRepository
-        .findByIdWithLock(reservationId)
-        .map(ReservationEntity::toDomain);
+        .findByCurrentExecutionIntentPublicIdWithLock(publicId)
+        .map(this::toDomain);
+  }
+
+  @Override
+  public Optional<Reservation> findActiveByBuyerAndSlotDateTimeWithLock(
+      Long buyerId, Long slotId, LocalDate reservationDate, LocalTime reservationTime) {
+    return reservationJpaRepository
+        .findActiveByBuyerAndSlotDateTimeWithLock(
+            buyerId, slotId, reservationDate, reservationTime, PageRequest.of(0, 1))
+        .stream()
+        .findFirst()
+        .map(this::toDomain);
   }
 
   @Override
   public int countActiveReservationsBySlotId(Long slotId) {
-    return reservationJpaRepository.countActiveBySlotId(slotId);
+    return reservationJpaRepository.countActiveBySlotId(slotId, activeCountNow());
   }
 
   @Override
   public Map<Long, Integer> countActiveReservationsBySlotIds(List<Long> slotIds) {
     if (slotIds == null || slotIds.isEmpty()) return new HashMap<>();
-    List<Object[]> results = reservationJpaRepository.countActiveBySlotIdIn(slotIds);
+    List<Object[]> results =
+        reservationJpaRepository.countActiveBySlotIdIn(slotIds, activeCountNow());
     Map<Long, Integer> map = new HashMap<>();
     for (Object[] row : results) {
       map.put((Long) row[0], ((Long) row[1]).intValue());
@@ -56,19 +83,59 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
 
   @Override
   public int countActiveReservationsBySlotIdAndDate(Long slotId, java.time.LocalDate date) {
-    return reservationJpaRepository.countActiveBySlotIdAndDate(slotId, date);
+    return reservationJpaRepository.countActiveBySlotIdAndDate(slotId, date, activeCountNow());
   }
 
   @Override
   public int countActiveReservationsBySlotIdAndDateWithLock(Long slotId, java.time.LocalDate date) {
-    return reservationJpaRepository.countActiveBySlotIdAndDateWithLock(slotId, date);
+    return reservationJpaRepository.countActiveBySlotIdAndDateWithLock(
+        slotId, date, activeCountNow());
+  }
+
+  @Override
+  public void lockSlotDateCapacityKey(Long slotId, java.time.LocalDate date) {
+    insertSlotDateLockIfAbsent(slotId, date);
+    slotDateLockJpaRepository
+        .findBySlotIdAndReservationDateForUpdate(slotId, date)
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "Failed to lock slot/date capacity key: slotId=" + slotId + ", date=" + date));
+  }
+
+  private void insertSlotDateLockIfAbsent(Long slotId, java.time.LocalDate date) {
+    String databaseProductName =
+        jdbcTemplate.execute(
+            (ConnectionCallback<String>)
+                connection -> connection.getMetaData().getDatabaseProductName());
+    if (databaseProductName != null && databaseProductName.toLowerCase().contains("h2")) {
+      jdbcTemplate.update(
+          """
+          MERGE INTO reservation_slot_date_locks (class_slot_id, reservation_date, created_at)
+          KEY (class_slot_id, reservation_date)
+          VALUES (?, ?, CURRENT_TIMESTAMP)
+          """,
+          slotId,
+          date);
+      return;
+    }
+
+    jdbcTemplate.update(
+        """
+        INSERT INTO reservation_slot_date_locks (class_slot_id, reservation_date, created_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT (class_slot_id, reservation_date) DO NOTHING
+        """,
+        slotId,
+        date);
   }
 
   @Override
   public Map<java.time.LocalDate, Integer> countActiveReservationsBySlotIdAndDateRange(
       Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate) {
     List<Object[]> rows =
-        reservationJpaRepository.countActiveBySlotIdAndDateRange(slotId, startDate, endDate);
+        reservationJpaRepository.countActiveBySlotIdAndDateRange(
+            slotId, startDate, endDate, activeCountNow());
     Map<java.time.LocalDate, Integer> result = new HashMap<>();
     for (Object[] row : rows) {
       // JPA might return Date or LocalDate, assuming it returns LocalDate or java.sql.Date
@@ -82,17 +149,22 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
     return result;
   }
 
+  private LocalDateTime activeCountNow() {
+    return LocalDateTime.now(clock);
+  }
+
   @Override
   public List<Reservation> findPendingForAutoCancel(
       LocalDateTime nowMinusTimeout, LocalDateTime nowPlusWindow, int batchSize) {
     return reservationJpaRepository
         .findPendingForAutoCancel(
+            nowPlusWindow.minusHours(1),
             nowMinusTimeout,
             nowPlusWindow.toLocalDate(),
             nowPlusWindow.toLocalTime(),
             org.springframework.data.domain.PageRequest.of(0, batchSize))
         .stream()
-        .map(ReservationEntity::toDomain)
+        .map(this::toDomain)
         .toList();
   }
 
@@ -105,9 +177,9 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
     // Fetch batchSize * 2 to account for some rows that might be filtered out
     return reservationJpaRepository
         .findApprovedCandidates(
-            targetDate, org.springframework.data.domain.PageRequest.of(0, batchSize * 2))
+            now, targetDate, org.springframework.data.domain.PageRequest.of(0, batchSize * 2))
         .stream()
-        .map(ReservationEntity::toDomain)
+        .map(this::toDomain)
         .filter(r -> r.sessionEndAt().plusHours(24).isBefore(now))
         .limit(batchSize)
         .toList();
@@ -120,8 +192,8 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
 
   @Override
   public List<Reservation> findByUserId(Long userId, ReservationStatus status) {
-    return reservationJpaRepository.findByUserId(userId, status).stream()
-        .map(ReservationEntity::toDomain)
+    return reservationJpaRepository.findByUserId(userId, toName(status)).stream()
+        .map(this::toDomain)
         .toList();
   }
 
@@ -145,14 +217,14 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
             ? reservationJpaRepository.findByUserIdCursorNoStatus(
                 userId, cursorDate, cursorTime, cursorId, page)
             : reservationJpaRepository.findByUserIdCursor(
-                userId, status, cursorDate, cursorTime, cursorId, page);
-    return rows.stream().map(ReservationEntity::toDomain).toList();
+                userId, toName(status), cursorDate, cursorTime, cursorId, page);
+    return rows.stream().map(this::toDomain).toList();
   }
 
   @Override
   public List<Reservation> findByTrainerId(Long trainerId, ReservationStatus status) {
-    return reservationJpaRepository.findByTrainerId(trainerId, status).stream()
-        .map(ReservationEntity::toDomain)
+    return reservationJpaRepository.findByTrainerId(trainerId, toName(status)).stream()
+        .map(this::toDomain)
         .toList();
   }
 
@@ -173,12 +245,117 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
             ? reservationJpaRepository.findByTrainerIdCursorNoStatus(
                 trainerId, cursorDate, cursorTime, cursorId, page)
             : reservationJpaRepository.findByTrainerIdCursor(
-                trainerId, status, cursorDate, cursorTime, cursorId, page);
-    return rows.stream().map(ReservationEntity::toDomain).toList();
+                trainerId, toName(status), cursorDate, cursorTime, cursorId, page);
+    return rows.stream().map(this::toDomain).toList();
   }
 
   @Override
   public Reservation save(Reservation reservation) {
-    return reservationJpaRepository.save(ReservationEntity.fromDomain(reservation)).toDomain();
+    return toDomain(reservationJpaRepository.save(toEntity(reservation)));
+  }
+
+  private ReservationEntity toEntity(Reservation domain) {
+    return ReservationEntity.builder()
+        .id(domain.getId())
+        .userId(domain.getUserId())
+        .trainerId(domain.getTrainerId())
+        .slotId(domain.getSlotId())
+        .reservationDate(domain.getReservationDate())
+        .reservationTime(domain.getReservationTime())
+        .durationMinutes(domain.getDurationMinutes())
+        .status(toName(domain.getStatus()))
+        .escrowStatus(toName(domain.getEscrowStatus()))
+        .escrowFlow(toName(domain.getEscrowFlow()))
+        .userRequest(domain.getUserRequest())
+        .rejectionReason(domain.getRejectionReason())
+        .orderId(domain.getOrderId())
+        .orderKey(domain.getOrderKey())
+        .currentExecutionIntentPublicId(domain.getCurrentExecutionIntentPublicId())
+        .buyerWalletAddress(domain.getBuyerWalletAddress())
+        .trainerWalletAddress(domain.getTrainerWalletAddress())
+        .tokenAddress(domain.getTokenAddress())
+        .priceBaseUnits(domain.getPriceBaseUnits())
+        .txHash(domain.getTxHash())
+        .holdExpiresAt(domain.getHoldExpiresAt())
+        .pendingActionExpiresAt(domain.getPendingActionExpiresAt())
+        .expectedContractDeadlineEpochSeconds(domain.getExpectedContractDeadlineEpochSeconds())
+        .expectedContractDeadlineAt(domain.getExpectedContractDeadlineAt())
+        .contractDeadlineEpochSeconds(domain.getContractDeadlineEpochSeconds())
+        .contractDeadlineAt(domain.getContractDeadlineAt())
+        .pendingAction(toName(domain.getPendingAction()))
+        .pendingAttemptToken(domain.getPendingAttemptToken())
+        .pendingExpectedVersion(domain.getPendingExpectedVersion())
+        .pendingExpectedStatus(toName(domain.getPendingExpectedStatus()))
+        .pendingExpectedEscrowStatus(toName(domain.getPendingExpectedEscrowStatus()))
+        .priorStatus(toName(domain.getPriorStatus()))
+        .priorEscrowStatus(toName(domain.getPriorEscrowStatus()))
+        .createIdempotencyKeyHash(domain.getCreateIdempotencyKeyHash())
+        .createPayloadHash(domain.getCreatePayloadHash())
+        .serverSignatureSignedAt(domain.getServerSignatureSignedAt())
+        .serverSignatureExpiresAt(domain.getServerSignatureExpiresAt())
+        .escrowFailureCode(domain.getEscrowFailureCode())
+        .escrowFailureMessage(domain.getEscrowFailureMessage())
+        .bookedPriceAmount(domain.getBookedPriceAmount())
+        .bookedClassTitle(domain.getBookedClassTitle())
+        .version(domain.getVersion())
+        .build();
+  }
+
+  private Reservation toDomain(ReservationEntity entity) {
+    return Reservation.builder()
+        .id(entity.getId())
+        .userId(entity.getUserId())
+        .trainerId(entity.getTrainerId())
+        .slotId(entity.getSlotId())
+        .reservationDate(entity.getReservationDate())
+        .reservationTime(entity.getReservationTime())
+        .durationMinutes(entity.getDurationMinutes())
+        .status(toEnum(entity.getStatus(), ReservationStatus.class))
+        .escrowStatus(toEnum(entity.getEscrowStatus(), ReservationEscrowStatus.class))
+        .escrowFlow(toEnum(entity.getEscrowFlow(), ReservationEscrowFlow.class))
+        .userRequest(entity.getUserRequest())
+        .rejectionReason(entity.getRejectionReason())
+        .orderId(entity.getOrderId())
+        .orderKey(entity.getOrderKey())
+        .currentExecutionIntentPublicId(entity.getCurrentExecutionIntentPublicId())
+        .buyerWalletAddress(entity.getBuyerWalletAddress())
+        .trainerWalletAddress(entity.getTrainerWalletAddress())
+        .tokenAddress(entity.getTokenAddress())
+        .priceBaseUnits(entity.getPriceBaseUnits())
+        .txHash(entity.getTxHash())
+        .holdExpiresAt(entity.getHoldExpiresAt())
+        .pendingActionExpiresAt(entity.getPendingActionExpiresAt())
+        .expectedContractDeadlineEpochSeconds(entity.getExpectedContractDeadlineEpochSeconds())
+        .expectedContractDeadlineAt(entity.getExpectedContractDeadlineAt())
+        .contractDeadlineEpochSeconds(entity.getContractDeadlineEpochSeconds())
+        .contractDeadlineAt(entity.getContractDeadlineAt())
+        .pendingAction(toEnum(entity.getPendingAction(), ReservationEscrowAction.class))
+        .pendingAttemptToken(entity.getPendingAttemptToken())
+        .pendingExpectedVersion(entity.getPendingExpectedVersion())
+        .pendingExpectedStatus(toEnum(entity.getPendingExpectedStatus(), ReservationStatus.class))
+        .pendingExpectedEscrowStatus(
+            toEnum(entity.getPendingExpectedEscrowStatus(), ReservationEscrowStatus.class))
+        .priorStatus(toEnum(entity.getPriorStatus(), ReservationStatus.class))
+        .priorEscrowStatus(toEnum(entity.getPriorEscrowStatus(), ReservationEscrowStatus.class))
+        .createIdempotencyKeyHash(entity.getCreateIdempotencyKeyHash())
+        .createPayloadHash(entity.getCreatePayloadHash())
+        .serverSignatureSignedAt(entity.getServerSignatureSignedAt())
+        .serverSignatureExpiresAt(entity.getServerSignatureExpiresAt())
+        .escrowFailureCode(entity.getEscrowFailureCode())
+        .escrowFailureMessage(entity.getEscrowFailureMessage())
+        .bookedPriceAmount(entity.getBookedPriceAmount())
+        .bookedClassTitle(entity.getBookedClassTitle())
+        .version(entity.getVersion())
+        .createdAt(entity.getCreatedAt())
+        .updatedAt(entity.getUpdatedAt())
+        .build();
+  }
+
+  private static <E extends Enum<E>> E toEnum(String value, Class<E> enumType) {
+    return value == null ? null : Enum.valueOf(enumType, value);
+  }
+
+  private static String toName(Enum<?> value) {
+    return value == null ? null : value.name();
   }
 }

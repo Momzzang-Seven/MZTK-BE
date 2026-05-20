@@ -6,8 +6,8 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo;
  * <p>This is a plain record (no Spring or framework dependencies) that carries just enough
  * information for the event listener to delegate to the sanction module via its input port.
  *
- * <p>Lifecycle: Published by {@code RejectReservationService} (AFTER_COMMIT) and handled by {@code
- * ReservationSanctionEventListener} in the reservation infrastructure layer.
+ * <p>Lifecycle: Published by reservation application services after terminal trainer-fault
+ * transitions and consumed by an outer adapter.
  *
  * <p>Reasons:
  *

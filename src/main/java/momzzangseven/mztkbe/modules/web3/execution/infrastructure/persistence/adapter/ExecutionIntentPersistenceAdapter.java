@@ -48,6 +48,15 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public List<ExecutionIntent> findByResource(
+      ExecutionResourceType resourceType, String resourceId, int limit) {
+    int size = limit <= 0 ? 20 : Math.min(limit, 100);
+    return repository.findByResource(resourceType, resourceId, PageRequest.of(0, size)).stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
   public Map<String, ExecutionIntent> findLatestByResources(
       ExecutionResourceType resourceType, Collection<String> resourceIds) {
     if (resourceIds == null || resourceIds.isEmpty()) {
@@ -208,7 +217,7 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
     if (executionIntent.getId() != null) {
       throw new Web3InvalidInputException("create requires id to be null");
     }
-    return toDomain(repository.save(toEntity(executionIntent)));
+    return toDomain(repository.saveAndFlush(toEntity(executionIntent)));
   }
 
   @Override

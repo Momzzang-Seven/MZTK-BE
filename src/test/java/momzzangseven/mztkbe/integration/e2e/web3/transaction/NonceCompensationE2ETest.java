@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.service.ReservedNonceCompensator;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,12 @@ class NonceCompensationE2ETest extends E2ETestBase {
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private ReservedNonceCompensator compensator;
   @Autowired private UpdateTransactionPort updateTransactionPort;
+
+  @BeforeEach
+  void cleanNonceFixtureRows() {
+    jdbcTemplate.update("DELETE FROM web3_transactions WHERE from_address = ?", FROM_ADDRESS);
+    jdbcTemplate.update("DELETE FROM web3_nonce_state WHERE from_address = ?", FROM_ADDRESS);
+  }
 
   @Test
   @DisplayName(
@@ -136,8 +143,9 @@ class NonceCompensationE2ETest extends E2ETestBase {
     return jdbcTemplate.queryForObject(
         "INSERT INTO web3_transactions"
             + " (idempotency_key, reference_type, reference_id, from_address, to_address,"
-            + " amount_wei, nonce, status)"
-            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED') RETURNING id",
+            + " amount_wei, nonce, status, processing_until)"
+            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED',"
+            + " CURRENT_TIMESTAMP + INTERVAL '1 hour') RETURNING id",
         Long.class,
         idempotencyKey,
         referenceId,
@@ -151,8 +159,9 @@ class NonceCompensationE2ETest extends E2ETestBase {
     return jdbcTemplate.queryForObject(
         "INSERT INTO web3_transactions"
             + " (idempotency_key, reference_type, reference_id, from_address, to_address,"
-            + " amount_wei, nonce, status, failure_reason)"
-            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED', ?) RETURNING id",
+            + " amount_wei, nonce, status, failure_reason, processing_until)"
+            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED', ?,"
+            + " CURRENT_TIMESTAMP + INTERVAL '1 hour') RETURNING id",
         Long.class,
         idempotencyKey,
         referenceId,

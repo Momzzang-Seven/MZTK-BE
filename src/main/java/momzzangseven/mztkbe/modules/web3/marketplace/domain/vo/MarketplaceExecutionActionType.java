@@ -4,5 +4,6 @@ package momzzangseven.mztkbe.modules.web3.marketplace.domain.vo;
 public enum MarketplaceExecutionActionType {
   MARKETPLACE_CLASS_PURCHASE,
   MARKETPLACE_CLASS_CANCEL,
-  MARKETPLACE_CLASS_CONFIRM
+  MARKETPLACE_CLASS_CONFIRM,
+  MARKETPLACE_CLASS_EXPIRED_REFUND
 }

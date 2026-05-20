@@ -82,6 +82,9 @@ web3:
         - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
       allowed-target-contracts: []
       blocked-function-selectors: []
+  marketplace:
+    user-execution:
+      fail-fast: true
 mztk:
   admin:
     bootstrap:

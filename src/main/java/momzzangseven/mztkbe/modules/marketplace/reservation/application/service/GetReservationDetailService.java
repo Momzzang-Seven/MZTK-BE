@@ -1,19 +1,22 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
-import lombok.RequiredArgsConstructor;
+import java.time.Clock;
+import java.util.Objects;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Returns the full detail of a single reservation.
@@ -32,16 +35,75 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Trainer and user nicknames are resolved live from the {@code user} module.
  * </ul>
  */
-@Service
-@RequiredArgsConstructor
 public class GetReservationDetailService implements GetReservationDetailUseCase {
 
   private final LoadReservationPort loadReservationPort;
   private final LoadClassSummaryPort loadClassSummaryPort;
   private final LoadUserSummaryPort loadUserSummaryPort;
+  private final LoadReservationExecutionResumePort loadReservationExecutionResumePort;
+  private final RepairReservationChainReadUseCase repairReservationChainReadUseCase;
+  private final LoadReservationEscrowPort loadReservationEscrowPort;
+  private final Clock clock;
+
+  public GetReservationDetailService(
+      LoadReservationPort loadReservationPort,
+      LoadClassSummaryPort loadClassSummaryPort,
+      LoadUserSummaryPort loadUserSummaryPort,
+      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      RepairReservationChainReadUseCase repairReservationChainReadUseCase,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      Clock clock) {
+    this.loadReservationPort = loadReservationPort;
+    this.loadClassSummaryPort = loadClassSummaryPort;
+    this.loadUserSummaryPort = loadUserSummaryPort;
+    this.loadReservationExecutionResumePort =
+        loadReservationExecutionResumePort == null
+            ? emptyResumePort()
+            : loadReservationExecutionResumePort;
+    this.repairReservationChainReadUseCase =
+        repairReservationChainReadUseCase == null
+            ? noOpRepairUseCase()
+            : repairReservationChainReadUseCase;
+    this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.clock = Objects.requireNonNull(clock, "clock");
+  }
+
+  private static LoadReservationExecutionResumePort emptyResumePort() {
+    return new LoadReservationExecutionResumePort() {
+      @Override
+      public java.util.Optional<
+              momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                  .ReservationExecutionResumeView>
+          loadLatest(Long reservationId) {
+        return java.util.Optional.empty();
+      }
+
+      @Override
+      public java.util.Map<
+              Long,
+              momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                  .ReservationExecutionResumeView>
+          loadLatestBatch(java.util.Collection<Long> reservationIds) {
+        return java.util.Map.of();
+      }
+    };
+  }
+
+  private static RepairReservationChainReadUseCase noOpRepairUseCase() {
+    return new RepairReservationChainReadUseCase() {
+      @Override
+      public Reservation repairOne(Reservation reservation) {
+        return reservation;
+      }
+
+      @Override
+      public java.util.List<Reservation> repairBatch(java.util.List<Reservation> reservations) {
+        return reservations;
+      }
+    };
+  }
 
   @Override
-  @Transactional(readOnly = true)
   public GetReservationResult execute(GetReservationQuery query) {
     query.validate();
 
@@ -54,6 +116,8 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
     if (!reservation.isOwnedByUser(requesterId) && !reservation.isOwnedByTrainer(requesterId)) {
       throw new MarketplaceUnauthorizedAccessException();
     }
+    reservation = repairReservationChainReadUseCase.repairOne(reservation);
+    reservation = applyEscrowTxHashOverride(reservation);
 
     // Snapshot fields take precedence for price and title (immutable at booking time).
     // Both snapshot fields must be present — if only one is populated (partial snapshot)
@@ -86,12 +150,30 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
         loadUserSummaryPort.findById(reservation.getTrainerId()).orElse(null);
     UserSummary userSummary = loadUserSummaryPort.findById(reservation.getUserId()).orElse(null);
 
-    return GetReservationResult.from(
+    return ReservationDisplayStatusMapper.detailResult(
         reservation,
         classTitle,
         priceAmount,
         thumbnailFinalObjectKey,
         trainerSummary != null ? trainerSummary.nickname() : null,
-        userSummary != null ? userSummary.nickname() : null);
+        userSummary != null ? userSummary.nickname() : null,
+        requesterId,
+        ReservationExecutionResumeViewer.hydrate(
+            reservation,
+            requesterId,
+            loadReservationExecutionResumePort.loadLatest(reservation.getId()).orElse(null)),
+        clock);
+  }
+
+  private Reservation applyEscrowTxHashOverride(Reservation reservation) {
+    if (loadReservationEscrowPort == null) {
+      return reservation;
+    }
+    return loadReservationEscrowPort
+        .findByReservationId(reservation.getId())
+        .map(MarketplaceReservationEscrow::getLastTxHash)
+        .filter(txHash -> txHash != null && !txHash.isBlank())
+        .map(txHash -> reservation.toBuilder().txHash(txHash).build())
+        .orElse(reservation);
   }
 }

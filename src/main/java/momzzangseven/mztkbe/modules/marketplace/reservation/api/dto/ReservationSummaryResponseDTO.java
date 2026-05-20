@@ -1,8 +1,11 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.api.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
 /**
@@ -27,13 +30,26 @@ public record ReservationSummaryResponseDTO(
     LocalDate reservationDate,
     LocalTime reservationTime,
     int durationMinutes,
-    ReservationStatus status,
+    ReservationDisplayStatus status,
+    ReservationStatus businessStatus,
+    ReservationEscrowStatus escrowStatus,
     String userRequest,
+    String orderKey,
+    LocalDateTime contractDeadlineAt,
+    Long contractDeadlineEpochSeconds,
     String classTitle,
     Integer priceAmount,
     String trainerNickname,
     String userNickname,
-    String thumbnailFinalObjectKey) {
+    String thumbnailFinalObjectKey,
+    String viewerAction,
+    boolean viewerCanCancel,
+    boolean viewerCanReject,
+    boolean viewerCanApprove,
+    boolean viewerCanComplete,
+    boolean viewerCanClaimDeadlineRefund,
+    boolean viewerCanRecover,
+    ReservationWeb3ExecutionResponseDTO web3Execution) {
 
   public static ReservationSummaryResponseDTO from(ReservationSummaryResult result) {
     return new ReservationSummaryResponseDTO(
@@ -45,11 +61,24 @@ public record ReservationSummaryResponseDTO(
         result.reservationTime(),
         result.durationMinutes(),
         result.status(),
+        result.businessStatus(),
+        result.escrowStatus(),
         result.userRequest(),
+        result.orderKey(),
+        result.contractDeadlineAt(),
+        result.contractDeadlineEpochSeconds(),
         result.classTitle(),
         result.priceAmount(),
         result.trainerNickname(),
         result.userNickname(),
-        result.thumbnailFinalObjectKey());
+        result.thumbnailFinalObjectKey(),
+        result.viewerActions().viewerAction(),
+        result.viewerActions().viewerCanCancel(),
+        result.viewerActions().viewerCanReject(),
+        result.viewerActions().viewerCanApprove(),
+        result.viewerActions().viewerCanComplete(),
+        result.viewerActions().viewerCanClaimDeadlineRefund(),
+        result.viewerActions().viewerCanRecover(),
+        ReservationWeb3ExecutionResponseDTO.from(result.web3Execution()));
   }
 }

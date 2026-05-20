@@ -249,6 +249,12 @@ comment:
     zone: Asia/Seoul
 
 answer:
+  lifecycle:
+    cleanup:
+      # Avoid running PostgreSQL advisory-lock cleanup SQL inside broad H2 SpringBootTest contexts.
+      initial-delay-ms: 86400000
+    reconciliation:
+      initial-delay-ms: 86400000
   orphan-cleanup:
     batch-size: 100
     cron: "0 30 * * * *"

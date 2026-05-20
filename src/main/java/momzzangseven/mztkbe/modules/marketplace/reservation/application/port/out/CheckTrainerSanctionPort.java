@@ -6,9 +6,8 @@ import java.util.Optional;
 /**
  * Output port for querying a trainer's sanction (suspension) status.
  *
- * <p>Belongs to the {@code reservation} module. The implementation lives in {@code
- * reservation/infrastructure/external/sanction/} and delegates to the sanction module's input port
- * once the sanction module is available.
+ * <p>Belongs to the {@code reservation} module. Outer adapters may delegate to the sanction module
+ * through its input port.
  */
 public interface CheckTrainerSanctionPort {
 
