@@ -3,8 +3,6 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.config;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
@@ -221,8 +219,8 @@ public class ExecutionIntentServiceConfig {
   @Bean
   CreateExecutionIntentUseCase createExecutionIntentUseCase(
       CreateExecutionIntentService delegate, PlatformTransactionManager transactionManager) {
-    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-    return new TransactionalCreateExecutionIntentUseCase(delegate, transactionTemplate);
+    return new TransactionalCreateExecutionIntentUseCase(
+        delegate, new TransactionTemplate(transactionManager));
   }
 
   @Bean
@@ -341,18 +339,16 @@ public class ExecutionIntentServiceConfig {
   @Bean
   ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      List<ExecutionActionHandlerPort> executionActionHandlerPorts) {
-    return new ReplayConfirmedExecutionIntentService(
-        executionIntentPersistencePort, executionActionHandlerPorts);
-  }
-
-  private record TransactionalCreateExecutionIntentUseCase(
-      CreateExecutionIntentService delegate, TransactionTemplate transactionTemplate)
-      implements CreateExecutionIntentUseCase {
-
-    @Override
-    public CreateExecutionIntentResult execute(CreateExecutionIntentCommand command) {
-      return transactionTemplate.execute(status -> delegate.execute(command));
-    }
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      PlatformTransactionManager transactionManager,
+      Clock appClock) {
+    ReplayConfirmedExecutionIntentService delegate =
+        new ReplayConfirmedExecutionIntentService(
+            executionIntentPersistencePort,
+            loadExecutionTransactionPort,
+            executionActionHandlerPorts,
+            appClock);
+    return new TransactionalReplayConfirmedExecutionIntentUseCase(delegate, transactionManager);
   }
 }

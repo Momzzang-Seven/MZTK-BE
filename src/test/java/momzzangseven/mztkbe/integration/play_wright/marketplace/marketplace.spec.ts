@@ -22,6 +22,8 @@
  */
 
 import { test, expect, APIRequestContext } from "@playwright/test";
+import { ethers } from "ethers";
+import { Pool } from "pg";
 import * as dotenv from "dotenv";
 import * as path from "path";
 
@@ -29,7 +31,566 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 const ENV = {
   BACKEND_URL: process.env.BACKEND_URL ?? "http://127.0.0.1:8080",
+  DB_HOST: process.env.DB_HOST ?? "localhost",
+  DB_PORT: Number.parseInt(process.env.DB_PORT ?? "5432", 10),
+  DB_NAME: process.env.DB_NAME ?? "mztk_e2e",
+  DB_USER: process.env.DB_USER ?? process.env.DB_USERNAME ?? "postgres",
+  DB_PASSWORD: process.env.DB_PASSWORD ?? "postgres",
+  WEB3_RPC_URL:
+    process.env.WEB3_RPC_URL ??
+    process.env.WEB3_RPC_MAIN ??
+    "https://sepolia.base.org",
+  WEB3_CHAIN_ID: BigInt(
+    process.env.WEB3_EIP712_CHAIN_ID ?? process.env.WEB3_CHAIN_ID ?? "84532"
+  ),
+  WEB3_EIP712_DOMAIN_NAME: process.env.WEB3_EIP712_DOMAIN_NAME ?? "MomzzangSeven",
+  WEB3_EIP712_DOMAIN_VERSION: process.env.WEB3_EIP712_DOMAIN_VERSION ?? "1",
+  WEB3_EIP712_VERIFYING_CONTRACT:
+    process.env.WEB3_EIP712_VERIFYING_CONTRACT ?? "",
+  WEB3_REWARD_TOKEN_CONTRACT_ADDRESS:
+    process.env.WEB3_REWARD_TOKEN_CONTRACT_ADDRESS ??
+    process.env.MZTK_TOKEN_CONTRACT_ADDRESS ??
+    "",
+  MARKETPLACE_ESCROW_CONTRACT_ADDRESS:
+    process.env.MARKETPLACE_ESCROW_CONTRACT_ADDRESS ??
+    process.env.WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS ??
+    "",
+  WEB3_REWARD_TOKEN_DECIMALS: Number.parseInt(
+    process.env.WEB3_REWARD_TOKEN_DECIMALS ?? "18",
+    10
+  ),
+  MARKETPLACE_TEST_USER_PRIVATE_KEY:
+    process.env.MARKETPLACE_TEST_USER_PRIVATE_KEY ?? "",
+  MARKETPLACE_TEST_TRAINER_PRIVATE_KEY:
+    process.env.MARKETPLACE_TEST_TRAINER_PRIVATE_KEY ?? "",
+  MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY:
+    process.env.MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY ??
+    process.env.SPONSOR_TREASURY_PRIVATE_KEY ??
+    "",
+  MARKETPLACE_TEST_SPONSOR_ADDRESS:
+    process.env.MARKETPLACE_TEST_SPONSOR_ADDRESS ??
+    process.env.SPONSOR_TREASURY_WALLET ??
+    process.env.SPONSOR_WALLET_ADDRESS ??
+    "",
+  MARKETPLACE_TEST_SPONSOR_KMS_KEY_ID:
+    process.env.MARKETPLACE_TEST_SPONSOR_KMS_KEY_ID ?? "sponsor-treasury",
+  MARKETPLACE_TEST_EXECUTION_SPONSOR_ADDRESS:
+    process.env.MARKETPLACE_TEST_EXECUTION_SPONSOR_ADDRESS ?? "",
+  MARKETPLACE_TEST_EXECUTION_SPONSOR_KMS_KEY_ID:
+    process.env.MARKETPLACE_TEST_EXECUTION_SPONSOR_KMS_KEY_ID ??
+    process.env.MARKETPLACE_TEST_SPONSOR_KMS_KEY_ID ??
+    "sponsor-treasury",
+  MARKETPLACE_TEST_SIGNER_ADDRESS:
+    process.env.MARKETPLACE_TEST_SIGNER_ADDRESS ??
+    process.env.MARKETPLACE_TEST_SPONSOR_ADDRESS ??
+    process.env.SPONSOR_TREASURY_WALLET ??
+    process.env.SPONSOR_WALLET_ADDRESS ??
+    "",
+  MARKETPLACE_TEST_SIGNER_KMS_KEY_ID:
+    process.env.MARKETPLACE_TEST_SIGNER_KMS_KEY_ID ?? "marketplace-signer-treasury",
+  MARKETPLACE_TEST_MIN_BUYER_TOKEN_BALANCE: Number.parseInt(
+    process.env.MARKETPLACE_TEST_MIN_BUYER_TOKEN_BALANCE ?? "100000",
+    10
+  ),
 };
+
+test.describe.configure({ mode: "serial" });
+
+const provider =
+  ENV.WEB3_RPC_URL === "" ? null : new ethers.JsonRpcProvider(ENV.WEB3_RPC_URL);
+const ERC20_ABI = [
+  "function balanceOf(address account) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+] as const;
+const MARKETPLACE_ESCROW_ABI = [
+  "function defaultDeadlineDuration() view returns (uint48)",
+  "function getOrder(bytes32 orderId) view returns (tuple(bytes32 orderId,uint256 price,address token,uint48 deadline,uint16 state,address buyer,address trainer))",
+] as const;
+const db = new Pool({
+  host: ENV.DB_HOST,
+  port: ENV.DB_PORT,
+  database: ENV.DB_NAME,
+  user: ENV.DB_USER,
+  password: ENV.DB_PASSWORD,
+});
+
+test.afterAll(async () => {
+  await db.end();
+});
+
+interface SignRequestBundle {
+  authorization?: {
+    chainId: number;
+    delegateTarget: string;
+    authorityNonce: number;
+    payloadHashToSign: string;
+  };
+  submit?: {
+    executionDigest: string;
+    deadlineEpochSeconds: number;
+  };
+  transaction?: {
+    chainId: number;
+    fromAddress: string;
+    toAddress: string;
+    valueHex: string;
+    data: string;
+    nonce?: number;
+    gasLimitHex?: string;
+    maxPriorityFeePerGasHex?: string;
+    maxFeePerGasHex?: string;
+    expectedNonce?: number;
+  };
+}
+
+interface ReservationWeb3WritePayload {
+  executionIntent: {
+    id: string;
+    status: string;
+  };
+  signRequest?: SignRequestBundle;
+}
+
+interface CreateReservationData {
+  reservationId: number;
+  status: string;
+  web3?: ReservationWeb3WritePayload;
+}
+
+function authHeaders(accessToken: string) {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
+}
+
+function walletFromPrivateKey(privateKey: string): ethers.Wallet {
+  return new ethers.Wallet(privateKey, provider ?? undefined);
+}
+
+function signRawDigest(wallet: ethers.Wallet, digest: string): string {
+  const signature = wallet.signingKey.sign(digest);
+  return ethers.Signature.from(signature).serialized;
+}
+
+function tokenBaseUnits(amount: number): string {
+  return ethers.parseUnits(amount.toString(), ENV.WEB3_REWARD_TOKEN_DECIMALS).toString();
+}
+
+function sameAddress(left: string, right: string): boolean {
+  return left !== "" && right !== "" && left.toLowerCase() === right.toLowerCase();
+}
+
+function resolveExecutionSponsorTreasury(): { address: string; kmsKeyId: string } {
+  const configuredAddress =
+    ENV.MARKETPLACE_TEST_EXECUTION_SPONSOR_ADDRESS || ENV.MARKETPLACE_TEST_SPONSOR_ADDRESS;
+  return {
+    address: configuredAddress,
+    kmsKeyId: ENV.MARKETPLACE_TEST_EXECUTION_SPONSOR_KMS_KEY_ID,
+  };
+}
+
+async function markWalletReusable(walletAddress: string): Promise<void> {
+  await db.query(
+    `update web3_wallet_registration_sessions
+        set status = 'CANCELED',
+            last_error_code = 'PLAYWRIGHT_REUSE',
+            last_error_reason = 'superseded by marketplace Playwright fixture',
+            updated_at = now()
+      where wallet_address = $1
+        and status in (
+          'APPROVAL_REQUIRED',
+          'APPROVAL_SIGNED',
+          'APPROVAL_PENDING_ONCHAIN',
+          'APPROVAL_RETRYABLE',
+          'FINALIZATION_FAILED',
+          'LOCAL_CONFLICT'
+        )`,
+    [walletAddress.toLowerCase()]
+  );
+  await db.query(
+    `update user_wallets
+        set status = 'UNLINKED',
+            unlinked_at = now(),
+            updated_at = now()
+      where wallet_address = $1
+        and status <> 'BLOCKED'`,
+    [walletAddress.toLowerCase()]
+  );
+}
+
+async function ensureSponsorTreasuryReady(): Promise<void> {
+  const executionSponsor = resolveExecutionSponsorTreasury();
+  expect(executionSponsor.address, "marketplace execution sponsor address is required").toBeTruthy();
+  expect(
+    ENV.MARKETPLACE_TEST_SIGNER_ADDRESS,
+    "MARKETPLACE_TEST_SIGNER_ADDRESS env is required"
+  ).toBeTruthy();
+  expect(
+    sameAddress(executionSponsor.address, ENV.MARKETPLACE_TEST_SIGNER_ADDRESS),
+    "marketplace execution sponsor and marketplace signer must use distinct treasury addresses"
+  ).toBe(false);
+  expect(
+    executionSponsor.kmsKeyId === ENV.MARKETPLACE_TEST_SIGNER_KMS_KEY_ID,
+    "marketplace execution sponsor and marketplace signer must use distinct KMS key ids"
+  ).toBe(false);
+  await db.query(
+    `delete from web3_treasury_wallets
+      where wallet_alias in ('sponsor-treasury', 'marketplace-signer-treasury')
+         or lower(treasury_address) in (lower($1), lower($2))
+         or kms_key_id in ($3, $4)`,
+    [
+      executionSponsor.address,
+      ENV.MARKETPLACE_TEST_SIGNER_ADDRESS,
+      executionSponsor.kmsKeyId,
+      ENV.MARKETPLACE_TEST_SIGNER_KMS_KEY_ID,
+    ]
+  );
+  await db.query(
+    `insert into web3_treasury_wallets (
+         wallet_alias,
+         treasury_address,
+         kms_key_id,
+         status,
+         key_origin,
+         created_at,
+         updated_at
+       )
+       values ('sponsor-treasury', $1, $2, 'ACTIVE', 'IMPORTED', now(), now())
+       on conflict (wallet_alias) do update
+          set treasury_address = excluded.treasury_address,
+              kms_key_id = excluded.kms_key_id,
+              status = 'ACTIVE',
+              key_origin = 'IMPORTED',
+              updated_at = now()`,
+    [executionSponsor.address, executionSponsor.kmsKeyId]
+  );
+  await db.query(
+    `insert into web3_treasury_wallets (
+         wallet_alias,
+         treasury_address,
+         kms_key_id,
+         status,
+         key_origin,
+         created_at,
+         updated_at
+       )
+       values ('marketplace-signer-treasury', $1, $2, 'ACTIVE', 'IMPORTED', now(), now())
+       on conflict (wallet_alias) do update
+          set treasury_address = excluded.treasury_address,
+              kms_key_id = excluded.kms_key_id,
+              status = 'ACTIVE',
+              key_origin = 'IMPORTED',
+              updated_at = now()`,
+    [ENV.MARKETPLACE_TEST_SIGNER_ADDRESS, ENV.MARKETPLACE_TEST_SIGNER_KMS_KEY_ID]
+  );
+}
+
+async function ensureBuyerTokenFunding(wallet: ethers.Wallet, minimumTokenAmount: number) {
+  if (provider == null || ENV.WEB3_REWARD_TOKEN_CONTRACT_ADDRESS === "") {
+    return;
+  }
+  expect(
+    ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS,
+    "MARKETPLACE_ESCROW_CONTRACT_ADDRESS or WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS is required"
+  ).toBeTruthy();
+  const token = new ethers.Contract(
+    ENV.WEB3_REWARD_TOKEN_CONTRACT_ADDRESS,
+    ERC20_ABI,
+    provider
+  );
+  const minimum = BigInt(tokenBaseUnits(minimumTokenAmount));
+  const current = (await token.balanceOf(wallet.address)) as bigint;
+  if (current < minimum) {
+    expect(
+      ENV.MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY,
+      "MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY or SPONSOR_TREASURY_PRIVATE_KEY is required to top up the buyer token balance"
+    ).toBeTruthy();
+
+    const sponsorWallet = walletFromPrivateKey(ENV.MARKETPLACE_TEST_SPONSOR_PRIVATE_KEY);
+    const tokenWithSponsor = token.connect(sponsorWallet) as ethers.Contract & {
+      transfer(to: string, amount: bigint): Promise<ethers.TransactionResponse>;
+    };
+    const transferTx = await tokenWithSponsor.transfer(wallet.address, minimum - current);
+    await transferTx.wait();
+  }
+
+  const allowance = (await token.allowance(
+    wallet.address,
+    ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS
+  )) as bigint;
+  if (allowance >= minimum) {
+    return;
+  }
+  const tokenWithBuyer = token.connect(wallet) as ethers.Contract & {
+    approve(spender: string, amount: bigint): Promise<ethers.TransactionResponse>;
+  };
+  const approveTx = await tokenWithBuyer.approve(
+    ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS,
+    ethers.MaxUint256
+  );
+  await approveTx.wait();
+}
+
+async function registerWallet(
+  request: APIRequestContext,
+  accessToken: string,
+  privateKey: string
+): Promise<ethers.Wallet> {
+  expect(privateKey, "marketplace wallet private key env is required").toBeTruthy();
+  expect(
+    ENV.WEB3_EIP712_VERIFYING_CONTRACT,
+    "WEB3_EIP712_VERIFYING_CONTRACT env is required"
+  ).toBeTruthy();
+  const wallet = walletFromPrivateKey(privateKey);
+  await markWalletReusable(wallet.address);
+
+  const challengeRes = await request.post(`${ENV.BACKEND_URL}/web3/challenges`, {
+    headers: authHeaders(accessToken),
+    data: {
+      purpose: "WALLET_REGISTRATION",
+      walletAddress: wallet.address,
+    },
+  });
+  expect(challengeRes.ok(), `challenge failed: ${await challengeRes.text()}`).toBeTruthy();
+  const challengeBody = await challengeRes.json();
+  const signature = await wallet.signTypedData(
+    {
+      name: ENV.WEB3_EIP712_DOMAIN_NAME,
+      version: ENV.WEB3_EIP712_DOMAIN_VERSION,
+      chainId: ENV.WEB3_CHAIN_ID,
+      verifyingContract: ENV.WEB3_EIP712_VERIFYING_CONTRACT,
+    },
+    {
+      AuthRequest: [
+        { name: "content", type: "string" },
+        { name: "nonce", type: "string" },
+      ],
+    },
+    {
+      content: challengeBody.data.message,
+      nonce: challengeBody.data.nonce,
+    }
+  );
+
+  const registerRes = await request.post(`${ENV.BACKEND_URL}/web3/wallets`, {
+    headers: authHeaders(accessToken),
+    data: {
+      walletAddress: wallet.address,
+      signature,
+      nonce: challengeBody.data.nonce,
+    },
+  });
+  expect(
+    [201, 202],
+    `wallet register failed: ${await registerRes.text()}`
+  ).toContain(registerRes.status());
+  const registerBody = await registerRes.json();
+  if (registerBody.data?.status === "APPROVAL_REQUIRED") {
+    await executeReservationIntent(
+      request,
+      accessToken,
+      wallet,
+      registerBody.data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForWalletRegistrationStatus(
+      request,
+      accessToken,
+      registerBody.data.registrationId,
+      "REGISTERED"
+    );
+  }
+  return wallet;
+}
+
+async function executeReservationIntent(
+  request: APIRequestContext,
+  accessToken: string,
+  wallet: ethers.Wallet,
+  web3: ReservationWeb3WritePayload
+): Promise<void> {
+  expect(web3?.executionIntent?.id, "execution intent id is required").toBeTruthy();
+  expect(web3.signRequest, "sign request is required").toBeTruthy();
+  const signRequest = web3.signRequest!;
+  let data:
+    | {
+        authorizationSignature: string;
+        submitSignature: string;
+      }
+    | {
+        signedRawTransaction: string;
+      };
+
+  if (signRequest.authorization != null && signRequest.submit != null) {
+    data = {
+      authorizationSignature: signRawDigest(
+        wallet,
+        signRequest.authorization.payloadHashToSign
+      ),
+      submitSignature: signRawDigest(wallet, signRequest.submit.executionDigest),
+    };
+  } else if (signRequest.transaction != null) {
+    data = {
+      signedRawTransaction: await wallet.signTransaction({
+        type: 2,
+        chainId: signRequest.transaction.chainId,
+        nonce:
+          signRequest.transaction.expectedNonce ?? signRequest.transaction.nonce ?? 0,
+        to: signRequest.transaction.toAddress,
+        value: BigInt(signRequest.transaction.valueHex),
+        data: signRequest.transaction.data,
+        gasLimit: BigInt(signRequest.transaction.gasLimitHex!),
+        maxPriorityFeePerGas: BigInt(signRequest.transaction.maxPriorityFeePerGasHex!),
+        maxFeePerGas: BigInt(signRequest.transaction.maxFeePerGasHex!),
+      }),
+    };
+  } else {
+    throw new Error("unsupported marketplace sign request");
+  }
+
+  const executeRes = await request.post(
+    `${ENV.BACKEND_URL}/users/me/web3/execution-intents/${web3.executionIntent.id}/execute`,
+    {
+      headers: authHeaders(accessToken),
+      data,
+    }
+  );
+  expect(executeRes.status(), `execution submit failed: ${await executeRes.text()}`).toBe(202);
+}
+
+async function waitForReservationStatus(
+  request: APIRequestContext,
+  accessToken: string,
+  reservationId: number,
+  expectedStatus: string,
+  timeoutMs = 300_000
+): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/reservations/${reservationId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    expect(res.status(), `reservation detail failed: ${await res.text()}`).toBe(200);
+    const body = await res.json();
+    if (body.data?.status === expectedStatus) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 3_000));
+  }
+  throw new Error(`reservation ${reservationId} did not reach ${expectedStatus}`);
+}
+
+async function loadReservationDetail(
+  request: APIRequestContext,
+  accessToken: string,
+  reservationId: number
+) {
+  const res = await request.get(
+    `${ENV.BACKEND_URL}/marketplace/reservations/${reservationId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  expect(res.status(), `reservation detail failed: ${await res.text()}`).toBe(200);
+  return (await res.json()).data;
+}
+
+async function moveReservationSessionToPast(reservationId: number): Promise<void> {
+  await db.query(
+    `update class_reservations
+        set reservation_date = current_date - interval '1 day',
+            reservation_time = '09:00:00'::time,
+            updated_at = now()
+      where id = $1`,
+    [reservationId]
+  );
+}
+
+async function moveReservationDeadlineToPast(reservationId: number): Promise<void> {
+  await db.query(
+    `update class_reservations
+        set contract_deadline_epoch_seconds = floor(extract(epoch from now()))::bigint - 1,
+            contract_deadline_at = now() - interval '1 second',
+            updated_at = now()
+      where id = $1`,
+    [reservationId]
+  );
+}
+
+async function loadReservationOrderKey(reservationId: number): Promise<string> {
+  const result = await db.query(
+    "select order_key from class_reservations where id = $1",
+    [reservationId]
+  );
+  expect(result.rows[0]?.order_key, "reservation order_key is required").toBeTruthy();
+  return result.rows[0].order_key as string;
+}
+
+async function expireMarketplaceOrderDeadline(
+  orderKey: string
+): Promise<{ expired: boolean; reason?: string }> {
+  if (provider == null || ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS === "") {
+    return { expired: false, reason: "marketplace escrow RPC is not configured" };
+  }
+  const escrow = new ethers.Contract(
+    ENV.MARKETPLACE_ESCROW_CONTRACT_ADDRESS,
+    MARKETPLACE_ESCROW_ABI,
+    provider
+  );
+  const order = await escrow.getOrder(orderKey);
+  const rawDeadline = order.deadline ?? order[3];
+  const deadline = BigInt(rawDeadline.toString());
+  const current = BigInt((await provider.getBlock("latest"))?.timestamp ?? 0);
+  if (current <= deadline) {
+    const secondsToAdvance = deadline - current + 2n;
+    if (secondsToAdvance > BigInt(Number.MAX_SAFE_INTEGER)) {
+      return { expired: false, reason: "deadline advance exceeds JavaScript safe integer" };
+    }
+    try {
+      await provider.send("evm_increaseTime", [Number(secondsToAdvance)]);
+      await provider.send("evm_mine", []);
+    } catch (error) {
+      return {
+        expired: false,
+        reason: `RPC does not support time travel: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+  const latest = BigInt((await provider.getBlock("latest"))?.timestamp ?? 0);
+  return {
+    expired: latest > deadline,
+    reason: latest > deadline ? undefined : "marketplace order deadline is still active",
+  };
+}
+
+async function waitForWalletRegistrationStatus(
+  request: APIRequestContext,
+  accessToken: string,
+  registrationId: string,
+  expectedStatus: string,
+  timeoutMs = 300_000
+): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/web3/wallet-registrations/${registrationId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    expect(res.status(), `wallet registration status failed: ${await res.text()}`).toBe(200);
+    const body = await res.json();
+    if (body.data?.status === expectedStatus) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 3_000));
+  }
+  throw new Error(`wallet registration ${registrationId} did not reach ${expectedStatus}`);
+}
+
+let marketplaceUserWallet: ethers.Wallet;
+let marketplaceTrainerWallet: ethers.Wallet;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 공통 헬퍼
@@ -1399,9 +1960,9 @@ async function getFirstSlotId(
 }
 
 /**
- * 예약을 생성하고 reservationId를 반환합니다.
+ * 예약을 생성하고 응답 data를 반환합니다. Web3 intent 실행은 호출자가 결정합니다.
  */
-async function createReservation(
+async function createReservationAndReturnData(
   apiContext: APIRequestContext,
   userToken: string,
   classId: number,
@@ -1409,7 +1970,7 @@ async function createReservation(
   reservationDate: string,
   reservationTime: string,
   signedAmount: number
-): Promise<number> {
+): Promise<CreateReservationData> {
   const res = await apiContext.post(
     `${ENV.BACKEND_URL}/marketplace/classes/${classId}/reservations`,
     {
@@ -1421,15 +1982,50 @@ async function createReservation(
         slotId,
         reservationDate,
         reservationTime,
-        signedAmount,
+        signedAmount: tokenBaseUnits(signedAmount),
         delegationSignature: "0x" + "a".repeat(130),
         executionSignature: "0x" + "b".repeat(130),
       },
     }
   );
-  expect(res.status(), `예약 생성 실패 (classId=${classId})`).toBe(200);
-  const body = await res.json();
-  return body?.data?.reservationId as number;
+  const resText = await res.text();
+  expect(res.status(), `예약 생성 실패 (classId=${classId}): ${resText}`).toBe(200);
+  const body = JSON.parse(resText);
+  return body?.data;
+}
+
+/**
+ * 예약을 생성하고 purchase intent를 확정한 뒤 reservationId를 반환합니다.
+ */
+async function createReservation(
+  apiContext: APIRequestContext,
+  userToken: string,
+  classId: number,
+  slotId: number,
+  reservationDate: string,
+  reservationTime: string,
+  signedAmount: number
+): Promise<number> {
+  const data = await createReservationAndReturnData(
+    apiContext,
+    userToken,
+    classId,
+    slotId,
+    reservationDate,
+    reservationTime,
+    signedAmount
+  );
+  const reservationId = data?.reservationId as number;
+  if (data?.status === "PURCHASE_PENDING") {
+    await executeReservationIntent(
+      apiContext,
+      userToken,
+      marketplaceUserWallet,
+      data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForReservationStatus(apiContext, userToken, reservationId, "PENDING");
+  }
+  return reservationId;
 }
 
 /**
@@ -1482,6 +2078,8 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
     const otherEmail = `trainer-rv-other-${Date.now()}@mztk-test.com`;
     const userEmail = `user-rv-${Date.now()}@mztk-test.com`;
 
+    await ensureSponsorTreasuryReady();
+
     trainerToken = await signUpAndLoginAsTrainer(request, trainerEmail);
     await upsertStore(request, trainerToken);
 
@@ -1489,6 +2087,20 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
     await upsertStore(request, otherTrainerToken);
 
     userToken = await signUpAndLoginAsUser(request, userEmail);
+    marketplaceTrainerWallet = await registerWallet(
+      request,
+      trainerToken,
+      ENV.MARKETPLACE_TEST_TRAINER_PRIVATE_KEY
+    );
+    marketplaceUserWallet = await registerWallet(
+      request,
+      userToken,
+      ENV.MARKETPLACE_TEST_USER_PRIVATE_KEY
+    );
+    await ensureBuyerTokenFunding(
+      marketplaceUserWallet,
+      ENV.MARKETPLACE_TEST_MIN_BUYER_TOKEN_BALANCE
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -1498,32 +2110,28 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
     request,
   }) => {
     const { classId, slotId, priceAmount, reservationDate, reservationTime } =
-      await setupClassWithSlot(request, trainerToken, "MONDAY", "10:00:00", 50000);
+      await setupClassWithSlot(request, trainerToken, "MONDAY", "10:00:00", 1);
 
-    const res = await request.post(
-      `${ENV.BACKEND_URL}/marketplace/classes/${classId}/reservations`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${userToken}`,
-        },
-        data: {
-          slotId,
-          reservationDate,
-          reservationTime,
-          signedAmount: priceAmount,
-          delegationSignature: "0x" + "a".repeat(130),
-          executionSignature: "0x" + "b".repeat(130),
-        },
-      }
+    const reservationId = await createReservation(
+      request,
+      userToken,
+      classId,
+      slotId,
+      reservationDate,
+      reservationTime,
+      priceAmount
     );
 
-    expect(res.status(), "예약 생성 실패").toBe(200);
-    const body = await res.json();
+    const detailRes = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/reservations/${reservationId}`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    expect(detailRes.status(), "예약 상세 조회 실패").toBe(200);
+    const body = await detailRes.json();
     expect(body).toHaveProperty("status", "SUCCESS");
-    expect(body.data.reservationId, "reservationId 없음").toBeDefined();
+    expect(body.data.reservationId, "reservationId 없음").toBe(reservationId);
     expect(body.data.status).toBe("PENDING");
-    console.log(`[TC-RV-01] 예약 생성 성공. reservationId=${body.data.reservationId}`);
+    console.log(`[TC-RV-01] 예약 생성 성공. reservationId=${reservationId}`);
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -1574,7 +2182,14 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
 
     expect(res.status(), "반려 실패").toBe(200);
     const body = await res.json();
-    expect(body.data.status).toBe("REJECTED");
+    expect(body.data.status).toBe("REJECT_PENDING");
+    await executeReservationIntent(
+      request,
+      trainerToken,
+      marketplaceTrainerWallet,
+      body.data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForReservationStatus(request, trainerToken, reservationId, "REJECTED");
     console.log(`[TC-RV-03] 반려 성공. reservationId=${reservationId}, status=REJECTED`);
   });
 
@@ -1597,8 +2212,159 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
 
     expect(res.status(), "취소 실패").toBe(200);
     const body = await res.json();
-    expect(body.data.status).toBe("USER_CANCELLED");
+    expect(body.data.status).toBe("CANCEL_PENDING");
+    await executeReservationIntent(
+      request,
+      userToken,
+      marketplaceUserWallet,
+      body.data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForReservationStatus(request, userToken, reservationId, "USER_CANCELLED");
     console.log(`[TC-RV-04] 취소 성공. reservationId=${reservationId}, status=USER_CANCELLED`);
+  });
+
+  test("MOM-313-LIVE-01: buyer cancel intent는 read hydration/recover 후 USER_CANCELLED로 종료된다", async ({
+    request,
+  }) => {
+    test.setTimeout(300_000);
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "MONDAY", "18:00:00", 1);
+    const reservationId = await createReservation(
+      request,
+      userToken,
+      classId,
+      slotId,
+      reservationDate,
+      reservationTime,
+      priceAmount
+    );
+
+    const cancelRes = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations/${reservationId}/cancel`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    expect(cancelRes.status(), `cancel prepare failed: ${await cancelRes.text()}`).toBe(200);
+    const cancelBody = await cancelRes.json();
+    expect(cancelBody.data.status).toBe("CANCEL_PENDING");
+    expect(cancelBody.data.web3.actionType).toBe("MARKETPLACE_CLASS_CANCEL");
+
+    const detail = await loadReservationDetail(request, userToken, reservationId);
+    expect(detail.status).toBe("CANCEL_PENDING");
+    expect(detail.web3Execution.actionType).toBe("MARKETPLACE_CLASS_CANCEL");
+    expect(
+      detail.web3Execution.viewerCanExecute || detail.web3Execution.viewerCanRecover
+    ).toBe(true);
+
+    const recoverRes = await request.post(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations/${reservationId}/web3/recover`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    expect(recoverRes.status(), `recover failed: ${await recoverRes.text()}`).toBe(200);
+    const recoverBody = await recoverRes.json();
+    expect(recoverBody.data.status).toBe("CANCEL_PENDING");
+    expect(recoverBody.data.web3.actionType).toBe("MARKETPLACE_CLASS_CANCEL");
+
+    await executeReservationIntent(
+      request,
+      userToken,
+      marketplaceUserWallet,
+      recoverBody.data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForReservationStatus(request, userToken, reservationId, "USER_CANCELLED");
+    console.log(`[MOM-313-LIVE-01] cancel/recover 성공. reservationId=${reservationId}`);
+  });
+
+  test("MOM-313-LIVE-02: trainer reject intent는 REJECTED로 종료되고 사유가 보존된다", async ({
+    request,
+  }) => {
+    test.setTimeout(300_000);
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "TUESDAY", "18:30:00", 1);
+    const reservationId = await createReservation(
+      request,
+      userToken,
+      classId,
+      slotId,
+      reservationDate,
+      reservationTime,
+      priceAmount
+    );
+
+    const rejectionReason = "MOM-313 live reject verification";
+    const rejectRes = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}/reject`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${trainerToken}`,
+        },
+        data: { rejectionReason },
+      }
+    );
+    expect(rejectRes.status(), `reject prepare failed: ${await rejectRes.text()}`).toBe(200);
+    const rejectBody = await rejectRes.json();
+    expect(rejectBody.data.status).toBe("REJECT_PENDING");
+    expect(rejectBody.data.web3.actionType).toBe("MARKETPLACE_CLASS_CANCEL");
+
+    await executeReservationIntent(
+      request,
+      trainerToken,
+      marketplaceTrainerWallet,
+      rejectBody.data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForReservationStatus(request, trainerToken, reservationId, "REJECTED");
+
+    const detail = await loadReservationDetail(request, userToken, reservationId);
+    expect(detail.status).toBe("REJECTED");
+    const reasonRow = await db.query(
+      "select rejection_reason from class_reservations where id = $1",
+      [reservationId]
+    );
+    expect(reasonRow.rows[0].rejection_reason).toBe(rejectionReason);
+    console.log(`[MOM-313-LIVE-02] reject 성공. reservationId=${reservationId}`);
+  });
+
+  test("MOM-313-LIVE-03: buyer confirm intent는 승인 후 SETTLED로 종료된다", async ({
+    request,
+  }) => {
+    test.setTimeout(300_000);
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "WEDNESDAY", "18:00:00", 1);
+    const reservationId = await createReservation(
+      request,
+      userToken,
+      classId,
+      slotId,
+      reservationDate,
+      reservationTime,
+      priceAmount
+    );
+
+    const approveRes = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}/approve`,
+      { headers: { Authorization: `Bearer ${trainerToken}` } }
+    );
+    expect(approveRes.status(), `approve failed: ${await approveRes.text()}`).toBe(200);
+    expect((await approveRes.json()).data.status).toBe("APPROVED");
+    await moveReservationSessionToPast(reservationId);
+
+    const completeRes = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations/${reservationId}/complete`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    expect(completeRes.status(), `complete prepare failed: ${await completeRes.text()}`).toBe(200);
+    const completeBody = await completeRes.json();
+    expect(completeBody.data.status).toBe("CONFIRM_PENDING");
+    expect(completeBody.data.web3.actionType).toBe("MARKETPLACE_CLASS_CONFIRM");
+
+    await executeReservationIntent(
+      request,
+      userToken,
+      marketplaceUserWallet,
+      completeBody.data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForReservationStatus(request, userToken, reservationId, "SETTLED");
+    console.log(`[MOM-313-LIVE-03] confirm 성공. reservationId=${reservationId}`);
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -1645,9 +2411,10 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
           slotId,
           reservationDate,
           reservationTime,
-          signedAmount: 99999, // 실제 50000과 불일치
+          signedAmount: tokenBaseUnits(99999), // 실제 50000과 불일치
           delegationSignature: "0x" + "a".repeat(130),
           executionSignature: "0x" + "b".repeat(130),
+          idempotencyKey: `tc-rv-06-${Date.now()}`,
         },
       }
     );
@@ -1709,9 +2476,10 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
           slotId,
           reservationDate,
           reservationTime: "12:00:00",
-          signedAmount: 10000,
+          signedAmount: tokenBaseUnits(10000),
           delegationSignature: "0x" + "a".repeat(130),
           executionSignature: "0x" + "b".repeat(130),
+          idempotencyKey: `tc-rv-07-${Date.now()}`,
         },
       }
     );
@@ -2026,5 +2794,47 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
     );
     expect(found, "트레이너 목록에 예약이 없음").toBe(true);
     console.log(`[TC-RV-18] 트레이너 수강 신청 목록 조회 성공. reservationId=${reservationId}`);
+  });
+
+  test("MOM-313-LIVE-04: deadline refund intent는 DEADLINE_REFUNDED로 종료된다", async ({
+    request,
+  }) => {
+    test.setTimeout(300_000);
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "THURSDAY", "16:00:00", 1);
+    const reservationId = await createReservation(
+      request,
+      userToken,
+      classId,
+      slotId,
+      reservationDate,
+      reservationTime,
+      priceAmount
+    );
+
+    const orderKey = await loadReservationOrderKey(reservationId);
+    const expiry = await expireMarketplaceOrderDeadline(orderKey);
+    test.skip(!expiry.expired, expiry.reason ?? "deadline refund requires expired chain order");
+    await moveReservationDeadlineToPast(reservationId);
+
+    const refundRes = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations/${reservationId}/deadline-refund`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    expect(refundRes.status(), `deadline refund prepare failed: ${await refundRes.text()}`).toBe(
+      200
+    );
+    const refundBody = await refundRes.json();
+    expect(refundBody.data.status).toBe("DEADLINE_REFUND_PENDING");
+    expect(refundBody.data.web3.actionType).toBe("MARKETPLACE_CLASS_EXPIRED_REFUND");
+
+    await executeReservationIntent(
+      request,
+      userToken,
+      marketplaceUserWallet,
+      refundBody.data.web3 as ReservationWeb3WritePayload
+    );
+    await waitForReservationStatus(request, userToken, reservationId, "DEADLINE_REFUNDED");
+    console.log(`[MOM-313-LIVE-04] deadline refund 성공. reservationId=${reservationId}`);
   });
 });

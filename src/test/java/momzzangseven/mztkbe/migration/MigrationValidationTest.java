@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import momzzangseven.mztkbe.MztkBeApplication;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataAccessException;
@@ -16,14 +16,14 @@ import org.springframework.test.context.ActiveProfiles;
 /**
  * Guards Flyway migration correctness in the real PostgreSQL integration test tier.
  *
- * <p>This test uses the {@code integration} profile, so it belongs to the {@code e2eTest} task with
- * the other real PostgreSQL tests. Booting the Spring context runs Flyway end-to-end with {@code
- * validate-on-migrate=true}, and Hibernate re-checks every {@code @Entity} against the resulting
- * schema via {@code ddl-auto=validate}. Any checksum mismatch, out-of-order version, missing
- * migration, or entity/column drift fails context startup — which fails this test.
+ * <p>This test intentionally has no {@code e2e} tag. When {@code DB_URL_E2E} is present, the
+ * default {@code test} task runs it against real PostgreSQL. Booting the Spring context runs Flyway
+ * end-to-end with {@code validate-on-migrate=true}, and Hibernate re-checks every {@code @Entity}
+ * against the resulting schema via {@code ddl-auto=validate}. Any checksum mismatch, out-of-order
+ * version, missing migration, or entity/column drift fails context startup — which fails this test.
  */
 @DisplayName("[Migration] Flyway migrations apply cleanly and match JPA entities")
-@Tag("e2e")
+@EnabledIfEnvironmentVariable(named = "DB_URL_E2E", matches = ".+")
 @ActiveProfiles("integration")
 @SpringBootTest(
     classes = MztkBeApplication.class,
@@ -152,6 +152,90 @@ class MigrationValidationTest {
         .contains("STALE");
   }
 
+  @Test
+  @DisplayName("marketplace reservation user escrow schema supports MOM-313 local state")
+  void marketplaceReservationUserEscrowSchemaSupportsLocalState() {
+    assertThat(columnExists("class_reservations", "escrow_status")).isTrue();
+    assertThat(columnExists("class_reservations", "escrow_flow")).isTrue();
+    assertThat(columnExists("class_reservations", "order_key")).isTrue();
+    assertThat(columnExists("class_reservations", "current_execution_intent_public_id")).isTrue();
+    assertThat(columnExists("class_reservations", "contract_deadline_epoch_seconds")).isTrue();
+    assertThat(columnExists("class_reservations", "contract_deadline_at")).isTrue();
+    assertThat(columnExists("marketplace_reservation_escrows", "reservation_id")).isTrue();
+    assertThat(columnExists("marketplace_reservation_escrows", "price_base_units")).isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "attempt_token")).isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "execution_intent_public_id"))
+        .isTrue();
+    assertThat(columnExists("reservation_create_idempotency_keys", "escrow_id")).isTrue();
+    assertThat(columnExists("reservation_create_idempotency_keys", "action_state_id")).isTrue();
+    assertThat(
+            columnExists(
+                "reservation_create_idempotency_keys", "current_execution_intent_public_id"))
+        .isFalse();
+    assertThat(indexExists("uk_class_reservations_order_key")).isTrue();
+    assertThat(indexExists("uk_class_reservations_active_buyer_slot_datetime")).isTrue();
+    assertThat(indexExists("uk_marketplace_reservation_action_states_active")).isTrue();
+    assertThat(indexExists("uk_reservation_create_idempotency_buyer_key")).isTrue();
+    assertThat(indexExists("uk_reservation_slot_date_locks_slot_date")).isTrue();
+    assertThat(indexExists("uk_trainer_strike_records_source")).isTrue();
+
+    String statusConstraint = checkClause("class_reservations", "chk_class_reservations_status");
+    assertThat(statusConstraint)
+        .contains("HOLDING")
+        .contains("PURCHASE_PREPARING")
+        .contains("PURCHASE_PENDING")
+        .contains("DEADLINE_REFUND_AVAILABLE")
+        .contains("DEADLINE_REFUNDED");
+
+    String escrowStatusConstraint =
+        checkClause(
+            "marketplace_reservation_escrows", "chk_marketplace_reservation_escrows_status");
+    assertThat(escrowStatusConstraint)
+        .contains("PURCHASE_PREPARING")
+        .contains("PURCHASE_PENDING")
+        .contains("LOCKED")
+        .contains("CANCEL_PENDING")
+        .contains("REJECT_PENDING")
+        .contains("CONFIRM_PENDING")
+        .contains("DEADLINE_REFUND_AVAILABLE")
+        .contains("DEADLINE_REFUND_PENDING")
+        .contains("DEADLINE_REFUNDED");
+
+    String actionStateStatusConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_status");
+    assertThat(actionStateStatusConstraint)
+        .contains("PREPARING")
+        .contains("INTENT_BOUND")
+        .contains("PREPARATION_FAILED")
+        .contains("STALE");
+
+    String actionStateBoundIntentConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_bound_intent");
+    assertThat(actionStateBoundIntentConstraint)
+        .contains("PREPARING")
+        .contains("PREPARATION_FAILED")
+        .contains("STALE");
+
+    String idempotencyStatusConstraint =
+        checkClause(
+            "reservation_create_idempotency_keys", "chk_reservation_create_idempotency_status");
+    assertThat(idempotencyStatusConstraint)
+        .contains("PREPARING")
+        .contains("BOUND")
+        .contains("COMPLETED")
+        .doesNotContain("INTENT_CREATED");
+
+    String deadlineConstraint =
+        checkClause("class_reservations", "chk_class_reservations_contract_deadline_pair");
+    assertThat(deadlineConstraint)
+        .contains("contract_deadline_epoch_seconds")
+        .contains("contract_deadline_at");
+  }
+
   private void insertWeb3Transaction(
       String idempotencyKey, String referenceType, String referenceId) {
     jdbcTemplate.update(
@@ -204,5 +288,21 @@ class MigrationValidationTest {
             tableName,
             columnName);
     return count != null && count > 0;
+  }
+
+  private String checkClause(String tableName, String constraintName) {
+    return jdbcTemplate.queryForObject(
+        """
+        SELECT cc.check_clause
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.check_constraints cc
+          ON tc.constraint_schema = cc.constraint_schema
+         AND tc.constraint_name = cc.constraint_name
+        WHERE tc.table_name = ?
+          AND tc.constraint_name = ?
+        """,
+        String.class,
+        tableName,
+        constraintName);
   }
 }

@@ -335,9 +335,16 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/marketplace/me/reservations/*")
                     .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/marketplace/reservations/*")
+                    .authenticated()
                     .requestMatchers(HttpMethod.PATCH, "/marketplace/me/reservations/*/complete")
                     .authenticated()
                     .requestMatchers(HttpMethod.PATCH, "/marketplace/me/reservations/*/cancel")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.PATCH, "/marketplace/me/reservations/*/deadline-refund")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/marketplace/me/reservations/*/web3/recover")
                     .authenticated()
 
                     // Reservation — trainer-only actions
@@ -349,6 +356,9 @@ public class SecurityConfig {
                         HttpMethod.PATCH, "/marketplace/trainer/reservations/*/approve")
                     .hasAuthority("ROLE_TRAINER")
                     .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/reservations/*/reject")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(
+                        HttpMethod.POST, "/marketplace/trainer/reservations/*/web3/recover")
                     .hasAuthority("ROLE_TRAINER")
 
                     // --- Internal Endpoints ---

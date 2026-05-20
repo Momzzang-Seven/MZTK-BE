@@ -15,9 +15,8 @@ public record CreateReservationRequestDTO(
     @NotNull @FutureOrPresent LocalDate reservationDate,
     @NotNull LocalTime reservationTime,
     @Size(max = 500) String userRequest,
-    @NotNull BigInteger signedAmount,
-    @NotBlank String delegationSignature,
-    @NotBlank String executionSignature) {
+    @NotBlank @Size(max = 200) String idempotencyKey,
+    @NotNull BigInteger signedAmount) {
 
   public CreateReservationCommand toCommand(Long userId, Long classId) {
     return new CreateReservationCommand(
@@ -27,8 +26,7 @@ public record CreateReservationRequestDTO(
         reservationDate,
         reservationTime,
         userRequest,
-        signedAmount,
-        delegationSignature,
-        executionSignature);
+        idempotencyKey,
+        signedAmount);
   }
 }

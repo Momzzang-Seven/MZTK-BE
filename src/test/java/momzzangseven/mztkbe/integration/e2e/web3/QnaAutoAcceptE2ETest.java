@@ -139,7 +139,8 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
     var internalResult = runInternalExecutionBatchUseCase.runBatch(NOW);
 
     assertThat(internalResult.executedCount()).isEqualTo(1);
-    assertThat(internalResult.pendingCount()).isEqualTo(1);
+    assertThat(internalResult.signedCount()).isEqualTo(1);
+    assertThat(internalResult.pendingCount()).isZero();
     assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("PENDING_ONCHAIN");
 
     markExecutionIntentSucceededUseCase.execute(701L);

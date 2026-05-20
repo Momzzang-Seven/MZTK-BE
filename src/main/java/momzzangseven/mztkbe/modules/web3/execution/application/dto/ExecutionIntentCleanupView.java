@@ -9,4 +9,5 @@ public record ExecutionIntentCleanupView(
     ExecutionResourceType resourceType,
     String resourceId,
     ExecutionActionType actionType,
-    Long requesterUserId) {}
+    Long requesterUserId,
+    String payloadSnapshotJson) {}

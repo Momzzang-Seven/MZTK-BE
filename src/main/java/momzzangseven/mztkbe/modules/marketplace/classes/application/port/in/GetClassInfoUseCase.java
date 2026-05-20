@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.classes.application.port.in;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassReservationProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 
@@ -91,4 +92,15 @@ public interface GetClassInfoUseCase {
    * @return Optional containing the summary projection if the slot and its class are found
    */
   Optional<ClassSummaryProjection> findBySlotId(Long slotId);
+
+  /**
+   * Find the reservation-facing class projection by class ID.
+   *
+   * <p>Cross-module callers should prefer this method over {@link #findById(Long)} so they depend
+   * only on the classes application DTO surface, not on the internal aggregate.
+   *
+   * @param classId class ID
+   * @return Optional containing the projection if found
+   */
+  Optional<ClassReservationProjection> findReservationProjectionById(Long classId);
 }

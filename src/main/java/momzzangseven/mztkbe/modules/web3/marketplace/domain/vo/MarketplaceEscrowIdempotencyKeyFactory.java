@@ -9,11 +9,22 @@ public final class MarketplaceEscrowIdempotencyKeyFactory {
 
   public static String create(
       MarketplaceExecutionActionType actionType, Long requesterUserId, Long reservationId) {
+    return create(actionType, MarketplaceActorType.BUYER, requesterUserId, reservationId);
+  }
+
+  public static String create(
+      MarketplaceExecutionActionType actionType,
+      MarketplaceActorType actorType,
+      Long authorityUserId,
+      Long reservationId) {
     if (actionType == null) {
       throw new Web3InvalidInputException("actionType is required");
     }
-    if (requesterUserId == null || requesterUserId <= 0) {
-      throw new Web3InvalidInputException("requesterUserId must be positive");
+    if (actorType == null) {
+      throw new Web3InvalidInputException("actorType is required");
+    }
+    if (authorityUserId == null || authorityUserId <= 0) {
+      throw new Web3InvalidInputException("authorityUserId must be positive");
     }
     if (reservationId == null || reservationId <= 0) {
       throw new Web3InvalidInputException("reservationId must be positive");
@@ -21,7 +32,9 @@ public final class MarketplaceEscrowIdempotencyKeyFactory {
     return "marketplace:"
         + actionType.name().toLowerCase()
         + ":"
-        + requesterUserId
+        + actorType.name().toLowerCase()
+        + ":"
+        + authorityUserId
         + ":"
         + reservationId;
   }

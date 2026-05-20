@@ -4,4 +4,7 @@ import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persiste
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TrainerStrikeRecordJpaRepository
-    extends JpaRepository<TrainerStrikeRecordEntity, Long> {}
+    extends JpaRepository<TrainerStrikeRecordEntity, Long> {
+
+  boolean existsBySourceTypeAndSourceId(String sourceType, String sourceId);
+}

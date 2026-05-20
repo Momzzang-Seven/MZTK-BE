@@ -17,6 +17,7 @@ public record MarketplaceExecutionDraft(
     Long requesterUserId,
     Long counterpartyUserId,
     String orderId,
+    String orderKey,
     String rootIdempotencyKey,
     String payloadHash,
     String payloadSnapshotJson,
@@ -28,6 +29,8 @@ public record MarketplaceExecutionDraft(
     String authorizationPayloadHash,
     MarketplaceUnsignedTxSnapshot unsignedTxSnapshot,
     String unsignedTxFingerprint,
+    MarketplaceSignatureMeta signatureMeta,
+    MarketplaceTokenMovement tokenMovement,
     LocalDateTime expiresAt) {
 
   public MarketplaceExecutionDraft {
@@ -43,6 +46,7 @@ public record MarketplaceExecutionDraft(
     }
     requirePositive(requesterUserId, "requesterUserId");
     requireUuid(orderId, "orderId");
+    requireText(orderKey, "orderKey");
     requireText(rootIdempotencyKey, "rootIdempotencyKey");
     requireText(payloadHash, "payloadHash");
     requireText(payloadSnapshotJson, "payloadSnapshotJson");
@@ -61,6 +65,51 @@ public record MarketplaceExecutionDraft(
         authorizationPayloadHash,
         unsignedTxSnapshot,
         unsignedTxFingerprint);
+  }
+
+  public MarketplaceExecutionDraft(
+      MarketplaceExecutionResourceType resourceType,
+      String resourceId,
+      MarketplaceExecutionResourceStatus resourceStatus,
+      MarketplaceExecutionActionType actionType,
+      Long requesterUserId,
+      Long counterpartyUserId,
+      String orderId,
+      String rootIdempotencyKey,
+      String payloadHash,
+      String payloadSnapshotJson,
+      List<MarketplaceExecutionDraftCall> calls,
+      boolean fallbackAllowed,
+      String authorityAddress,
+      Long authorityNonce,
+      String delegateTarget,
+      String authorizationPayloadHash,
+      MarketplaceUnsignedTxSnapshot unsignedTxSnapshot,
+      String unsignedTxFingerprint,
+      LocalDateTime expiresAt) {
+    this(
+        resourceType,
+        resourceId,
+        resourceStatus,
+        actionType,
+        requesterUserId,
+        counterpartyUserId,
+        orderId,
+        "0x0000000000000000000000000000000000000000000000000000000000000001",
+        rootIdempotencyKey,
+        payloadHash,
+        payloadSnapshotJson,
+        calls,
+        fallbackAllowed,
+        authorityAddress,
+        authorityNonce,
+        delegateTarget,
+        authorizationPayloadHash,
+        unsignedTxSnapshot,
+        unsignedTxFingerprint,
+        null,
+        null,
+        expiresAt);
   }
 
   private static void validateSigningMaterial(

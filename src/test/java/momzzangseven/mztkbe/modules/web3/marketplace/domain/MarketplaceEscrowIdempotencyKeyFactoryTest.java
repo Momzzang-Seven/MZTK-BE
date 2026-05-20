@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceActorType;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,7 @@ class MarketplaceEscrowIdempotencyKeyFactoryTest {
         MarketplaceEscrowIdempotencyKeyFactory.create(
             MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, 7L, 123L);
 
-    assertThat(key).isEqualTo("marketplace:marketplace_class_purchase:7:123");
+    assertThat(key).isEqualTo("marketplace:marketplace_class_purchase:buyer:7:123");
   }
 
   @Test
@@ -24,11 +25,18 @@ class MarketplaceEscrowIdempotencyKeyFactoryTest {
     assertThat(
             MarketplaceEscrowIdempotencyKeyFactory.create(
                 MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL, 7L, 123L))
-        .isEqualTo("marketplace:marketplace_class_cancel:7:123");
+        .isEqualTo("marketplace:marketplace_class_cancel:buyer:7:123");
     assertThat(
             MarketplaceEscrowIdempotencyKeyFactory.create(
-                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CONFIRM, 9L, 123L))
-        .isEqualTo("marketplace:marketplace_class_confirm:9:123");
+                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CANCEL,
+                MarketplaceActorType.TRAINER,
+                9L,
+                123L))
+        .isEqualTo("marketplace:marketplace_class_cancel:trainer:9:123");
+    assertThat(
+            MarketplaceEscrowIdempotencyKeyFactory.create(
+                MarketplaceExecutionActionType.MARKETPLACE_CLASS_CONFIRM, 7L, 123L))
+        .isEqualTo("marketplace:marketplace_class_confirm:buyer:7:123");
   }
 
   @Test
@@ -41,7 +49,7 @@ class MarketplaceEscrowIdempotencyKeyFactoryTest {
                 MarketplaceEscrowIdempotencyKeyFactory.create(
                     MarketplaceExecutionActionType.MARKETPLACE_CLASS_PURCHASE, 0L, 123L))
         .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("requesterUserId");
+        .hasMessageContaining("authorityUserId");
     assertThatThrownBy(
             () ->
                 MarketplaceEscrowIdempotencyKeyFactory.create(

@@ -58,6 +58,9 @@ class ReservationMarketplaceExecutionAdapterTest {
     assertThat(request.trainerWalletAddress()).isEqualTo("0xtrainer");
     assertThat(request.bookedPriceAmountKrw()).isEqualTo(50000);
     assertThat(request.sessionEndAt()).isEqualTo(sessionEndAt());
+    assertThat(request.escrowId()).isEqualTo(900L);
+    assertThat(request.actionStateId()).isEqualTo(901L);
+    assertThat(request.rootIdempotencyKey()).isEqualTo("buyer:7:create:key-hash");
   }
 
   @Test
@@ -106,16 +109,40 @@ class ReservationMarketplaceExecutionAdapterTest {
   }
 
   @Test
-  void commandDoesNotCarryOrderKeyOrTokenWeiFields() {
+  void commandCarriesOnchainExecutionFields() {
     assertThat(PrepareReservationEscrowCommand.class.getRecordComponents())
         .extracting(component -> component.getName())
-        .doesNotContain("orderKey", "tokenAddress", "priceAmountWei")
-        .contains("orderId", "bookedPriceAmountKrw");
+        .doesNotContain("priceAmountWei")
+        .contains("orderId", "orderKey", "tokenAddress", "priceBaseUnits", "bookedPriceAmountKrw");
   }
 
   private static PrepareReservationEscrowCommand command() {
     return new PrepareReservationEscrowCommand(
-        123L, ORDER_ID, 7L, 7L, 9L, 3L, "0xbuyer", "0xtrainer", 50000, sessionEndAt());
+        123L,
+        ORDER_ID,
+        "0x00000000000000000000000000000000123e4567e89b12d3a456426614174000",
+        "BUYER",
+        7L,
+        7L,
+        9L,
+        7L,
+        9L,
+        3L,
+        null,
+        null,
+        "0xbuyer",
+        "0xtrainer",
+        "0xtoken",
+        "50000",
+        50000,
+        sessionEndAt(),
+        null,
+        null,
+        "attempt-token",
+        "PENDING",
+        900L,
+        901L,
+        "buyer:7:create:key-hash");
   }
 
   private static MarketplaceExecutionIntentResult result(String actionType) {

@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
@@ -197,8 +198,7 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
             intent.getUnsignedTxSnapshot(),
             intent.getUnsignedTxFingerprint());
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
+    stubFindAndTrackUpdates(intent);
     when(eip1559TransactionCodecPort.decodeAndVerify(
             "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
         .thenReturn(decoded);
@@ -212,8 +212,6 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
     when(executionTransactionGatewayPort.broadcast("0xsigned"))
         .thenReturn(
             new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", "rpc-1", null));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
     doThrow(new RuntimeException("hook failed"))
         .when(executionActionHandlerPort)
         .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
@@ -223,7 +221,7 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
             new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
             sponsorGate());
 
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
     assertThat(result.transactionId()).isEqualTo(202L);
     assertThat(tm.commits).isEqualTo(1);
     assertThat(tm.rollbacks).isZero();
@@ -247,6 +245,19 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
         new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS, true);
     TreasurySigner signer = new TreasurySigner(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS);
     return new SponsorWalletGate(info, signer);
+  }
+
+  private void stubFindAndTrackUpdates(ExecutionIntent initial) {
+    AtomicReference<ExecutionIntent> latest = new AtomicReference<>(initial);
+    when(executionIntentPersistencePort.findByPublicIdForUpdate(initial.getPublicId()))
+        .thenAnswer(invocation -> Optional.of(latest.get()));
+    when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
+        .thenAnswer(
+            invocation -> {
+              ExecutionIntent updated = invocation.getArgument(0);
+              latest.set(updated);
+              return updated;
+            });
   }
 
   private ExecutionIntent existingEip1559Intent() {
@@ -312,20 +323,53 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
 
   private static class TestRunAfterCommitPort implements RunAfterCommitPort {
 
+    private boolean runningAfterCommitCallback;
+
     @Override
     public void runAfterCommit(Runnable action) {
-      if (TransactionSynchronizationManager.isSynchronizationActive()) {
+      if (canRegisterAfterCommitCallback()) {
         TransactionSynchronizationManager.registerSynchronization(
             new TransactionSynchronization() {
               @Override
               public void afterCommit() {
-                action.run();
+                runAfterCommitCallback(action);
               }
             });
         return;
       }
 
       action.run();
+    }
+
+    @Override
+    public void runAfterCommitWithoutTransaction(Runnable action) {
+      if (canRegisterAfterCommitCallback()) {
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+              @Override
+              public void afterCommit() {
+                runAfterCommitCallback(action);
+              }
+            });
+        return;
+      }
+
+      action.run();
+    }
+
+    private boolean canRegisterAfterCommitCallback() {
+      return TransactionSynchronizationManager.isSynchronizationActive()
+          && !runningAfterCommitCallback;
+    }
+
+    private void runAfterCommitCallback(Runnable action) {
+      boolean previous = runningAfterCommitCallback;
+      runningAfterCommitCallback = true;
+      try {
+        action.run();
+      } finally {
+        runningAfterCommitCallback = previous;
+      }
     }
   }
 }

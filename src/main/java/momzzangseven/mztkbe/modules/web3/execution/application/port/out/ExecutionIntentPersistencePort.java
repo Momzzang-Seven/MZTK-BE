@@ -19,6 +19,9 @@ public interface ExecutionIntentPersistencePort {
   Optional<ExecutionIntent> findLatestByResource(
       ExecutionResourceType resourceType, String resourceId);
 
+  List<ExecutionIntent> findByResource(
+      ExecutionResourceType resourceType, String resourceId, int limit);
+
   default Map<String, ExecutionIntent> findLatestByResources(
       ExecutionResourceType resourceType, Collection<String> resourceIds) {
     Map<String, ExecutionIntent> results = new LinkedHashMap<>();

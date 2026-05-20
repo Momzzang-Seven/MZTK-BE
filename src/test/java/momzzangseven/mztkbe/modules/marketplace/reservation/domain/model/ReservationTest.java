@@ -7,6 +7,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -141,5 +143,155 @@ class ReservationTest {
 
     // 2025-01-01T10:00 + 60 minutes = 2025-01-01T11:00
     assertThat(endAt).isEqualTo(LocalDateTime.of(2025, 1, 1, 11, 0));
+  }
+
+  @Test
+  @DisplayName("user escrow purchase transitions stay scheduler-invisible until confirmed")
+  void userEscrowPurchaseTransitions() {
+    Reservation pending = createDefaultPendingReservation();
+
+    Reservation preparing =
+        pending.beginPurchasePreparing(
+            "key-hash",
+            "payload-hash",
+            LocalDateTime.of(2026, 5, 16, 10, 0),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "purchase-token");
+    Reservation purchasePending = preparing.bindPurchaseIntent("intent-public-id");
+    Reservation retryPreparing =
+        purchasePending.retryPurchasePreparing(
+            "purchase-token-2", LocalDateTime.of(2026, 5, 16, 10, 5));
+    Reservation locked =
+        purchasePending.markPurchaseConfirmedLocked(
+            1_800_000_000L, LocalDateTime.of(2027, 1, 15, 8, 0));
+
+    assertThat(preparing.getStatus()).isEqualTo(ReservationStatus.HOLDING);
+    assertThat(preparing.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.PURCHASE_PREPARING);
+    assertThat(preparing.getEscrowFlow()).isEqualTo(ReservationEscrowFlow.USER_EIP7702);
+    assertThat(preparing.getPendingAttemptToken()).isEqualTo("purchase-token");
+    assertThat(preparing.getStatus().isSchedulerInvisibleUserState()).isTrue();
+    assertThat(purchasePending.getStatus()).isEqualTo(ReservationStatus.HOLDING);
+    assertThat(purchasePending.getEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.PURCHASE_PENDING);
+    assertThat(purchasePending.getCurrentExecutionIntentPublicId()).isEqualTo("intent-public-id");
+    assertThat(retryPreparing.getStatus()).isEqualTo(ReservationStatus.HOLDING);
+    assertThat(retryPreparing.getEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.PURCHASE_PREPARING);
+    assertThat(retryPreparing.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(retryPreparing.getPendingAttemptToken()).isEqualTo("purchase-token-2");
+    assertThat(locked.getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(locked.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(locked.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(locked.getPendingAction()).isNull();
+    assertThat(locked.getPendingAttemptToken()).isNull();
+    assertThat(locked.getContractDeadlineEpochSeconds()).isEqualTo(1_800_000_000L);
+    assertThat(locked.getContractDeadlineAt()).isEqualTo(LocalDateTime.of(2027, 1, 15, 8, 0));
+    assertThat(locked.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 0, 0))).isFalse();
+  }
+
+  @Test
+  @DisplayName("deadline refund transitions use scheduler-invisible business statuses")
+  void deadlineRefundTransitions() {
+    Reservation locked =
+        createDefaultPendingReservation()
+            .beginPurchasePreparing("key", "payload", LocalDateTime.of(2026, 5, 16, 10, 0))
+            .bindPurchaseIntent("intent")
+            .markPurchaseConfirmedLocked(100L, LocalDateTime.of(2026, 5, 16, 9, 0));
+
+    Reservation available = locked.markDeadlineRefundAvailable();
+    Reservation pending = available.beginDeadlineRefundPending("attempt-token");
+    Reservation refunded = pending.markDeadlineRefunded("refund-tx");
+
+    assertThat(available.getStatus()).isEqualTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+    assertThat(available.getStatus().isSchedulerInvisibleUserState()).isTrue();
+    assertThat(pending.getStatus()).isEqualTo(ReservationStatus.DEADLINE_REFUND_PENDING);
+    assertThat(pending.getEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.DEADLINE_REFUND_PENDING);
+    assertThat(refunded.getStatus()).isEqualTo(ReservationStatus.DEADLINE_REFUNDED);
+    assertThat(refunded.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.DEADLINE_REFUNDED);
+    assertThat(refunded.getTxHash()).isEqualTo("refund-tx");
+    assertThat(refunded.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(refunded.getPendingAction()).isNull();
+    assertThat(refunded.getPendingAttemptToken()).isNull();
+    assertThat(refunded.getStatus().isTerminal()).isTrue();
+  }
+
+  @Test
+  @DisplayName("manual sync status allows explicit repair exits")
+  void manualSyncRequired_allowsExplicitRepairExits() {
+    assertThat(ReservationStatus.MANUAL_SYNC_REQUIRED.canTransitionTo(ReservationStatus.SETTLED))
+        .isTrue();
+    assertThat(
+            ReservationStatus.MANUAL_SYNC_REQUIRED.canTransitionTo(
+                ReservationStatus.DEADLINE_REFUND_AVAILABLE))
+        .isTrue();
+    assertThat(ReservationStatus.MANUAL_SYNC_REQUIRED.canTransitionTo(ReservationStatus.PENDING))
+        .isFalse();
+  }
+
+  @Test
+  @DisplayName("confirmed cancel/reject/confirm transitions close pending execution state")
+  void confirmedTerminalTransitions_clearPendingExecutionState() {
+    Reservation locked =
+        createDefaultPendingReservation()
+            .beginPurchasePreparing("key", "payload", LocalDateTime.of(2026, 5, 16, 10, 0))
+            .bindPurchaseIntent("purchase-intent")
+            .markPurchaseConfirmedLocked(100L, LocalDateTime.of(2026, 5, 16, 9, 0));
+
+    Reservation cancelled =
+        locked
+            .beginCancelPending("cancel-token")
+            .bindPendingExecutionIntent("cancel-intent")
+            .cancelByUser("cancel-tx");
+    Reservation rejected =
+        locked
+            .beginRejectPending("reject-token", "일정 불가")
+            .bindPendingExecutionIntent("reject-intent")
+            .reject("reject-tx", "일정 불가");
+    Reservation settled =
+        locked
+            .approve()
+            .beginConfirmPending("confirm-token")
+            .bindPendingExecutionIntent("confirm-intent")
+            .complete("confirm-tx");
+
+    assertTerminalEscrowClosed(cancelled, ReservationStatus.USER_CANCELLED);
+    assertThat(cancelled.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertTerminalEscrowClosed(rejected, ReservationStatus.REJECTED);
+    assertThat(rejected.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertThat(rejected.getRejectionReason()).isEqualTo("일정 불가");
+    assertTerminalEscrowClosed(settled, ReservationStatus.SETTLED);
+    assertThat(settled.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.SETTLED);
+  }
+
+  private void assertTerminalEscrowClosed(
+      Reservation reservation, ReservationStatus expectedStatus) {
+    assertThat(reservation.getStatus()).isEqualTo(expectedStatus);
+    assertThat(reservation.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(reservation.getPendingAction()).isNull();
+    assertThat(reservation.getPendingAttemptToken()).isNull();
+    assertThat(reservation.getPriorStatus()).isNull();
+    assertThat(reservation.getPriorEscrowStatus()).isNull();
+  }
+
+  @Test
+  @DisplayName("legacy scheduler guard rejects USER_EIP7702 and expired deadline rows")
+  void legacySchedulerGuard() {
+    Reservation legacy = createDefaultPendingReservation();
+    Reservation userFlow =
+        legacy.beginPurchasePreparing("key", "payload", LocalDateTime.of(2026, 5, 16, 10, 0));
+    Reservation expiredLegacy =
+        legacy.toBuilder().contractDeadlineAt(LocalDateTime.of(2026, 5, 16, 9, 0)).build();
+
+    assertThat(legacy.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 8, 0))).isTrue();
+    assertThat(userFlow.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 8, 0))).isFalse();
+    assertThat(expiredLegacy.isLegacySchedulerEligibleAt(LocalDateTime.of(2026, 5, 16, 9, 1)))
+        .isFalse();
   }
 }

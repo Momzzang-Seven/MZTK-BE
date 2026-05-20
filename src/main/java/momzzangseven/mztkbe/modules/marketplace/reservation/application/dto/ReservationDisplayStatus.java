@@ -1,0 +1,25 @@
+package momzzangseven.mztkbe.modules.marketplace.reservation.application.dto;
+
+/** Public read-model reservation status returned by user/trainer APIs. */
+public enum ReservationDisplayStatus {
+  PENDING,
+  APPROVED,
+  USER_CANCELLED,
+  REJECTED,
+  TIMEOUT_CANCELLED,
+  SETTLED,
+  AUTO_SETTLED,
+  HOLD_EXPIRED,
+  PAYMENT_FAILED,
+  DEADLINE_REFUNDED,
+  MANUAL_SYNC_REQUIRED,
+  PURCHASE_PREPARING,
+  PURCHASE_PENDING,
+  CANCEL_PENDING,
+  REJECT_PENDING,
+  CONFIRM_PENDING,
+  DEADLINE_REFUND_PENDING,
+  DEADLINE_REFUND_AVAILABLE,
+  DEADLINE_RECOVERY_REQUIRED,
+  DEADLINE_SYNC_REQUIRED
+}

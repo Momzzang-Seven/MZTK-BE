@@ -11,4 +11,8 @@ public class ReservationInvalidSlotDateException extends BusinessException {
         ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
         "Reservation date/time does not match slot schedule: slotId=" + slotId);
   }
+
+  public ReservationInvalidSlotDateException(Long slotId, String message) {
+    super(ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE, message);
+  }
 }

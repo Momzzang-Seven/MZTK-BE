@@ -11,11 +11,13 @@ package momzzangseven.mztkbe.modules.web3.treasury.domain.vo;
 public enum TreasuryRole {
   REWARD,
   SPONSOR,
-  QNA_SIGNER;
+  QNA_SIGNER,
+  MARKETPLACE_SIGNER;
 
   private static final String REWARD_ALIAS = "reward-treasury";
   private static final String SPONSOR_ALIAS = "sponsor-treasury";
   private static final String QNA_SIGNER_ALIAS = "qna-signer-treasury";
+  private static final String MARKETPLACE_SIGNER_ALIAS = "marketplace-signer-treasury";
 
   /**
    * @return the canonical wallet alias bound to this role
@@ -25,6 +27,7 @@ public enum TreasuryRole {
       case REWARD -> REWARD_ALIAS;
       case SPONSOR -> SPONSOR_ALIAS;
       case QNA_SIGNER -> QNA_SIGNER_ALIAS;
+      case MARKETPLACE_SIGNER -> MARKETPLACE_SIGNER_ALIAS;
     };
   }
 }
