@@ -157,6 +157,7 @@ jobs:
               -p 8080:8080 \
               --add-host=host.docker.internal:host-gateway \
               -e SPRING_PROFILES_ACTIVE=prod \
+              -e JAVA_OPTS="-Xms512m -Xmx5g" \
               --env-file ~/apps/.env \
               ${{ secrets.DOCKER_HUB_USERNAME }}/mztk-be:latest
             
