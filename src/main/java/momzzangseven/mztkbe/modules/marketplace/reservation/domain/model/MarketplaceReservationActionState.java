@@ -5,6 +5,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionRequestSource;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowActorType;
@@ -23,6 +24,7 @@ public class MarketplaceReservationActionState {
   private final ReservationEscrowAction actionType;
   private final ReservationEscrowActorType actorType;
   private final Long actorUserId;
+  private final ReservationActionRequestSource requestSource;
   private final Integer attemptNo;
   private final String attemptToken;
   private final String executionIntentPublicId;
@@ -38,6 +40,8 @@ public class MarketplaceReservationActionState {
   private final LocalDateTime serverSignatureSignedAt;
   private final LocalDateTime serverSignatureExpiresAt;
   private final String actionReason;
+  private final String reasonCode;
+  private final String memo;
   private final Boolean retryable;
   private final String errorCode;
   private final String errorReason;

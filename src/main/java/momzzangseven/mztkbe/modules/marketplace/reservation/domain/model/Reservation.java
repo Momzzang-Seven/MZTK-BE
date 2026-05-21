@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 
 /**
  * Aggregate root representing a single class reservation.
@@ -110,6 +111,8 @@ public class Reservation {
   private final LocalDateTime serverSignatureExpiresAt;
   private final String escrowFailureCode;
   private final String escrowFailureMessage;
+  private final ReservationTerminalResolvedBy resolvedBy;
+  private final String terminalReasonCode;
 
   /**
    * Class price in KRW at the moment of booking. Denormalised snapshot so that past reservations
@@ -266,7 +269,12 @@ public class Reservation {
    */
   public Reservation timeoutCancel(String refundTxHash) {
     guardTransition(ReservationStatus.TIMEOUT_CANCELLED);
-    return toBuilder().status(ReservationStatus.TIMEOUT_CANCELLED).txHash(refundTxHash).build();
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.TIMEOUT_CANCELLED)
+                .escrowStatus(ReservationEscrowStatus.REFUNDED)
+                .txHash(refundTxHash))
+        .build();
   }
 
   /**
@@ -277,7 +285,12 @@ public class Reservation {
    */
   public Reservation autoSettle(String settleTxHash) {
     guardTransition(ReservationStatus.AUTO_SETTLED);
-    return toBuilder().status(ReservationStatus.AUTO_SETTLED).txHash(settleTxHash).build();
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.AUTO_SETTLED)
+                .escrowStatus(ReservationEscrowStatus.SETTLED)
+                .txHash(settleTxHash))
+        .build();
   }
 
   // ============================================================
@@ -396,6 +409,22 @@ public class Reservation {
               throw new MarketplaceReservationStateException(
                   ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
                   "Cannot bind execution intent from " + status);
+        };
+    return toBuilder()
+        .currentExecutionIntentPublicId(executionIntentPublicId)
+        .escrowStatus(nextEscrowStatus)
+        .build();
+  }
+
+  public Reservation bindAdminPendingExecutionIntent(String executionIntentPublicId) {
+    ReservationEscrowStatus nextEscrowStatus =
+        switch (status) {
+          case ADMIN_REFUND_PENDING -> ReservationEscrowStatus.ADMIN_REFUND_PENDING;
+          case ADMIN_SETTLE_PENDING -> ReservationEscrowStatus.ADMIN_SETTLE_PENDING;
+          default ->
+              throw new MarketplaceReservationStateException(
+                  ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+                  "Cannot bind admin execution intent from " + status);
         };
     return toBuilder()
         .currentExecutionIntentPublicId(executionIntentPublicId)
@@ -566,6 +595,24 @@ public class Reservation {
       String txHash,
       Long contractDeadlineEpochSeconds,
       LocalDateTime contractDeadlineAt) {
+    return syncChainOutcome(
+        outcomeStatus,
+        outcomeEscrowStatus,
+        txHash,
+        contractDeadlineEpochSeconds,
+        contractDeadlineAt,
+        null,
+        null);
+  }
+
+  public Reservation syncChainOutcome(
+      ReservationStatus outcomeStatus,
+      ReservationEscrowStatus outcomeEscrowStatus,
+      String txHash,
+      Long contractDeadlineEpochSeconds,
+      LocalDateTime contractDeadlineAt,
+      ReservationTerminalResolvedBy resolvedBy,
+      String terminalReasonCode) {
     if (!outcomeStatus.isTerminal() && outcomeStatus != ReservationStatus.MANUAL_SYNC_REQUIRED) {
       throw new MarketplaceReservationStateException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
@@ -577,9 +624,12 @@ public class Reservation {
         .txHash(txHash)
         .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
         .contractDeadlineAt(contractDeadlineAt)
+        .resolvedBy(resolvedBy)
+        .terminalReasonCode(terminalReasonCode)
         .currentExecutionIntentPublicId(null)
         .pendingAction(null)
         .pendingAttemptToken(null)
+        .pendingActionExpiresAt(null)
         .pendingExpectedVersion(null)
         .pendingExpectedStatus(null)
         .pendingExpectedEscrowStatus(null)
@@ -614,6 +664,73 @@ public class Reservation {
         .pendingAttemptToken(pendingAttemptToken)
         .priorStatus(ReservationStatus.DEADLINE_REFUND_AVAILABLE)
         .priorEscrowStatus(getEffectiveEscrowStatus())
+        .build();
+  }
+
+  public Reservation beginAdminRefundPending(
+      String pendingAttemptToken, LocalDateTime pendingActionExpiresAt) {
+    if (getEffectiveEscrowStatus() != ReservationEscrowStatus.LOCKED) {
+      throw new MarketplaceReservationStateException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS, "Admin refund requires locked escrow");
+    }
+    guardTransition(ReservationStatus.ADMIN_REFUND_PENDING);
+    return toBuilder()
+        .status(ReservationStatus.ADMIN_REFUND_PENDING)
+        .escrowStatus(ReservationEscrowStatus.ADMIN_REFUND_PENDING)
+        .pendingAction(ReservationEscrowAction.ADMIN_REFUND)
+        .pendingAttemptToken(pendingAttemptToken)
+        .pendingActionExpiresAt(pendingActionExpiresAt)
+        .pendingExpectedStatus(ReservationStatus.ADMIN_REFUND_PENDING)
+        .pendingExpectedEscrowStatus(ReservationEscrowStatus.ADMIN_REFUND_PENDING)
+        .priorStatus(status)
+        .priorEscrowStatus(getEffectiveEscrowStatus())
+        .build();
+  }
+
+  public Reservation beginAdminSettlePending(
+      String pendingAttemptToken, LocalDateTime pendingActionExpiresAt) {
+    if (getEffectiveEscrowStatus() != ReservationEscrowStatus.LOCKED) {
+      throw new MarketplaceReservationStateException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+          "Admin settlement requires locked escrow");
+    }
+    guardTransition(ReservationStatus.ADMIN_SETTLE_PENDING);
+    return toBuilder()
+        .status(ReservationStatus.ADMIN_SETTLE_PENDING)
+        .escrowStatus(ReservationEscrowStatus.ADMIN_SETTLE_PENDING)
+        .pendingAction(ReservationEscrowAction.ADMIN_SETTLE)
+        .pendingAttemptToken(pendingAttemptToken)
+        .pendingActionExpiresAt(pendingActionExpiresAt)
+        .pendingExpectedStatus(ReservationStatus.ADMIN_SETTLE_PENDING)
+        .pendingExpectedEscrowStatus(ReservationEscrowStatus.ADMIN_SETTLE_PENDING)
+        .priorStatus(status)
+        .priorEscrowStatus(getEffectiveEscrowStatus())
+        .build();
+  }
+
+  public Reservation markAdminRefunded(
+      String txHash, ReservationTerminalResolvedBy resolvedBy, String terminalReasonCode) {
+    guardTransition(ReservationStatus.TIMEOUT_CANCELLED);
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.TIMEOUT_CANCELLED)
+                .escrowStatus(ReservationEscrowStatus.REFUNDED)
+                .txHash(txHash)
+                .resolvedBy(resolvedBy)
+                .terminalReasonCode(terminalReasonCode))
+        .build();
+  }
+
+  public Reservation markAdminSettled(
+      String txHash, ReservationTerminalResolvedBy resolvedBy, String terminalReasonCode) {
+    guardTransition(ReservationStatus.AUTO_SETTLED);
+    return clearPendingExecutionState(
+            toBuilder()
+                .status(ReservationStatus.AUTO_SETTLED)
+                .escrowStatus(ReservationEscrowStatus.SETTLED)
+                .txHash(txHash)
+                .resolvedBy(resolvedBy)
+                .terminalReasonCode(terminalReasonCode))
         .build();
   }
 
@@ -702,6 +819,7 @@ public class Reservation {
             .currentExecutionIntentPublicId(null)
             .pendingAction(null)
             .pendingAttemptToken(null)
+            .pendingActionExpiresAt(null)
             .pendingExpectedVersion(null)
             .pendingExpectedStatus(null)
             .pendingExpectedEscrowStatus(null)
@@ -748,6 +866,7 @@ public class Reservation {
         .currentExecutionIntentPublicId(null)
         .pendingAction(null)
         .pendingAttemptToken(null)
+        .pendingActionExpiresAt(null)
         .pendingExpectedVersion(null)
         .pendingExpectedStatus(null)
         .pendingExpectedEscrowStatus(null)

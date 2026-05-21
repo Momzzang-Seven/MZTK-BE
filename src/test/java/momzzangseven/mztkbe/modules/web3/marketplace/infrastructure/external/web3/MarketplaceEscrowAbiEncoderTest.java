@@ -96,6 +96,34 @@ class MarketplaceEscrowAbiEncoderTest {
         .hasMessageContaining("signature");
   }
 
+  @Test
+  @DisplayName("user-scope encoder는 admin action type을 거부한다")
+  void encodeRejectsAdminActionTypes() {
+    assertThatThrownBy(
+            () ->
+                sut.encode(
+                    MarketplaceExecutionActionType.MARKETPLACE_ADMIN_REFUND,
+                    ORDER_KEY,
+                    TOKEN,
+                    TRAINER,
+                    BigInteger.valueOf(50_000),
+                    1_000L,
+                    SIGNATURE))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("admin marketplace action");
+  }
+
+  @Test
+  @DisplayName("adminRefund/adminSettle calldata는 orderKey만 ABI 인자로 사용한다")
+  void encodeAdminCalldataUsesOrderKeyOnly() {
+    assertThat(sut.encodeAdminRefund(ORDER_KEY))
+        .startsWith(selector("adminRefund(bytes32)"))
+        .contains(ORDER_KEY.substring(2));
+    assertThat(sut.encodeAdminSettle(ORDER_KEY))
+        .startsWith(selector("adminSettle(bytes32)"))
+        .contains(ORDER_KEY.substring(2));
+  }
+
   private static String selector(String signature) {
     return Hash.sha3String(signature).substring(0, 10);
   }

@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reserva
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
@@ -37,6 +38,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminExecutionProvenanceActor;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceTokenMovement;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceActorType;
@@ -87,6 +89,19 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     hookService.setTransactionPort(ReservationTestTransactionPort.direct());
     sut = new MarketplaceEscrowExecutionActionHandlerAdapter(objectMapper, hookService);
     sut.setLoadExecutionTransactionPort(loadExecutionTransactionPort);
+    sut.setLoadReservationEscrowOrderPort(loadReservationEscrowOrderPort);
+  }
+
+  @Test
+  @DisplayName("failed-onchain hook은 marketplace 상태를 직접 변경하지 않는다")
+  void afterExecutionFailedOnchain_isNoop() throws Exception {
+    ExecutionIntent intent =
+        intent("intent-admin-refund", ExecutionActionType.MARKETPLACE_ADMIN_REFUND, adminPayload());
+
+    sut.afterExecutionFailedOnchain(intent, null, "REVERTED");
+
+    then(loadReservationPort).shouldHaveNoInteractions();
+    then(saveReservationPort).shouldHaveNoInteractions();
   }
 
   @Test
@@ -293,7 +308,10 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   }
 
   @ParameterizedTest
-  @EnumSource(MarketplaceExecutionActionType.class)
+  @EnumSource(
+      value = MarketplaceExecutionActionType.class,
+      names = {"MARKETPLACE_ADMIN_REFUND", "MARKETPLACE_ADMIN_SETTLE"},
+      mode = EnumSource.Mode.EXCLUDE)
   @DisplayName("marketplace runtime action plan call uses the exact payload call target and data")
   void buildActionPlan_usesPayloadCallTargetAndData(MarketplaceExecutionActionType actionType)
       throws Exception {
@@ -307,6 +325,44 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     assertThat(actionPlan.calls())
         .containsExactly(
             new ExecutionDraftCall(payload.callTarget(), BigInteger.ZERO, payload.callData()));
+  }
+
+  @Test
+  @DisplayName("admin marketplace actions are supported by the shared execution handler")
+  void supports_adminMarketplaceActions() {
+    assertThat(sut.supports(ExecutionActionType.MARKETPLACE_ADMIN_REFUND)).isTrue();
+    assertThat(sut.supports(ExecutionActionType.MARKETPLACE_ADMIN_SETTLE)).isTrue();
+  }
+
+  @Test
+  @DisplayName(
+      "confirmed admin refund maps v2 payload provenance and reason into terminal local state")
+  void afterExecutionConfirmed_adminRefund_mapsProvenanceAndReason() throws Exception {
+    String txHash = "0x" + "4".repeat(64);
+    Reservation reservation = adminRefundPending();
+    ExecutionIntent intent =
+        intent("intent-admin-refund", ExecutionActionType.MARKETPLACE_ADMIN_REFUND, adminPayload())
+            .toBuilder()
+            .submittedTxId(58L)
+            .build();
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-admin-refund"))
+        .willReturn(Optional.of(reservation));
+    given(loadExecutionTransactionPort.findById(58L))
+        .willReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    58L, ExecutionTransactionStatus.SUCCEEDED, txHash)));
+
+    sut.afterExecutionConfirmed(intent, null);
+
+    ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(captor.capture());
+    Reservation updated = captor.getValue();
+    assertThat(updated.getStatus()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
+    assertThat(updated.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertThat(updated.getResolvedBy()).isEqualTo(ReservationTerminalResolvedBy.ADMIN);
+    assertThat(updated.getTerminalReasonCode()).isEqualTo("TRAINER_TIMEOUT");
+    assertThat(updated.getTxHash()).isEqualTo(txHash);
   }
 
   @Test
@@ -520,6 +576,55 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     then(saveReservationCreateIdempotencyPort).shouldHaveNoInteractions();
   }
 
+  @Test
+  @DisplayName("admin termination evidence includes tx summary and current chain order state")
+  void buildTerminationEvidence_adminRefund_includesTransactionAndChainState() throws Exception {
+    String txHash = "0x" + "5".repeat(64);
+    ExecutionIntent intent =
+        intent("intent-admin-refund", ExecutionActionType.MARKETPLACE_ADMIN_REFUND, adminPayload())
+            .toBuilder()
+            .submittedTxId(60L)
+            .build();
+    given(loadExecutionTransactionPort.findById(60L))
+        .willReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    60L, ExecutionTransactionStatus.FAILED_ONCHAIN, txHash)));
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, 1_900_000_000L));
+
+    var evidence =
+        sut.buildTerminationEvidence(
+            intent, null, ExecutionIntentStatus.FAILED_ONCHAIN, "receipt status 0");
+
+    assertThat(evidence.txHash()).isEqualTo(txHash);
+    assertThat(evidence.hasTxHash()).isTrue();
+    assertThat(evidence.executionTransactionStatus()).isEqualTo("FAILED_ONCHAIN");
+    assertThat(evidence.receiptStatus()).isEqualTo("REVERTED");
+    assertThat(evidence.chainOrderState()).isEqualTo("CREATED");
+    assertThat(evidence.evidenceErrorCode()).isNull();
+  }
+
+  @Test
+  @DisplayName("admin termination evidence marks chain lookup failures as unknown")
+  void buildTerminationEvidence_adminRefund_chainLookupFailureMarksUnknown() throws Exception {
+    ExecutionIntent intent =
+        intent("intent-admin-refund", ExecutionActionType.MARKETPLACE_ADMIN_REFUND, adminPayload());
+    willThrow(new IllegalStateException("rpc unavailable"))
+        .given(loadReservationEscrowOrderPort)
+        .getOrder(ORDER_KEY);
+
+    var evidence =
+        sut.buildTerminationEvidence(
+            intent, null, ExecutionIntentStatus.FAILED_ONCHAIN, "receipt status unknown");
+
+    assertThat(evidence.txHash()).isNull();
+    assertThat(evidence.hasTxHash()).isFalse();
+    assertThat(evidence.receiptStatus()).isEqualTo("MISSING");
+    assertThat(evidence.chainOrderState()).isEqualTo("UNKNOWN");
+    assertThat(evidence.evidenceErrorCode()).isEqualTo("CHAIN_ORDER_LOOKUP_FAILED");
+  }
+
   private Reservation purchasePreparing(String pendingAttemptToken) {
     return Reservation.createPending(
             7L,
@@ -634,6 +739,55 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
         "0x" + "a".repeat(130));
   }
 
+  private MarketplaceEscrowExecutionPayload adminPayload() {
+    return new MarketplaceEscrowExecutionPayload(
+        MarketplaceExecutionActionType.MARKETPLACE_ADMIN_REFUND,
+        null,
+        123L,
+        "123",
+        ORDER_ID,
+        ORDER_KEY,
+        null,
+        7L,
+        9L,
+        7L,
+        9L,
+        0L,
+        "ADMIN_REFUND_PENDING",
+        "ADMIN_REFUND_PENDING",
+        "0x1111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222",
+        "0x3333333333333333333333333333333333333333",
+        BigInteger.valueOf(50_000),
+        null,
+        LocalDateTime.of(2026, 5, 20, 11, 0),
+        null,
+        null,
+        "admin-refund-token",
+        "TIMEOUT_CANCELLED",
+        "0x4444444444444444444444444444444444444444",
+        "0x1234",
+        new MarketplaceTokenMovement(
+            "0x3333333333333333333333333333333333333333",
+            BigInteger.valueOf(50_000),
+            "ESCROW",
+            "0x4444444444444444444444444444444444444444",
+            "BUYER",
+            "0x1111111111111111111111111111111111111111"),
+        null,
+        null,
+        2,
+        10L,
+        20L,
+        "marketplace-admin:MARKETPLACE_ADMIN_REFUND:123:MANUAL_ADMIN:TRAINER_TIMEOUT",
+        MarketplaceAdminExecutionProvenanceActor.ADMIN,
+        "MANUAL_ADMIN",
+        77L,
+        null,
+        "TRAINER_TIMEOUT",
+        "operator memo");
+  }
+
   private ReservationEscrowOrderView order(int state, long deadlineEpochSeconds) {
     return new ReservationEscrowOrderView(
         ORDER_KEY,
@@ -680,6 +834,12 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
         .markDeadlineRefundAvailable(1_800_000_000L, LocalDateTime.of(2027, 1, 15, 8, 0))
         .beginDeadlineRefundPending("refund-token")
         .bindPendingExecutionIntent("intent-refund");
+  }
+
+  private Reservation adminRefundPending() {
+    return baseLockedReservation()
+        .beginAdminRefundPending("admin-refund-token", LocalDateTime.of(2026, 5, 16, 1, 0))
+        .bindAdminPendingExecutionIntent("intent-admin-refund");
   }
 
   private Reservation baseLockedReservation() {

@@ -4,6 +4,8 @@ import jakarta.annotation.PostConstruct;
 import java.math.BigInteger;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,24 +24,30 @@ import org.springframework.stereotype.Component;
 @Component
 public class EscrowTransactionAdapter implements SubmitEscrowTransactionPort {
 
-  //  @Value("${spring.profiles.active:}")
-  //  private String activeProfiles;
-  //
-  //  @PostConstruct
-  //  void rejectIfProd() {
-  //    if (activeProfiles.contains("prod")) {
-  //      throw new IllegalStateException(
-  //          "[STUB] EscrowTransactionAdapter is a stub and must not run in prod. "
-  //              + "Replace with a real Web3 adapter before deploying to production.");
-  //    }
-  //    log.warn(
-  //        "[STUB] EscrowTransactionAdapter is active (profiles={}). "
-  //            + "All escrow calls return a fake txHash.",
-  //        activeProfiles);
-  //  }
-
   private static final String STUB_TX_HASH =
       "0x0000000000000000000000000000000000000000000000000000000000000STUB";
+
+  private final Environment environment;
+
+  public EscrowTransactionAdapter(Environment environment) {
+    this.environment = environment;
+  }
+
+  @PostConstruct
+  void rejectUnsafeRuntime() {
+    boolean prodProfile = environment.acceptsProfiles(Profiles.of("prod"));
+    boolean marketplaceAdminEnabled =
+        environment.getProperty("web3.marketplace.admin.enabled", Boolean.class, false);
+    if (prodProfile || marketplaceAdminEnabled) {
+      throw new IllegalStateException(
+          "[STUB] EscrowTransactionAdapter must not run when prod profile or marketplace admin "
+              + "execution is enabled. Replace the legacy stub before enabling marketplace admin.");
+    }
+    log.warn(
+        "[STUB] EscrowTransactionAdapter is active (profiles={}). "
+            + "All legacy escrow calls return a fake txHash.",
+        String.join(",", environment.getActiveProfiles()));
+  }
 
   @Override
   public String submitPurchase(

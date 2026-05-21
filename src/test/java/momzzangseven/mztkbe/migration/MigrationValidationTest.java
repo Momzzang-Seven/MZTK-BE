@@ -161,11 +161,16 @@ class MigrationValidationTest {
     assertThat(columnExists("class_reservations", "current_execution_intent_public_id")).isTrue();
     assertThat(columnExists("class_reservations", "contract_deadline_epoch_seconds")).isTrue();
     assertThat(columnExists("class_reservations", "contract_deadline_at")).isTrue();
+    assertThat(columnExists("class_reservations", "resolved_by")).isTrue();
+    assertThat(columnExists("class_reservations", "terminal_reason_code")).isTrue();
     assertThat(columnExists("marketplace_reservation_escrows", "reservation_id")).isTrue();
     assertThat(columnExists("marketplace_reservation_escrows", "price_base_units")).isTrue();
     assertThat(columnExists("marketplace_reservation_action_states", "attempt_token")).isTrue();
     assertThat(columnExists("marketplace_reservation_action_states", "execution_intent_public_id"))
         .isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "request_source")).isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "reason_code")).isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "memo")).isTrue();
     assertThat(columnExists("reservation_create_idempotency_keys", "escrow_id")).isTrue();
     assertThat(columnExists("reservation_create_idempotency_keys", "action_state_id")).isTrue();
     assertThat(
@@ -184,6 +189,8 @@ class MigrationValidationTest {
         .contains("HOLDING")
         .contains("PURCHASE_PREPARING")
         .contains("PURCHASE_PENDING")
+        .contains("ADMIN_REFUND_PENDING")
+        .contains("ADMIN_SETTLE_PENDING")
         .contains("DEADLINE_REFUND_AVAILABLE")
         .contains("DEADLINE_REFUNDED");
 
@@ -197,6 +204,8 @@ class MigrationValidationTest {
         .contains("CANCEL_PENDING")
         .contains("REJECT_PENDING")
         .contains("CONFIRM_PENDING")
+        .contains("ADMIN_REFUND_PENDING")
+        .contains("ADMIN_SETTLE_PENDING")
         .contains("DEADLINE_REFUND_AVAILABLE")
         .contains("DEADLINE_REFUND_PENDING")
         .contains("DEADLINE_REFUNDED");
@@ -210,6 +219,30 @@ class MigrationValidationTest {
         .contains("INTENT_BOUND")
         .contains("PREPARATION_FAILED")
         .contains("STALE");
+
+    String actionStateActionTypeConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_action_type");
+    assertThat(actionStateActionTypeConstraint).contains("ADMIN_REFUND").contains("ADMIN_SETTLE");
+
+    String actionStateRequestSourceConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_request_source");
+    assertThat(actionStateRequestSourceConstraint)
+        .contains("USER")
+        .contains("MANUAL_ADMIN")
+        .contains("SCHEDULER");
+
+    String actionStateReasonCodeConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_reason_code_required");
+    assertThat(actionStateReasonCodeConstraint)
+        .contains("TRAINER_TIMEOUT")
+        .contains("BUYER_CONFIRMATION_TIMEOUT")
+        .contains("ADMIN_MANUAL_SETTLE");
 
     String actionStateBoundIntentConstraint =
         checkClause(

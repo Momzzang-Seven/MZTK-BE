@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionRequestSource;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowActorType;
@@ -98,6 +99,14 @@ public class MarketplaceReservationActionStatePersistenceAdapter
   }
 
   @Override
+  public List<MarketplaceReservationActionState> findExpiredAdminPreparingAttemptsWithLock(
+      LocalDateTime now, int batchSize) {
+    return repository.findExpiredAdminPreparingAttemptsWithLock(now, batchSize).stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
   public MarketplaceReservationActionState save(MarketplaceReservationActionState actionState) {
     return toDomain(repository.save(toEntity(actionState)));
   }
@@ -132,6 +141,7 @@ public class MarketplaceReservationActionStatePersistenceAdapter
         .actionType(ReservationEscrowAction.valueOf(entity.getActionType()))
         .actorType(ReservationEscrowActorType.valueOf(entity.getActorType()))
         .actorUserId(entity.getActorUserId())
+        .requestSource(toRequestSource(entity.getRequestSource()))
         .attemptNo(entity.getAttemptNo())
         .attemptToken(entity.getAttemptToken())
         .executionIntentPublicId(entity.getExecutionIntentPublicId())
@@ -149,6 +159,8 @@ public class MarketplaceReservationActionStatePersistenceAdapter
         .serverSignatureSignedAt(entity.getServerSignatureSignedAt())
         .serverSignatureExpiresAt(entity.getServerSignatureExpiresAt())
         .actionReason(entity.getActionReason())
+        .reasonCode(entity.getReasonCode())
+        .memo(entity.getMemo())
         .retryable(entity.getRetryable())
         .errorCode(entity.getErrorCode())
         .errorReason(entity.getErrorReason())
@@ -166,6 +178,8 @@ public class MarketplaceReservationActionStatePersistenceAdapter
         .actionType(domain.getActionType().name())
         .actorType(domain.getActorType().name())
         .actorUserId(domain.getActorUserId())
+        .requestSource(
+            toNameOrDefault(domain.getRequestSource(), ReservationActionRequestSource.USER))
         .attemptNo(domain.getAttemptNo())
         .attemptToken(domain.getAttemptToken())
         .executionIntentPublicId(domain.getExecutionIntentPublicId())
@@ -181,6 +195,8 @@ public class MarketplaceReservationActionStatePersistenceAdapter
         .serverSignatureSignedAt(domain.getServerSignatureSignedAt())
         .serverSignatureExpiresAt(domain.getServerSignatureExpiresAt())
         .actionReason(domain.getActionReason())
+        .reasonCode(domain.getReasonCode())
+        .memo(domain.getMemo())
         .retryable(domain.getRetryable())
         .errorCode(domain.getErrorCode())
         .errorReason(domain.getErrorReason())
@@ -193,7 +209,17 @@ public class MarketplaceReservationActionStatePersistenceAdapter
     return value == null ? null : Enum.valueOf(enumType, value);
   }
 
+  private static ReservationActionRequestSource toRequestSource(String value) {
+    return value == null
+        ? ReservationActionRequestSource.USER
+        : ReservationActionRequestSource.valueOf(value);
+  }
+
   private static String toName(Enum<?> value) {
     return value == null ? null : value.name();
+  }
+
+  private static String toNameOrDefault(Enum<?> value, Enum<?> defaultValue) {
+    return value == null ? defaultValue.name() : value.name();
   }
 }

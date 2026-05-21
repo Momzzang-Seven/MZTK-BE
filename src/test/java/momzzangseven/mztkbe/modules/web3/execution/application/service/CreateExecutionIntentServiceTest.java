@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentIdempotencyMismatchPolicy;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -374,6 +375,27 @@ class CreateExecutionIntentServiceTest {
   }
 
   @Test
+  void execute_rejectsPayloadMismatchWithoutCancelingExisting_whenRejectPolicyIsUsed() {
+    ExecutionIntent existing =
+        withId(existingTransferIntent("intent-conflict", FIXED_NOW.plusSeconds(60)), 77L);
+
+    when(executionIntentPersistencePort.findLatestByRootIdempotencyKeyForUpdate("root-transfer-1"))
+        .thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new CreateExecutionIntentCommand(
+                        transferDraft(true),
+                        ExecutionIntentIdempotencyMismatchPolicy.REJECT_ON_MISMATCH)))
+        .isInstanceOf(Web3TransferException.class);
+
+    verify(executionIntentPersistencePort, never()).update(any());
+    verify(publishExecutionIntentTerminatedPort, never()).publish(any());
+    verify(executionIntentPersistencePort, never()).create(any());
+  }
+
+  @Test
   void execute_createsDirectEip1559Intent_forInternalAdminSettleDraft() {
     when(executionIntentPersistencePort.create(any()))
         .thenAnswer(invocation -> withId(invocation.getArgument(0), 91L));
@@ -397,6 +419,40 @@ class CreateExecutionIntentServiceTest {
 
     CreateExecutionIntentResult result =
         service.execute(new CreateExecutionIntentCommand(adminRefundDraft()));
+
+    assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
+    assertThat(result.signCount()).isEqualTo(1);
+    assertThat(result.signRequest().transaction()).isNotNull();
+    verify(loadSponsorPolicyPort, never()).loadSponsorPolicy();
+    verify(sponsorDailyUsagePersistencePort, never()).find(any(), any());
+    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
+    verify(validateExecutionDraftPolicyPort, never()).validate(any(), any());
+  }
+
+  @Test
+  void execute_createsDirectEip1559Intent_forMarketplaceAdminSettleDraft() {
+    when(executionIntentPersistencePort.create(any()))
+        .thenAnswer(invocation -> withId(invocation.getArgument(0), 93L));
+
+    CreateExecutionIntentResult result =
+        service.execute(new CreateExecutionIntentCommand(marketplaceAdminSettleDraft()));
+
+    assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
+    assertThat(result.signCount()).isEqualTo(1);
+    assertThat(result.signRequest().transaction()).isNotNull();
+    verify(loadSponsorPolicyPort, never()).loadSponsorPolicy();
+    verify(sponsorDailyUsagePersistencePort, never()).find(any(), any());
+    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
+    verify(validateExecutionDraftPolicyPort, never()).validate(any(), any());
+  }
+
+  @Test
+  void execute_createsDirectEip1559Intent_forMarketplaceAdminRefundDraft() {
+    when(executionIntentPersistencePort.create(any()))
+        .thenAnswer(invocation -> withId(invocation.getArgument(0), 94L));
+
+    CreateExecutionIntentResult result =
+        service.execute(new CreateExecutionIntentCommand(marketplaceAdminRefundDraft()));
 
     assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
     assertThat(result.signCount()).isEqualTo(1);
@@ -553,6 +609,49 @@ class CreateExecutionIntentServiceTest {
         null,
         unsignedTxSnapshot(),
         "0x" + "1".repeat(64),
+        FIXED_NOW.plusSeconds(120));
+  }
+
+  private ExecutionDraft marketplaceAdminSettleDraft() {
+    return marketplaceAdminDraft(
+        ExecutionActionTypeCode.MARKETPLACE_ADMIN_SETTLE,
+        "root-marketplace-admin-settle-101",
+        "0x" + "2".repeat(64),
+        "{\"action\":\"MARKETPLACE_ADMIN_SETTLE\"}");
+  }
+
+  private ExecutionDraft marketplaceAdminRefundDraft() {
+    return marketplaceAdminDraft(
+        ExecutionActionTypeCode.MARKETPLACE_ADMIN_REFUND,
+        "root-marketplace-admin-refund-101",
+        "0x" + "3".repeat(64),
+        "{\"action\":\"MARKETPLACE_ADMIN_REFUND\"}");
+  }
+
+  private ExecutionDraft marketplaceAdminDraft(
+      ExecutionActionTypeCode actionType,
+      String rootIdempotencyKey,
+      String payloadHash,
+      String payloadSnapshotJson) {
+    return new ExecutionDraft(
+        ExecutionResourceTypeCode.ORDER,
+        "101",
+        ExecutionResourceStatusCode.PENDING_EXECUTION,
+        actionType,
+        7L,
+        8L,
+        rootIdempotencyKey,
+        payloadHash,
+        payloadSnapshotJson,
+        List.of(
+            new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x" + "2".repeat(8))),
+        false,
+        null,
+        null,
+        null,
+        null,
+        unsignedTxSnapshot(),
+        "0x" + "4".repeat(64),
         FIXED_NOW.plusSeconds(120));
   }
 

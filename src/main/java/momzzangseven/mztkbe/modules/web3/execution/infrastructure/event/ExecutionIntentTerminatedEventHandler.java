@@ -7,8 +7,6 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunExecut
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.ConditionalOnExecutionModeEnabled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -21,7 +19,6 @@ public class ExecutionIntentTerminatedEventHandler {
   private final RunExecutionTerminationHookUseCase runExecutionTerminationHookUseCase;
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void handle(ExecutionIntentTerminatedEvent event) {
     try {
       runExecutionTerminationHookUseCase.execute(RunExecutionTerminationHookCommand.from(event));

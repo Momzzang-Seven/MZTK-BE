@@ -29,12 +29,20 @@ class GetInternalExecutionIssuerPolicyServiceTest {
     when(loadInternalExecutionIssuerPolicyPort.loadPolicy())
         .thenReturn(
             new LoadInternalExecutionIssuerPolicyPort.InternalExecutionIssuerPolicy(
-                true, 20, List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+                true,
+                20,
+                List.of(
+                    ExecutionActionType.QNA_ADMIN_SETTLE,
+                    ExecutionActionType.MARKETPLACE_ADMIN_SETTLE,
+                    ExecutionActionType.MARKETPLACE_ADMIN_REFUND)));
 
     var result = service.getPolicy();
 
     assertThat(result.enabled()).isTrue();
     assertThat(result.qnaAdminSettleEnabled()).isTrue();
+    assertThat(result.qnaAdminRefundEnabled()).isFalse();
+    assertThat(result.marketplaceAdminSettleEnabled()).isTrue();
+    assertThat(result.marketplaceAdminRefundEnabled()).isTrue();
   }
 
   @Test
@@ -48,5 +56,8 @@ class GetInternalExecutionIssuerPolicyServiceTest {
 
     assertThat(result.enabled()).isTrue();
     assertThat(result.qnaAdminSettleEnabled()).isFalse();
+    assertThat(result.qnaAdminRefundEnabled()).isFalse();
+    assertThat(result.marketplaceAdminSettleEnabled()).isFalse();
+    assertThat(result.marketplaceAdminRefundEnabled()).isFalse();
   }
 }

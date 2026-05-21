@@ -43,6 +43,9 @@ public record MarketplaceEscrowExecutionRequest(
     if (actionType == null) {
       throw new Web3InvalidInputException("actionType is required");
     }
+    if (!actionType.isUserAction()) {
+      throw new Web3InvalidInputException("user marketplace request supports only user actions");
+    }
     if (reservationId == null || reservationId <= 0) {
       throw new Web3InvalidInputException("reservationId must be positive");
     }

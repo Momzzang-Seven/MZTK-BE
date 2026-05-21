@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationJpaRepository;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationSlotDateLockJpaRepository;
@@ -295,6 +296,8 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
         .serverSignatureExpiresAt(domain.getServerSignatureExpiresAt())
         .escrowFailureCode(domain.getEscrowFailureCode())
         .escrowFailureMessage(domain.getEscrowFailureMessage())
+        .resolvedBy(toName(domain.getResolvedBy()))
+        .terminalReasonCode(domain.getTerminalReasonCode())
         .bookedPriceAmount(domain.getBookedPriceAmount())
         .bookedClassTitle(domain.getBookedClassTitle())
         .version(domain.getVersion())
@@ -343,6 +346,8 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
         .serverSignatureExpiresAt(entity.getServerSignatureExpiresAt())
         .escrowFailureCode(entity.getEscrowFailureCode())
         .escrowFailureMessage(entity.getEscrowFailureMessage())
+        .resolvedBy(toEnum(entity.getResolvedBy(), ReservationTerminalResolvedBy.class))
+        .terminalReasonCode(entity.getTerminalReasonCode())
         .bookedPriceAmount(entity.getBookedPriceAmount())
         .bookedClassTitle(entity.getBookedClassTitle())
         .version(entity.getVersion())

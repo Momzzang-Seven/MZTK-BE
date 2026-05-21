@@ -72,6 +72,37 @@ public interface MarketplaceReservationActionStateJpaRepository
       Pageable pageable);
 
   @Query(
+      value =
+          """
+          SELECT *
+          FROM marketplace_reservation_action_states a
+          WHERE a.status = 'PREPARING'
+            AND a.execution_intent_public_id IS NULL
+            AND a.action_type IN ('ADMIN_REFUND', 'ADMIN_SETTLE')
+            AND a.preparation_expires_at IS NOT NULL
+            AND a.preparation_expires_at <= :now
+          ORDER BY a.id ASC
+          LIMIT :batchSize
+          FOR UPDATE SKIP LOCKED
+          """,
+      nativeQuery = true)
+  List<MarketplaceReservationActionStateEntity> findExpiredAdminPreparingAttemptsWithLock(
+      @Param("now") LocalDateTime now, @Param("batchSize") int batchSize);
+
+  @Query(
+      """
+      SELECT a FROM MarketplaceReservationActionStateEntity a
+      WHERE a.status = 'PREPARING'
+        AND a.executionIntentPublicId IS NULL
+        AND a.actionType IN ('ADMIN_REFUND', 'ADMIN_SETTLE')
+        AND a.preparationExpiresAt IS NOT NULL
+        AND a.preparationExpiresAt <= :now
+      ORDER BY a.id ASC
+      """)
+  List<MarketplaceReservationActionStateEntity> findExpiredAdminPreparingAttemptsForInspection(
+      @Param("now") LocalDateTime now, Pageable pageable);
+
+  @Query(
       "SELECT a.executionIntentPublicId FROM MarketplaceReservationActionStateEntity a "
           + "WHERE a.executionIntentPublicId IN :publicIds "
           + "AND a.status IN :statuses")

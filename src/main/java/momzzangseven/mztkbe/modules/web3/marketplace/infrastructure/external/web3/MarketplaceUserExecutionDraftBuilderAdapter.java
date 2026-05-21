@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceExecutionStateException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
@@ -55,6 +56,9 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
 
   @Override
   public MarketplaceExecutionDraft build(MarketplaceEscrowExecutionRequest request) {
+    if (!request.actionType().isUserAction()) {
+      throw new Web3InvalidInputException("user draft builder supports only user actions");
+    }
     String callTarget =
         EvmAddress.of(marketplaceEscrowProperties.getMarketplaceContractAddress()).value();
     DraftContext context = resolveDraftContext(request);
@@ -206,6 +210,8 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
               authorityAddress, request.orderKey());
       case MARKETPLACE_CLASS_EXPIRED_REFUND ->
           throw new IllegalStateException("deadline refund does not use a server signature");
+      case MARKETPLACE_ADMIN_REFUND, MARKETPLACE_ADMIN_SETTLE ->
+          throw new Web3InvalidInputException("user draft builder supports only user actions");
     };
   }
 
@@ -238,6 +244,8 @@ public class MarketplaceUserExecutionDraftBuilderAdapter
               escrowAddress,
               "TRAINER",
               trainer);
+      case MARKETPLACE_ADMIN_REFUND, MARKETPLACE_ADMIN_SETTLE ->
+          throw new Web3InvalidInputException("user draft builder supports only user actions");
     };
   }
 

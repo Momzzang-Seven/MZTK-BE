@@ -72,6 +72,27 @@ class MarketplaceExecutionDraftTest {
   }
 
   @Test
+  void requestRejectsAdminActionTypes() {
+    assertThatThrownBy(
+            () ->
+                new MarketplaceEscrowExecutionRequest(
+                    MarketplaceExecutionActionType.MARKETPLACE_ADMIN_REFUND,
+                    123L,
+                    "123",
+                    ORDER_ID,
+                    7L,
+                    7L,
+                    9L,
+                    3L,
+                    "0xbuyer",
+                    "0xtrainer",
+                    50000,
+                    expiresAt()))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("user actions");
+  }
+
+  @Test
   void draftPreservesResourceIdAndOrderIdSeparately() {
     MarketplaceExecutionDraft draft = eip7702Draft();
 

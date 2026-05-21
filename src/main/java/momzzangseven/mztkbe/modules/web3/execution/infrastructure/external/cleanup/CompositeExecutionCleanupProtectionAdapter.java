@@ -48,7 +48,7 @@ public class CompositeExecutionCleanupProtectionAdapter
         views.stream().filter(this::isQnaIntent).map(ExecutionIntentCleanupView::id).toList();
     List<Long> marketplaceIds =
         views.stream()
-            .filter(this::isMarketplaceUserIntent)
+            .filter(this::isMarketplaceIntent)
             .map(ExecutionIntentCleanupView::id)
             .toList();
     Set<Long> routedIds = new HashSet<>();
@@ -102,11 +102,13 @@ public class CompositeExecutionCleanupProtectionAdapter
         intent.getPayloadSnapshotJson());
   }
 
-  private boolean isMarketplaceUserIntent(ExecutionIntentCleanupView view) {
+  private boolean isMarketplaceIntent(ExecutionIntentCleanupView view) {
     ExecutionActionType actionType = view.actionType();
     return actionType == ExecutionActionType.MARKETPLACE_CLASS_PURCHASE
         || actionType == ExecutionActionType.MARKETPLACE_CLASS_CANCEL
         || actionType == ExecutionActionType.MARKETPLACE_CLASS_CONFIRM
-        || actionType == ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND;
+        || actionType == ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND
+        || actionType == ExecutionActionType.MARKETPLACE_ADMIN_REFUND
+        || actionType == ExecutionActionType.MARKETPLACE_ADMIN_SETTLE;
   }
 }

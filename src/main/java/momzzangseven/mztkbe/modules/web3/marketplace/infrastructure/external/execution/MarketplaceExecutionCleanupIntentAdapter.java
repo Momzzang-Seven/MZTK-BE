@@ -20,19 +20,21 @@ import org.springframework.stereotype.Component;
 public class MarketplaceExecutionCleanupIntentAdapter
     implements LoadMarketplaceExecutionCleanupIntentPort {
 
-  private static final Set<String> MARKETPLACE_USER_ACTIONS =
+  private static final Set<String> MARKETPLACE_PROTECTED_ACTIONS =
       Set.of(
           "MARKETPLACE_CLASS_PURCHASE",
           "MARKETPLACE_CLASS_CANCEL",
           "MARKETPLACE_CLASS_CONFIRM",
-          "MARKETPLACE_CLASS_EXPIRED_REFUND");
+          "MARKETPLACE_CLASS_EXPIRED_REFUND",
+          "MARKETPLACE_ADMIN_REFUND",
+          "MARKETPLACE_ADMIN_SETTLE");
 
   private final GetExecutionIntentCleanupViewUseCase getExecutionIntentCleanupViewUseCase;
 
   @Override
   public List<MarketplaceExecutionCleanupIntent> loadByIds(List<Long> intentIds) {
     return getExecutionIntentCleanupViewUseCase.getCleanupViewsByIds(intentIds).stream()
-        .filter(this::isMarketplaceUserOrder)
+        .filter(this::isMarketplaceOrder)
         .map(
             view ->
                 new MarketplaceExecutionCleanupIntent(
@@ -45,8 +47,8 @@ public class MarketplaceExecutionCleanupIntentAdapter
         .toList();
   }
 
-  private boolean isMarketplaceUserOrder(ExecutionIntentCleanupView view) {
+  private boolean isMarketplaceOrder(ExecutionIntentCleanupView view) {
     return "ORDER".equals(view.resourceType().name())
-        && MARKETPLACE_USER_ACTIONS.contains(view.actionType().name());
+        && MARKETPLACE_PROTECTED_ACTIONS.contains(view.actionType().name());
   }
 }

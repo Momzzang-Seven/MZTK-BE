@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 
 /**
  * Result containing the full detail of a single reservation.
@@ -70,5 +71,7 @@ public record GetReservationResult(
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey,
+    ReservationTerminalResolvedBy resolvedBy,
+    String terminalReasonCode,
     ReservationViewerActions viewerActions,
     ReservationExecutionResumeView web3Execution) {}

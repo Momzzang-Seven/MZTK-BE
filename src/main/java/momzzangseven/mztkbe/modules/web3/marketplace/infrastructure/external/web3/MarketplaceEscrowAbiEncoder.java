@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.Collections;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceAdminEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
@@ -17,7 +18,8 @@ import org.web3j.abi.datatypes.generated.Bytes32;
 import org.web3j.abi.datatypes.generated.Uint256;
 
 @Component
-public class MarketplaceEscrowAbiEncoder implements BuildMarketplaceEscrowCallDataPort {
+public class MarketplaceEscrowAbiEncoder
+    implements BuildMarketplaceEscrowCallDataPort, BuildMarketplaceAdminEscrowCallDataPort {
 
   @Override
   public String encode(
@@ -30,6 +32,9 @@ public class MarketplaceEscrowAbiEncoder implements BuildMarketplaceEscrowCallDa
       byte[] signatureBytes) {
     if (actionType == null) {
       throw new Web3InvalidInputException("actionType is required");
+    }
+    if (!actionType.isUserAction()) {
+      throw new Web3InvalidInputException("admin marketplace action is not supported here");
     }
     Function function =
         switch (actionType) {
@@ -57,8 +62,22 @@ public class MarketplaceEscrowAbiEncoder implements BuildMarketplaceEscrowCallDa
           case MARKETPLACE_CLASS_EXPIRED_REFUND ->
               new Function(
                   "claimExpiredRefund", List.of(bytes32(orderKey)), Collections.emptyList());
+          case MARKETPLACE_ADMIN_REFUND, MARKETPLACE_ADMIN_SETTLE ->
+              throw new Web3InvalidInputException("admin marketplace action is not supported here");
         };
     return FunctionEncoder.encode(function);
+  }
+
+  @Override
+  public String encodeAdminRefund(String orderKey) {
+    return FunctionEncoder.encode(
+        new Function("adminRefund", List.of(bytes32(orderKey)), Collections.emptyList()));
+  }
+
+  @Override
+  public String encodeAdminSettle(String orderKey) {
+    return FunctionEncoder.encode(
+        new Function("adminSettle", List.of(bytes32(orderKey)), Collections.emptyList()));
   }
 
   private Type<?> bytes32(String orderKey) {

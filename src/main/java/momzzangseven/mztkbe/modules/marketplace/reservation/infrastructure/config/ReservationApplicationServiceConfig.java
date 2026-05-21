@@ -3,18 +3,26 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.conf
 import java.time.Clock;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApplyReservationEscrowExecutionHookUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApproveReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CalculateMarketplaceAdminRefundReviewUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CalculateMarketplaceAdminSettlementReviewUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CancelPendingReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CheckReservationExecutionCleanupProtectionUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ClaimExpiredRefundReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CompleteReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceAdminRefundUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceAdminSettlementUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceSchedulerAdminRefundUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceSchedulerAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverExpiredMarketplaceAdminExecutionAttemptUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BindReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BuildMarketplaceAdminReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
@@ -43,26 +51,160 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitMarketplaceAdminReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApplyReservationEscrowExecutionHookService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ApproveReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.AutoCancelBatchItemProcessor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.AutoSettleBatchItemProcessor;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CalculateMarketplaceAdminRefundReviewService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CalculateMarketplaceAdminSettlementReviewService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CancelPendingReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CheckReservationExecutionCleanupProtectionService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ClaimExpiredRefundReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CompleteReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.CreateReservationService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ExecuteMarketplaceAdminRefundService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ExecuteMarketplaceAdminSettlementService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ExecuteMarketplaceSchedulerAdminRefundService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ExecuteMarketplaceSchedulerAdminSettlementService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.GetReservationDetailService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.GetTrainerReservationsService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.GetUserReservationsService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.MarketplaceAdminExecutionOrchestrator;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.RecoverExpiredMarketplaceAdminExecutionAttemptService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.RecoverReservationEscrowService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.RejectReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ReservationChainReadRepairService;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnMarketplaceAdminEnabled;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ReservationApplicationServiceConfig {
+
+  @Bean
+  CalculateMarketplaceAdminRefundReviewUseCase calculateMarketplaceAdminRefundReviewUseCase(
+      LoadReservationPort loadReservationPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      ObjectProvider<LoadReservationExecutionStatePort> loadReservationExecutionStatePortProvider,
+      Clock clock) {
+    return new CalculateMarketplaceAdminRefundReviewService(
+        loadReservationPort,
+        loadReservationEscrowPort,
+        loadReservationActionStatePort,
+        loadReservationExecutionStatePortProvider.getIfAvailable(),
+        clock);
+  }
+
+  @Bean
+  CalculateMarketplaceAdminSettlementReviewUseCase calculateMarketplaceAdminSettlementReviewUseCase(
+      LoadReservationPort loadReservationPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      ObjectProvider<LoadReservationExecutionStatePort> loadReservationExecutionStatePortProvider,
+      Clock clock) {
+    return new CalculateMarketplaceAdminSettlementReviewService(
+        loadReservationPort,
+        loadReservationEscrowPort,
+        loadReservationActionStatePort,
+        loadReservationExecutionStatePortProvider.getIfAvailable(),
+        clock);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator(
+      LoadReservationPort loadReservationPort,
+      SaveReservationPort saveReservationPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      SaveReservationEscrowPort saveReservationEscrowPort,
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      SaveReservationActionStatePort saveReservationActionStatePort,
+      BindReservationActionStatePort bindReservationActionStatePort,
+      BuildMarketplaceAdminReservationExecutionPort buildMarketplaceAdminReservationExecutionPort,
+      SubmitMarketplaceAdminReservationExecutionPort submitMarketplaceAdminReservationExecutionPort,
+      RunReservationTransactionPort transactionPort,
+      Clock clock) {
+    return new MarketplaceAdminExecutionOrchestrator(
+        loadReservationPort,
+        saveReservationPort,
+        loadReservationEscrowPort,
+        saveReservationEscrowPort,
+        loadReservationActionStatePort,
+        saveReservationActionStatePort,
+        bindReservationActionStatePort,
+        buildMarketplaceAdminReservationExecutionPort,
+        submitMarketplaceAdminReservationExecutionPort,
+        transactionPort,
+        clock);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  ExecuteMarketplaceAdminRefundService executeMarketplaceAdminRefundService(
+      MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator) {
+    return new ExecuteMarketplaceAdminRefundService(marketplaceAdminExecutionOrchestrator);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  ExecuteMarketplaceAdminRefundUseCase executeMarketplaceAdminRefundUseCase(
+      ExecuteMarketplaceAdminRefundService delegate) {
+    return new AdminAuditedExecuteMarketplaceAdminRefundUseCase(delegate);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  ExecuteMarketplaceAdminSettlementService executeMarketplaceAdminSettlementService(
+      MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator) {
+    return new ExecuteMarketplaceAdminSettlementService(marketplaceAdminExecutionOrchestrator);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  ExecuteMarketplaceAdminSettlementUseCase executeMarketplaceAdminSettlementUseCase(
+      ExecuteMarketplaceAdminSettlementService delegate) {
+    return new AdminAuditedExecuteMarketplaceAdminSettlementUseCase(delegate);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  ExecuteMarketplaceSchedulerAdminRefundUseCase executeMarketplaceSchedulerAdminRefundUseCase(
+      MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator) {
+    return new ExecuteMarketplaceSchedulerAdminRefundService(marketplaceAdminExecutionOrchestrator);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  ExecuteMarketplaceSchedulerAdminSettlementUseCase
+      executeMarketplaceSchedulerAdminSettlementUseCase(
+          MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator) {
+    return new ExecuteMarketplaceSchedulerAdminSettlementService(
+        marketplaceAdminExecutionOrchestrator);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  RecoverExpiredMarketplaceAdminExecutionAttemptUseCase
+      recoverExpiredMarketplaceAdminExecutionAttemptUseCase(
+          LoadReservationActionStatePort loadReservationActionStatePort,
+          SaveReservationActionStatePort saveReservationActionStatePort,
+          LoadReservationPort loadReservationPort,
+          SaveReservationPort saveReservationPort,
+          LoadReservationEscrowPort loadReservationEscrowPort,
+          SaveReservationEscrowPort saveReservationEscrowPort,
+          RunReservationTransactionPort transactionPort) {
+    return new RecoverExpiredMarketplaceAdminExecutionAttemptService(
+        loadReservationActionStatePort,
+        saveReservationActionStatePort,
+        loadReservationPort,
+        saveReservationPort,
+        loadReservationEscrowPort,
+        saveReservationEscrowPort,
+        transactionPort);
+  }
 
   @Bean
   AutoCancelBatchItemProcessor autoCancelBatchItemProcessor(

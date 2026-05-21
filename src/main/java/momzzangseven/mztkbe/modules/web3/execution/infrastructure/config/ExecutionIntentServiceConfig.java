@@ -29,6 +29,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSpon
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionHookTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
@@ -53,6 +54,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
@@ -331,9 +333,20 @@ public class ExecutionIntentServiceConfig {
   @Bean
   RunExecutionTerminationHookService runExecutionTerminationHookService(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      List<ExecutionActionHandlerPort> executionActionHandlerPorts) {
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunExecutionHookTransactionPort runExecutionHookTransactionPort) {
     return new RunExecutionTerminationHookService(
-        executionIntentPersistencePort, executionActionHandlerPorts);
+        executionIntentPersistencePort,
+        executionActionHandlerPorts,
+        runExecutionHookTransactionPort);
+  }
+
+  @Bean
+  RunExecutionHookTransactionPort runExecutionHookTransactionPort(
+      PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    return action -> transactionTemplate.executeWithoutResult(status -> action.run());
   }
 
   @Bean

@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraf
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.RunExecutionTerminationHookCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionHookTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -39,6 +40,7 @@ class RunExecutionTerminationHookServiceTest {
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
+  @Mock private RunExecutionHookTransactionPort transactionPort;
 
   @Test
   void execute_runsTerminationHookWithRebuiltActionPlan() {
@@ -46,7 +48,7 @@ class RunExecutionTerminationHookServiceTest {
     ExecutionActionPlan actionPlan = actionPlan();
     RunExecutionTerminationHookService service =
         new RunExecutionTerminationHookService(
-            executionIntentPersistencePort, List.of(executionActionHandlerPort));
+            executionIntentPersistencePort, List.of(executionActionHandlerPort), directTx());
 
     when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
@@ -62,7 +64,8 @@ class RunExecutionTerminationHookServiceTest {
             same(intent),
             same(actionPlan),
             eq(ExecutionIntentStatus.EXPIRED),
-            eq("EXECUTION_INTENT_EXPIRED"));
+            eq("EXECUTION_INTENT_EXPIRED"),
+            any());
   }
 
   @Test
@@ -71,7 +74,7 @@ class RunExecutionTerminationHookServiceTest {
     ExecutionActionPlan actionPlan = actionPlan();
     RunExecutionTerminationHookService service =
         new RunExecutionTerminationHookService(
-            executionIntentPersistencePort, List.of(executionActionHandlerPort));
+            executionIntentPersistencePort, List.of(executionActionHandlerPort), directTx());
 
     when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
@@ -92,14 +95,15 @@ class RunExecutionTerminationHookServiceTest {
             same(intent),
             same(actionPlan),
             eq(ExecutionIntentStatus.FAILED_ONCHAIN),
-            eq("RECEIPT_STATUS_0"));
+            eq("RECEIPT_STATUS_0"),
+            any());
   }
 
   @Test
   void execute_throwsWhenIntentDoesNotExist() {
     RunExecutionTerminationHookService service =
         new RunExecutionTerminationHookService(
-            executionIntentPersistencePort, List.of(executionActionHandlerPort));
+            executionIntentPersistencePort, List.of(executionActionHandlerPort), directTx());
 
     when(executionIntentPersistencePort.findByPublicId("missing-intent"))
         .thenReturn(Optional.empty());
@@ -111,6 +115,39 @@ class RunExecutionTerminationHookServiceTest {
                         "missing-intent", ExecutionIntentStatus.EXPIRED, "reason")))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("executionIntentId not found");
+  }
+
+  @Test
+  void execute_buildsActionPlanBeforeEnteringStateMutationTransaction() {
+    ExecutionIntent intent = existingEip1559Intent();
+    ExecutionActionPlan actionPlan = actionPlan();
+    RunExecutionTerminationHookService service =
+        new RunExecutionTerminationHookService(
+            executionIntentPersistencePort, List.of(executionActionHandlerPort), transactionPort);
+
+    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.supports(any(ExecutionIntent.class))).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(intent)).thenReturn(actionPlan);
+
+    service.execute(
+        new RunExecutionTerminationHookCommand(
+            "intent-1", ExecutionIntentStatus.EXPIRED, "EXECUTION_INTENT_EXPIRED"));
+
+    InOrder inOrder = inOrder(executionActionHandlerPort, transactionPort);
+    inOrder.verify(executionActionHandlerPort).buildActionPlan(intent);
+    inOrder
+        .verify(executionActionHandlerPort)
+        .buildTerminationEvidence(
+            same(intent),
+            same(actionPlan),
+            eq(ExecutionIntentStatus.EXPIRED),
+            eq("EXECUTION_INTENT_EXPIRED"));
+    inOrder.verify(transactionPort).requiresNew(any(Runnable.class));
+  }
+
+  private RunExecutionHookTransactionPort directTx() {
+    return Runnable::run;
   }
 
   private ExecutionActionPlan actionPlan() {

@@ -58,6 +58,7 @@ public record MarketplaceExecutionDraft(
       throw new Web3InvalidInputException("expiresAt is required");
     }
     validateSigningMaterial(
+        actionType,
         fallbackAllowed,
         authorityAddress,
         authorityNonce,
@@ -113,6 +114,7 @@ public record MarketplaceExecutionDraft(
   }
 
   private static void validateSigningMaterial(
+      MarketplaceExecutionActionType actionType,
       boolean fallbackAllowed,
       String authorityAddress,
       Long authorityNonce,
@@ -142,7 +144,7 @@ public record MarketplaceExecutionDraft(
       throw new Web3InvalidInputException(
           "either authority tuple or unsignedTxSnapshot must be provided");
     }
-    if (!hasAuthorityTuple && !fallbackAllowed) {
+    if (!hasAuthorityTuple && !fallbackAllowed && !actionType.isAdminAction()) {
       throw new Web3InvalidInputException(
           "fallbackAllowed is required when authority tuple is absent");
     }

@@ -19,6 +19,8 @@ public class GetInternalExecutionIssuerPolicyService
     return new InternalExecutionIssuerPolicyView(
         policy.enabled(),
         policy.actionTypes().contains(ExecutionActionType.QNA_ADMIN_SETTLE),
-        policy.actionTypes().contains(ExecutionActionType.QNA_ADMIN_REFUND));
+        policy.actionTypes().contains(ExecutionActionType.QNA_ADMIN_REFUND),
+        policy.actionTypes().contains(ExecutionActionType.MARKETPLACE_ADMIN_SETTLE),
+        policy.actionTypes().contains(ExecutionActionType.MARKETPLACE_ADMIN_REFUND));
   }
 }

@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionT
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
+import org.springframework.lang.Nullable;
 
 @RequiredArgsConstructor
 public class ReplayConfirmedExecutionIntentService
@@ -29,14 +30,19 @@ public class ReplayConfirmedExecutionIntentService
 
   @Override
   public boolean execute(ReplayConfirmedExecutionIntentCommand command) {
+    ExecutionIntent intent = resolveReplayTarget(command);
+    return intent != null && replayConfirmed(intent);
+  }
+
+  @Nullable
+  public ExecutionIntent resolveReplayTarget(ReplayConfirmedExecutionIntentCommand command) {
     command.validate();
     ExecutionActionType expectedActionType = parseActionType(command.expectedActionType());
     return executionIntentPersistencePort
         .findByPublicIdForUpdate(command.executionIntentId())
         .filter(intent -> intent.getActionType() == expectedActionType)
         .flatMap(this::confirmedOrRepairable)
-        .map(this::replayConfirmed)
-        .orElse(false);
+        .orElse(null);
   }
 
   private ExecutionActionType parseActionType(String actionType) {
@@ -72,7 +78,7 @@ public class ReplayConfirmedExecutionIntentService
     return executionIntentPersistencePort.update(confirmed);
   }
 
-  private boolean replayConfirmed(ExecutionIntent intent) {
+  public boolean replayConfirmed(ExecutionIntent intent) {
     ExecutionActionHandlerPort actionHandler = resolveActionHandler(intent);
     ExecutionActionPlan actionPlan = actionHandler.buildActionPlan(intent);
     actionHandler.afterExecutionConfirmed(intent, actionPlan);

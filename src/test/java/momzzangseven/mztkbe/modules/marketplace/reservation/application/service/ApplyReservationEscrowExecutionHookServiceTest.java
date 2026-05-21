@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowExecutionConfirmedCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowExecutionTerminatedCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowExecutionTerminatedCommand.ReservationEscrowExecutionTerminationEvidence;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
@@ -40,6 +41,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -225,6 +227,90 @@ class ApplyReservationEscrowExecutionHookServiceTest {
     } else {
       then(recordTrainerStrikePort).shouldHaveNoInteractions();
     }
+  }
+
+  @Test
+  void confirmedAdminRefundHook_marksTimeoutCancelledWithReason() {
+    Reservation reservation = adminRefundPendingReservation();
+    MarketplaceReservationActionState actionState =
+        activeActionState(
+            ReservationEscrowAction.ADMIN_REFUND, ReservationEscrowActorType.ADMIN, 77L);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(actionState));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(escrowProjection()));
+
+    service.afterExecutionConfirmed(
+        new ReservationEscrowExecutionConfirmedCommand(
+            "intent-action",
+            "0xtx",
+            "MARKETPLACE_ADMIN_REFUND",
+            "ADMIN",
+            "TRAINER_TIMEOUT",
+            reservation.getId(),
+            reservation.getOrderKey(),
+            null,
+            null,
+            reservation.sessionEndAt(),
+            "attempt-1",
+            20L));
+
+    ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(reservationCaptor.capture());
+    Reservation updated = reservationCaptor.getValue();
+    assertThat(updated.getStatus()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
+    assertThat(updated.getEffectiveEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertThat(updated.getResolvedBy()).isEqualTo(ReservationTerminalResolvedBy.ADMIN);
+    assertThat(updated.getTerminalReasonCode()).isEqualTo("TRAINER_TIMEOUT");
+
+    ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveReservationActionStatePort).should().save(actionCaptor.capture());
+    assertThat(actionCaptor.getValue().getStatus())
+        .isEqualTo(ReservationActionStateStatus.CONFIRMED);
+  }
+
+  @Test
+  void confirmedSchedulerAdminSettleHookMarksResolvedByScheduler() {
+    Reservation reservation =
+        actionPendingReservation(
+            ReservationStatus.ADMIN_SETTLE_PENDING,
+            ReservationEscrowStatus.ADMIN_SETTLE_PENDING,
+            ReservationEscrowAction.ADMIN_SETTLE,
+            null);
+    MarketplaceReservationActionState actionState =
+        activeActionState(
+            ReservationEscrowAction.ADMIN_SETTLE, ReservationEscrowActorType.SYSTEM, null);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(actionState));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(escrowProjection()));
+
+    service.afterExecutionConfirmed(
+        new ReservationEscrowExecutionConfirmedCommand(
+            "intent-action",
+            "0xtx",
+            "MARKETPLACE_ADMIN_SETTLE",
+            "SYSTEM",
+            "BUYER_CONFIRMATION_TIMEOUT",
+            reservation.getId(),
+            reservation.getOrderKey(),
+            null,
+            null,
+            reservation.sessionEndAt(),
+            "attempt-1",
+            20L));
+
+    ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(reservationCaptor.capture());
+    Reservation updated = reservationCaptor.getValue();
+    assertThat(updated.getStatus()).isEqualTo(ReservationStatus.AUTO_SETTLED);
+    assertThat(updated.getResolvedBy()).isEqualTo(ReservationTerminalResolvedBy.SCHEDULER);
+    assertThat(updated.getTerminalReasonCode()).isEqualTo("BUYER_CONFIRMATION_TIMEOUT");
   }
 
   @Test
@@ -517,6 +603,149 @@ class ApplyReservationEscrowExecutionHookServiceTest {
     assertThat(captor.getValue().getErrorCode()).isEqualTo("CANCELED");
   }
 
+  @Test
+  void terminatedAdminHook_rollsBackWhenFailedOnchainEvidenceShowsCreatedOrder() {
+    Reservation reservation = adminRefundPendingReservation();
+    MarketplaceReservationActionState actionState =
+        activeActionState(
+            ReservationEscrowAction.ADMIN_REFUND, ReservationEscrowActorType.ADMIN, 77L);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(actionState));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(escrowProjection()));
+
+    service.afterExecutionTerminated(
+        new ReservationEscrowExecutionTerminatedCommand(
+            "intent-action",
+            "MARKETPLACE_ADMIN_REFUND",
+            "ADMIN",
+            reservation.getId(),
+            "attempt-1",
+            20L,
+            "FAILED_ONCHAIN",
+            "receipt status 0",
+            "TRAINER_TIMEOUT",
+            evidence("0xdead", true, "FAILED_ONCHAIN", "REVERTED", "CREATED", null)));
+
+    ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(reservationCaptor.capture());
+    Reservation updated = reservationCaptor.getValue();
+    assertThat(updated.getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(updated.getEffectiveEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(updated.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(updated.getPendingAction()).isNull();
+    assertThat(updated.getPendingAttemptToken()).isNull();
+    assertThat(updated.getPendingActionExpiresAt()).isNull();
+
+    ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveReservationActionStatePort).should().save(actionCaptor.capture());
+    assertThat(actionCaptor.getValue().getStatus())
+        .isEqualTo(ReservationActionStateStatus.TERMINATED);
+    assertThat(actionCaptor.getValue().getRetryable()).isTrue();
+    assertThat(actionCaptor.getValue().getErrorCode()).isEqualTo("FAILED_ONCHAIN");
+
+    ArgumentCaptor<MarketplaceReservationEscrow> escrowCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationEscrow.class);
+    then(saveReservationEscrowPort).should().save(escrowCaptor.capture());
+    assertThat(escrowCaptor.getValue().getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(escrowCaptor.getValue().getLastTxHash()).isEqualTo("0xdead");
+  }
+
+  @Test
+  void terminatedAdminHook_marksManualSyncRequiredWhenEvidenceIsUnknown() {
+    Reservation reservation = adminRefundPendingReservation();
+    MarketplaceReservationActionState actionState =
+        activeActionState(
+            ReservationEscrowAction.ADMIN_REFUND, ReservationEscrowActorType.ADMIN, 77L);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(actionState));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(escrowProjection()));
+
+    service.afterExecutionTerminated(
+        new ReservationEscrowExecutionTerminatedCommand(
+            "intent-action",
+            "MARKETPLACE_ADMIN_REFUND",
+            "ADMIN",
+            reservation.getId(),
+            "attempt-1",
+            20L,
+            "FAILED_ONCHAIN",
+            "receipt unavailable",
+            "TRAINER_TIMEOUT",
+            evidence(
+                "0xdead",
+                true,
+                "FAILED_ONCHAIN",
+                "UNKNOWN",
+                "UNKNOWN",
+                "CHAIN_ORDER_LOOKUP_FAILED")));
+
+    ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(reservationCaptor.capture());
+    Reservation updated = reservationCaptor.getValue();
+    assertThat(updated.getStatus()).isEqualTo(ReservationStatus.MANUAL_SYNC_REQUIRED);
+    assertThat(updated.getEffectiveEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.MANUAL_SYNC_REQUIRED);
+    assertThat(updated.getCurrentExecutionIntentPublicId()).isNull();
+    assertThat(updated.getPendingAction()).isNull();
+    assertThat(updated.getPendingAttemptToken()).isNull();
+    assertThat(updated.getTerminalReasonCode()).isEqualTo("CHAIN_ORDER_LOOKUP_FAILED");
+
+    ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveReservationActionStatePort).should().save(actionCaptor.capture());
+    assertThat(actionCaptor.getValue().getStatus()).isEqualTo(ReservationActionStateStatus.STALE);
+    assertThat(actionCaptor.getValue().getRetryable()).isFalse();
+    assertThat(actionCaptor.getValue().getErrorCode()).isEqualTo("CHAIN_ORDER_LOOKUP_FAILED");
+  }
+
+  @Test
+  void terminatedAdminHook_appliesMatchingChainFinalStateWhenAlreadyRefunded() {
+    Reservation reservation = adminRefundPendingReservation();
+    MarketplaceReservationActionState actionState =
+        activeActionState(
+            ReservationEscrowAction.ADMIN_REFUND, ReservationEscrowActorType.ADMIN, 77L);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(actionState));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(escrowProjection()));
+
+    service.afterExecutionTerminated(
+        new ReservationEscrowExecutionTerminatedCommand(
+            "intent-action",
+            "MARKETPLACE_ADMIN_REFUND",
+            "ADMIN",
+            reservation.getId(),
+            "attempt-1",
+            20L,
+            "FAILED_ONCHAIN",
+            "local receipt unknown",
+            "TRAINER_TIMEOUT",
+            evidence("0xdead", true, "UNCONFIRMED", "UNKNOWN", "REFUNDED", null)));
+
+    ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(reservationCaptor.capture());
+    Reservation updated = reservationCaptor.getValue();
+    assertThat(updated.getStatus()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
+    assertThat(updated.getEffectiveEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertThat(updated.getResolvedBy()).isEqualTo(ReservationTerminalResolvedBy.ADMIN);
+    assertThat(updated.getTerminalReasonCode()).isEqualTo("TRAINER_TIMEOUT");
+
+    ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveReservationActionStatePort).should().save(actionCaptor.capture());
+    assertThat(actionCaptor.getValue().getStatus())
+        .isEqualTo(ReservationActionStateStatus.CONFIRMED);
+  }
+
   private Reservation pendingCancelReservation() {
     return Reservation.builder()
         .id(123L)
@@ -559,6 +788,14 @@ class ApplyReservationEscrowExecutionHookServiceTest {
         .bookedPriceAmount(50_000)
         .version(1L)
         .build();
+  }
+
+  private Reservation adminRefundPendingReservation() {
+    return actionPendingReservation(
+        ReservationStatus.ADMIN_REFUND_PENDING,
+        ReservationEscrowStatus.ADMIN_REFUND_PENDING,
+        ReservationEscrowAction.ADMIN_REFUND,
+        null);
   }
 
   private MarketplaceReservationActionState activeActionState() {
@@ -684,6 +921,25 @@ class ApplyReservationEscrowExecutionHookServiceTest {
         .executionIntentPublicId("intent-purchase")
         .status(ReservationActionStateStatus.INTENT_BOUND)
         .build();
+  }
+
+  private ReservationEscrowExecutionTerminationEvidence evidence(
+      String txHash,
+      boolean hasTxHash,
+      String executionTransactionStatus,
+      String receiptStatus,
+      String chainOrderState,
+      String evidenceErrorCode) {
+    return new ReservationEscrowExecutionTerminationEvidence(
+        txHash,
+        hasTxHash,
+        "intent-action",
+        "intent-action",
+        executionTransactionStatus,
+        receiptStatus,
+        chainOrderState,
+        evidenceErrorCode,
+        LocalDateTime.of(2026, 5, 16, 0, 0));
   }
 
   private ReservationCreateIdempotency createIdempotency(Reservation reservation) {

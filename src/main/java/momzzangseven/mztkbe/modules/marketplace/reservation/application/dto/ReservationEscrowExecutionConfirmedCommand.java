@@ -7,10 +7,39 @@ public record ReservationEscrowExecutionConfirmedCommand(
     String txHash,
     String actionType,
     String actorType,
+    String terminalReasonCode,
     Long reservationId,
     String orderKey,
     Long expectedContractDeadlineEpochSeconds,
     Long contractDeadlineEpochSeconds,
     LocalDateTime sessionEndAt,
     String pendingAttemptToken,
-    Long actionStateId) {}
+    Long actionStateId) {
+
+  public ReservationEscrowExecutionConfirmedCommand(
+      String executionIntentPublicId,
+      String txHash,
+      String actionType,
+      String actorType,
+      Long reservationId,
+      String orderKey,
+      Long expectedContractDeadlineEpochSeconds,
+      Long contractDeadlineEpochSeconds,
+      LocalDateTime sessionEndAt,
+      String pendingAttemptToken,
+      Long actionStateId) {
+    this(
+        executionIntentPublicId,
+        txHash,
+        actionType,
+        actorType,
+        null,
+        reservationId,
+        orderKey,
+        expectedContractDeadlineEpochSeconds,
+        contractDeadlineEpochSeconds,
+        sessionEndAt,
+        pendingAttemptToken,
+        actionStateId);
+  }
+}
