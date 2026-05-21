@@ -1,0 +1,129 @@
+{
+  "_comment": "표준 차트 팔레트. 필요한 항목을 골라 chart_config.json 의 'charts' 배열에 복사하고, ymax/yticks 는 probe_metrics.py 결과로, title 의 ____ 자리(SLO/-Xmx/pool max)는 실제 값으로 채운다. job 라벨은 mztk-be 고정. 'universal' 은 모든 테스트 공통, 'opt-in' 은 해당 자원을 쓰는 테스트에만.",
+
+  "throughput": {
+    "_use": "universal — 처리량이 VU 에 어떻게 반응하는가",
+    "file": "01_throughput",
+    "title": "Throughput - RPS vs VU",
+    "ylabel": "req/s  ·  VU",
+    "ymax": 120, "yticks": 6,
+    "series": [
+      {"label": "RPS (server, ex-actuator)", "color": "#2f6df0",
+       "query": "sum(rate(http_server_requests_seconds_count{job=\"mztk-be\",uri!~\"/actuator.*\"}[1m]))"},
+      {"label": "VU (k6, derived)", "color": "#b0b5bd", "query": "@vu"}
+    ]
+  },
+
+  "latency": {
+    "_use": "universal — 서버 처리시간 SLO 충족/추세. title 의 ____ 를 실제 SLO 로",
+    "file": "02_latency",
+    "title": "Latency - server-side p95 / p99  (SLO: ____)",
+    "ylabel": "ms",
+    "ymax": 120, "yticks": 6,
+    "series": [
+      {"label": "p99", "color": "#e8843c",
+       "query": "histogram_quantile(0.99, sum by(le)(rate(http_server_requests_seconds_bucket{job=\"mztk-be\",uri!~\"/actuator.*\"}[2m])))*1000"},
+      {"label": "p95", "color": "#2ca05a",
+       "query": "histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket{job=\"mztk-be\",uri!~\"/actuator.*\"}[2m])))*1000"}
+    ],
+    "annotate_max": {"series": 0, "label": "p99 {v}ms (cold start)"}
+  },
+
+  "cpu": {
+    "_use": "universal — JVM vs 머신 CPU. system 스파이크가 크면 ymax 를 키워 클리핑 방지",
+    "file": "03_cpu",
+    "title": "CPU - JVM process vs whole machine",
+    "ylabel": "%",
+    "ymax": 80, "yticks": 4,
+    "series": [
+      {"label": "system_cpu_usage (machine)", "color": "#d64545",
+       "query": "system_cpu_usage{job=\"mztk-be\"}*100"},
+      {"label": "process_cpu_usage (JVM)", "color": "#2f6df0",
+       "query": "process_cpu_usage{job=\"mztk-be\"}*100"}
+    ]
+  },
+
+  "heap": {
+    "_use": "universal — 힙 톱니파. title 의 ____ 를 실제 -Xmx(MB) 로",
+    "file": "05_heap",
+    "title": "JVM heap used  (-Xmx = ____ MB)",
+    "ylabel": "MB",
+    "ymax": 600, "yticks": 6,
+    "series": [
+      {"label": "heap used", "color": "#0d9488",
+       "query": "sum(jvm_memory_used_bytes{job=\"mztk-be\",area=\"heap\"})/1024/1024"}
+    ]
+  },
+
+  "db_pool": {
+    "_use": "opt-in — DB 접근(읽기·쓰기 공통) 테스트. refline 을 실제 pool max 로",
+    "file": "04_db_pool",
+    "title": "HikariCP - active / pending connections (per-minute peak)",
+    "ylabel": "connections",
+    "ymax": 12, "yticks": 6,
+    "refline": [10, "pool max = 10"],
+    "series": [
+      {"label": "active", "color": "#7b52d1",
+       "query": "max_over_time(hikaricp_connections_active{job=\"mztk-be\"}[1m])"},
+      {"label": "pending", "color": "#d64545",
+       "query": "max_over_time(hikaricp_connections_pending{job=\"mztk-be\"}[1m])"}
+    ]
+  },
+
+  "leak_endurance": {
+    "_use": "opt-in — endurance 전용. 메모리 누수 판정 핵심: 두 선의 floor 가 평탄해야",
+    "file": "06_leak",
+    "title": "Memory leak signal - old-gen floor & GC live-data set",
+    "ylabel": "MB",
+    "ymax": 300, "yticks": 6,
+    "series": [
+      {"label": "old-gen used (post-GC floor)", "color": "#d4663c",
+       "query": "sum(jvm_memory_used_bytes{job=\"mztk-be\",area=\"heap\",id=~\".*Old Gen.*|.*Tenured.*\"})/1024/1024"},
+      {"label": "GC live-data set", "color": "#0d9488",
+       "query": "jvm_gc_live_data_size_bytes{job=\"mztk-be\"}/1024/1024"}
+    ]
+  },
+
+  "ext_latency": {
+    "_use": "opt-in — 외부 호출(Web3 RPC/AWS KMS·S3/Gemini) 테스트. outbound HTTP 가 Micrometer 로 계측돼 있을 때. client_name 라벨로 특정 연동만 보려면 query 에 client_name=\"...\" 추가",
+    "file": "07_ext_latency",
+    "title": "Outbound call latency - p95 / p99  (WebClient/RestClient)",
+    "ylabel": "ms",
+    "ymax": 3000, "yticks": 6,
+    "series": [
+      {"label": "p99", "color": "#e8843c",
+       "query": "histogram_quantile(0.99, sum by(le)(rate(http_client_requests_seconds_bucket{job=\"mztk-be\"}[2m])))*1000"},
+      {"label": "p95", "color": "#2ca05a",
+       "query": "histogram_quantile(0.95, sum by(le)(rate(http_client_requests_seconds_bucket{job=\"mztk-be\"}[2m])))*1000"}
+    ],
+    "annotate_max": {"series": 0, "label": "p99 {v}ms"}
+  },
+
+  "ext_errors": {
+    "_use": "opt-in — 외부 호출 실패율 + 서버 5xx. 쓰기/외부연동 테스트에서 재시도·타임아웃 가시화",
+    "file": "08_ext_errors",
+    "title": "Error rate - outbound failures & server 5xx",
+    "ylabel": "errors/s",
+    "ymax": 5, "yticks": 5,
+    "series": [
+      {"label": "outbound 4xx/5xx (http_client)", "color": "#e8843c",
+       "query": "sum(rate(http_client_requests_seconds_count{job=\"mztk-be\",outcome=~\"CLIENT_ERROR|SERVER_ERROR\"}[1m]))"},
+      {"label": "server 5xx", "color": "#d64545",
+       "query": "sum(rate(http_server_requests_seconds_count{job=\"mztk-be\",status=~\"5..\"}[1m]))"}
+    ]
+  },
+
+  "async_queue": {
+    "_use": "opt-in — 비동기 쓰기 경로(TransactionIssuerWorker, 배치 스케줄러 등). queued 가 우상향하면 백로그 누적 = 처리율 < 유입율",
+    "file": "09_async_queue",
+    "title": "Async executor - queued tasks & active threads",
+    "ylabel": "tasks · threads",
+    "ymax": 50, "yticks": 5,
+    "series": [
+      {"label": "queued tasks", "color": "#d64545",
+       "query": "sum(executor_queued_tasks{job=\"mztk-be\"})"},
+      {"label": "active threads", "color": "#2f6df0",
+       "query": "sum(executor_active_threads{job=\"mztk-be\"})"}
+    ]
+  }
+}
