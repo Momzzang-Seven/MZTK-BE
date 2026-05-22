@@ -89,10 +89,15 @@ public class ApplyReservationEscrowExecutionHookService
   @Override
   public void afterExecutionConfirmed(ReservationEscrowExecutionConfirmedCommand command) {
     if (isAdminAction(command.actionType())) {
-      afterAdminExecutionConfirmed(command);
+      runInNewTransaction(() -> afterAdminExecutionConfirmed(command));
       return;
     }
     ChainOrderLookup chainOrderLookup = loadChainOrderBeforeReservationLock(command);
+    runInNewTransaction(() -> afterExecutionConfirmed(command, chainOrderLookup));
+  }
+
+  private void afterExecutionConfirmed(
+      ReservationEscrowExecutionConfirmedCommand command, ChainOrderLookup chainOrderLookup) {
     Reservation reservation = loadReservationForHook(command.executionIntentPublicId(), command);
     if (isAlreadyApplied(reservation, command.actionType(), command.actorType())) {
       Reservation repaired = repairTxHashIfNeeded(reservation, command.txHash());
@@ -150,9 +155,14 @@ public class ApplyReservationEscrowExecutionHookService
   @Override
   public void afterExecutionTerminated(ReservationEscrowExecutionTerminatedCommand command) {
     if (isAdminAction(command.actionType())) {
-      afterAdminExecutionTerminated(command);
+      runInNewTransaction(() -> afterAdminExecutionTerminated(command));
       return;
     }
+    runInNewTransaction(() -> afterExecutionTerminatedInTransaction(command));
+  }
+
+  private void afterExecutionTerminatedInTransaction(
+      ReservationEscrowExecutionTerminatedCommand command) {
     Reservation reservation = loadReservationForHook(command.executionIntentPublicId(), command);
     if (!isCurrentOrRecoverableOrphan(
         command.executionIntentPublicId(), command.pendingAttemptToken(), reservation)) {
@@ -602,7 +612,15 @@ public class ApplyReservationEscrowExecutionHookService
   }
 
   private <T> T runWithoutTransaction(java.util.function.Supplier<T> supplier) {
-    return transactionPort.notSupported(supplier);
+    return transactionPort == null ? supplier.get() : transactionPort.notSupported(supplier);
+  }
+
+  private void runInNewTransaction(Runnable action) {
+    if (transactionPort == null) {
+      action.run();
+      return;
+    }
+    transactionPort.requiresNew(action);
   }
 
   private void markPurchaseCreateIdempotencyFailedAfterCommitIfNeeded(

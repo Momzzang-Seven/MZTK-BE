@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
@@ -234,9 +235,23 @@ class ApplyReservationEscrowExecutionHookServiceTest {
   @Test
   void confirmedAdminRefundHook_marksTimeoutCancelledWithReason() {
     Reservation reservation = adminRefundPendingReservation();
+    AtomicBoolean requiresNewCalled = new AtomicBoolean(false);
     MarketplaceReservationActionState actionState =
         activeActionState(
             ReservationEscrowAction.ADMIN_REFUND, ReservationEscrowActorType.ADMIN, 77L);
+    service.setTransactionPort(
+        new RunReservationTransactionPort() {
+          @Override
+          public <T> T requiresNew(java.util.function.Supplier<T> supplier) {
+            requiresNewCalled.set(true);
+            return supplier.get();
+          }
+
+          @Override
+          public <T> T notSupported(java.util.function.Supplier<T> supplier) {
+            return supplier.get();
+          }
+        });
     given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
         .willReturn(Optional.of(reservation));
     given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-action"))
@@ -261,6 +276,7 @@ class ApplyReservationEscrowExecutionHookServiceTest {
 
     ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
     then(saveReservationPort).should().save(reservationCaptor.capture());
+    assertThat(requiresNewCalled).isTrue();
     Reservation updated = reservationCaptor.getValue();
     assertThat(updated.getStatus()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
     assertThat(updated.getEffectiveEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);

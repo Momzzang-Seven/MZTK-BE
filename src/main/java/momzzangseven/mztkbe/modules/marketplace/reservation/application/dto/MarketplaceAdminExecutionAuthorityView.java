@@ -44,6 +44,9 @@ public record MarketplaceAdminExecutionAuthorityView(
     if (relayerRegistrationStatus == null || relayerRegistrationStatus.isBlank()) {
       throw new Web3InvalidInputException("relayerRegistrationStatus is required");
     }
+    if (!isKnownRelayerRegistrationStatus(relayerRegistrationStatus)) {
+      throw new Web3InvalidInputException("relayerRegistrationStatus is invalid");
+    }
     if (requiresUserSignature) {
       throw new Web3InvalidInputException(
           "marketplace admin execution must not require user signature");
@@ -60,6 +63,10 @@ public record MarketplaceAdminExecutionAuthorityView(
         && !RELAYER_REGISTRATION_UNCHECKED.equals(relayerRegistrationStatus)) {
       throw new Web3InvalidInputException(
           "relayerRegistrationStatus must be UNCHECKED when server signer is unavailable");
+    }
+    if (serverSignerAvailable && RELAYER_REGISTRATION_UNCHECKED.equals(relayerRegistrationStatus)) {
+      throw new Web3InvalidInputException(
+          "relayerRegistrationStatus must be checked when server signer is available");
     }
   }
 
@@ -93,5 +100,12 @@ public record MarketplaceAdminExecutionAuthorityView(
     return relayerRegistered
         ? RELAYER_REGISTRATION_REGISTERED
         : RELAYER_REGISTRATION_NOT_REGISTERED;
+  }
+
+  private static boolean isKnownRelayerRegistrationStatus(String value) {
+    return RELAYER_REGISTRATION_UNCHECKED.equals(value)
+        || RELAYER_REGISTRATION_REGISTERED.equals(value)
+        || RELAYER_REGISTRATION_NOT_REGISTERED.equals(value)
+        || RELAYER_REGISTRATION_CHECK_FAILED.equals(value);
   }
 }
