@@ -240,6 +240,12 @@ final class MarketplaceAdminReviewSupport {
               MarketplaceAdminReviewValidationCode.SERVER_SIGNER_UNAVAILABLE,
               "marketplace admin server signer is unavailable"));
     }
+    if (authority.relayerRegistrationCheckFailed()) {
+      return List.of(
+          MarketplaceAdminReviewValidationItem.blocking(
+              MarketplaceAdminReviewValidationCode.RELAYER_REGISTRATION_CHECK_FAILED,
+              "marketplace admin relayer registration check failed"));
+    }
     if (!authority.relayerRegistered()) {
       return List.of(
           MarketplaceAdminReviewValidationItem.blocking(
@@ -386,6 +392,13 @@ final class MarketplaceAdminReviewSupport {
               ? MarketplaceAdminExecutionAuthorityView.serverRelayerOnly()
               : authority;
       validationItems = validationItems == null ? List.of() : List.copyOf(validationItems);
+    }
+
+    PreflightResult withOperatorAuthority(boolean canEarlySettle, boolean canManualRefund) {
+      return new PreflightResult(
+          chainCheckedAt,
+          authority.withOperatorAuthority(canEarlySettle, canManualRefund),
+          validationItems);
     }
   }
 }

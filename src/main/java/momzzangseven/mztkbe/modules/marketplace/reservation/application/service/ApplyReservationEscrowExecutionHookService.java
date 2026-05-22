@@ -188,7 +188,7 @@ public class ApplyReservationEscrowExecutionHookService
             command.actionStateId(),
             command.pendingAttemptToken(),
             command.reservationId(),
-            false);
+            true);
     if (locked == null) {
       return;
     }

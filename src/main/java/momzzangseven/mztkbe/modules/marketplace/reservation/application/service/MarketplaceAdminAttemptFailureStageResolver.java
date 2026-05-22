@@ -34,7 +34,8 @@ public final class MarketplaceAdminAttemptFailureStageResolver {
           MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS,
           MarketplaceAdminReviewValidationCode.INVALID_LOCAL_STATUS,
           MarketplaceAdminReviewValidationCode.ESCROW_NOT_LOCKED,
-          MarketplaceAdminReviewValidationCode.RESERVATION_NOT_USER_EIP7702);
+          MarketplaceAdminReviewValidationCode.RESERVATION_NOT_USER_EIP7702,
+          MarketplaceAdminReviewValidationCode.PREPARED_SNAPSHOT_MISMATCH);
 
   private static final EnumSet<MarketplaceAdminReviewValidationCode> PHASE_C_BIND =
       EnumSet.of(

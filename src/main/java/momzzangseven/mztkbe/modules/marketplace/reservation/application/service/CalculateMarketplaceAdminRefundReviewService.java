@@ -104,6 +104,7 @@ public class CalculateMarketplaceAdminRefundReviewService
             clock,
             loadReservationEscrowOrderPort,
             loadMarketplaceAdminExecutionAuthorityPort);
+    preflight = preflight.withOperatorAuthority(false, query.canManualRefund());
     baseItems.addAll(preflight.validationItems());
     MarketplaceAdminReviewValidationCode baseBlocking =
         MarketplaceAdminReviewSupport.firstBlockingCode(baseItems);

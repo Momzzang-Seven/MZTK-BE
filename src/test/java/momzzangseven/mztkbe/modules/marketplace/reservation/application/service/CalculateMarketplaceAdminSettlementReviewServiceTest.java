@@ -10,6 +10,7 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CalculateMarketplaceAdminSettlementReviewQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionAuthorityView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
@@ -61,6 +62,23 @@ class CalculateMarketplaceAdminSettlementReviewServiceTest {
     assertThat(result.reasonOptions().get(1).blockingCode())
         .isEqualTo(MarketplaceAdminReviewValidationCode.ELEVATED_AUTHORITY_REQUIRED);
     assertThat(result.reasonOptions().get(1).authoritySatisfied()).isFalse();
+  }
+
+  @Test
+  @DisplayName("settlement review carries elevated operator authority into authority summary")
+  void settlementReviewCarriesOperatorAuthority() {
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(approvedEndedMoreThan24hAgo()));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(Optional.empty());
+
+    var result = service.execute(new CalculateMarketplaceAdminSettlementReviewQuery(1L, true));
+
+    assertThat(result.authority().authorityModel())
+        .isEqualTo(MarketplaceAdminExecutionAuthorityView.SERVER_RELAYER_ONLY);
+    assertThat(result.authority().canEarlySettle()).isTrue();
+    assertThat(result.reasonOptions().get(1).blockingCode())
+        .isEqualTo(MarketplaceAdminReviewValidationCode.EARLY_SETTLE_CONFIRMATION_REQUIRED);
   }
 
   private Reservation approvedEndedMoreThan24hAgo() {

@@ -75,6 +75,7 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
     assertThat(result.authority().requiresUserSignature()).isFalse();
     assertThat(result.authority().authorityModel())
         .isEqualTo(MarketplaceAdminExecutionAuthorityView.SERVER_RELAYER_ONLY);
+    assertThat(result.authority().canManualRefund()).isTrue();
     assertThat(result.reasonOptions()).hasSize(3);
     assertThat(result.reasonOptions())
         .extracting("reasonCode")
@@ -157,6 +158,44 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
     assertThat(result.baseValidationItems())
         .extracting("code")
         .contains(MarketplaceAdminReviewValidationCode.SERVER_SIGNER_UNAVAILABLE);
+  }
+
+  @Test
+  @DisplayName("refund review separates relayer check failure from unregistered relayer")
+  void refundReviewPreflightBlocksRelayerCheckFailure() {
+    service =
+        new CalculateMarketplaceAdminRefundReviewService(
+            loadReservationPort,
+            loadReservationEscrowPort,
+            loadReservationActionStatePort,
+            loadReservationExecutionStatePort,
+            loadReservationEscrowOrderPort,
+            loadMarketplaceAdminExecutionAuthorityPort,
+            Clock.fixed(Instant.parse("2026-05-21T12:00:00Z"), ZoneOffset.UTC));
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(lockedPending()));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(Optional.empty());
+    given(loadReservationEscrowOrderPort.getOrder("0xorder")).willReturn(createdOrder());
+    given(loadMarketplaceAdminExecutionAuthorityPort.load())
+        .willReturn(
+            new MarketplaceAdminExecutionAuthorityView(
+                false,
+                MarketplaceAdminExecutionAuthorityView.SERVER_RELAYER_ONLY,
+                true,
+                "0x1111111111111111111111111111111111111111",
+                false,
+                MarketplaceAdminExecutionAuthorityView.RELAYER_REGISTRATION_CHECK_FAILED,
+                false,
+                false));
+
+    var result = service.execute(new CalculateMarketplaceAdminRefundReviewQuery(1L, false));
+
+    assertThat(result.processable()).isFalse();
+    assertThat(result.baseBlockingCode())
+        .isEqualTo(MarketplaceAdminReviewValidationCode.RELAYER_REGISTRATION_CHECK_FAILED);
+    assertThat(result.authority().relayerRegistrationStatus())
+        .isEqualTo(MarketplaceAdminExecutionAuthorityView.RELAYER_REGISTRATION_CHECK_FAILED);
   }
 
   private Reservation lockedPending() {

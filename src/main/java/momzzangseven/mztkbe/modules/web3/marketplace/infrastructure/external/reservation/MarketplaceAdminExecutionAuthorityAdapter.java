@@ -42,13 +42,15 @@ public class MarketplaceAdminExecutionAuthorityAdapter
       MarketplaceAdminSignerWalletView wallet) {
     String signerAddress = normalizedSignerAddress(wallet);
     boolean signerAvailable = wallet.active() && signerAddress != null && signerIsUsable(wallet);
-    boolean relayerRegistered = signerAvailable && relayerRegistered(signerAddress);
+    RelayerRegistration relayerRegistration =
+        signerAvailable ? relayerRegistration(signerAddress) : RelayerRegistration.ofUnchecked();
     return new MarketplaceAdminExecutionAuthorityView(
         false,
         MarketplaceAdminExecutionAuthorityView.SERVER_RELAYER_ONLY,
         signerAvailable,
         signerAvailable ? signerAddress : null,
-        relayerRegistered,
+        relayerRegistration.registered(),
+        relayerRegistration.status(),
         false,
         false);
   }
@@ -81,16 +83,43 @@ public class MarketplaceAdminExecutionAuthorityAdapter
     }
   }
 
-  private boolean relayerRegistered(String signerAddress) {
+  private RelayerRegistration relayerRegistration(String signerAddress) {
     try {
-      return marketplaceContractCallSupport.isRelayerRegistered(
-          marketplaceEscrowProperties.getMarketplaceContractAddress(), signerAddress);
+      boolean registered =
+          marketplaceContractCallSupport.isRelayerRegistered(
+              marketplaceEscrowProperties.getMarketplaceContractAddress(), signerAddress);
+      return registered
+          ? RelayerRegistration.ofRegistered()
+          : RelayerRegistration.ofNotRegistered();
     } catch (RuntimeException e) {
       log.warn(
           "Failed to validate marketplace admin relayer registration during review preflight: signerAddress={}",
           signerAddress,
           e);
-      return false;
+      return RelayerRegistration.ofCheckFailed();
+    }
+  }
+
+  private record RelayerRegistration(boolean registered, String status) {
+
+    private static RelayerRegistration ofUnchecked() {
+      return new RelayerRegistration(
+          false, MarketplaceAdminExecutionAuthorityView.RELAYER_REGISTRATION_UNCHECKED);
+    }
+
+    private static RelayerRegistration ofRegistered() {
+      return new RelayerRegistration(
+          true, MarketplaceAdminExecutionAuthorityView.RELAYER_REGISTRATION_REGISTERED);
+    }
+
+    private static RelayerRegistration ofNotRegistered() {
+      return new RelayerRegistration(
+          false, MarketplaceAdminExecutionAuthorityView.RELAYER_REGISTRATION_NOT_REGISTERED);
+    }
+
+    private static RelayerRegistration ofCheckFailed() {
+      return new RelayerRegistration(
+          false, MarketplaceAdminExecutionAuthorityView.RELAYER_REGISTRATION_CHECK_FAILED);
     }
   }
 }

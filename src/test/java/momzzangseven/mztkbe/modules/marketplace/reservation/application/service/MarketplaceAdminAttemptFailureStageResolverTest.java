@@ -41,6 +41,11 @@ class MarketplaceAdminAttemptFailureStageResolverTest {
     assertThat(
             MarketplaceAdminAttemptFailureStageResolver.resolve(
                 ReservationActionStateStatus.STALE,
+                MarketplaceAdminReviewValidationCode.PREPARED_SNAPSHOT_MISMATCH.name()))
+        .isEqualTo(MarketplaceAdminAttemptFailureStage.PHASE_C_RELOCK);
+    assertThat(
+            MarketplaceAdminAttemptFailureStageResolver.resolve(
+                ReservationActionStateStatus.STALE,
                 MarketplaceAdminReviewValidationCode.IDEMPOTENCY_REUSE_ATTEMPT_MISMATCH.name()))
         .isEqualTo(MarketplaceAdminAttemptFailureStage.PHASE_C_BIND);
     assertThat(
