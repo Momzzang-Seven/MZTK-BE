@@ -6,7 +6,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminExecutionProvenanceActor;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminSignerWalletView;
@@ -26,7 +25,7 @@ import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecut
 import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
@@ -35,8 +34,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnAnyExecutionEnabled
 @ConditionalOnBean({
   LoadMarketplaceAdminSignerWalletPort.class,
-  VerifyMarketplaceAdminSignerWalletPort.class,
-  LoadInternalExecutionEip1559TtlPort.class
+  VerifyMarketplaceAdminSignerWalletPort.class
 })
 public class MarketplaceAdminExecutionDraftBuilderAdapter
     implements BuildMarketplaceAdminExecutionDraftPort {
@@ -48,14 +46,18 @@ public class MarketplaceAdminExecutionDraftBuilderAdapter
 
   private final LoadMarketplaceAdminSignerWalletPort loadMarketplaceAdminSignerWalletPort;
   private final VerifyMarketplaceAdminSignerWalletPort verifyMarketplaceAdminSignerWalletPort;
-  private final LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
-  private final Web3CoreProperties web3CoreProperties;
   private final MarketplaceEscrowProperties marketplaceEscrowProperties;
   private final BuildMarketplaceAdminEscrowCallDataPort buildMarketplaceAdminEscrowCallDataPort;
   private final MarketplaceContractCallSupport marketplaceContractCallSupport;
   private final MarketplacePayloadSerializer marketplacePayloadSerializer;
   private final MarketplaceUnsignedTxFingerprintFactory marketplaceUnsignedTxFingerprintFactory;
   private final Clock appClock;
+
+  @Value("${web3.chain-id}")
+  private long chainId;
+
+  @Value("${web3.execution.internal.eip1559-ttl-seconds:90}")
+  private long eip1559TtlSeconds;
 
   @Override
   public MarketplaceExecutionDraft build(MarketplaceAdminEscrowExecutionRequest request) {
@@ -74,7 +76,7 @@ public class MarketplaceAdminExecutionDraftBuilderAdapter
 
     MarketplaceUnsignedTxSnapshot unsignedTxSnapshot =
         new MarketplaceUnsignedTxSnapshot(
-            web3CoreProperties.getChainId(),
+            chainId,
             signerAddress,
             callTarget,
             BigInteger.ZERO,
@@ -150,8 +152,7 @@ public class MarketplaceAdminExecutionDraftBuilderAdapter
         marketplaceUnsignedTxFingerprintFactory.compute(unsignedTxSnapshot),
         null,
         tokenMovement,
-        LocalDateTime.now(appClock)
-            .plusSeconds(loadInternalExecutionEip1559TtlPort.loadTtlSeconds()));
+        LocalDateTime.now(appClock).plusSeconds(eip1559TtlSeconds));
   }
 
   private MarketplaceAdminSignerWalletView loadSigner() {

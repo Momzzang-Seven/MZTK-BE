@@ -6,8 +6,9 @@ import java.math.BigInteger;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.CheckMarketplaceAdminRelayerRegistrationPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.DefaultGasFeeCalculator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -30,7 +31,8 @@ import org.web3j.protocol.http.HttpService;
 @Component
 @ConditionalOnAnyExecutionEnabled
 @Slf4j
-public class MarketplaceContractCallSupport {
+public class MarketplaceContractCallSupport
+    implements CheckMarketplaceAdminRelayerRegistrationPort {
 
   @Value("${web3.rpc.main}")
   private String mainRpcUrl;
@@ -39,7 +41,10 @@ public class MarketplaceContractCallSupport {
   private String subRpcUrl;
 
   @Autowired(required = false)
-  private DefaultGasFeeCalculator defaultGasFeeCalculator;
+  private MarketplaceGasFeeCalculator marketplaceGasFeeCalculator;
+
+  @Autowired(required = false)
+  private MarketplaceEscrowProperties marketplaceEscrowProperties;
 
   private Web3j mainWeb3j;
   private Web3j subWeb3j;
@@ -105,9 +110,18 @@ public class MarketplaceContractCallSupport {
     return Boolean.TRUE.equals(decodeBool(response.getValue()));
   }
 
+  @Override
+  public boolean isRegistered(String signerAddress) {
+    if (marketplaceEscrowProperties == null) {
+      throw new Web3InvalidInputException("marketplace escrow properties are unavailable");
+    }
+    return isRelayerRegistered(
+        marketplaceEscrowProperties.getMarketplaceContractAddress(), signerAddress);
+  }
+
   public MarketplaceCallPrevalidationResult prevalidateContractCall(
       String fromAddress, String contractAddress, String callData) {
-    if (defaultGasFeeCalculator == null) {
+    if (marketplaceGasFeeCalculator == null) {
       throw new Web3InvalidInputException("gas fee calculator is unavailable");
     }
     String normalizedFrom = requireAddressText(fromAddress, "fromAddress");
@@ -134,12 +148,12 @@ public class MarketplaceContractCallSupport {
           "eth_estimateGas failed: " + estimateGas.getError().getMessage());
     }
 
-    DefaultGasFeeCalculator.FeePlan feePlan = loadFeePlan(estimateGas.getAmountUsed());
+    MarketplaceGasFeeCalculator.FeePlan feePlan = loadFeePlan(estimateGas.getAmountUsed());
     return new MarketplaceCallPrevalidationResult(
         feePlan.gasLimit(), feePlan.maxPriorityFeePerGas(), feePlan.maxFeePerGas());
   }
 
-  private DefaultGasFeeCalculator.FeePlan loadFeePlan(BigInteger estimatedGas) {
+  private MarketplaceGasFeeCalculator.FeePlan loadFeePlan(BigInteger estimatedGas) {
     BigInteger maxPriorityFeePerGas = null;
     RpcOutcome<org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas> priorityOutcome =
         callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send());
@@ -163,8 +177,8 @@ public class MarketplaceContractCallSupport {
       }
     }
 
-    return defaultGasFeeCalculator.calculate(
-        new DefaultGasFeeCalculator.FeeInputs(
+    return marketplaceGasFeeCalculator.calculate(
+        new MarketplaceGasFeeCalculator.FeeInputs(
             estimatedGas, maxPriorityFeePerGas, baseFee, gasPrice));
   }
 

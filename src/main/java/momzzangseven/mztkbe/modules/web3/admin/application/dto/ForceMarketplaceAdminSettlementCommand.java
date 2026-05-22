@@ -1,12 +1,11 @@
 package momzzangseven.mztkbe.modules.web3.admin.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminSettleReasonCode;
 
 public record ForceMarketplaceAdminSettlementCommand(
     Long operatorId,
     Long reservationId,
-    MarketplaceAdminSettleReasonCode reasonCode,
+    MarketplaceAdminSettlementReason reasonCode,
     String memo,
     boolean confirmEarlySettle) {
 

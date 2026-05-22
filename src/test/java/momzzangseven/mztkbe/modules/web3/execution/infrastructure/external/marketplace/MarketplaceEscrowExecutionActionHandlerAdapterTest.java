@@ -605,6 +605,30 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     assertThat(evidence.evidenceErrorCode()).isNull();
   }
 
+  @ParameterizedTest(name = "chain state {0} -> evidence {1}")
+  @CsvSource({
+    "2000, CONFIRMED",
+    "3000, CANCELLED",
+    "4000, ADMIN_SETTLED",
+    "5000, ADMIN_REFUNDED",
+    "6000, DEADLINE_REFUNDED"
+  })
+  @DisplayName("admin termination evidence keeps exact marketplace chain terminal provenance")
+  void buildTerminationEvidence_adminRefund_preservesExactTerminalChainState(
+      int chainState, String expectedEvidenceState) throws Exception {
+    ExecutionIntent intent =
+        intent("intent-admin-refund", ExecutionActionType.MARKETPLACE_ADMIN_REFUND, adminPayload());
+    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+        .willReturn(order(chainState, 1_900_000_000L));
+
+    var evidence =
+        sut.buildTerminationEvidence(
+            intent, null, ExecutionIntentStatus.FAILED_ONCHAIN, "receipt unknown");
+
+    assertThat(evidence.chainOrderState()).isEqualTo(expectedEvidenceState);
+    assertThat(evidence.evidenceErrorCode()).isNull();
+  }
+
   @Test
   @DisplayName("admin termination evidence marks chain lookup failures as unknown")
   void buildTerminationEvidence_adminRefund_chainLookupFailureMarksUnknown() throws Exception {

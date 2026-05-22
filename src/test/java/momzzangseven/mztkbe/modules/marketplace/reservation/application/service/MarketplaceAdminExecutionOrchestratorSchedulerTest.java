@@ -278,6 +278,200 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
     assertThat(commandCaptor.getValue().memo()).isNull();
   }
 
+  @Test
+  void manualRefundCreatesAdminActionStateAndOperatorPayloadCommand() {
+    AtomicReference<Reservation> reservationRef = new AtomicReference<>(pendingReservation());
+    AtomicReference<MarketplaceReservationEscrow> escrowRef = new AtomicReference<>(escrow());
+    AtomicReference<MarketplaceReservationActionState> actionStateRef = new AtomicReference<>();
+    ReservationAdminExecutionDraft draft = new ReservationAdminExecutionDraft() {};
+    given(loadReservationPort.findByIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(reservationRef.get()));
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0);
+              reservationRef.set(saved);
+              return saved;
+            });
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(escrowRef.get()));
+    given(saveReservationEscrowPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationEscrow saved = invocation.getArgument(0);
+              escrowRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(saveReservationActionStatePort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationActionState saved =
+                  invocation.<MarketplaceReservationActionState>getArgument(0).toBuilder()
+                      .id(20L)
+                      .build();
+              actionStateRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willAnswer(ignored -> Optional.of(actionStateRef.get()));
+    given(loadReservationEscrowOrderPort.getOrder(anyString())).willReturn(createdOrder());
+    given(buildExecutionPort.buildRefund(any())).willReturn(draft);
+    given(submitExecutionPort.submit(draft))
+        .willReturn(
+            new SubmitMarketplaceAdminEscrowResult(
+                "intent-1",
+                "AWAITING_SIGNATURE",
+                "EIP1559",
+                LocalDateTime.of(2026, 5, 21, 12, 10),
+                false));
+    given(bindReservationActionStatePort.bindExecutionIntent(eq(20L), anyString(), eq("intent-1")))
+        .willAnswer(
+            ignored ->
+                Optional.of(
+                    actionStateRef.get().toBuilder()
+                        .status(ReservationActionStateStatus.INTENT_BOUND)
+                        .executionIntentPublicId("intent-1")
+                        .build()));
+
+    orchestrator.executeRefund(
+        77L, MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, "operator memo", false, 1L);
+
+    MarketplaceReservationActionState actionState = actionStateRef.get();
+    assertThat(actionState.getRequestSource())
+        .isEqualTo(ReservationActionRequestSource.MANUAL_ADMIN);
+    assertThat(actionState.getActorType()).isEqualTo(ReservationEscrowActorType.ADMIN);
+    assertThat(actionState.getActorUserId()).isEqualTo(77L);
+    assertThat(actionState.getMemo()).isEqualTo("operator memo");
+    assertThat(actionState.getReasonCode()).isEqualTo("TRAINER_TIMEOUT");
+
+    ArgumentCaptor<PrepareMarketplaceAdminEscrowCommand> commandCaptor =
+        ArgumentCaptor.forClass(PrepareMarketplaceAdminEscrowCommand.class);
+    then(buildExecutionPort).should().buildRefund(commandCaptor.capture());
+    assertThat(commandCaptor.getValue().requestSource())
+        .isEqualTo(ReservationActionRequestSource.MANUAL_ADMIN);
+    assertThat(commandCaptor.getValue().operatorUserId()).isEqualTo(77L);
+    assertThat(commandCaptor.getValue().schedulerRunId()).isNull();
+    assertThat(commandCaptor.getValue().memo()).isEqualTo("operator memo");
+  }
+
+  @Test
+  void phaseBTransientChainLookupFailureRollsBackPriorStateAndClosesRetryablePreparation() {
+    AtomicReference<Reservation> reservationRef = new AtomicReference<>(pendingReservation());
+    AtomicReference<MarketplaceReservationEscrow> escrowRef = new AtomicReference<>(escrow());
+    AtomicReference<MarketplaceReservationActionState> actionStateRef = new AtomicReference<>();
+    given(loadReservationPort.findByIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(reservationRef.get()));
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0);
+              reservationRef.set(saved);
+              return saved;
+            });
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(escrowRef.get()));
+    given(saveReservationEscrowPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationEscrow saved = invocation.getArgument(0);
+              escrowRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(saveReservationActionStatePort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationActionState saved =
+                  invocation.<MarketplaceReservationActionState>getArgument(0).toBuilder()
+                      .id(20L)
+                      .build();
+              actionStateRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willAnswer(ignored -> Optional.of(actionStateRef.get()));
+    given(loadReservationEscrowOrderPort.getOrder(anyString()))
+        .willThrow(new IllegalStateException("rpc timeout"));
+
+    assertThatThrownBy(
+            () ->
+                orchestrator.executeSchedulerRefund(
+                    "scheduler-run-1", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 1L))
+        .isInstanceOf(RuntimeException.class);
+
+    assertThat(reservationRef.get().getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(reservationRef.get().getEffectiveEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(actionStateRef.get().getStatus())
+        .isEqualTo(ReservationActionStateStatus.PREPARATION_FAILED);
+    assertThat(actionStateRef.get().getRetryable()).isTrue();
+    assertThat(actionStateRef.get().getErrorCode()).isEqualTo("CHAIN_LOOKUP_FAILED");
+    then(buildExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  void phaseCSnapshotVersionMismatchClosesAttemptAsStaleBeforeSubmit() {
+    AtomicReference<Reservation> reservationRef = new AtomicReference<>(pendingReservation());
+    AtomicReference<MarketplaceReservationEscrow> escrowRef = new AtomicReference<>(escrow());
+    AtomicReference<MarketplaceReservationActionState> actionStateRef = new AtomicReference<>();
+    ReservationAdminExecutionDraft draft = new ReservationAdminExecutionDraft() {};
+    given(loadReservationPort.findByIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(reservationRef.get()));
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0);
+              reservationRef.set(saved);
+              return saved;
+            });
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(escrowRef.get()));
+    given(saveReservationEscrowPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationEscrow saved = invocation.getArgument(0);
+              escrowRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(saveReservationActionStatePort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationActionState saved =
+                  invocation.<MarketplaceReservationActionState>getArgument(0).toBuilder()
+                      .id(20L)
+                      .build();
+              actionStateRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willAnswer(ignored -> Optional.of(actionStateRef.get()));
+    given(loadReservationEscrowOrderPort.getOrder(anyString())).willReturn(createdOrder());
+    given(buildExecutionPort.buildRefund(any()))
+        .willAnswer(
+            ignored -> {
+              reservationRef.set(reservationRef.get().toBuilder().version(8L).build());
+              return draft;
+            });
+
+    assertThatThrownBy(
+            () ->
+                orchestrator.executeSchedulerRefund(
+                    "scheduler-run-1", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 1L))
+        .isInstanceOf(MarketplaceReservationStateException.class);
+
+    assertThat(reservationRef.get().getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(actionStateRef.get().getStatus()).isEqualTo(ReservationActionStateStatus.STALE);
+    assertThat(actionStateRef.get().getRetryable()).isFalse();
+    assertThat(actionStateRef.get().getErrorCode()).isEqualTo("PREPARED_SNAPSHOT_MISMATCH");
+    then(submitExecutionPort).shouldHaveNoInteractions();
+    then(bindReservationActionStatePort).shouldHaveNoInteractions();
+  }
+
   private Reservation pendingReservation() {
     return Reservation.builder()
         .id(1L)

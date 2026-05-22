@@ -42,19 +42,15 @@ public class RecoverExpiredMarketplaceAdminExecutionAttemptService
   public RecoverExpiredMarketplaceAdminExecutionAttemptResult execute(
       RecoverExpiredMarketplaceAdminExecutionAttemptCommand command) {
     command.validate();
-    return transactionPort.requiresNew(() -> recoverLocked(command.now(), command.batchSize()));
-  }
-
-  private RecoverExpiredMarketplaceAdminExecutionAttemptResult recoverLocked(
-      LocalDateTime now, int batchSize) {
-    List<MarketplaceReservationActionState> candidates =
-        loadReservationActionStatePort.findExpiredAdminPreparingAttemptsWithLock(now, batchSize);
+    List<Long> candidateIds =
+        transactionPort.requiresNew(() -> findCandidateIds(command.now(), command.batchSize()));
     int recovered = 0;
     int skipped = 0;
     int failed = 0;
-    for (MarketplaceReservationActionState actionState : candidates) {
+    for (Long actionStateId : candidateIds) {
       try {
-        if (recoverOne(actionState)) {
+        if (Boolean.TRUE.equals(
+            transactionPort.requiresNew(() -> recoverOneLocked(actionStateId)))) {
           recovered++;
         } else {
           skipped++;
@@ -63,15 +59,28 @@ public class RecoverExpiredMarketplaceAdminExecutionAttemptService
         failed++;
         log.warn(
             "Failed to recover expired marketplace admin attempt: actionStateId={}",
-            actionState.getId(),
+            actionStateId,
             e);
       }
     }
     return new RecoverExpiredMarketplaceAdminExecutionAttemptResult(
-        candidates.size(), recovered, skipped, failed);
+        candidateIds.size(), recovered, skipped, failed);
   }
 
-  private boolean recoverOne(MarketplaceReservationActionState actionState) {
+  private List<Long> findCandidateIds(LocalDateTime now, int batchSize) {
+    return loadReservationActionStatePort
+        .findExpiredAdminPreparingAttemptsWithLock(now, batchSize)
+        .stream()
+        .map(MarketplaceReservationActionState::getId)
+        .toList();
+  }
+
+  private boolean recoverOneLocked(Long actionStateId) {
+    MarketplaceReservationActionState actionState =
+        loadReservationActionStatePort.findByIdWithLock(actionStateId).orElse(null);
+    if (actionState == null) {
+      return false;
+    }
     if (!isExpiredUnboundAdminPreparing(actionState)) {
       return false;
     }

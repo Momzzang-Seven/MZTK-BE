@@ -211,13 +211,14 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
       }
       return switch (order.state()) {
         case ReservationEscrowOrderView.STATE_CREATED -> new ChainEvidence("CREATED", null);
-        case ReservationEscrowOrderView.STATE_CONFIRMED,
-                ReservationEscrowOrderView.STATE_ADMIN_SETTLED ->
-            new ChainEvidence("SETTLED", null);
-        case ReservationEscrowOrderView.STATE_CANCELLED,
-                ReservationEscrowOrderView.STATE_ADMIN_REFUNDED,
-                ReservationEscrowOrderView.STATE_DEADLINE_REFUNDED ->
-            new ChainEvidence("REFUNDED", null);
+        case ReservationEscrowOrderView.STATE_CONFIRMED -> new ChainEvidence("CONFIRMED", null);
+        case ReservationEscrowOrderView.STATE_ADMIN_SETTLED ->
+            new ChainEvidence("ADMIN_SETTLED", null);
+        case ReservationEscrowOrderView.STATE_CANCELLED -> new ChainEvidence("CANCELLED", null);
+        case ReservationEscrowOrderView.STATE_ADMIN_REFUNDED ->
+            new ChainEvidence("ADMIN_REFUNDED", null);
+        case ReservationEscrowOrderView.STATE_DEADLINE_REFUNDED ->
+            new ChainEvidence("DEADLINE_REFUNDED", null);
         default -> new ChainEvidence("UNKNOWN", "CHAIN_ORDER_STATE_UNSUPPORTED");
       };
     } catch (RuntimeException ex) {

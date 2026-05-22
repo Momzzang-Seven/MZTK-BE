@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.annotation.Transactional;
@@ -164,6 +165,43 @@ class ExecuteInternalExecutionIntentServiceTest {
     // sponsor preflight 자체가 호출되지 않아야 한다.
     verifyNoInteractions(internalExecutionSignerPreflight);
     verify(delegate, never()).execute(any(), any());
+  }
+
+  @Test
+  void execute_filtersCommandToActionTypesThatPassSignerPreflight() {
+    ExecuteInternalExecutionIntentCommand mixedCommand =
+        new ExecuteInternalExecutionIntentCommand(
+            List.of(
+                ExecutionActionType.QNA_ADMIN_SETTLE,
+                ExecutionActionType.MARKETPLACE_ADMIN_REFUND));
+    when(executionIntentPersistencePort.existsClaimableInternal(mixedCommand.actionTypes()))
+        .thenReturn(true);
+    SponsorWalletGate qnaGate =
+        new SponsorWalletGate(
+            new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS, true),
+            new TreasurySigner(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS));
+    when(internalExecutionSignerPreflight.preflight(List.of(ExecutionActionType.QNA_ADMIN_SETTLE)))
+        .thenReturn(
+            new InternalExecutionSignerGates(
+                Map.of(ExecutionActionType.QNA_ADMIN_SETTLE, qnaGate)));
+    when(internalExecutionSignerPreflight.preflight(
+            List.of(ExecutionActionType.MARKETPLACE_ADMIN_REFUND)))
+        .thenThrow(new Web3InvalidInputException("marketplace admin signer unavailable"));
+    ExecuteInternalExecutionIntentResult expected = ExecuteInternalExecutionIntentResult.notFound();
+    when(delegate.execute(any(), any())).thenReturn(expected);
+
+    ExecuteInternalExecutionIntentResult result = service.execute(mixedCommand);
+
+    assertThat(result).isSameAs(expected);
+    ArgumentCaptor<ExecuteInternalExecutionIntentCommand> commandCaptor =
+        ArgumentCaptor.forClass(ExecuteInternalExecutionIntentCommand.class);
+    ArgumentCaptor<InternalExecutionSignerGates> gatesCaptor =
+        ArgumentCaptor.forClass(InternalExecutionSignerGates.class);
+    verify(delegate).execute(commandCaptor.capture(), gatesCaptor.capture());
+    assertThat(commandCaptor.getValue().actionTypes())
+        .containsExactly(ExecutionActionType.QNA_ADMIN_SETTLE);
+    assertThat(gatesCaptor.getValue().gates())
+        .containsOnlyKeys(ExecutionActionType.QNA_ADMIN_SETTLE);
   }
 
   @Test

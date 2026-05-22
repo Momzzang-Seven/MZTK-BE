@@ -13,7 +13,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminSignerWalletView;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
@@ -23,13 +22,13 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.Verify
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAdminExecutionRequestSource;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("MarketplaceAdminExecutionDraftBuilderAdapter")
@@ -40,7 +39,6 @@ class MarketplaceAdminExecutionDraftBuilderAdapterTest {
 
   @Mock private LoadMarketplaceAdminSignerWalletPort loadMarketplaceAdminSignerWalletPort;
   @Mock private VerifyMarketplaceAdminSignerWalletPort verifyMarketplaceAdminSignerWalletPort;
-  @Mock private LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   @Mock private BuildMarketplaceAdminEscrowCallDataPort buildCallDataPort;
   @Mock private MarketplaceContractCallSupport marketplaceContractCallSupport;
 
@@ -50,20 +48,18 @@ class MarketplaceAdminExecutionDraftBuilderAdapterTest {
   void setUp() {
     MarketplaceEscrowProperties escrowProperties = new MarketplaceEscrowProperties();
     escrowProperties.setMarketplaceContractAddress(ESCROW);
-    Web3CoreProperties coreProperties = new Web3CoreProperties();
-    coreProperties.setChainId(11155111L);
     sut =
         new MarketplaceAdminExecutionDraftBuilderAdapter(
             loadMarketplaceAdminSignerWalletPort,
             verifyMarketplaceAdminSignerWalletPort,
-            loadInternalExecutionEip1559TtlPort,
-            coreProperties,
             escrowProperties,
             buildCallDataPort,
             marketplaceContractCallSupport,
             new MarketplacePayloadSerializer(new ObjectMapper().findAndRegisterModules()),
             new MarketplaceUnsignedTxFingerprintFactory(),
             Clock.fixed(Instant.parse("2026-05-20T01:00:00Z"), ZoneOffset.UTC));
+    ReflectionTestUtils.setField(sut, "chainId", 11155111L);
+    ReflectionTestUtils.setField(sut, "eip1559TtlSeconds", 120L);
   }
 
   @Test
@@ -77,8 +73,6 @@ class MarketplaceAdminExecutionDraftBuilderAdapterTest {
                 BigInteger.valueOf(80_000),
                 BigInteger.valueOf(2_000_000_000L),
                 BigInteger.valueOf(50_000_000_000L)));
-    given(loadInternalExecutionEip1559TtlPort.loadTtlSeconds()).willReturn(120L);
-
     MarketplaceExecutionDraft draft = sut.build(request());
 
     assertThat(draft.actionType())

@@ -17,8 +17,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Mark
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionPhase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminParticipantView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminRefundReasonCode;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminSettleReasonCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminTokenView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -31,6 +29,8 @@ import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdm
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminRefundReviewResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminSettlementReviewQuery;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminSettlementReviewResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminRefundReason;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminSettlementReason;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceMarketplaceAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceMarketplaceAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.GetMarketplaceAdminRefundReviewUseCase;
@@ -174,7 +174,7 @@ class MarketplaceAdminEscrowControllerTest {
     assertThat(captor.getValue().operatorId()).isEqualTo(9L);
     assertThat(captor.getValue().reservationId()).isEqualTo(77L);
     assertThat(captor.getValue().reasonCode())
-        .isEqualTo(MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT);
+        .isEqualTo(MarketplaceAdminRefundReason.TRAINER_TIMEOUT);
     assertThat(captor.getValue().memo()).isEqualTo("memo");
     assertThat(captor.getValue().confirmManualRefund()).isFalse();
   }
@@ -211,7 +211,7 @@ class MarketplaceAdminEscrowControllerTest {
     assertThat(captor.getValue().operatorId()).isEqualTo(9L);
     assertThat(captor.getValue().reservationId()).isEqualTo(77L);
     assertThat(captor.getValue().reasonCode())
-        .isEqualTo(MarketplaceAdminSettleReasonCode.ADMIN_MANUAL_SETTLE);
+        .isEqualTo(MarketplaceAdminSettlementReason.ADMIN_MANUAL_SETTLE);
     assertThat(captor.getValue().memo()).isEqualTo("memo");
     assertThat(captor.getValue().confirmEarlySettle()).isTrue();
   }
@@ -225,6 +225,52 @@ class MarketplaceAdminEscrowControllerTest {
         .andExpect(status().isForbidden());
 
     verifyNoInteractions(getRefundReviewUseCase);
+  }
+
+  @Test
+  @DisplayName("marketplace admin endpoint 는 인증이 없으면 401")
+  void marketplaceAdminEndpoint_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(get("/admin/web3/marketplace/reservations/77/refund-review"))
+        .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(getRefundReviewUseCase);
+  }
+
+  @Test
+  @DisplayName("review 후 execute까지 같은 admin surface에서 호출된다")
+  void reviewThenExecuteFlow_success() throws Exception {
+    given(getRefundReviewUseCase.execute(any(GetMarketplaceAdminRefundReviewQuery.class)))
+        .willReturn(new GetMarketplaceAdminRefundReviewResult(sampleReview()));
+    given(forceRefundUseCase.execute(any(ForceMarketplaceAdminRefundCommand.class)))
+        .willReturn(
+            new ForceMarketplaceAdminRefundResult(sampleExecution("MARKETPLACE_ADMIN_REFUND")));
+
+    mockMvc
+        .perform(
+            get("/admin/web3/marketplace/reservations/77/refund-review").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.processable").value(true));
+
+    mockMvc
+        .perform(
+            post("/admin/web3/marketplace/reservations/77/refund")
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "reasonCode": "TRAINER_TIMEOUT",
+                      "memo": "operator memo",
+                      "confirmManualRefund": false
+                    }
+                    """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.actionType").value("MARKETPLACE_ADMIN_REFUND"))
+        .andExpect(jsonPath("$.data.adminExecutionPhase").value("QUEUED_FOR_SERVER_RELAYER"));
+
+    verify(getRefundReviewUseCase).execute(any(GetMarketplaceAdminRefundReviewQuery.class));
+    verify(forceRefundUseCase).execute(any(ForceMarketplaceAdminRefundCommand.class));
   }
 
   private RequestPostProcessor adminPrincipal(Long userId) {

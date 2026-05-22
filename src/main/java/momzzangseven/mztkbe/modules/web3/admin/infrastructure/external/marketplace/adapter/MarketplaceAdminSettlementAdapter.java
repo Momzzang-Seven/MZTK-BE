@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminSettlementResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminSettlementReviewResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminSettlementReason;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.ForceMarketplaceAdminSettlementPort;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.GetMarketplaceAdminSettlementReviewPort;
 import org.springframework.stereotype.Component;
@@ -34,13 +35,18 @@ public class MarketplaceAdminSettlementAdapter
   public ForceMarketplaceAdminSettlementResult settle(
       Long operatorId,
       Long reservationId,
-      MarketplaceAdminSettleReasonCode reasonCode,
+      MarketplaceAdminSettlementReason reasonCode,
       String memo,
       boolean confirmEarlySettle,
       boolean canEarlySettle) {
     return new ForceMarketplaceAdminSettlementResult(
         executeSettlementUseCase.execute(
             new ExecuteMarketplaceAdminSettlementCommand(
-                operatorId, reservationId, reasonCode, memo, confirmEarlySettle, canEarlySettle)));
+                operatorId,
+                reservationId,
+                MarketplaceAdminSettleReasonCode.valueOf(reasonCode.name()),
+                memo,
+                confirmEarlySettle,
+                canEarlySettle)));
   }
 }

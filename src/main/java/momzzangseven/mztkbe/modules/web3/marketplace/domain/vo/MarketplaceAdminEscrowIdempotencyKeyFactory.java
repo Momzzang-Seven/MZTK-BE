@@ -45,16 +45,22 @@ public final class MarketplaceAdminEscrowIdempotencyKeyFactory {
       throw new Web3InvalidInputException("reasonCode is required");
     }
     String normalized = reasonCode.trim().toUpperCase(Locale.ROOT);
-    boolean allowed =
-        switch (actionType) {
-          case MARKETPLACE_ADMIN_REFUND -> REFUND_REASONS.contains(normalized);
-          case MARKETPLACE_ADMIN_SETTLE -> SETTLE_REASONS.contains(normalized);
-          case MARKETPLACE_CLASS_PURCHASE,
-                  MARKETPLACE_CLASS_CANCEL,
-                  MARKETPLACE_CLASS_CONFIRM,
-                  MARKETPLACE_CLASS_EXPIRED_REFUND ->
-              throw new Web3InvalidInputException("admin actionType is required");
-        };
+    boolean allowed;
+    switch (actionType) {
+      case MARKETPLACE_ADMIN_REFUND:
+        allowed = REFUND_REASONS.contains(normalized);
+        break;
+      case MARKETPLACE_ADMIN_SETTLE:
+        allowed = SETTLE_REASONS.contains(normalized);
+        break;
+      case MARKETPLACE_CLASS_PURCHASE:
+      case MARKETPLACE_CLASS_CANCEL:
+      case MARKETPLACE_CLASS_CONFIRM:
+      case MARKETPLACE_CLASS_EXPIRED_REFUND:
+        throw new Web3InvalidInputException("admin actionType is required");
+      default:
+        throw new Web3InvalidInputException("unsupported marketplace actionType");
+    }
     if (!allowed) {
       throw new Web3InvalidInputException("reasonCode is not valid for actionType");
     }

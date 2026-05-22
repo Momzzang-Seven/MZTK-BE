@@ -130,7 +130,7 @@ public class ReservationExecutionCleanupProtectionPersistenceAdapter
     try {
       JsonNode root = objectMapper.readTree(intent.payloadSnapshotJson());
       int payloadVersion = root.path("payloadVersion").asInt(0);
-      if (payloadVersion != 1) {
+      if (payloadVersion != 1 && payloadVersion != 2) {
         return EvidenceResult.invalid();
       }
       String payloadActionType = text(root, "actionType");

@@ -14,8 +14,8 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminExecutionDraftSubmitResult;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceAdminExecutionDraftPort;
-import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.SubmitMarketplaceAdminExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.BuildMarketplaceAdminExecutionDraftUseCase;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.SubmitMarketplaceAdminExecutionDraftUseCase;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAdminExecutionRequestSource;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import org.springframework.stereotype.Component;
@@ -27,13 +27,15 @@ public class ReservationMarketplaceAdminExecutionAdapter
     implements BuildMarketplaceAdminReservationExecutionPort,
         SubmitMarketplaceAdminReservationExecutionPort {
 
-  private final BuildMarketplaceAdminExecutionDraftPort buildMarketplaceAdminExecutionDraftPort;
-  private final SubmitMarketplaceAdminExecutionDraftPort submitMarketplaceAdminExecutionDraftPort;
+  private final BuildMarketplaceAdminExecutionDraftUseCase
+      buildMarketplaceAdminExecutionDraftUseCase;
+  private final SubmitMarketplaceAdminExecutionDraftUseCase
+      submitMarketplaceAdminExecutionDraftUseCase;
 
   @Override
   public ReservationAdminExecutionDraft buildRefund(PrepareMarketplaceAdminEscrowCommand command) {
     return new DraftHandle(
-        buildMarketplaceAdminExecutionDraftPort.build(
+        buildMarketplaceAdminExecutionDraftUseCase.execute(
             toRequest(command, MarketplaceExecutionActionType.MARKETPLACE_ADMIN_REFUND)));
   }
 
@@ -41,7 +43,7 @@ public class ReservationMarketplaceAdminExecutionAdapter
   public ReservationAdminExecutionDraft buildSettlement(
       PrepareMarketplaceAdminEscrowCommand command) {
     return new DraftHandle(
-        buildMarketplaceAdminExecutionDraftPort.build(
+        buildMarketplaceAdminExecutionDraftUseCase.execute(
             toRequest(command, MarketplaceExecutionActionType.MARKETPLACE_ADMIN_SETTLE)));
   }
 
@@ -51,7 +53,7 @@ public class ReservationMarketplaceAdminExecutionAdapter
       throw new Web3InvalidInputException("unsupported marketplace admin execution draft handle");
     }
     MarketplaceAdminExecutionDraftSubmitResult result =
-        submitMarketplaceAdminExecutionDraftPort.submit(handle.delegate());
+        submitMarketplaceAdminExecutionDraftUseCase.execute(handle.delegate());
     return new SubmitMarketplaceAdminEscrowResult(
         result.executionIntentId(),
         result.executionIntentStatus(),

@@ -21,6 +21,22 @@ import org.springframework.stereotype.Component;
 @ConditionalOnBean(ProbeTreasuryWalletCapabilityUseCase.class)
 public class MarketplaceAdminExecutionConfigurationValidator {
 
+  private static final String ENABLE_MARKETPLACE_ADMIN_SETTLE_MESSAGE =
+      "Marketplace admin execution requires web3.execution.internal.action-policy to enable "
+          + "MARKETPLACE_ADMIN_SETTLE";
+  private static final String ENABLE_MARKETPLACE_ADMIN_REFUND_MESSAGE =
+      "Marketplace admin execution requires web3.execution.internal.action-policy to enable "
+          + "MARKETPLACE_ADMIN_REFUND";
+  private static final String SIGNER_UNAVAILABLE_MESSAGE =
+      "Marketplace admin execution signer is unavailable at startup: walletAlias=%s, "
+          + "slotStatus=%s, failureReason=%s";
+  private static final String RELAYER_CHECK_FAILED_MESSAGE =
+      "Marketplace admin execution failed to validate current server signer relayer "
+          + "registration at startup";
+  private static final String RELAYER_NOT_REGISTERED_MESSAGE =
+      "Marketplace admin execution signer is not registered as relayer at startup: "
+          + "signerAddress=%s";
+
   private final GetInternalExecutionIssuerPolicyUseCase getInternalExecutionIssuerPolicyUseCase;
   private final ProbeTreasuryWalletCapabilityUseCase probeTreasuryWalletCapabilityUseCase;
   private final MarketplaceContractCallSupport marketplaceContractCallSupport;
@@ -41,20 +57,18 @@ public class MarketplaceAdminExecutionConfigurationValidator {
           "Marketplace admin execution requires web3.execution.internal.enabled=true");
     }
     if (!policy.marketplaceAdminSettleEnabled()) {
-      throw new IllegalStateException(
-          "Marketplace admin execution requires web3.execution.internal.action-policy to enable MARKETPLACE_ADMIN_SETTLE");
+      throw new IllegalStateException(ENABLE_MARKETPLACE_ADMIN_SETTLE_MESSAGE);
     }
     if (!policy.marketplaceAdminRefundEnabled()) {
-      throw new IllegalStateException(
-          "Marketplace admin execution requires web3.execution.internal.action-policy to enable MARKETPLACE_ADMIN_REFUND");
+      throw new IllegalStateException(ENABLE_MARKETPLACE_ADMIN_REFUND_MESSAGE);
     }
 
     ExecutionSignerCapabilityView signer =
         probeTreasuryWalletCapabilityUseCase.probe(TreasuryRole.MARKETPLACE_SIGNER.toAlias());
     if (!signer.signable() || signer.signerAddress() == null) {
       handleMisconfiguration(
-          "Marketplace admin execution signer is unavailable at startup: walletAlias=%s, slotStatus=%s, failureReason=%s"
-              .formatted(signer.walletAlias(), signer.slotStatus(), signer.failureReason()),
+          SIGNER_UNAVAILABLE_MESSAGE.formatted(
+              signer.walletAlias(), signer.slotStatus(), signer.failureReason()),
           null);
       return;
     }
@@ -65,16 +79,12 @@ public class MarketplaceAdminExecutionConfigurationValidator {
           marketplaceContractCallSupport.isRelayerRegistered(
               marketplaceEscrowProperties.getMarketplaceContractAddress(), signer.signerAddress());
     } catch (RuntimeException ex) {
-      handleMisconfiguration(
-          "Marketplace admin execution failed to validate current server signer relayer registration at startup",
-          ex);
+      handleMisconfiguration(RELAYER_CHECK_FAILED_MESSAGE, ex);
       return;
     }
     if (!relayerRegistered) {
       handleMisconfiguration(
-          "Marketplace admin execution signer is not registered as relayer at startup: signerAddress=%s"
-              .formatted(signer.signerAddress()),
-          null);
+          RELAYER_NOT_REGISTERED_MESSAGE.formatted(signer.signerAddress()), null);
     }
   }
 

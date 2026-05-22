@@ -9,14 +9,14 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Mark
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionPhase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminParticipantView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminRefundReasonCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminResultPreview;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationItem;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminSettleReasonCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminTokenView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminRefundReason;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminSettlementReason;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -28,14 +28,13 @@ class MarketplaceAdminEscrowDtoTest {
   void refundRequest_toCommand() {
     var request =
         new ForceMarketplaceAdminRefundRequestDTO(
-            MarketplaceAdminRefundReasonCode.ADMIN_MANUAL_REFUND, " evidence ", true);
+            MarketplaceAdminRefundReason.ADMIN_MANUAL_REFUND, " evidence ", true);
 
     var command = request.toCommand(9L, 77L);
 
     assertThat(command.operatorId()).isEqualTo(9L);
     assertThat(command.reservationId()).isEqualTo(77L);
-    assertThat(command.reasonCode())
-        .isEqualTo(MarketplaceAdminRefundReasonCode.ADMIN_MANUAL_REFUND);
+    assertThat(command.reasonCode()).isEqualTo(MarketplaceAdminRefundReason.ADMIN_MANUAL_REFUND);
     assertThat(command.memo()).isEqualTo(" evidence ");
     assertThat(command.confirmManualRefund()).isTrue();
   }
@@ -45,14 +44,14 @@ class MarketplaceAdminEscrowDtoTest {
   void settlementRequest_toCommand() {
     var request =
         new ForceMarketplaceAdminSettlementRequestDTO(
-            MarketplaceAdminSettleReasonCode.ADMIN_MANUAL_SETTLE, " evidence ", true);
+            MarketplaceAdminSettlementReason.ADMIN_MANUAL_SETTLE, " evidence ", true);
 
     var command = request.toCommand(9L, 77L);
 
     assertThat(command.operatorId()).isEqualTo(9L);
     assertThat(command.reservationId()).isEqualTo(77L);
     assertThat(command.reasonCode())
-        .isEqualTo(MarketplaceAdminSettleReasonCode.ADMIN_MANUAL_SETTLE);
+        .isEqualTo(MarketplaceAdminSettlementReason.ADMIN_MANUAL_SETTLE);
     assertThat(command.memo()).isEqualTo(" evidence ");
     assertThat(command.confirmEarlySettle()).isTrue();
   }
@@ -114,7 +113,7 @@ class MarketplaceAdminEscrowDtoTest {
         List.of(
             new momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
                 .MarketplaceAdminReasonReviewOption(
-                MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT.name(),
+                "TRAINER_TIMEOUT",
                 true,
                 null,
                 false,
@@ -126,7 +125,7 @@ class MarketplaceAdminEscrowDtoTest {
                     ReservationStatus.TIMEOUT_CANCELLED,
                     ReservationEscrowStatus.REFUNDED,
                     ReservationTerminalResolvedBy.ADMIN,
-                    MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT.name()),
+                    "TRAINER_TIMEOUT"),
                 List.of())));
   }
 

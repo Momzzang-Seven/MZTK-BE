@@ -36,35 +36,45 @@ public class MarketplaceEscrowAbiEncoder
     if (!actionType.isUserAction()) {
       throw new Web3InvalidInputException("admin marketplace action is not supported here");
     }
-    Function function =
-        switch (actionType) {
-          case MARKETPLACE_CLASS_PURCHASE ->
-              new Function(
-                  "purchaseClass",
-                  List.of(
-                      bytes32(orderKey),
-                      new Address(tokenAddress),
-                      new Address(trainerAddress),
-                      uint256(priceBaseUnits),
-                      uint256(signedAt),
-                      signature(signatureBytes)),
-                  Collections.emptyList());
-          case MARKETPLACE_CLASS_CANCEL ->
-              new Function(
-                  "cancelClass",
-                  List.of(bytes32(orderKey), uint256(signedAt), signature(signatureBytes)),
-                  Collections.emptyList());
-          case MARKETPLACE_CLASS_CONFIRM ->
-              new Function(
-                  "confirmClass",
-                  List.of(bytes32(orderKey), uint256(signedAt), signature(signatureBytes)),
-                  Collections.emptyList());
-          case MARKETPLACE_CLASS_EXPIRED_REFUND ->
-              new Function(
-                  "claimExpiredRefund", List.of(bytes32(orderKey)), Collections.emptyList());
-          case MARKETPLACE_ADMIN_REFUND, MARKETPLACE_ADMIN_SETTLE ->
-              throw new Web3InvalidInputException("admin marketplace action is not supported here");
-        };
+    Function function;
+    switch (actionType) {
+      case MARKETPLACE_CLASS_PURCHASE:
+        function =
+            new Function(
+                "purchaseClass",
+                List.of(
+                    bytes32(orderKey),
+                    new Address(tokenAddress),
+                    new Address(trainerAddress),
+                    uint256(priceBaseUnits),
+                    uint256(signedAt),
+                    signature(signatureBytes)),
+                Collections.emptyList());
+        break;
+      case MARKETPLACE_CLASS_CANCEL:
+        function =
+            new Function(
+                "cancelClass",
+                List.of(bytes32(orderKey), uint256(signedAt), signature(signatureBytes)),
+                Collections.emptyList());
+        break;
+      case MARKETPLACE_CLASS_CONFIRM:
+        function =
+            new Function(
+                "confirmClass",
+                List.of(bytes32(orderKey), uint256(signedAt), signature(signatureBytes)),
+                Collections.emptyList());
+        break;
+      case MARKETPLACE_CLASS_EXPIRED_REFUND:
+        function =
+            new Function("claimExpiredRefund", List.of(bytes32(orderKey)), Collections.emptyList());
+        break;
+      case MARKETPLACE_ADMIN_REFUND:
+      case MARKETPLACE_ADMIN_SETTLE:
+        throw new Web3InvalidInputException("admin marketplace action is not supported here");
+      default:
+        throw new Web3InvalidInputException("unsupported marketplace actionType");
+    }
     return FunctionEncoder.encode(function);
   }
 

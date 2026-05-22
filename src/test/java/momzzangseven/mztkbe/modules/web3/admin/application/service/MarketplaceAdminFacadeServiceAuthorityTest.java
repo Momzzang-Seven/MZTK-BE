@@ -3,13 +3,13 @@ package momzzangseven.mztkbe.modules.web3.admin.application.service;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminRefundReasonCode;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminSettleReasonCode;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminRefundReviewQuery;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminSettlementReviewQuery;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminAuthorityView;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminRefundReason;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminSettlementReason;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.ForceMarketplaceAdminRefundPort;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.ForceMarketplaceAdminSettlementPort;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.GetMarketplaceAdminRefundReviewPort;
@@ -70,10 +70,10 @@ class MarketplaceAdminFacadeServiceAuthorityTest {
 
     service.execute(
         new ForceMarketplaceAdminRefundCommand(
-            9L, 77L, MarketplaceAdminRefundReasonCode.ADMIN_MANUAL_REFUND, "memo", true));
+            9L, 77L, MarketplaceAdminRefundReason.ADMIN_MANUAL_REFUND, "memo", true));
 
     verify(forceRefundPort)
-        .refund(9L, 77L, MarketplaceAdminRefundReasonCode.ADMIN_MANUAL_REFUND, "memo", true, true);
+        .refund(9L, 77L, MarketplaceAdminRefundReason.ADMIN_MANUAL_REFUND, "memo", true, true);
   }
 
   @Test
@@ -87,9 +87,9 @@ class MarketplaceAdminFacadeServiceAuthorityTest {
 
     service.execute(
         new ForceMarketplaceAdminSettlementCommand(
-            9L, 77L, MarketplaceAdminSettleReasonCode.ADMIN_MANUAL_SETTLE, "memo", true));
+            9L, 77L, MarketplaceAdminSettlementReason.ADMIN_MANUAL_SETTLE, "memo", true));
 
     verify(forceSettlementPort)
-        .settle(9L, 77L, MarketplaceAdminSettleReasonCode.ADMIN_MANUAL_SETTLE, "memo", true, false);
+        .settle(9L, 77L, MarketplaceAdminSettlementReason.ADMIN_MANUAL_SETTLE, "memo", true, false);
   }
 }

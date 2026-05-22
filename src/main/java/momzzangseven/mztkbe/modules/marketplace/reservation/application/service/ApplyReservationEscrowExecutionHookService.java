@@ -44,8 +44,8 @@ public class ApplyReservationEscrowExecutionHookService
   private static final String ADMIN_SETTLE = "MARKETPLACE_ADMIN_SETTLE";
   private static final String TRAINER = "TRAINER";
   private static final String CHAIN_CREATED = "CREATED";
-  private static final String CHAIN_REFUNDED = "REFUNDED";
-  private static final String CHAIN_SETTLED = "SETTLED";
+  private static final String CHAIN_ADMIN_REFUNDED = "ADMIN_REFUNDED";
+  private static final String CHAIN_ADMIN_SETTLED = "ADMIN_SETTLED";
   private static final String RECEIPT_REVERTED = "REVERTED";
   private static final String EVIDENCE_UNAVAILABLE = "EVIDENCE_UNAVAILABLE";
   private static final String CHAIN_MISMATCH_REQUIRES_SYNC = "CHAIN_MISMATCH_REQUIRES_SYNC";
@@ -293,15 +293,16 @@ public class ApplyReservationEscrowExecutionHookService
   }
 
   private boolean isConfirmedByChain(String actionType, String chainOrderState) {
-    return (ADMIN_REFUND.equals(actionType) && CHAIN_REFUNDED.equals(chainOrderState))
-        || (ADMIN_SETTLE.equals(actionType) && CHAIN_SETTLED.equals(chainOrderState));
+    return (ADMIN_REFUND.equals(actionType) && CHAIN_ADMIN_REFUNDED.equals(chainOrderState))
+        || (ADMIN_SETTLE.equals(actionType) && CHAIN_ADMIN_SETTLED.equals(chainOrderState));
   }
 
   private boolean isRollbackSafeAdminTermination(
       ReservationEscrowExecutionTerminatedCommand command,
       ReservationEscrowExecutionTerminationEvidence evidence) {
     return switch (command.terminalStatus()) {
-      case "EXPIRED", "CANCELED" -> !evidence.hasTxHash();
+      case "EXPIRED", "CANCELED" ->
+          !evidence.hasTxHash() && CHAIN_CREATED.equals(evidence.chainOrderState());
       case "NONCE_STALE" -> CHAIN_CREATED.equals(evidence.chainOrderState());
       case "FAILED_ONCHAIN" ->
           RECEIPT_REVERTED.equals(evidence.receiptStatus())

@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -220,6 +221,10 @@ public class MarketplaceAdminExecutionOrchestrator {
       String reasonCode,
       String memo,
       Long reservationId) {
+    MarketplaceReservationActionState latest =
+        loadReservationActionStatePort
+            .findLatestByReservationIdWithLock(reservationId)
+            .orElse(null);
     Reservation reservation =
         loadReservationPort
             .findByIdWithLock(reservationId)
@@ -232,10 +237,6 @@ public class MarketplaceAdminExecutionOrchestrator {
                     new MarketplaceReservationStateException(
                         ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
                         "marketplace reservation escrow projection is required"));
-    MarketplaceReservationActionState latest =
-        loadReservationActionStatePort
-            .findLatestByReservationIdWithLock(reservationId)
-            .orElse(null);
     validateBaseExecutable(action, reservation, latest);
     validateReasonWindow(action, reasonCode, reservation);
 
@@ -624,6 +625,9 @@ public class MarketplaceAdminExecutionOrchestrator {
         actionState.getStatus() == ReservationActionStateStatus.PREPARING
             && phaseA.actionState().getAttemptToken().equals(actionState.getAttemptToken())
             && actionState.getExecutionIntentPublicId() == null
+            && Objects.equals(actionState.getExpectedReservationVersion(), reservation.getVersion())
+            && Objects.equals(
+                actionState.getExpectedReservationVersion(), phaseA.reservation().getVersion())
             && reservation.getStatus() == phaseA.reservation().getStatus()
             && reservation.getEffectiveEscrowStatus()
                 == phaseA.reservation().getEffectiveEscrowStatus()

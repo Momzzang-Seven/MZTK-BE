@@ -67,8 +67,15 @@ ALTER TABLE marketplace_reservation_escrows
             'REFUNDED', 'SETTLED', 'DEADLINE_REFUNDED',
             'DEADLINE_RECOVERY_REQUIRED', 'DEADLINE_SYNC_REQUIRED',
             'MANUAL_SYNC_REQUIRED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'FAILED'
-        )
-    );
+	        )
+	    );
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_action_states_admin_preparing_expired
+    ON marketplace_reservation_action_states (preparation_expires_at, id)
+    WHERE status = 'PREPARING'
+      AND execution_intent_public_id IS NULL
+      AND action_type IN ('ADMIN_REFUND', 'ADMIN_SETTLE')
+      AND preparation_expires_at IS NOT NULL;
 
 ALTER TABLE marketplace_reservation_action_states
     ADD COLUMN IF NOT EXISTS request_source VARCHAR(30),

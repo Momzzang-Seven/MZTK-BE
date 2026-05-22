@@ -20,6 +20,8 @@ public class ExecutionIntentTerminatedEventHandler {
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void handle(ExecutionIntentTerminatedEvent event) {
+    // Deliberately no @Transactional here: termination evidence may perform RPC/receipt reads.
+    // RunExecutionTerminationHookService enters REQUIRES_NEW only for the local state mutation.
     try {
       runExecutionTerminationHookUseCase.execute(RunExecutionTerminationHookCommand.from(event));
     } catch (Exception e) {

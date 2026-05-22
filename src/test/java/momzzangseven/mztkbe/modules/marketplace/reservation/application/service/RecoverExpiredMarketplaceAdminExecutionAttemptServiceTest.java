@@ -9,10 +9,13 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverExpiredMarketplaceAdminExecutionAttemptCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
@@ -66,6 +69,8 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
     Reservation reservation = adminRefundPendingReservation();
     given(loadReservationActionStatePort.findExpiredAdminPreparingAttemptsWithLock(NOW, 10))
         .willReturn(List.of(actionState));
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willReturn(Optional.of(actionState));
     given(loadReservationPort.findByIdWithLock(1L)).willReturn(Optional.of(reservation));
     given(saveReservationPort.save(org.mockito.ArgumentMatchers.any()))
         .willAnswer(invocation -> invocation.getArgument(0));
@@ -106,6 +111,8 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
     MarketplaceReservationActionState actionState = expiredAdminActionState();
     given(loadReservationActionStatePort.findExpiredAdminPreparingAttemptsWithLock(NOW, 10))
         .willReturn(List.of(actionState));
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willReturn(Optional.of(actionState));
     given(loadReservationPort.findByIdWithLock(1L)).willReturn(Optional.of(pendingReservation()));
 
     var result =
@@ -118,6 +125,59 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
     then(saveReservationActionStatePort).should().save(actionCaptor.capture());
     assertThat(actionCaptor.getValue().getStatus()).isEqualTo(ReservationActionStateStatus.STALE);
     assertThat(actionCaptor.getValue().getRetryable()).isFalse();
+  }
+
+  @Test
+  void expiredRecoveryRunsEachCandidateInIndependentRequiresNewBoundary() {
+    AtomicInteger requiresNewCalls = new AtomicInteger();
+    service =
+        new RecoverExpiredMarketplaceAdminExecutionAttemptService(
+            loadReservationActionStatePort,
+            saveReservationActionStatePort,
+            loadReservationPort,
+            saveReservationPort,
+            loadReservationEscrowPort,
+            saveReservationEscrowPort,
+            countingTransactionPort(requiresNewCalls));
+    MarketplaceReservationActionState failedActionState = expiredAdminActionState();
+    MarketplaceReservationActionState recoveredActionState =
+        expiredAdminActionState().toBuilder()
+            .id(21L)
+            .reservationId(2L)
+            .attemptToken("attempt-2")
+            .build();
+    given(loadReservationActionStatePort.findExpiredAdminPreparingAttemptsWithLock(NOW, 10))
+        .willReturn(List.of(failedActionState, recoveredActionState));
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willReturn(Optional.of(failedActionState));
+    given(loadReservationActionStatePort.findByIdWithLock(21L))
+        .willReturn(Optional.of(recoveredActionState));
+    given(loadReservationPort.findByIdWithLock(1L))
+        .willReturn(Optional.of(adminRefundPendingReservation()));
+    given(loadReservationPort.findByIdWithLock(2L))
+        .willReturn(Optional.of(adminRefundPendingReservation(2L, "attempt-2")));
+    given(saveReservationPort.save(org.mockito.ArgumentMatchers.any()))
+        .willThrow(new IllegalStateException("first candidate failed after reservation save"))
+        .willAnswer(invocation -> invocation.getArgument(0));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(2L))
+        .willReturn(Optional.of(adminRefundPendingEscrow(2L)));
+
+    var result =
+        service.execute(new RecoverExpiredMarketplaceAdminExecutionAttemptCommand(NOW, 10));
+
+    assertThat(result.scanned()).isEqualTo(2);
+    assertThat(result.recovered()).isEqualTo(1);
+    assertThat(result.failed()).isEqualTo(1);
+    assertThat(requiresNewCalls.get())
+        .as("one scan transaction plus one transaction per candidate")
+        .isEqualTo(3);
+
+    ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveReservationActionStatePort).should().save(actionCaptor.capture());
+    assertThat(actionCaptor.getValue().getId()).isEqualTo(21L);
+    assertThat(actionCaptor.getValue().getStatus())
+        .isEqualTo(ReservationActionStateStatus.PREPARATION_FAILED);
   }
 
   private MarketplaceReservationActionState expiredAdminActionState() {
@@ -140,12 +200,21 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
   }
 
   private Reservation adminRefundPendingReservation() {
-    return pendingReservation().beginAdminRefundPending("attempt-1", NOW.minusMinutes(1));
+    return adminRefundPendingReservation(1L, "attempt-1");
+  }
+
+  private Reservation adminRefundPendingReservation(Long reservationId, String attemptToken) {
+    return pendingReservation(reservationId)
+        .beginAdminRefundPending(attemptToken, NOW.minusMinutes(1));
   }
 
   private Reservation pendingReservation() {
+    return pendingReservation(1L);
+  }
+
+  private Reservation pendingReservation(Long reservationId) {
     return Reservation.builder()
-        .id(1L)
+        .id(reservationId)
         .userId(10L)
         .trainerId(20L)
         .slotId(30L)
@@ -159,11 +228,30 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
   }
 
   private MarketplaceReservationEscrow adminRefundPendingEscrow() {
+    return adminRefundPendingEscrow(1L);
+  }
+
+  private MarketplaceReservationEscrow adminRefundPendingEscrow(Long reservationId) {
     return MarketplaceReservationEscrow.builder()
         .id(900L)
-        .reservationId(1L)
+        .reservationId(reservationId)
         .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
         .escrowStatus(ReservationEscrowStatus.ADMIN_REFUND_PENDING)
         .build();
+  }
+
+  private RunReservationTransactionPort countingTransactionPort(AtomicInteger requiresNewCalls) {
+    return new RunReservationTransactionPort() {
+      @Override
+      public <T> T requiresNew(Supplier<T> supplier) {
+        requiresNewCalls.incrementAndGet();
+        return supplier.get();
+      }
+
+      @Override
+      public <T> T notSupported(Supplier<T> supplier) {
+        return supplier.get();
+      }
+    };
   }
 }

@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminRefundResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminRefundReviewResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminRefundReason;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.ForceMarketplaceAdminRefundPort;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.GetMarketplaceAdminRefundReviewPort;
 import org.springframework.stereotype.Component;
@@ -34,7 +35,7 @@ public class MarketplaceAdminRefundAdapter
   public ForceMarketplaceAdminRefundResult refund(
       Long operatorId,
       Long reservationId,
-      MarketplaceAdminRefundReasonCode reasonCode,
+      MarketplaceAdminRefundReason reasonCode,
       String memo,
       boolean confirmManualRefund,
       boolean canManualRefund) {
@@ -43,7 +44,7 @@ public class MarketplaceAdminRefundAdapter
             new ExecuteMarketplaceAdminRefundCommand(
                 operatorId,
                 reservationId,
-                reasonCode,
+                MarketplaceAdminRefundReasonCode.valueOf(reasonCode.name()),
                 memo,
                 confirmManualRefund,
                 canManualRefund)));

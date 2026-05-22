@@ -17,7 +17,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionT
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
-import org.springframework.lang.Nullable;
 
 @RequiredArgsConstructor
 public class ReplayConfirmedExecutionIntentService
@@ -34,7 +33,6 @@ public class ReplayConfirmedExecutionIntentService
     return intent != null && replayConfirmed(intent);
   }
 
-  @Nullable
   public ExecutionIntent resolveReplayTarget(ReplayConfirmedExecutionIntentCommand command) {
     command.validate();
     ExecutionActionType expectedActionType = parseActionType(command.expectedActionType());

@@ -78,7 +78,11 @@ class MarketplaceMigrationScriptTest {
         .contains("request_source IN ('USER', 'MANUAL_ADMIN', 'SCHEDULER')")
         .contains("request_source = 'SCHEDULER'")
         .contains("actor_type = 'SYSTEM'")
-        .contains("actor_user_id IS NULL");
+        .contains("actor_user_id IS NULL")
+        .contains(
+            "CREATE INDEX IF NOT EXISTS idx_marketplace_action_states_admin_preparing_expired")
+        .contains("WHERE status = 'PREPARING'")
+        .contains("action_type IN ('ADMIN_REFUND', 'ADMIN_SETTLE')");
   }
 
   private String migration(String filename) throws IOException {

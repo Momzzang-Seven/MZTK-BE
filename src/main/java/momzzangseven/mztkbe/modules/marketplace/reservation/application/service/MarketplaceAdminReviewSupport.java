@@ -301,11 +301,47 @@ final class MarketplaceAdminReviewSupport {
     MarketplaceAdminExecutionPhase phase =
         switch (latest.getStatus()) {
           case CONFIRMED -> MarketplaceAdminExecutionPhase.COMPLETED;
-          case TERMINATED -> MarketplaceAdminExecutionPhase.FAILED_ONCHAIN;
-          case STALE -> MarketplaceAdminExecutionPhase.MANUAL_SYNC_REQUIRED;
+          case TERMINATED -> terminatedPhase(latest.getErrorCode());
+          case STALE -> stalePhase(latest.getErrorCode());
           default -> MarketplaceAdminExecutionPhase.IDLE;
         };
     return attemptView(latest, phase, null);
+  }
+
+  private static MarketplaceAdminExecutionPhase terminatedPhase(String errorCode) {
+    if ("EXPIRED".equals(errorCode)
+        || "CANCELED".equals(errorCode)
+        || "NONCE_STALE".equals(errorCode)) {
+      return MarketplaceAdminExecutionPhase.EXPIRED;
+    }
+    return MarketplaceAdminExecutionPhase.FAILED_ONCHAIN;
+  }
+
+  private static MarketplaceAdminExecutionPhase stalePhase(String errorCode) {
+    MarketplaceAdminReviewValidationCode code = parseValidationCode(errorCode);
+    if (code == MarketplaceAdminReviewValidationCode.CONTRACT_DEADLINE_EXPIRED) {
+      return MarketplaceAdminExecutionPhase.DEADLINE_SYNC_REQUIRED;
+    }
+    if (code == MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ABSENT
+        || code == MarketplaceAdminReviewValidationCode.CHAIN_ORDER_NOT_CREATED
+        || code == MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_REFUNDED
+        || code == MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_SETTLED
+        || code == MarketplaceAdminReviewValidationCode.CHAIN_MISMATCH_REQUIRES_SYNC
+        || code == MarketplaceAdminReviewValidationCode.MANUAL_SYNC_REQUIRED) {
+      return MarketplaceAdminExecutionPhase.MANUAL_SYNC_REQUIRED;
+    }
+    return MarketplaceAdminExecutionPhase.IDLE;
+  }
+
+  private static MarketplaceAdminReviewValidationCode parseValidationCode(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    try {
+      return MarketplaceAdminReviewValidationCode.valueOf(value);
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
   }
 
   private static MarketplaceAdminExecutionAttemptView attemptView(

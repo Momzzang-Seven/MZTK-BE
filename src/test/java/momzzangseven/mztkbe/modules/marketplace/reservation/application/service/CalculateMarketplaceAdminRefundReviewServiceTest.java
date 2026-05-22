@@ -198,6 +198,59 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
         .isEqualTo(MarketplaceAdminExecutionAuthorityView.RELAYER_REGISTRATION_CHECK_FAILED);
   }
 
+  @Test
+  @DisplayName("Phase C stale attempt is exposed as idle retry surface, not manual chain sync")
+  void refundReviewMapsPhaseCStaleAttemptToIdlePhase() {
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(lockedPending()));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(
+            Optional.of(
+                closedAttempt(
+                    ReservationActionStateStatus.STALE,
+                    MarketplaceAdminReviewValidationCode.IDEMPOTENCY_CONFLICT.name())));
+
+    var result = service.execute(new CalculateMarketplaceAdminRefundReviewQuery(1L, true));
+
+    assertThat(result.adminExecutionPhase()).isEqualTo(MarketplaceAdminExecutionPhase.IDLE);
+    assertThat(result.lastAttempt()).isNotNull();
+    assertThat(result.lastAttempt().failureStage().name()).isEqualTo("PHASE_C_BIND");
+  }
+
+  @Test
+  @DisplayName("authoritative chain stale attempt remains manual sync in polling UX")
+  void refundReviewMapsChainMismatchStaleAttemptToManualSyncPhase() {
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(lockedPending()));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(
+            Optional.of(
+                closedAttempt(
+                    ReservationActionStateStatus.STALE,
+                    MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ABSENT.name())));
+
+    var result = service.execute(new CalculateMarketplaceAdminRefundReviewQuery(1L, true));
+
+    assertThat(result.adminExecutionPhase())
+        .isEqualTo(MarketplaceAdminExecutionPhase.MANUAL_SYNC_REQUIRED);
+    assertThat(result.lastAttempt()).isNotNull();
+  }
+
+  @Test
+  @DisplayName("expired/canceled/nonce-stale terminated attempts use EXPIRED polling phase")
+  void refundReviewMapsNonceStaleTerminatedAttemptToExpiredPhase() {
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(lockedPending()));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(
+            Optional.of(closedAttempt(ReservationActionStateStatus.TERMINATED, "NONCE_STALE")));
+
+    var result = service.execute(new CalculateMarketplaceAdminRefundReviewQuery(1L, true));
+
+    assertThat(result.adminExecutionPhase()).isEqualTo(MarketplaceAdminExecutionPhase.EXPIRED);
+    assertThat(result.lastAttempt()).isNotNull();
+  }
+
   private Reservation lockedPending() {
     return Reservation.builder()
         .id(1L)
@@ -245,6 +298,17 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
         .reservationId(1L)
         .status(ReservationActionStateStatus.INTENT_BOUND)
         .executionIntentPublicId("intent-1")
+        .build();
+  }
+
+  private MarketplaceReservationActionState closedAttempt(
+      ReservationActionStateStatus status, String errorCode) {
+    return MarketplaceReservationActionState.builder()
+        .id(99L)
+        .reservationId(1L)
+        .status(status)
+        .errorCode(errorCode)
+        .retryable(false)
         .build();
   }
 }
