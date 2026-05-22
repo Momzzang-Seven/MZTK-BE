@@ -21,8 +21,7 @@ public final class WalletRegistrationReceiptTimeout {
     return session != null && ERROR_CODE.equals(session.getLastErrorCode());
   }
 
-  public static boolean approvalTtlRemains(
-      WalletRegistrationSession session, LocalDateTime now) {
+  public static boolean approvalTtlRemains(WalletRegistrationSession session, LocalDateTime now) {
     return session.getApprovalExpiresAt() != null && session.getApprovalExpiresAt().isAfter(now);
   }
 }

@@ -32,6 +32,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ExpireWallet
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalTerminatedUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletApprovalAttemptUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
@@ -44,6 +45,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationS
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Wallet registration entry service.
@@ -63,6 +65,7 @@ public class RegisterWalletService implements RegisterWalletUseCase {
   private final LoadWalletPort loadWalletPort;
   private final LoadWalletApprovalCapabilityPort loadWalletApprovalCapabilityPort;
   private final LoadWalletApprovalExecutionStatePort loadWalletApprovalExecutionStatePort;
+  private final AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   private final WalletRegistrationSessionDuplicateResolver duplicateResolver;
   private final RegisterWalletApprovalAttemptUseCase approvalAttemptUseCase;
   private final ExpireWalletRegistrationSessionUseCase expireSessionUseCase;
@@ -70,6 +73,7 @@ public class RegisterWalletService implements RegisterWalletUseCase {
   private final Clock appClock;
 
   @Override
+  @Transactional
   public RegisterWalletResult execute(RegisterWalletCommand command) {
     log.info(
         "Registering wallet approval session: userId={}, address={}, nonce={}",
@@ -82,6 +86,7 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     validateChallenge(challenge, command);
     verifyOwnershipSignature(challenge, command);
     validateApprovalAvailable();
+    authorityLockPort.lock(command.userId(), command.walletAddress());
     validateLocalWalletEligibility(command);
 
     WalletRegistrationDuplicateResolution currentDuplicate =
@@ -214,19 +219,20 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     if (session == null) {
       return false;
     }
-    Optional<WalletApprovalExecutionStateView> currentState =
-        session.getLatestExecutionIntentId() == null
-            ? Optional.empty()
-            : loadWalletApprovalExecutionStatePort.loadByExecutionIntentId(
-                session.getUserId(), session.getLatestExecutionIntentId());
-    if (currentState.filter(WalletRegistrationReceiptTimeout::isCurrent).isPresent()) {
-      markTerminatedUseCase.execute(
-          new MarkWalletRegistrationApprovalTerminatedCommand(
-              session.getPublicId(),
-              session.getLatestExecutionIntentId(),
-              WalletRegistrationReceiptTimeout.ERROR_CODE,
-              WalletRegistrationReceiptTimeout.ERROR_REASON));
-      return true;
+    if (session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        && session.getLatestExecutionIntentId() != null) {
+      Optional<WalletApprovalExecutionStateView> currentState =
+          loadWalletApprovalExecutionStatePort.loadByExecutionIntentId(
+              session.getUserId(), session.getLatestExecutionIntentId());
+      if (currentState.filter(WalletRegistrationReceiptTimeout::isCurrent).isPresent()) {
+        markTerminatedUseCase.execute(
+            new MarkWalletRegistrationApprovalTerminatedCommand(
+                session.getPublicId(),
+                session.getLatestExecutionIntentId(),
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON));
+        return true;
+      }
     }
     if (!isApprovalTtlElapsed(session)) {
       return false;

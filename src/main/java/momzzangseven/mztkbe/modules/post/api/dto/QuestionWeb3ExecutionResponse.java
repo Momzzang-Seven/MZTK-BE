@@ -7,7 +7,10 @@ public record QuestionWeb3ExecutionResponse(
     String actionType,
     ExecutionIntent executionIntent,
     Execution execution,
-    Transaction transaction) {
+    Transaction transaction,
+    String recoveryStatus,
+    String recoveryReason,
+    Boolean retryAllowed) {
 
   public static QuestionWeb3ExecutionResponse from(QuestionExecutionResumeView view) {
     if (view == null) {
@@ -25,7 +28,10 @@ public record QuestionWeb3ExecutionResponse(
         view.transaction() == null
             ? null
             : new Transaction(
-                view.transaction().id(), view.transaction().status(), view.transaction().txHash()));
+                view.transaction().id(), view.transaction().status(), view.transaction().txHash()),
+        view.recoveryStatus(),
+        view.recoveryReason(),
+        view.retryAllowed());
   }
 
   public record Resource(String type, String id, String status) {}

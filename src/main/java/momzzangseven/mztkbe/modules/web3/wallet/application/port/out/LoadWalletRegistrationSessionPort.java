@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.port.out;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
 
@@ -16,4 +17,7 @@ public interface LoadWalletRegistrationSessionPort {
 
   Optional<WalletRegistrationSession> loadLatestNonTerminalByUserIdAndWalletAddress(
       Long userId, String walletAddress);
+
+  boolean existsNewerByUserIdOrWalletAddress(
+      Long userId, String walletAddress, LocalDateTime createdAt, Long sessionId);
 }

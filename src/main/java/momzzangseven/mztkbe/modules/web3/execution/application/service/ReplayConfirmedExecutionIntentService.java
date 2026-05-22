@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayCon
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -25,6 +26,7 @@ public class ReplayConfirmedExecutionIntentService
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
+  private final RunAfterCommitPort runAfterCommitPort;
   private final Clock appClock;
 
   @Override
@@ -75,7 +77,8 @@ public class ReplayConfirmedExecutionIntentService
   private boolean replayConfirmed(ExecutionIntent intent) {
     ExecutionActionHandlerPort actionHandler = resolveActionHandler(intent);
     ExecutionActionPlan actionPlan = actionHandler.buildActionPlan(intent);
-    actionHandler.afterExecutionConfirmed(intent, actionPlan);
+    runAfterCommitPort.runAfterCommit(
+        () -> actionHandler.afterExecutionConfirmed(intent, actionPlan));
     return true;
   }
 

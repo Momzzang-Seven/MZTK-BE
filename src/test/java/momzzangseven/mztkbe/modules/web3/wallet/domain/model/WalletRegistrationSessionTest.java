@@ -95,6 +95,74 @@ class WalletRegistrationSessionTest {
   }
 
   @Test
+  void receiptTimeoutRetryableOrFailedSession_canFinalizeOnlyWithReceiptTimeoutError() {
+    WalletRegistrationSession retryable =
+        signedSession()
+            .markApprovalPendingOnchain(
+                EXECUTION_INTENT_ID,
+                10L,
+                "0x" + "b".repeat(64),
+                "PENDING_ONCHAIN",
+                NOW.plusSeconds(3))
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4));
+    WalletRegistrationSession failed =
+        signedSession()
+            .markApprovalPendingOnchain(
+                EXECUTION_INTENT_ID,
+                10L,
+                "0x" + "b".repeat(64),
+                "PENDING_ONCHAIN",
+                NOW.plusSeconds(3))
+            .markApprovalFailed("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4));
+
+    assertThat(
+            retryable
+                .markApprovalConfirmed(
+                    EXECUTION_INTENT_ID,
+                    10L,
+                    "0x" + "b".repeat(64),
+                    "CONFIRMED",
+                    NOW.plusSeconds(5))
+                .markRegistered(77L, NOW.plusSeconds(6))
+                .getStatus())
+        .isEqualTo(WalletRegistrationStatus.REGISTERED);
+    assertThat(
+            failed
+                .markApprovalConfirmed(
+                    EXECUTION_INTENT_ID,
+                    10L,
+                    "0x" + "b".repeat(64),
+                    "CONFIRMED",
+                    NOW.plusSeconds(5))
+                .markRegistered(77L, NOW.plusSeconds(6))
+                .getStatus())
+        .isEqualTo(WalletRegistrationStatus.REGISTERED);
+  }
+
+  @Test
+  void nonReceiptTimeoutApprovalFailedSession_cannotFinalize() {
+    WalletRegistrationSession failed =
+        signedSession()
+            .markApprovalPendingOnchain(
+                EXECUTION_INTENT_ID,
+                10L,
+                "0x" + "b".repeat(64),
+                "PENDING_ONCHAIN",
+                NOW.plusSeconds(3))
+            .markApprovalFailed("FAILED_ONCHAIN", "failed", NOW.plusSeconds(4));
+
+    assertThatThrownBy(
+            () ->
+                failed.markApprovalConfirmed(
+                    EXECUTION_INTENT_ID,
+                    10L,
+                    "0x" + "b".repeat(64),
+                    "CONFIRMED",
+                    NOW.plusSeconds(5)))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
   void confirmedOrSubmittedSessions_cannotCreateAnotherApprovalIntent() {
     WalletRegistrationSession signed = signedSession();
     WalletRegistrationSession pending =

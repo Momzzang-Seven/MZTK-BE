@@ -42,7 +42,13 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationS
           columnList = "wallet_address,status,created_at"),
       @Index(
           name = "idx_web3_wallet_registration_sessions_latest_tx",
-          columnList = "latest_transaction_id")
+          columnList = "latest_transaction_id"),
+      @Index(
+          name = "idx_web3_wallet_registration_sessions_user_created_id",
+          columnList = "user_id,created_at,id"),
+      @Index(
+          name = "idx_web3_wallet_registration_sessions_wallet_created_id",
+          columnList = "wallet_address,created_at,id")
     })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

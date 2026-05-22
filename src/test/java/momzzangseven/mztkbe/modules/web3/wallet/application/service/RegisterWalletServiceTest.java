@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -25,6 +26,7 @@ import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableExcepti
 import momzzangseven.mztkbe.global.error.wallet.WalletBlackListException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ExpireWalletRegistrationSessionCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.MarkWalletRegistrationApprovalTerminatedCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalCapability;
@@ -34,9 +36,12 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSi
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationChallengeView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationDuplicateResolution;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationNextAction;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.DuplicateWalletRegistrationSessionException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ExpireWalletRegistrationSessionUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalTerminatedUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletApprovalAttemptUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
@@ -52,6 +57,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -76,9 +82,11 @@ class RegisterWalletServiceTest {
   @Mock private LoadWalletPort loadWalletPort;
   @Mock private LoadWalletApprovalCapabilityPort loadWalletApprovalCapabilityPort;
   @Mock private LoadWalletApprovalExecutionStatePort loadWalletApprovalExecutionStatePort;
+  @Mock private AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   @Mock private WalletRegistrationSessionDuplicateResolver duplicateResolver;
   @Mock private RegisterWalletApprovalAttemptUseCase approvalAttemptService;
   @Mock private ExpireWalletRegistrationSessionUseCase expireSessionUseCase;
+  @Mock private MarkWalletRegistrationApprovalTerminatedUseCase markTerminatedUseCase;
 
   private RegisterWalletService registerWalletService;
   private WalletRegistrationChallengeView validChallenge;
@@ -95,9 +103,11 @@ class RegisterWalletServiceTest {
             loadWalletPort,
             loadWalletApprovalCapabilityPort,
             loadWalletApprovalExecutionStatePort,
+            authorityLockPort,
             duplicateResolver,
             approvalAttemptService,
             expireSessionUseCase,
+            markTerminatedUseCase,
             FIXED_CLOCK);
   }
 
@@ -120,6 +130,12 @@ class RegisterWalletServiceTest {
     assertThat(result.walletId()).isNull();
     assertThat(result.web3()).isNotNull();
     verify(approvalAttemptService).createPendingApproval(command);
+    InOrder inOrder = inOrder(authorityLockPort, loadWalletPort, duplicateResolver);
+    inOrder.verify(authorityLockPort).lock(VALID_USER_ID, VALID_WALLET_ADDRESS);
+    inOrder
+        .verify(loadWalletPort)
+        .countWalletsByUserIdAndStatus(VALID_USER_ID, WalletStatus.ACTIVE);
+    inOrder.verify(duplicateResolver).resolveCurrent(VALID_USER_ID, VALID_WALLET_ADDRESS);
   }
 
   @Test
@@ -309,6 +325,40 @@ class RegisterWalletServiceTest {
     assertThat(result.web3()).isNull();
     verifyNoInteractions(approvalAttemptService);
     verify(loadWalletApprovalExecutionStatePort, never()).loadByExecutionIntentId(any(), any());
+  }
+
+  @Test
+  @DisplayName("pending-onchain duplicate with UNCONFIRMED tx is reconciled before reuse")
+  void execute_DuplicatePendingOnchainUnconfirmed_ReconcilesReceiptTimeoutBeforeReuse() {
+    RegisterWalletCommand command = validCommand();
+    WalletRegistrationSession pendingOnchain = pendingOnchainSession();
+    WalletRegistrationSession retryable =
+        pendingOnchain.markApprovalRetryable(
+            WalletRegistrationReceiptTimeout.ERROR_CODE,
+            WalletRegistrationReceiptTimeout.ERROR_REASON,
+            NOW.plusSeconds(4));
+    givenValidOwnership(command);
+    when(loadWalletPort.countWalletsByUserIdAndStatus(VALID_USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(0);
+    when(loadWalletPort.findByWalletAddress(VALID_WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(duplicateResolver.resolveCurrent(VALID_USER_ID, VALID_WALLET_ADDRESS))
+        .thenReturn(WalletRegistrationDuplicateResolution.reuse(pendingOnchain))
+        .thenReturn(WalletRegistrationDuplicateResolution.reuse(retryable));
+    when(loadWalletApprovalExecutionStatePort.loadByExecutionIntentId(VALID_USER_ID, "intent-1"))
+        .thenReturn(Optional.of(unconfirmedExecutionState()));
+
+    RegisterWalletResult result = registerWalletService.execute(command);
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_RETRYABLE);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.RETRY_APPROVAL);
+    verify(markTerminatedUseCase)
+        .execute(
+            new MarkWalletRegistrationApprovalTerminatedCommand(
+                "registration-1",
+                "intent-1",
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON));
+    verifyNoInteractions(approvalAttemptService);
   }
 
   @Test
@@ -551,6 +601,12 @@ class RegisterWalletServiceTest {
         .markApprovalSigned("intent-1", 11L, "0x" + "c".repeat(64), "SIGNED", NOW.plusSeconds(2));
   }
 
+  private static WalletRegistrationSession pendingOnchainSession() {
+    return signedSession()
+        .markApprovalPendingOnchain(
+            "intent-1", 11L, "0x" + "c".repeat(64), "PENDING_ONCHAIN", NOW.plusSeconds(3));
+  }
+
   private static WalletRegistrationSession retryableSession() {
     return pendingSession()
         .markApprovalRetryable("FAILED_ONCHAIN", "approval failed", NOW.plusSeconds(2));
@@ -599,6 +655,25 @@ class RegisterWalletServiceTest {
         null,
         null,
         null);
+  }
+
+  private static WalletApprovalExecutionStateView unconfirmedExecutionState() {
+    return new WalletApprovalExecutionStateView(
+        "WALLET_REGISTRATION",
+        "registration-1",
+        "PENDING_EXECUTION",
+        "WALLET_ESCROW_APPROVE",
+        "intent-1",
+        "PENDING_ONCHAIN",
+        NOW.plusMinutes(5),
+        1L,
+        "EIP7702",
+        2,
+        null,
+        null,
+        11L,
+        WalletRegistrationReceiptTimeout.TRANSACTION_STATUS,
+        "0x" + "c".repeat(64));
   }
 
   private static WalletRegistrationChallengeView challenge(boolean used, boolean expired) {

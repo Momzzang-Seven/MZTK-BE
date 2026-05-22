@@ -30,6 +30,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalEx
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalTtlPolicy;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationNextAction;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationStatusResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.BuildWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.CancelWalletApprovalExecutionPort;
@@ -297,6 +298,57 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   @Test
+  void
+      execute_whenPendingOnchainTransactionUnconfirmedAndTtlValid_marksRetryableThenCreatesNewIntent() {
+    WalletRegistrationSession pending = pendingOnchainSession();
+    WalletRegistrationSession retryable =
+        pending.markApprovalRetryable(
+            WalletRegistrationReceiptTimeout.ERROR_CODE,
+            WalletRegistrationReceiptTimeout.ERROR_REASON,
+            NOW.plusSeconds(4));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(pending), Optional.of(retryable));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", null, NOW.plusMinutes(5))));
+    when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    givenApprovalAvailable();
+    givenMinimumRemainingTtl(30L);
+    when(buildDraftPort.build(any())).thenReturn(draft());
+    when(submitDraftPort.submit(any())).thenReturn(intentResult(RETRY_INTENT_ID));
+
+    WalletRegistrationStatusResult result = service.execute(command(USER_ID));
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort, org.mockito.Mockito.times(2)).save(captor.capture());
+    assertThat(captor.getAllValues().get(0).getStatus())
+        .isEqualTo(WalletRegistrationStatus.APPROVAL_RETRYABLE);
+    assertThat(captor.getAllValues().get(0).getLastErrorCode())
+        .isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
+    assertThat(captor.getAllValues().get(1).getLatestExecutionIntentId())
+        .isEqualTo(RETRY_INTENT_ID);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.SIGN_APPROVAL);
+  }
+
+  @Test
+  void execute_whenPendingOnchainTransactionUnconfirmedAndTtlElapsed_returnsTerminalStatus() {
+    WalletRegistrationSession pending = expiredPendingOnchainSession();
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(pending));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(
+            Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", null, NOW.minusSeconds(1))));
+    when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    WalletRegistrationStatusResult result = service.execute(command(USER_ID));
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_FAILED);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.NONE);
+    assertThat(result.lastErrorCode()).isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
+    verify(buildDraftPort, never()).build(any());
+    verify(submitDraftPort, never()).submit(any());
+  }
+
+  @Test
   void execute_whenTerminalSession_rejectsRetry() {
     for (WalletRegistrationSession terminalSession : terminalSessions()) {
       when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
@@ -328,6 +380,20 @@ class RetryWalletRegistrationApprovalServiceTest {
             NOW.minusSeconds(1),
             NOW.minusMinutes(31))
         .attachApprovalIntent(INTENT_ID, NOW.minusSeconds(1), NOW.minusMinutes(30));
+  }
+
+  private static WalletRegistrationSession pendingOnchainSession() {
+    return approvalRequiredSession()
+        .markApprovalSigned(INTENT_ID, 10L, "0x" + "c".repeat(64), "SIGNED", NOW.plusSeconds(2))
+        .markApprovalPendingOnchain(
+            INTENT_ID, 10L, "0x" + "c".repeat(64), "PENDING_ONCHAIN", NOW.plusSeconds(3));
+  }
+
+  private static WalletRegistrationSession expiredPendingOnchainSession() {
+    return expiredTtlSession()
+        .markApprovalSigned(INTENT_ID, 10L, "0x" + "c".repeat(64), "SIGNED", NOW.minusSeconds(20))
+        .markApprovalPendingOnchain(
+            INTENT_ID, 10L, "0x" + "c".repeat(64), "PENDING_ONCHAIN", NOW.minusSeconds(10));
   }
 
   private static WalletRegistrationSession nearExpiredSession() {

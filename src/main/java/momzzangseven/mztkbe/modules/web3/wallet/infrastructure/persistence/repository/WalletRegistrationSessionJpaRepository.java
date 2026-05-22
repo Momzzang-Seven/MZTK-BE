@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.repository;
 
 import jakarta.persistence.LockModeType;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -58,4 +59,20 @@ public interface WalletRegistrationSessionJpaRepository
 
   List<WalletRegistrationSessionEntity> findByStatusInOrderByUpdatedAtAscIdAsc(
       Collection<WalletRegistrationStatus> statuses, Pageable pageable);
+
+  @Query(
+      """
+      select count(s) > 0
+      from WalletRegistrationSessionEntity s
+      where (s.userId = :userId or s.walletAddress = :walletAddress)
+        and (
+          s.createdAt > :createdAt
+          or (s.createdAt = :createdAt and s.id > :sessionId)
+        )
+      """)
+  boolean existsNewerByUserIdOrWalletAddress(
+      @Param("userId") Long userId,
+      @Param("walletAddress") String walletAddress,
+      @Param("createdAt") LocalDateTime createdAt,
+      @Param("sessionId") Long sessionId);
 }

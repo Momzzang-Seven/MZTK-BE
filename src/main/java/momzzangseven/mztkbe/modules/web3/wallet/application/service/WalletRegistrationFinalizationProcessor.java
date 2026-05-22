@@ -11,8 +11,10 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.WalletRegistrationLocalConflictException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletAndFlushPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RecordWalletEventPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletAndFlushPort;
@@ -34,6 +36,8 @@ class WalletRegistrationFinalizationProcessor {
   static final String LOCAL_CONFLICT = "LOCAL_CONFLICT";
 
   private final LockWalletRegistrationSessionPort lockSessionPort;
+  private final LoadWalletRegistrationSessionPort loadSessionPort;
+  private final AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   private final SaveWalletRegistrationSessionPort saveSessionPort;
   private final LoadWalletPort loadWalletPort;
   private final SaveWalletAndFlushPort saveWalletAndFlushPort;
@@ -43,6 +47,15 @@ class WalletRegistrationFinalizationProcessor {
 
   @Transactional
   public void finalizeConfirmed(FinalizeWalletRegistrationCommand command) {
+    WalletRegistrationSession authoritySnapshot =
+        loadSessionPort
+            .loadByPublicId(command.registrationId())
+            .orElseThrow(
+                () ->
+                    new Web3InvalidInputException(
+                        "registrationId not found: " + command.registrationId()));
+    authorityLockPort.lock(authoritySnapshot.getUserId(), authoritySnapshot.getWalletAddress());
+
     WalletRegistrationSession session =
         lockSessionPort
             .lockByPublicIdForUpdate(command.registrationId())
@@ -69,6 +82,14 @@ class WalletRegistrationFinalizationProcessor {
           session.getStatus());
       return;
     }
+    if (hasNewerAuthoritativeSession(session)) {
+      log.info(
+          "Skipping superseded wallet finalization event: registrationId={}, userId={}, walletAddress={}",
+          session.getPublicId(),
+          session.getUserId(),
+          session.getWalletAddress());
+      return;
+    }
 
     LocalDateTime now = LocalDateTime.now(appClock);
     WalletRegistrationSession confirmed =
@@ -91,6 +112,16 @@ class WalletRegistrationFinalizationProcessor {
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
         || isReceiptTimeoutLateSuccess(session)
         || session.getStatus().isConfirmedButNotFinalized();
+  }
+
+  private boolean hasNewerAuthoritativeSession(WalletRegistrationSession session) {
+    return session.getId() != null
+        && session.getCreatedAt() != null
+        && loadSessionPort.existsNewerByUserIdOrWalletAddress(
+            session.getUserId(),
+            session.getWalletAddress(),
+            session.getCreatedAt(),
+            session.getId());
   }
 
   private boolean isReceiptTimeoutLateSuccess(WalletRegistrationSession session) {

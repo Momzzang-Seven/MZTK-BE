@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -23,6 +25,8 @@ class WalletRegistrationFinalizationFailureRecorder {
   static final String FINALIZATION_FAILED = "FINALIZATION_FAILED";
 
   private final LockWalletRegistrationSessionPort lockSessionPort;
+  private final LoadWalletRegistrationSessionPort loadSessionPort;
+  private final AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   private final SaveWalletRegistrationSessionPort saveSessionPort;
   private final Clock appClock;
 
@@ -44,6 +48,12 @@ class WalletRegistrationFinalizationFailureRecorder {
       String errorReason,
       boolean localConflict) {
     try {
+      WalletRegistrationSession authoritySnapshot =
+          loadSessionPort.loadByPublicId(command.registrationId()).orElse(null);
+      if (authoritySnapshot == null) {
+        return;
+      }
+      authorityLockPort.lock(authoritySnapshot.getUserId(), authoritySnapshot.getWalletAddress());
       lockSessionPort
           .lockByPublicIdForUpdate(command.registrationId())
           .ifPresent(

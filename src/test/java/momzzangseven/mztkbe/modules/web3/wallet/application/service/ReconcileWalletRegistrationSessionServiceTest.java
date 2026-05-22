@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ReconcileWalletR
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ReconcileWalletRegistrationSessionResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RetryWalletRegistrationFinalizationCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ExpireWalletRegistrationSessionUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.FinalizeWalletRegistrationUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalSubmittedUseCase;
@@ -130,6 +131,27 @@ class ReconcileWalletRegistrationSessionServiceTest {
                 "FAILED_ONCHAIN",
                 "approval transaction failed on-chain"));
     verify(markSubmittedUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void execute_whenTransactionUnconfirmed_marksReceiptTimeoutBeforeSubmitted() {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID))
+        .thenReturn(Optional.of(pendingOnchainSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", 10L, NOW.plusMinutes(5))));
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.recovered()).isTrue();
+    verify(markTerminatedUseCase)
+        .execute(
+            new MarkWalletRegistrationApprovalTerminatedCommand(
+                REGISTRATION_ID,
+                INTENT_ID,
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON));
+    verify(markSubmittedUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+    verify(expireUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
   }
 
   @Test
