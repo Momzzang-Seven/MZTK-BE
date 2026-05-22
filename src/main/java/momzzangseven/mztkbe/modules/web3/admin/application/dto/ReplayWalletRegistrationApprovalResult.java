@@ -5,6 +5,7 @@ public record ReplayWalletRegistrationApprovalResult(
     boolean replayInvoked,
     String registrationId,
     Long transactionId,
+    String txHash,
     String executionIntentId,
     String executionIntentStatus,
     String transactionStatus,

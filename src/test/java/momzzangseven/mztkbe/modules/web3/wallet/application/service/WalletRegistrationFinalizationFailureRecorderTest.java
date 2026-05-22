@@ -96,6 +96,19 @@ class WalletRegistrationFinalizationFailureRecorderTest {
     assertThat(captor.getValue().getLastErrorReason()).isEqualTo("active wallet");
   }
 
+  @Test
+  void recordLocalConflict_whenNewerAuthoritativeSessionExists_doesNotPersistFailure() {
+    WalletRegistrationSession session = approvalRequiredSession().toBuilder().id(10L).build();
+    givenRecordableSession(session);
+    when(loadSessionPort.existsNewerByUserIdOrWalletAddress(
+            session.getUserId(), session.getWalletAddress(), session.getId()))
+        .thenReturn(true);
+
+    recorder.recordLocalConflict(command(), "LOCAL_CONFLICT", "active wallet");
+
+    verify(saveSessionPort, never()).save(any());
+  }
+
   private static FinalizeWalletRegistrationCommand command() {
     return new FinalizeWalletRegistrationCommand(REGISTRATION_ID, INTENT_ID);
   }

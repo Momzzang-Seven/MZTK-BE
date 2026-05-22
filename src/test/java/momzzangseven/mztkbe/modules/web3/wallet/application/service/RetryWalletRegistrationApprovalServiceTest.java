@@ -447,6 +447,28 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   @Test
+  void execute_whenRetryIntentReuseIsAlreadyConfirmed_rejectsAttach() {
+    WalletRegistrationSession retryable =
+        approvalRequiredSession().markApprovalRetryable("EXPIRED", "expired", NOW.plusSeconds(2));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(retryable), Optional.of(retryable));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(state("EXPIRED", null, null, NOW.minusMinutes(1))));
+    givenApprovalAvailable();
+    givenMinimumRemainingTtl(30L);
+    when(buildDraftPort.build(any())).thenReturn(draft());
+    when(submitDraftPort.submit(any()))
+        .thenReturn(intentResult(RETRY_INTENT_ID, true, "CONFIRMED", null));
+
+    assertThatThrownBy(() -> service.execute(command(USER_ID)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("not signable");
+
+    verify(saveSessionPort, never()).save(any());
+    verify(cancelExecutionPort, never()).cancelIfSignable(any(), any(), any());
+  }
+
+  @Test
   void execute_whenPendingOnchainTransactionUnconfirmedAndTtlElapsed_returnsTerminalStatus() {
     WalletRegistrationSession pending = expiredPendingOnchainSession();
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(pending));
@@ -610,14 +632,22 @@ class RetryWalletRegistrationApprovalServiceTest {
 
   private static WalletApprovalExecutionIntentResult intentResult(
       String intentId, boolean existing) {
+    return intentResult(intentId, existing, "AWAITING_SIGNATURE", signRequest());
+  }
+
+  private static WalletApprovalExecutionIntentResult intentResult(
+      String intentId,
+      boolean existing,
+      String executionIntentStatus,
+      WalletApprovalSignRequestBundle signRequest) {
     return new WalletApprovalExecutionIntentResult(
         new WalletApprovalExecutionIntentResult.Resource(
             "WALLET_REGISTRATION", REGISTRATION_ID, "PENDING_EXECUTION"),
         "WALLET_ESCROW_APPROVE",
         new WalletApprovalExecutionIntentResult.ExecutionIntent(
-            intentId, "AWAITING_SIGNATURE", NOW.plusMinutes(5), 1L),
+            intentId, executionIntentStatus, NOW.plusMinutes(5), 1L),
         new WalletApprovalExecutionIntentResult.Execution("EIP7702", 2),
-        signRequest(),
+        signRequest,
         existing);
   }
 

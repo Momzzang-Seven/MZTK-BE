@@ -53,7 +53,7 @@ public class ReconcileWalletRegistrationSessionService
     }
 
     WalletRegistrationSession session = maybeSession.get();
-    if (session.isTerminal()) {
+    if (session.isTerminal() && !isReceiptTimeoutApprovalFailed(session)) {
       return ReconcileWalletRegistrationSessionResult.skippedResult();
     }
     if (session.getStatus().isConfirmedButNotFinalized()) {
@@ -147,6 +147,10 @@ public class ReconcileWalletRegistrationSessionService
     return session.getStatus().isPreSubmissionExpirable()
         && session.getApprovalExpiresAt() != null
         && !session.getApprovalExpiresAt().isAfter(LocalDateTime.now(appClock));
+  }
+
+  private boolean isReceiptTimeoutApprovalFailed(WalletRegistrationSession session) {
+    return session.isTerminal() && WalletRegistrationReceiptTimeout.isRecordedOn(session);
   }
 
   private boolean isSucceededTransactionBeforeExecutionConfirmed(

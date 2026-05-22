@@ -367,6 +367,7 @@ class AdminOnlyAspectTest {
             true,
             "registration-1",
             24L,
+            "0x" + "a".repeat(64),
             "intent-1",
             "CONFIRMED",
             "SUCCEEDED",
@@ -393,6 +394,8 @@ class AdminOnlyAspectTest {
     assertThat(command.detail()).containsEntry("walletRegistrationStatus", "FINALIZATION_FAILED");
     assertThat(command.detail()).containsEntry("newerWalletRegistrationExists", false);
     assertThat(command.detail()).containsEntry("walletLastErrorCode", "LOCAL_CONFLICT");
+    assertThat(command.detail()).containsEntry("reason", "manual replay");
+    assertThat(command.detail()).containsEntry("evidence", "ops-ticket-450");
   }
 
   @Test

@@ -188,7 +188,9 @@ class AdminOnlyAnnotationTest {
             "transactionStatus=#result?.transactionStatus()",
             "walletRegistrationStatus=#result?.walletRegistrationStatus()",
             "newerWalletRegistrationExists=#result?.newerWalletRegistrationExists()",
-            "walletLastErrorCode=#result?.walletLastErrorCode()");
+            "walletLastErrorCode=#result?.walletLastErrorCode()",
+            "reason=#command.reason()",
+            "evidence=#command.evidence()");
     assertThat(detailKeys(annotation)).doesNotContainAnyElementsOf(RESERVED_AUDIT_DETAIL_KEYS);
   }
 

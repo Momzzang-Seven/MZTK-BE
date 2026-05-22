@@ -74,6 +74,7 @@ class WalletRegistrationRecoveryControllerTest {
                 true,
                 "registration-1",
                 24L,
+                "0x" + "a".repeat(64),
                 "intent-1",
                 "CONFIRMED",
                 "SUCCEEDED",
@@ -99,6 +100,7 @@ class WalletRegistrationRecoveryControllerTest {
         .andExpect(jsonPath("$.data.replayInvoked").value(true))
         .andExpect(jsonPath("$.data.registrationId").value("registration-1"))
         .andExpect(jsonPath("$.data.transactionId").value(24))
+        .andExpect(jsonPath("$.data.txHash").value("0x" + "a".repeat(64)))
         .andExpect(jsonPath("$.data.executionIntentId").value("intent-1"))
         .andExpect(jsonPath("$.data.walletRegistrationStatus").value("REGISTERED"))
         .andExpect(jsonPath("$.data.newerWalletRegistrationExists").value(false));

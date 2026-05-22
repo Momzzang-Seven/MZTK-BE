@@ -154,6 +154,7 @@ public class RetryWalletRegistrationApprovalService
     rejectExpiredSession(session, now);
     rejectStaleRetrySession(session, preparation);
     rejectReusedRetryIntent(preparation, approvalIntent);
+    rejectNonSignableRetryIntent(approvalIntent);
 
     Optional<WalletApprovalExecutionStateView> currentState = loadCurrentState(session);
     WalletRegistrationSession retryable = ensureRetryable(session, currentState, now);
@@ -281,6 +282,13 @@ public class RetryWalletRegistrationApprovalService
       RetryApprovalPreparation preparation, WalletApprovalExecutionIntentResult approvalIntent) {
     if (Objects.equals(approvalIntent.executionIntent().id(), preparation.previousIntentId())) {
       throw new Web3InvalidInputException("wallet registration retry reused previous intent");
+    }
+  }
+
+  private void rejectNonSignableRetryIntent(WalletApprovalExecutionIntentResult approvalIntent) {
+    if (!"AWAITING_SIGNATURE".equals(approvalIntent.executionIntent().status())
+        || approvalIntent.signRequest() == null) {
+      throw new Web3InvalidInputException("wallet registration retry intent is not signable");
     }
   }
 

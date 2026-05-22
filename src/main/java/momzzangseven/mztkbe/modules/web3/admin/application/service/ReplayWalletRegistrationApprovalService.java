@@ -40,7 +40,9 @@ public class ReplayWalletRegistrationApprovalService
         "transactionStatus=#result?.transactionStatus()",
         "walletRegistrationStatus=#result?.walletRegistrationStatus()",
         "newerWalletRegistrationExists=#result?.newerWalletRegistrationExists()",
-        "walletLastErrorCode=#result?.walletLastErrorCode()"
+        "walletLastErrorCode=#result?.walletLastErrorCode()",
+        "reason=#command.reason()",
+        "evidence=#command.evidence()"
       })
   public ReplayWalletRegistrationApprovalResult execute(
       ReplayWalletRegistrationApprovalCommand command) {
@@ -134,6 +136,7 @@ public class ReplayWalletRegistrationApprovalService
         false,
         command.registrationId(),
         command.transactionId(),
+        null,
         command.executionIntentId(),
         null,
         null,
@@ -153,6 +156,7 @@ public class ReplayWalletRegistrationApprovalService
         replayInvoked,
         target.registrationId(),
         target.transactionId(),
+        target.txHash(),
         target.executionIntentId(),
         target.executionIntentStatus(),
         target.transactionStatus(),

@@ -231,6 +231,40 @@ class ReconcileWalletRegistrationSessionServiceTest {
   }
 
   @Test
+  void execute_whenReceiptTimeoutFailedButExecutionConfirmed_finalizesLateSuccess() {
+    WalletRegistrationSession session =
+        pendingOnchainSession()
+            .markApprovalFailed(
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON,
+                NOW.plusSeconds(4));
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(Optional.of(state("CONFIRMED", "SUCCEEDED", 10L, NOW.minusSeconds(1))));
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.recovered()).isTrue();
+    verify(finalizeUseCase)
+        .execute(new FinalizeWalletRegistrationCommand(REGISTRATION_ID, INTENT_ID));
+  }
+
+  @Test
+  void execute_whenNonReceiptTimeoutFailed_skipsTerminalSession() {
+    WalletRegistrationSession session =
+        approvalRequiredSession()
+            .markApprovalFailed("APPROVAL_FAILED", "failed", NOW.plusSeconds(2));
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.skipped()).isTrue();
+    verify(loadExecutionStatePort, never())
+        .loadByExecutionIntentId(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void execute_whenFinalizationFailedAfterBackoff_retriesFinalization() {
     WalletRegistrationSession session =
         pendingOnchainSession()

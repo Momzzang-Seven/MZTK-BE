@@ -85,6 +85,9 @@ class WalletRegistrationFinalizationFailureRecorder {
     if (session.isTerminal() && !isReceiptTimeoutLateSuccess(session) && !recoveredStaleIntent) {
       return;
     }
+    if (hasNewerAuthoritativeSession(session)) {
+      return;
+    }
     if (!recoveredStaleIntent && !isFinalizationFailureStatus(session)) {
       return;
     }
@@ -130,5 +133,11 @@ class WalletRegistrationFinalizationFailureRecorder {
     return (session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
             || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED)
         && WalletRegistrationReceiptTimeout.isRecordedOn(session);
+  }
+
+  private boolean hasNewerAuthoritativeSession(WalletRegistrationSession session) {
+    return session.getId() != null
+        && loadSessionPort.existsNewerByUserIdOrWalletAddress(
+            session.getUserId(), session.getWalletAddress(), session.getId());
   }
 }

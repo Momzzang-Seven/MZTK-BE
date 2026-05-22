@@ -47,6 +47,7 @@ class ReplayWalletRegistrationApprovalServiceTest {
 
     assertThat(result.outcome()).isEqualTo("REGISTERED");
     assertThat(result.replayInvoked()).isTrue();
+    assertThat(result.txHash()).isEqualTo("0x" + "a".repeat(64));
     assertThat(result.walletRegistrationStatus()).isEqualTo("REGISTERED");
     verify(replayConfirmedWalletApprovalPort).replay("intent-1", "WALLET_ESCROW_APPROVE");
   }
