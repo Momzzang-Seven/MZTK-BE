@@ -73,6 +73,26 @@ class ResolveExecutionIntentRecoveryTargetServiceTest {
     assertThat(result.executionIntentStatus()).isEqualTo("PENDING_ONCHAIN");
   }
 
+  @Test
+  void execute_whenExecutionIntentIdProvided_resolvesIntentAndSubmittedTransaction() {
+    ExecutionIntent intent = intent().toBuilder().submittedTxId(24L).build();
+    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
+    when(loadExecutionTransactionPort.findById(24L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    24L, ExecutionTransactionStatus.SUCCEEDED, "0x" + "a".repeat(64))));
+
+    var result =
+        service
+            .execute(ResolveExecutionIntentRecoveryTargetQuery.byExecutionIntentId("intent-1"))
+            .orElseThrow();
+
+    assertThat(result.resourceId()).isEqualTo("registration-1");
+    assertThat(result.transactionId()).isEqualTo(24L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SUCCEEDED);
+  }
+
   private ExecutionIntent intent() {
     return ExecutionIntent.builder()
         .id(1L)

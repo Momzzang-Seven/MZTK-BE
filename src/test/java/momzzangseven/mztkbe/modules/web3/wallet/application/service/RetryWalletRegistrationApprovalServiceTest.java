@@ -260,6 +260,28 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   @Test
+  void execute_whenExistingIntentReuseLosesAttachRace_doesNotCancelSharedIntent() {
+    WalletRegistrationSession retryable =
+        approvalRequiredSession().markApprovalRetryable("EXPIRED", "expired", NOW.plusSeconds(2));
+    WalletRegistrationSession changed =
+        retryable.attachApprovalIntentPreservingDeadline("intent-other", NOW.plusSeconds(3));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(retryable), Optional.of(changed));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(state("EXPIRED", null, null, NOW.minusMinutes(1))));
+    givenApprovalAvailable();
+    givenMinimumRemainingTtl(30L);
+    when(buildDraftPort.build(any())).thenReturn(draft());
+    when(submitDraftPort.submit(any())).thenReturn(intentResult(RETRY_INTENT_ID, true));
+
+    assertThatThrownBy(() -> service.execute(command(USER_ID)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("changed before attach");
+
+    verify(cancelExecutionPort, never()).cancelIfSignable(any(), any(), any());
+  }
+
+  @Test
   void execute_whenWrongUser_rejectsBeforeExecutionStateRead() {
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalRequiredSession()));
@@ -489,6 +511,11 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   private static WalletApprovalExecutionIntentResult intentResult(String intentId) {
+    return intentResult(intentId, false);
+  }
+
+  private static WalletApprovalExecutionIntentResult intentResult(
+      String intentId, boolean existing) {
     return new WalletApprovalExecutionIntentResult(
         new WalletApprovalExecutionIntentResult.Resource(
             "WALLET_REGISTRATION", REGISTRATION_ID, "PENDING_EXECUTION"),
@@ -497,7 +524,7 @@ class RetryWalletRegistrationApprovalServiceTest {
             intentId, "AWAITING_SIGNATURE", NOW.plusMinutes(5), 1L),
         new WalletApprovalExecutionIntentResult.Execution("EIP7702", 2),
         signRequest(),
-        false);
+        existing);
   }
 
   private void givenApprovalAvailable() {

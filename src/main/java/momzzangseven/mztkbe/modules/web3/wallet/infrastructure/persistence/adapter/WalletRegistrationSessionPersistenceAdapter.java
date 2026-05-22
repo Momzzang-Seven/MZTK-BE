@@ -79,6 +79,12 @@ public class WalletRegistrationSessionPersistenceAdapter
   }
 
   @Override
+  public Optional<WalletRegistrationSession> loadByLatestExecutionIntentId(
+      String executionIntentId) {
+    return repository.findByLatestExecutionIntentId(executionIntentId).map(this::mapToDomain);
+  }
+
+  @Override
   public Optional<WalletRegistrationSession> loadLatestNonTerminalByUserId(Long userId) {
     return repository
         .findLatestByUserIdAndStatusIn(userId, NON_TERMINAL_STATUSES, ONE_LATEST)

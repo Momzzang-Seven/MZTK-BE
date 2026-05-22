@@ -299,6 +299,20 @@ class WalletRegistrationFinalizationProcessorTest {
   }
 
   @Test
+  void finalizeConfirmed_whenOldReceiptTimeoutIntentAlreadyRetried_noopsAsStale() {
+    WalletRegistrationSession retried =
+        pendingSession()
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4))
+            .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(5));
+    givenFinalizationSession(retried);
+
+    processor.finalizeConfirmed(command());
+
+    verify(saveSessionPort, never()).save(any());
+    verify(saveWalletAndFlushPort, never()).saveAndFlush(any());
+  }
+
+  @Test
   void finalizeConfirmed_whenSessionMissing_throwsInvalidInput() {
     when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.empty());
 

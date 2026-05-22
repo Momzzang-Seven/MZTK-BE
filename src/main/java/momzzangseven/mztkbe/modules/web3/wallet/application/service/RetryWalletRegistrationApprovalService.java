@@ -268,6 +268,9 @@ public class RetryWalletRegistrationApprovalService
 
   private void cancelOrphanIntent(
       WalletApprovalExecutionIntentResult approvalIntent, RuntimeException exception) {
+    if (approvalIntent.existing()) {
+      return;
+    }
     try {
       cancelExecutionPort.cancelIfSignable(
           approvalIntent.executionIntent().id(),

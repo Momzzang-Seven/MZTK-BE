@@ -11,6 +11,8 @@ public interface LoadWalletRegistrationSessionPort {
 
   Optional<WalletRegistrationSession> loadByPublicIdAndUserId(String publicId, Long userId);
 
+  Optional<WalletRegistrationSession> loadByLatestExecutionIntentId(String executionIntentId);
+
   Optional<WalletRegistrationSession> loadLatestNonTerminalByUserId(Long userId);
 
   Optional<WalletRegistrationSession> loadLatestNonTerminalByWalletAddress(String walletAddress);

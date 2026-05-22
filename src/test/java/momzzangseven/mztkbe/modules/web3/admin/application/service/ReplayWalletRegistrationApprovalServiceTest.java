@@ -52,6 +52,21 @@ class ReplayWalletRegistrationApprovalServiceTest {
   }
 
   @Test
+  void execute_whenRegistrationIdOnly_resolvesLatestWalletApprovalTarget() {
+    when(resolveTargetPort.resolveByRegistrationId("registration-1"))
+        .thenReturn(Optional.of(target()));
+    when(replayConfirmedWalletApprovalPort.replay("intent-1", "WALLET_ESCROW_APPROVE"))
+        .thenReturn(true);
+    when(loadRecoveryStatePort.load("registration-1")).thenReturn(Optional.of(state("REGISTERED")));
+
+    var result = service.execute(command("registration-1", null, null));
+
+    assertThat(result.outcome()).isEqualTo("REGISTERED");
+    assertThat(result.registrationId()).isEqualTo("registration-1");
+    verify(resolveTargetPort).resolveByRegistrationId("registration-1");
+  }
+
+  @Test
   void execute_whenWalletLatestIntentChanged_returnsStaleSuperseded() {
     when(resolveTargetPort.resolveByExecutionIntentId("intent-1"))
         .thenReturn(Optional.of(target()));
