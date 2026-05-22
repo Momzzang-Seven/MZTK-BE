@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.function.Supplier;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.challenge.ChallengeAlreadyUsedException;
 import momzzangseven.mztkbe.global.error.challenge.ChallengeMismatchWalletAddressException;
@@ -48,6 +49,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletP
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationChallengePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.MarkWalletRegistrationChallengeExpiredPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.MarkWalletRegistrationChallengeUsedPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RunWalletRegistrationTransactionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.VerifyWalletOwnershipSignaturePort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -60,6 +62,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RegisterWalletService Unit Test")
@@ -90,10 +93,12 @@ class RegisterWalletServiceTest {
 
   private RegisterWalletService registerWalletService;
   private WalletRegistrationChallengeView validChallenge;
+  private RecordingRegistrationTransactionPort transactionPort;
 
   @BeforeEach
   void setUp() {
     validChallenge = challenge(false, false);
+    transactionPort = new RecordingRegistrationTransactionPort();
     registerWalletService =
         new RegisterWalletService(
             loadChallengePort,
@@ -108,7 +113,18 @@ class RegisterWalletServiceTest {
             approvalAttemptService,
             expireSessionUseCase,
             markTerminatedUseCase,
+            transactionPort,
             FIXED_CLOCK);
+  }
+
+  @Test
+  @DisplayName("execute does not keep an outer transaction open across duplicate-race recovery")
+  void execute_HasNoOuterTransactionalBoundary() throws NoSuchMethodException {
+    assertThat(
+            RegisterWalletService.class
+                .getMethod("execute", RegisterWalletCommand.class)
+                .getAnnotation(Transactional.class))
+        .isNull();
   }
 
   @Test
@@ -129,6 +145,7 @@ class RegisterWalletServiceTest {
     assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_REQUIRED);
     assertThat(result.walletId()).isNull();
     assertThat(result.web3()).isNotNull();
+    assertThat(transactionPort.executionCount()).isEqualTo(1);
     verify(approvalAttemptService).createPendingApproval(command);
     InOrder inOrder = inOrder(authorityLockPort, loadWalletPort, duplicateResolver);
     inOrder.verify(authorityLockPort).lock(VALID_USER_ID, VALID_WALLET_ADDRESS);
@@ -301,6 +318,7 @@ class RegisterWalletServiceTest {
     RegisterWalletResult result = registerWalletService.execute(command);
 
     assertThat(result.registrationId()).isEqualTo("registration-1");
+    assertThat(transactionPort.executionCount()).isEqualTo(2);
     verify(expireSessionUseCase)
         .execute(new ExpireWalletRegistrationSessionCommand(expired.getPublicId()));
     verify(approvalAttemptService, org.mockito.Mockito.times(2)).createPendingApproval(command);
@@ -384,6 +402,7 @@ class RegisterWalletServiceTest {
     RegisterWalletResult result = registerWalletService.execute(command);
 
     assertThat(result.registrationId()).isEqualTo("registration-1");
+    assertThat(transactionPort.executionCount()).isEqualTo(2);
     verify(duplicateResolver).resolveAfterCreateRace(VALID_USER_ID, VALID_WALLET_ADDRESS);
   }
 
@@ -679,5 +698,21 @@ class RegisterWalletServiceTest {
   private static WalletRegistrationChallengeView challenge(boolean used, boolean expired) {
     return new WalletRegistrationChallengeView(
         VALID_USER_ID, VALID_WALLET_ADDRESS, VALID_NONCE, "message", used, expired);
+  }
+
+  private static final class RecordingRegistrationTransactionPort
+      implements RunWalletRegistrationTransactionPort {
+
+    private int executionCount;
+
+    @Override
+    public <T> T execute(Supplier<T> callback) {
+      executionCount++;
+      return callback.get();
+    }
+
+    private int executionCount() {
+      return executionCount;
+    }
   }
 }

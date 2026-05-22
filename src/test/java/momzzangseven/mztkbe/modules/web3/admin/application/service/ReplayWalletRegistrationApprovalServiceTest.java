@@ -162,7 +162,7 @@ class ReplayWalletRegistrationApprovalServiceTest {
   }
 
   @Test
-  void execute_whenNewerWalletRegistrationExists_returnsStaleSuperseded() {
+  void execute_whenNewerWalletRegistrationExists_returnsNewerAttemptExists() {
     when(resolveTargetPort.resolveByExecutionIntentId("intent-1"))
         .thenReturn(Optional.of(target()));
     when(replayConfirmedWalletApprovalPort.replay("intent-1", "WALLET_ESCROW_APPROVE"))
@@ -172,7 +172,7 @@ class ReplayWalletRegistrationApprovalServiceTest {
 
     var result = service.execute(command(null, null, "intent-1"));
 
-    assertThat(result.outcome()).isEqualTo("STALE_SUPERSEDED");
+    assertThat(result.outcome()).isEqualTo("NEWER_ATTEMPT_EXISTS");
     assertThat(result.newerWalletRegistrationExists()).isTrue();
   }
 

@@ -113,7 +113,7 @@ public class ReplayWalletRegistrationApprovalService
       return "STALE_SUPERSEDED";
     }
     if (postState.newerWalletRegistrationExists()) {
-      return "STALE_SUPERSEDED";
+      return "NEWER_ATTEMPT_EXISTS";
     }
     return switch (postState.status()) {
       case "REGISTERED" -> "REGISTERED";
