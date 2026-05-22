@@ -270,9 +270,6 @@ public class RetryWalletRegistrationApprovalService
 
   private void rejectReusedRetryIntent(
       RetryApprovalPreparation preparation, WalletApprovalExecutionIntentResult approvalIntent) {
-    if (approvalIntent.existing()) {
-      throw new Web3InvalidInputException("wallet registration retry reused existing intent");
-    }
     if (Objects.equals(approvalIntent.executionIntent().id(), preparation.previousIntentId())) {
       throw new Web3InvalidInputException("wallet registration retry reused previous intent");
     }

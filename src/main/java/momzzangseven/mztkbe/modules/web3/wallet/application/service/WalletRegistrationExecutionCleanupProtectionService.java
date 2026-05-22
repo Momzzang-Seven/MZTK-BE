@@ -9,16 +9,8 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.FilterWallet
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-@Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "eip7702.cleanup.enabled"},
-    havingValue = "true")
 public class WalletRegistrationExecutionCleanupProtectionService
     implements FilterWalletRegistrationExecutionCleanupCandidatesUseCase {
 
@@ -28,7 +20,6 @@ public class WalletRegistrationExecutionCleanupProtectionService
   private final LoadWalletRegistrationSessionPort loadSessionPort;
 
   @Override
-  @Transactional(readOnly = true)
   public List<Long> filterDeletableFinalizedIntentIds(
       List<WalletRegistrationExecutionCleanupCandidate> candidates) {
     if (candidates == null || candidates.isEmpty()) {

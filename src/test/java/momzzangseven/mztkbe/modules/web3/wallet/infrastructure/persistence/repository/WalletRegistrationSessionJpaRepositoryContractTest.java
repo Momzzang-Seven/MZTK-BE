@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.repo
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
@@ -21,6 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 class WalletRegistrationSessionJpaRepositoryContractTest {
 
   @Autowired private WalletRegistrationSessionJpaRepository repository;
+  @Autowired private EntityManager entityManager;
 
   @Test
   void findByPublicIdForUpdate_declaresPessimisticWriteLock() throws NoSuchMethodException {
@@ -150,6 +152,32 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
                 createdAt,
                 sameTimestampBase.getId()))
         .isTrue();
+  }
+
+  @Test
+  void saveAndReload_persistsReceiptTimeoutExecutionIntentIds() {
+    LocalDateTime createdAt = LocalDateTime.parse("2026-05-13T10:00:00");
+    WalletRegistrationSessionEntity saved =
+        repository.saveAndFlush(
+            WalletRegistrationSessionEntity.builder()
+                .publicId("registration-timeout-history")
+                .userId(10L)
+                .walletAddress("0x" + "a".repeat(40))
+                .challengeNonce("nonce-timeout-history")
+                .status(WalletRegistrationStatus.APPROVAL_RETRYABLE)
+                .latestExecutionIntentId("intent-current")
+                .receiptTimeoutExecutionIntentIds("intent-timeout-1,intent-timeout-2")
+                .retryCount(1)
+                .approvalExpiresAt(createdAt.plusMinutes(30))
+                .createdAt(createdAt)
+                .updatedAt(createdAt)
+                .build());
+    entityManager.clear();
+
+    WalletRegistrationSessionEntity loaded = repository.findById(saved.getId()).orElseThrow();
+
+    assertThat(loaded.getReceiptTimeoutExecutionIntentIds())
+        .isEqualTo("intent-timeout-1,intent-timeout-2");
   }
 
   private static WalletRegistrationSessionEntity session(

@@ -34,8 +34,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.core.annotation.AnnotationUtils;
-import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class ReplayConfirmedExecutionIntentServiceTest {
@@ -47,11 +45,10 @@ class ReplayConfirmedExecutionIntentServiceTest {
       Clock.fixed(java.time.Instant.parse("2026-04-12T01:03:00Z"), ZoneId.of("Asia/Seoul"));
 
   @Test
-  void service_isTransactionalBecauseReplayUsesPessimisticLockAndAfterCommitHook() {
-    assertThat(
-            AnnotationUtils.findAnnotation(
-                ReplayConfirmedExecutionIntentService.class, Transactional.class))
-        .isNotNull();
+  void service_hasNoSpringTransactionalAnnotationBecauseBoundaryIsInfrastructureOwned() {
+    assertThat(ReplayConfirmedExecutionIntentService.class.getAnnotations())
+        .extracting(annotation -> annotation.annotationType().getName())
+        .doesNotContain("org.springframework.transaction.annotation.Transactional");
   }
 
   @Test

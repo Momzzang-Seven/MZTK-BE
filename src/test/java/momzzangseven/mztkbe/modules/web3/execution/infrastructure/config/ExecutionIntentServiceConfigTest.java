@@ -25,11 +25,8 @@ import momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter.Execut
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter.SponsorPolicyAdapter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.aop.support.AopUtils;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @DisplayName("ExecutionIntentServiceConfig 단위 테스트")
 class ExecutionIntentServiceConfigTest {
@@ -103,10 +100,9 @@ class ExecutionIntentServiceConfigTest {
   }
 
   @Test
-  @DisplayName("confirmed replay use case는 Spring context에서 트랜잭션 프록시로 노출된다")
-  void exposesReplayConfirmedUseCaseAsTransactionalProxy() {
+  @DisplayName("confirmed replay use case는 infrastructure transaction wrapper로 노출된다")
+  void exposesReplayConfirmedUseCaseAsInfrastructureTransactionWrapper() {
     contextRunner
-        .withUserConfiguration(TransactionManagementTestConfig.class)
         .withPropertyValues(
             "web3.reward-token.enabled=true",
             "web3.eip7702.enabled=false",
@@ -116,11 +112,8 @@ class ExecutionIntentServiceConfigTest {
               assertThat(context).hasNotFailed();
               ReplayConfirmedExecutionIntentUseCase replayUseCase =
                   context.getBean(ReplayConfirmedExecutionIntentUseCase.class);
-              assertThat(AopUtils.isAopProxy(replayUseCase)).isTrue();
+              assertThat(replayUseCase)
+                  .isInstanceOf(TransactionalReplayConfirmedExecutionIntentUseCase.class);
             });
   }
-
-  @Configuration
-  @EnableTransactionManagement
-  static class TransactionManagementTestConfig {}
 }

@@ -358,7 +358,7 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   @Test
-  void execute_whenReceiptTimeoutRetryReusesExistingIntent_rejectsAttach() {
+  void execute_whenReceiptTimeoutRetryReusesPreviousIntent_rejectsAttach() {
     WalletRegistrationSession pending = pendingOnchainSession();
     WalletRegistrationSession retryable =
         pending.markApprovalRetryable(
@@ -377,9 +377,38 @@ class RetryWalletRegistrationApprovalServiceTest {
 
     assertThatThrownBy(() -> service.execute(command(USER_ID)))
         .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("reused existing intent");
+        .hasMessageContaining("reused previous intent");
 
     verify(saveSessionPort, org.mockito.Mockito.times(1)).save(any());
+    verify(cancelExecutionPort, never()).cancelIfSignable(any(), any(), any());
+  }
+
+  @Test
+  void execute_whenReceiptTimeoutRetryFindsOrphanRetryIntent_attachesExistingRetryIntent() {
+    WalletRegistrationSession pending = pendingOnchainSession();
+    WalletRegistrationSession retryable =
+        pending.markApprovalRetryable(
+            WalletRegistrationReceiptTimeout.ERROR_CODE,
+            WalletRegistrationReceiptTimeout.ERROR_REASON,
+            NOW.plusSeconds(4));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(pending), Optional.of(retryable));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", null, NOW.plusMinutes(5))));
+    when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    givenApprovalAvailable();
+    givenMinimumRemainingTtl(30L);
+    when(buildDraftPort.build(any())).thenReturn(draft());
+    when(submitDraftPort.submit(any())).thenReturn(intentResult(RETRY_INTENT_ID, true));
+
+    WalletRegistrationStatusResult result = service.execute(command(USER_ID));
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort, org.mockito.Mockito.times(2)).save(captor.capture());
+    WalletRegistrationSession attached = captor.getAllValues().get(1);
+    assertThat(attached.getLatestExecutionIntentId()).isEqualTo(RETRY_INTENT_ID);
+    assertThat(result.latestExecutionIntentId()).isEqualTo(RETRY_INTENT_ID);
     verify(cancelExecutionPort, never()).cancelIfSignable(any(), any(), any());
   }
 
