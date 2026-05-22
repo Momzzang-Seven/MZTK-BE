@@ -120,6 +120,7 @@ class RetryWalletRegistrationApprovalServiceTest {
         ArgumentCaptor.forClass(WalletApprovalExecutionRequest.class);
     verify(buildDraftPort).build(requestCaptor.capture());
     assertThat(requestCaptor.getValue().expiresAt()).isEqualTo(NOW.plusMinutes(30));
+    assertThat(requestCaptor.getValue().retryAttemptNo()).isEqualTo(1);
     ArgumentCaptor<WalletRegistrationSession> captor =
         ArgumentCaptor.forClass(WalletRegistrationSession.class);
     verify(saveSessionPort).save(captor.capture());
@@ -340,6 +341,10 @@ class RetryWalletRegistrationApprovalServiceTest {
 
     WalletRegistrationStatusResult result = service.execute(command(USER_ID));
 
+    ArgumentCaptor<WalletApprovalExecutionRequest> requestCaptor =
+        ArgumentCaptor.forClass(WalletApprovalExecutionRequest.class);
+    verify(buildDraftPort).build(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().retryAttemptNo()).isEqualTo(1);
     ArgumentCaptor<WalletRegistrationSession> captor =
         ArgumentCaptor.forClass(WalletRegistrationSession.class);
     verify(saveSessionPort, org.mockito.Mockito.times(2)).save(captor.capture());
@@ -350,6 +355,32 @@ class RetryWalletRegistrationApprovalServiceTest {
     assertThat(captor.getAllValues().get(1).getLatestExecutionIntentId())
         .isEqualTo(RETRY_INTENT_ID);
     assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.SIGN_APPROVAL);
+  }
+
+  @Test
+  void execute_whenReceiptTimeoutRetryReusesExistingIntent_rejectsAttach() {
+    WalletRegistrationSession pending = pendingOnchainSession();
+    WalletRegistrationSession retryable =
+        pending.markApprovalRetryable(
+            WalletRegistrationReceiptTimeout.ERROR_CODE,
+            WalletRegistrationReceiptTimeout.ERROR_REASON,
+            NOW.plusSeconds(4));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(pending), Optional.of(retryable));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", null, NOW.plusMinutes(5))));
+    when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    givenApprovalAvailable();
+    givenMinimumRemainingTtl(30L);
+    when(buildDraftPort.build(any())).thenReturn(draft());
+    when(submitDraftPort.submit(any())).thenReturn(intentResult(INTENT_ID, true));
+
+    assertThatThrownBy(() -> service.execute(command(USER_ID)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("reused existing intent");
+
+    verify(saveSessionPort, org.mockito.Mockito.times(1)).save(any());
+    verify(cancelExecutionPort, never()).cancelIfSignable(any(), any(), any());
   }
 
   @Test

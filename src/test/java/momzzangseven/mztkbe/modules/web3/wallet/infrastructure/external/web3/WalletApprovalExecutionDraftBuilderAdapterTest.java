@@ -93,6 +93,19 @@ class WalletApprovalExecutionDraftBuilderAdapterTest {
   }
 
   @Test
+  void build_whenRetryAttemptNoProvided_usesRetryRootIdempotencyKey() {
+    givenExecutionSupport("0x" + "f".repeat(64), 12L);
+
+    WalletApprovalExecutionDraft draft =
+        adapter.build(
+            new WalletApprovalExecutionRequest(
+                "registration-1", 7L, WALLET, LocalDateTime.parse("2026-05-13T09:03:00"), 2));
+
+    assertThat(draft.rootIdempotencyKey())
+        .isEqualTo("wallet-registration-approval:registration-1:retry:2");
+  }
+
+  @Test
   void build_storesApprovalCallsInPayloadSnapshot() throws Exception {
     givenExecutionSupport("0x" + "a".repeat(64), 1L);
 

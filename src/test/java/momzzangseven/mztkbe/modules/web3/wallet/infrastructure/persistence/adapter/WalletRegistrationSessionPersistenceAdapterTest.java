@@ -95,6 +95,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
 
     assertThat(loaded).isPresent();
     assertThat(loaded.get().getWalletAddress()).isEqualTo(WALLET_ADDRESS);
+    assertThat(loaded.get().hasReceiptTimeoutExecutionIntent("intent-timeout")).isTrue();
   }
 
   @Test
@@ -174,6 +175,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
         .walletAddress(WALLET_ADDRESS)
         .challengeNonce("challenge-nonce")
         .status(WalletRegistrationStatus.APPROVAL_REQUIRED)
+        .receiptTimeoutExecutionIntentIds("intent-timeout")
         .retryCount(0)
         .approvalExpiresAt(NOW.plusMinutes(30))
         .createdAt(NOW)

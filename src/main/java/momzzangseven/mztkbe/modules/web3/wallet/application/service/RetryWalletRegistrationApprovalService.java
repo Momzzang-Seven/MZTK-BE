@@ -144,6 +144,7 @@ public class RetryWalletRegistrationApprovalService
     LocalDateTime now = LocalDateTime.now(appClock);
     rejectExpiredSession(session, now);
     rejectStaleRetrySession(session, preparation);
+    rejectReusedRetryIntent(preparation, approvalIntent);
 
     Optional<WalletApprovalExecutionStateView> currentState = loadCurrentState(session);
     WalletRegistrationSession retryable = ensureRetryable(session, currentState, now);
@@ -187,7 +188,8 @@ public class RetryWalletRegistrationApprovalService
                 preparation.registrationId(),
                 preparation.requesterUserId(),
                 preparation.walletAddress(),
-                preparation.sessionDeadline()));
+                preparation.sessionDeadline(),
+                preparation.nextRetryAttemptNo()));
     rejectDeadlineTooClose(draft.expiresAt(), now());
     try {
       return submitDraftPort.submit(draft);
@@ -266,6 +268,16 @@ public class RetryWalletRegistrationApprovalService
     }
   }
 
+  private void rejectReusedRetryIntent(
+      RetryApprovalPreparation preparation, WalletApprovalExecutionIntentResult approvalIntent) {
+    if (approvalIntent.existing()) {
+      throw new Web3InvalidInputException("wallet registration retry reused existing intent");
+    }
+    if (Objects.equals(approvalIntent.executionIntent().id(), preparation.previousIntentId())) {
+      throw new Web3InvalidInputException("wallet registration retry reused previous intent");
+    }
+  }
+
   private void cancelOrphanIntent(
       WalletApprovalExecutionIntentResult approvalIntent, RuntimeException exception) {
     if (approvalIntent.existing()) {
@@ -296,10 +308,11 @@ public class RetryWalletRegistrationApprovalService
       String previousIntentId,
       Integer retryCount,
       LocalDateTime sessionDeadline,
+      Integer nextRetryAttemptNo,
       WalletRegistrationStatusResult reusableResult) {
 
     static RetryApprovalPreparation reusable(WalletRegistrationStatusResult result) {
-      return new RetryApprovalPreparation(null, null, null, null, null, null, result);
+      return new RetryApprovalPreparation(null, null, null, null, null, null, null, result);
     }
 
     static RetryApprovalPreparation forCreation(WalletRegistrationSession session) {
@@ -310,11 +323,16 @@ public class RetryWalletRegistrationApprovalService
           session.getLatestExecutionIntentId(),
           session.getRetryCount(),
           session.getApprovalExpiresAt(),
+          safeRetryCount(session) + 1,
           null);
     }
 
     boolean requiresNewIntent() {
       return reusableResult == null;
+    }
+
+    private static int safeRetryCount(WalletRegistrationSession session) {
+      return session.getRetryCount() == null ? 0 : session.getRetryCount();
     }
   }
 }
