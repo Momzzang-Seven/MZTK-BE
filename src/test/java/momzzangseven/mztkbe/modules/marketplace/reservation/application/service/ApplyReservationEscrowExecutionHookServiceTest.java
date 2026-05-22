@@ -758,6 +758,37 @@ class ApplyReservationEscrowExecutionHookServiceTest {
         .isEqualTo(ReservationActionStateStatus.CONFIRMED);
   }
 
+  @Test
+  void terminatedAdminHook_skipsActionStateIdFallbackWhenBoundIntentMismatches() {
+    MarketplaceReservationActionState mismatchedActionState =
+        activeActionState(
+                ReservationEscrowAction.ADMIN_REFUND, ReservationEscrowActorType.ADMIN, 77L)
+            .toBuilder()
+            .executionIntentPublicId("other-intent")
+            .build();
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willReturn(Optional.of(mismatchedActionState));
+
+    service.afterExecutionTerminated(
+        new ReservationEscrowExecutionTerminatedCommand(
+            "intent-action",
+            "MARKETPLACE_ADMIN_REFUND",
+            "ADMIN",
+            123L,
+            "attempt-1",
+            20L,
+            "FAILED_ONCHAIN",
+            "receipt status 0",
+            "TRAINER_TIMEOUT",
+            evidence("0xdead", true, "FAILED_ONCHAIN", "REVERTED", "CREATED", null)));
+
+    then(loadReservationPort).shouldHaveNoInteractions();
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(saveReservationActionStatePort).shouldHaveNoInteractions();
+  }
+
   private Reservation pendingCancelReservation() {
     return Reservation.builder()
         .id(123L)

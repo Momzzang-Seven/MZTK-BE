@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import java.math.BigInteger;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,8 +17,11 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Mark
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationItem;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminTokenView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadMarketplaceAdminExecutionAuthorityPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -55,6 +59,7 @@ final class MarketplaceAdminReviewSupport {
       String pollingEndpoint,
       List<MarketplaceAdminReasonReviewOption> reasonOptions,
       List<MarketplaceAdminReviewValidationItem> baseItems,
+      PreflightResult preflight,
       LoadReservationExecutionStatePort loadReservationExecutionStatePort) {
     Reservation reservation = context.reservation();
     LocalDateTime now = LocalDateTime.now(clock);
@@ -77,17 +82,39 @@ final class MarketplaceAdminReviewSupport {
             reservation.getTrainerId(), reservation.getTrainerWalletAddress()),
         new MarketplaceAdminTokenView(reservation.getTokenAddress(), amount(reservation), "MZTK"),
         now,
-        null,
+        preflight == null ? null : preflight.chainCheckedAt(),
         reservation.getVersion(),
         phase,
         nextPollAfterMs(phase),
         pollingEndpoint,
         reservation.getTxHash(),
-        MarketplaceAdminExecutionAuthorityView.serverRelayerOnly(),
+        preflight == null
+            ? MarketplaceAdminExecutionAuthorityView.serverRelayerOnly()
+            : preflight.authority(),
         activeAttempt,
         activeAttempt == null ? lastAttempt : null,
         baseItems,
         reasonOptions);
+  }
+
+  static PreflightResult preflight(
+      Context context,
+      Clock clock,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      LoadMarketplaceAdminExecutionAuthorityPort loadMarketplaceAdminExecutionAuthorityPort) {
+    List<MarketplaceAdminReviewValidationItem> items = new ArrayList<>();
+    LocalDateTime chainCheckedAt = null;
+    if (loadReservationEscrowOrderPort != null) {
+      chainCheckedAt = LocalDateTime.now(clock);
+      items.addAll(
+          chainPreflightItems(context.reservation(), loadReservationEscrowOrderPort, clock));
+    }
+    MarketplaceAdminExecutionAuthorityView authority =
+        loadAuthority(loadMarketplaceAdminExecutionAuthorityPort);
+    if (loadMarketplaceAdminExecutionAuthorityPort != null) {
+      items.addAll(authorityPreflightItems(authority));
+    }
+    return new PreflightResult(chainCheckedAt, authority, items);
   }
 
   static List<MarketplaceAdminReviewValidationItem> baseItems(
@@ -135,6 +162,91 @@ final class MarketplaceAdminReviewSupport {
         .map(MarketplaceAdminReviewValidationItem::code)
         .findFirst()
         .orElse(null);
+  }
+
+  private static List<MarketplaceAdminReviewValidationItem> chainPreflightItems(
+      Reservation reservation,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      Clock clock) {
+    if (reservation.getOrderKey() == null || reservation.getOrderKey().isBlank()) {
+      return List.of(
+          MarketplaceAdminReviewValidationItem.blocking(
+              MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ABSENT,
+              "marketplace chain order key is missing"));
+    }
+    ReservationEscrowOrderView order;
+    try {
+      order = loadReservationEscrowOrderPort.getOrder(reservation.getOrderKey());
+    } catch (RuntimeException e) {
+      return List.of(
+          MarketplaceAdminReviewValidationItem.blocking(
+              MarketplaceAdminReviewValidationCode.CHAIN_LOOKUP_FAILED,
+              "marketplace chain order lookup failed"));
+    }
+    MarketplaceAdminReviewValidationCode code = chainBlockingCode(order, clock);
+    if (code == null) {
+      return List.of();
+    }
+    return List.of(MarketplaceAdminReviewValidationItem.blocking(code, code.name()));
+  }
+
+  private static MarketplaceAdminReviewValidationCode chainBlockingCode(
+      ReservationEscrowOrderView order, Clock clock) {
+    if (order == null || order.isAbsent()) {
+      return MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ABSENT;
+    }
+    if (order.state() == ReservationEscrowOrderView.STATE_CREATED) {
+      if (order.deadlineEpochSeconds() != null
+          && !LocalDateTime.ofInstant(
+                  Instant.ofEpochSecond(order.deadlineEpochSeconds()), clock.getZone())
+              .isAfter(LocalDateTime.now(clock))) {
+        return MarketplaceAdminReviewValidationCode.CONTRACT_DEADLINE_EXPIRED;
+      }
+      return null;
+    }
+    return switch (order.state()) {
+      case ReservationEscrowOrderView.STATE_ADMIN_REFUNDED ->
+          MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_REFUNDED;
+      case ReservationEscrowOrderView.STATE_ADMIN_SETTLED,
+              ReservationEscrowOrderView.STATE_CONFIRMED ->
+          MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_SETTLED;
+      case ReservationEscrowOrderView.STATE_DEADLINE_REFUNDED ->
+          MarketplaceAdminReviewValidationCode.CHAIN_MISMATCH_REQUIRES_SYNC;
+      default -> MarketplaceAdminReviewValidationCode.CHAIN_ORDER_NOT_CREATED;
+    };
+  }
+
+  private static MarketplaceAdminExecutionAuthorityView loadAuthority(
+      LoadMarketplaceAdminExecutionAuthorityPort loadMarketplaceAdminExecutionAuthorityPort) {
+    if (loadMarketplaceAdminExecutionAuthorityPort == null) {
+      return MarketplaceAdminExecutionAuthorityView.serverRelayerOnly();
+    }
+    try {
+      MarketplaceAdminExecutionAuthorityView authority =
+          loadMarketplaceAdminExecutionAuthorityPort.load();
+      return authority == null
+          ? MarketplaceAdminExecutionAuthorityView.serverRelayerOnly()
+          : authority;
+    } catch (RuntimeException e) {
+      return MarketplaceAdminExecutionAuthorityView.serverRelayerOnly();
+    }
+  }
+
+  private static List<MarketplaceAdminReviewValidationItem> authorityPreflightItems(
+      MarketplaceAdminExecutionAuthorityView authority) {
+    if (!authority.serverSignerAvailable()) {
+      return List.of(
+          MarketplaceAdminReviewValidationItem.blocking(
+              MarketplaceAdminReviewValidationCode.SERVER_SIGNER_UNAVAILABLE,
+              "marketplace admin server signer is unavailable"));
+    }
+    if (!authority.relayerRegistered()) {
+      return List.of(
+          MarketplaceAdminReviewValidationItem.blocking(
+              MarketplaceAdminReviewValidationCode.RELAYER_NOT_REGISTERED,
+              "marketplace admin server signer is not registered as relayer"));
+    }
+    return List.of();
   }
 
   private static MarketplaceAdminExecutionPhase phase(
@@ -263,4 +375,17 @@ final class MarketplaceAdminReviewSupport {
       Reservation reservation,
       MarketplaceReservationEscrow escrow,
       MarketplaceReservationActionState latestAttempt) {}
+
+  record PreflightResult(
+      LocalDateTime chainCheckedAt,
+      MarketplaceAdminExecutionAuthorityView authority,
+      List<MarketplaceAdminReviewValidationItem> validationItems) {
+    PreflightResult {
+      authority =
+          authority == null
+              ? MarketplaceAdminExecutionAuthorityView.serverRelayerOnly()
+              : authority;
+      validationItems = validationItems == null ? List.of() : List.copyOf(validationItems);
+    }
+  }
 }

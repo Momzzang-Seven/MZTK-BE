@@ -17,8 +17,11 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceReservationStateException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminRefundReasonCode;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareMarketplaceAdminEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationAdminExecutionDraft;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
@@ -137,6 +140,63 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
     assertThat(actionStateRef.get().getStatus()).isEqualTo(ReservationActionStateStatus.STALE);
     assertThat(actionStateRef.get().getErrorCode()).isEqualTo("CHAIN_ORDER_ALREADY_REFUNDED");
     then(buildExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  void phaseCIdempotencyConflictClosesAttemptAsStaleWithAdminErrorCode() {
+    AtomicReference<Reservation> reservationRef = new AtomicReference<>(pendingReservation());
+    AtomicReference<MarketplaceReservationEscrow> escrowRef = new AtomicReference<>(escrow());
+    AtomicReference<MarketplaceReservationActionState> actionStateRef = new AtomicReference<>();
+    ReservationAdminExecutionDraft draft = new ReservationAdminExecutionDraft() {};
+    given(loadReservationPort.findByIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(reservationRef.get()));
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0);
+              reservationRef.set(saved);
+              return saved;
+            });
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(escrowRef.get()));
+    given(saveReservationEscrowPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationEscrow saved = invocation.getArgument(0);
+              escrowRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(saveReservationActionStatePort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationActionState saved =
+                  invocation.<MarketplaceReservationActionState>getArgument(0).toBuilder()
+                      .id(20L)
+                      .build();
+              actionStateRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willAnswer(ignored -> Optional.of(actionStateRef.get()));
+    given(loadReservationEscrowOrderPort.getOrder(anyString())).willReturn(createdOrder());
+    given(buildExecutionPort.buildRefund(any())).willReturn(draft);
+    given(submitExecutionPort.submit(draft))
+        .willThrow(new Web3TransferException(ErrorCode.IDEMPOTENCY_CONFLICT, false));
+
+    assertThatThrownBy(
+            () ->
+                orchestrator.executeSchedulerRefund(
+                    "scheduler-run-1", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 1L))
+        .isInstanceOf(Web3TransferException.class);
+
+    assertThat(reservationRef.get().getStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(actionStateRef.get().getStatus()).isEqualTo(ReservationActionStateStatus.STALE);
+    assertThat(actionStateRef.get().getRetryable()).isFalse();
+    assertThat(actionStateRef.get().getErrorCode())
+        .isEqualTo(MarketplaceAdminReviewValidationCode.IDEMPOTENCY_CONFLICT.name());
+    then(bindReservationActionStatePort).shouldHaveNoInteractions();
   }
 
   @Test

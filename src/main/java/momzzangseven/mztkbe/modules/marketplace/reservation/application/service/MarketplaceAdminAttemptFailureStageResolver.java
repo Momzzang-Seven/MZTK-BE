@@ -13,6 +13,7 @@ public final class MarketplaceAdminAttemptFailureStageResolver {
       EnumSet.of(
           MarketplaceAdminReviewValidationCode.SERVER_SIGNER_UNAVAILABLE,
           MarketplaceAdminReviewValidationCode.RELAYER_NOT_REGISTERED,
+          MarketplaceAdminReviewValidationCode.RELAYER_REGISTRATION_CHECK_FAILED,
           MarketplaceAdminReviewValidationCode.GAS_PREFLIGHT_FAILED,
           MarketplaceAdminReviewValidationCode.DRAFT_BUILD_FAILED,
           MarketplaceAdminReviewValidationCode.RPC_UNAVAILABLE,

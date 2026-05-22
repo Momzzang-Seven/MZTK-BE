@@ -187,7 +187,8 @@ public class ApplyReservationEscrowExecutionHookService
             command.executionIntentPublicId(),
             command.actionStateId(),
             command.pendingAttemptToken(),
-            command.reservationId());
+            command.reservationId(),
+            false);
     if (locked == null) {
       return;
     }
@@ -223,7 +224,8 @@ public class ApplyReservationEscrowExecutionHookService
             command.executionIntentPublicId(),
             command.actionStateId(),
             command.pendingAttemptToken(),
-            command.reservationId());
+            command.reservationId(),
+            true);
     if (locked == null) {
       return;
     }
@@ -351,9 +353,11 @@ public class ApplyReservationEscrowExecutionHookService
       String executionIntentPublicId,
       Long actionStateId,
       String pendingAttemptToken,
-      Long fallbackReservationId) {
+      Long fallbackReservationId,
+      boolean requireBoundIntent) {
     java.util.Optional<MarketplaceReservationActionState> actionState =
-        lockActionStateForHook(executionIntentPublicId, actionStateId, pendingAttemptToken);
+        lockActionStateForHook(
+            executionIntentPublicId, actionStateId, pendingAttemptToken, requireBoundIntent);
     if (actionState.isEmpty()) {
       if (loadReservationActionStatePort != null && saveReservationActionStatePort != null) {
         log.warn(
@@ -384,7 +388,12 @@ public class ApplyReservationEscrowExecutionHookService
                     new IllegalStateException(
                         "marketplace reservation not found for intentId="
                             + executionIntentPublicId));
-    if (!actionStateMatches(lockedActionState, reservation, pendingAttemptToken)) {
+    if (!actionStateMatches(
+        lockedActionState,
+        reservation,
+        pendingAttemptToken,
+        executionIntentPublicId,
+        requireBoundIntent)) {
       log.warn(
           "Skipping marketplace admin hook because action state mismatched: intentId={}, actionStateId={}, reservationId={}",
           executionIntentPublicId,
@@ -396,7 +405,10 @@ public class ApplyReservationEscrowExecutionHookService
   }
 
   private java.util.Optional<MarketplaceReservationActionState> lockActionStateForHook(
-      String executionIntentPublicId, Long actionStateId, String pendingAttemptToken) {
+      String executionIntentPublicId,
+      Long actionStateId,
+      String pendingAttemptToken,
+      boolean requireBoundIntent) {
     if (loadReservationActionStatePort == null || saveReservationActionStatePort == null) {
       return java.util.Optional.empty();
     }
@@ -405,14 +417,21 @@ public class ApplyReservationEscrowExecutionHookService
             executionIntentPublicId);
     if (byIntent.isPresent()) {
       return byIntent.filter(
-          actionState -> actionStateTokenMatches(actionState, pendingAttemptToken));
+          actionState ->
+              actionStateTokenMatches(actionState, pendingAttemptToken)
+                  && actionStateBoundIntentMatches(
+                      actionState, executionIntentPublicId, requireBoundIntent));
     }
     if (actionStateId == null) {
       return java.util.Optional.empty();
     }
     return loadReservationActionStatePort
         .findByIdWithLock(actionStateId)
-        .filter(actionState -> actionStateTokenMatches(actionState, pendingAttemptToken));
+        .filter(
+            actionState ->
+                actionStateTokenMatches(actionState, pendingAttemptToken)
+                    && actionStateBoundIntentMatches(
+                        actionState, executionIntentPublicId, requireBoundIntent));
   }
 
   private boolean isCurrentOrRecoverableOrphan(
@@ -831,6 +850,28 @@ public class ApplyReservationEscrowExecutionHookService
       String pendingAttemptToken) {
     return reservation.getId().equals(actionState.getReservationId())
         && actionStateTokenMatches(actionState, pendingAttemptToken);
+  }
+
+  private boolean actionStateMatches(
+      MarketplaceReservationActionState actionState,
+      Reservation reservation,
+      String pendingAttemptToken,
+      String executionIntentPublicId,
+      boolean requireBoundIntent) {
+    return actionStateMatches(actionState, reservation, pendingAttemptToken)
+        && actionStateBoundIntentMatches(actionState, executionIntentPublicId, requireBoundIntent);
+  }
+
+  private boolean actionStateBoundIntentMatches(
+      MarketplaceReservationActionState actionState,
+      String executionIntentPublicId,
+      boolean requireBoundIntent) {
+    if (!requireBoundIntent) {
+      return true;
+    }
+    return actionState.getStatus() == ReservationActionStateStatus.INTENT_BOUND
+        && executionIntentPublicId != null
+        && executionIntentPublicId.equals(actionState.getExecutionIntentPublicId());
   }
 
   private boolean actionStateTokenMatches(

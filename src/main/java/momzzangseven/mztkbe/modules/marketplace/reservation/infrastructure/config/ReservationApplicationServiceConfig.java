@@ -26,6 +26,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadMarketplaceAdminExecutionAuthorityPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationClassPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
@@ -89,12 +90,17 @@ public class ReservationApplicationServiceConfig {
       LoadReservationEscrowPort loadReservationEscrowPort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       ObjectProvider<LoadReservationExecutionStatePort> loadReservationExecutionStatePortProvider,
+      ObjectProvider<LoadReservationEscrowOrderPort> loadReservationEscrowOrderPortProvider,
+      ObjectProvider<LoadMarketplaceAdminExecutionAuthorityPort>
+          loadMarketplaceAdminExecutionAuthorityPortProvider,
       Clock clock) {
     return new CalculateMarketplaceAdminRefundReviewService(
         loadReservationPort,
         loadReservationEscrowPort,
         loadReservationActionStatePort,
         loadReservationExecutionStatePortProvider.getIfAvailable(),
+        loadReservationEscrowOrderPortProvider.getIfAvailable(),
+        loadMarketplaceAdminExecutionAuthorityPortProvider.getIfAvailable(),
         clock);
   }
 
@@ -104,12 +110,17 @@ public class ReservationApplicationServiceConfig {
       LoadReservationEscrowPort loadReservationEscrowPort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       ObjectProvider<LoadReservationExecutionStatePort> loadReservationExecutionStatePortProvider,
+      ObjectProvider<LoadReservationEscrowOrderPort> loadReservationEscrowOrderPortProvider,
+      ObjectProvider<LoadMarketplaceAdminExecutionAuthorityPort>
+          loadMarketplaceAdminExecutionAuthorityPortProvider,
       Clock clock) {
     return new CalculateMarketplaceAdminSettlementReviewService(
         loadReservationPort,
         loadReservationEscrowPort,
         loadReservationActionStatePort,
         loadReservationExecutionStatePortProvider.getIfAvailable(),
+        loadReservationEscrowOrderPortProvider.getIfAvailable(),
+        loadMarketplaceAdminExecutionAuthorityPortProvider.getIfAvailable(),
         clock);
   }
 

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceReservationStateException;
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
@@ -206,7 +207,7 @@ public class MarketplaceAdminExecutionOrchestrator {
       cleanupUnboundPreparation(phaseA, ReservationActionStateStatus.STALE, e);
       throw e;
     } catch (RuntimeException e) {
-      cleanupUnboundPreparation(phaseA, ReservationActionStateStatus.PREPARATION_FAILED, e);
+      cleanupUnboundPreparation(phaseA, phaseCFailureStatus(e), e);
       throw e;
     }
   }
@@ -717,9 +718,57 @@ public class MarketplaceAdminExecutionOrchestrator {
     if (cause instanceof AdminPhaseBChainMismatchException mismatchException) {
       return mismatchException.inspection().code().name();
     }
-    return cause instanceof momzzangseven.mztkbe.global.error.BusinessException businessException
+    MarketplaceAdminReviewValidationCode adminCode = validationCode(cause);
+    if (adminCode != null) {
+      return adminCode.name();
+    }
+    return cause instanceof BusinessException businessException
         ? businessException.getCode()
         : cause.getClass().getSimpleName();
+  }
+
+  private static ReservationActionStateStatus phaseCFailureStatus(RuntimeException cause) {
+    MarketplaceAdminReviewValidationCode code = validationCode(cause);
+    if (code == MarketplaceAdminReviewValidationCode.IDEMPOTENCY_CONFLICT
+        || code == MarketplaceAdminReviewValidationCode.IDEMPOTENCY_REUSE_ATTEMPT_MISMATCH) {
+      return ReservationActionStateStatus.STALE;
+    }
+    return ReservationActionStateStatus.PREPARATION_FAILED;
+  }
+
+  private static MarketplaceAdminReviewValidationCode validationCode(RuntimeException cause) {
+    if (cause == null) {
+      return null;
+    }
+    MarketplaceAdminReviewValidationCode messageCode = parseValidationCode(cause.getMessage());
+    if (messageCode != null) {
+      return messageCode;
+    }
+    if (cause instanceof BusinessException businessException) {
+      String code = businessException.getCode();
+      if (ErrorCode.IDEMPOTENCY_CONFLICT.getCode().equals(code)
+          || ErrorCode.MARKETPLACE_IDEMPOTENCY_CONFLICT.getCode().equals(code)) {
+        return MarketplaceAdminReviewValidationCode.IDEMPOTENCY_CONFLICT;
+      }
+      if (ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT.getCode().equals(code)) {
+        return MarketplaceAdminReviewValidationCode.INTENT_BIND_CONFLICT;
+      }
+      if (ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS.getCode().equals(code)) {
+        return parseValidationCode(cause.getMessage());
+      }
+    }
+    return cause.getCause() instanceof RuntimeException nested ? validationCode(nested) : null;
+  }
+
+  private static MarketplaceAdminReviewValidationCode parseValidationCode(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    try {
+      return MarketplaceAdminReviewValidationCode.valueOf(value);
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
   }
 
   private LocalDateTime deadlineAt(Long epochSeconds) {

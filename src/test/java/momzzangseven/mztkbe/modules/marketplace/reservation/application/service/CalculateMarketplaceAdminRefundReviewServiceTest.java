@@ -14,8 +14,11 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Calc
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionAuthorityView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionPhase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationCode;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadMarketplaceAdminExecutionAuthorityPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -39,6 +42,10 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
   @Mock private LoadReservationEscrowPort loadReservationEscrowPort;
   @Mock private LoadReservationActionStatePort loadReservationActionStatePort;
   @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
+
+  @Mock
+  private LoadMarketplaceAdminExecutionAuthorityPort loadMarketplaceAdminExecutionAuthorityPort;
 
   private CalculateMarketplaceAdminRefundReviewService service;
 
@@ -121,6 +128,37 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
     assertThat(result.activeExecution().txHash()).isEqualTo("0xhash");
   }
 
+  @Test
+  @DisplayName("refund review preflight exposes chain check time and server signer blocking")
+  void refundReviewPreflightBlocksUnavailableServerSigner() {
+    service =
+        new CalculateMarketplaceAdminRefundReviewService(
+            loadReservationPort,
+            loadReservationEscrowPort,
+            loadReservationActionStatePort,
+            loadReservationExecutionStatePort,
+            loadReservationEscrowOrderPort,
+            loadMarketplaceAdminExecutionAuthorityPort,
+            Clock.fixed(Instant.parse("2026-05-21T12:00:00Z"), ZoneOffset.UTC));
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(lockedPending()));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(Optional.empty());
+    given(loadReservationEscrowOrderPort.getOrder("0xorder")).willReturn(createdOrder());
+    given(loadMarketplaceAdminExecutionAuthorityPort.load())
+        .willReturn(MarketplaceAdminExecutionAuthorityView.serverRelayerOnly());
+
+    var result = service.execute(new CalculateMarketplaceAdminRefundReviewQuery(1L, true));
+
+    assertThat(result.processable()).isFalse();
+    assertThat(result.chainCheckedAt()).isEqualTo(LocalDateTime.of(2026, 5, 21, 12, 0));
+    assertThat(result.baseBlockingCode())
+        .isEqualTo(MarketplaceAdminReviewValidationCode.SERVER_SIGNER_UNAVAILABLE);
+    assertThat(result.baseValidationItems())
+        .extracting("code")
+        .contains(MarketplaceAdminReviewValidationCode.SERVER_SIGNER_UNAVAILABLE);
+  }
+
   private Reservation lockedPending() {
     return Reservation.builder()
         .id(1L)
@@ -133,6 +171,7 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
         .status(ReservationStatus.PENDING)
         .escrowStatus(ReservationEscrowStatus.LOCKED)
         .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+        .orderKey("0xorder")
         .buyerWalletAddress("0xbuyer")
         .trainerWalletAddress("0xtrainer")
         .tokenAddress("0xtoken")
@@ -140,6 +179,17 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
         .createdAt(LocalDateTime.of(2026, 5, 18, 11, 0))
         .version(4L)
         .build();
+  }
+
+  private ReservationEscrowOrderView createdOrder() {
+    return new ReservationEscrowOrderView(
+        "0xorder",
+        "1000000000000000000",
+        "0xtoken",
+        Instant.parse("2026-05-22T12:00:00Z").getEpochSecond(),
+        ReservationEscrowOrderView.STATE_CREATED,
+        "0xbuyer",
+        "0xtrainer");
   }
 
   private MarketplaceReservationActionState activeAttempt() {

@@ -12,7 +12,9 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Mark
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationItem;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminSettleReasonCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CalculateMarketplaceAdminSettlementReviewUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadMarketplaceAdminExecutionAuthorityPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -30,6 +32,9 @@ public class CalculateMarketplaceAdminSettlementReviewService
   private final LoadReservationEscrowPort loadReservationEscrowPort;
   private final LoadReservationActionStatePort loadReservationActionStatePort;
   private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
+  private final LoadMarketplaceAdminExecutionAuthorityPort
+      loadMarketplaceAdminExecutionAuthorityPort;
   private final Clock clock;
 
   public CalculateMarketplaceAdminSettlementReviewService(
@@ -42,6 +47,8 @@ public class CalculateMarketplaceAdminSettlementReviewService
         loadReservationEscrowPort,
         loadReservationActionStatePort,
         null,
+        null,
+        null,
         clock);
   }
 
@@ -51,10 +58,30 @@ public class CalculateMarketplaceAdminSettlementReviewService
       LoadReservationActionStatePort loadReservationActionStatePort,
       LoadReservationExecutionStatePort loadReservationExecutionStatePort,
       Clock clock) {
+    this(
+        loadReservationPort,
+        loadReservationEscrowPort,
+        loadReservationActionStatePort,
+        loadReservationExecutionStatePort,
+        null,
+        null,
+        clock);
+  }
+
+  public CalculateMarketplaceAdminSettlementReviewService(
+      LoadReservationPort loadReservationPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      LoadMarketplaceAdminExecutionAuthorityPort loadMarketplaceAdminExecutionAuthorityPort,
+      Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.loadReservationEscrowPort = loadReservationEscrowPort;
     this.loadReservationActionStatePort = loadReservationActionStatePort;
     this.loadReservationExecutionStatePort = loadReservationExecutionStatePort;
+    this.loadReservationEscrowOrderPort = loadReservationEscrowOrderPort;
+    this.loadMarketplaceAdminExecutionAuthorityPort = loadMarketplaceAdminExecutionAuthorityPort;
     this.clock = clock;
   }
 
@@ -69,7 +96,15 @@ public class CalculateMarketplaceAdminSettlementReviewService
             loadReservationEscrowPort,
             loadReservationActionStatePort);
     List<MarketplaceAdminReviewValidationItem> baseItems =
-        MarketplaceAdminReviewSupport.baseItems(context, ReservationStatus.APPROVED);
+        new ArrayList<>(
+            MarketplaceAdminReviewSupport.baseItems(context, ReservationStatus.APPROVED));
+    MarketplaceAdminReviewSupport.PreflightResult preflight =
+        MarketplaceAdminReviewSupport.preflight(
+            context,
+            clock,
+            loadReservationEscrowOrderPort,
+            loadMarketplaceAdminExecutionAuthorityPort);
+    baseItems.addAll(preflight.validationItems());
     MarketplaceAdminReviewValidationCode baseBlocking =
         MarketplaceAdminReviewSupport.firstBlockingCode(baseItems);
     return MarketplaceAdminReviewSupport.result(
@@ -77,7 +112,8 @@ public class CalculateMarketplaceAdminSettlementReviewService
         clock,
         "/admin/web3/marketplace/reservations/" + query.reservationId() + POLLING_ENDPOINT_SUFFIX,
         reasonOptions(context.reservation(), query.canEarlySettle(), baseBlocking),
-        baseItems,
+        List.copyOf(baseItems),
+        preflight,
         loadReservationExecutionStatePort);
   }
 
