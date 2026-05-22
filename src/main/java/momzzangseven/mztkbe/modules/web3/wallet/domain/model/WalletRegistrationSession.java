@@ -207,6 +207,30 @@ public class WalletRegistrationSession {
         .build();
   }
 
+  /**
+   * Recovers a same-registration approval confirmation that arrived after a receipt-timeout retry
+   * replaced the latest intent.
+   */
+  public WalletRegistrationSession markRecoveredApprovalConfirmed(
+      String executionIntentId, String executionStatus, LocalDateTime now) {
+    requireExecutionIntentId(executionIntentId);
+    requireNow(now);
+    if (!canRecoverReplacedApprovalIntent()) {
+      throw new IllegalStateException("session cannot recover replaced approval from " + status);
+    }
+
+    return toBuilder()
+        .status(WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN)
+        .latestExecutionIntentId(executionIntentId)
+        .latestTransactionId(null)
+        .latestTransactionHash(null)
+        .lastExecutionStatus(executionStatus)
+        .submittedAt(submittedAt == null ? now : submittedAt)
+        .confirmedAt(confirmedAt == null ? now : confirmedAt)
+        .updatedAt(now)
+        .build();
+  }
+
   /** Marks local wallet creation as complete after approval confirmation. */
   public WalletRegistrationSession markRegistered(Long walletId, LocalDateTime now) {
     if (status != WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
@@ -365,6 +389,13 @@ public class WalletRegistrationSession {
     return (status == WalletRegistrationStatus.APPROVAL_RETRYABLE
             || status == WalletRegistrationStatus.APPROVAL_FAILED)
         && RECEIPT_TIMEOUT.equals(lastErrorCode);
+  }
+
+  private boolean canRecoverReplacedApprovalIntent() {
+    return safeRetryCount() > 0
+        && (status == WalletRegistrationStatus.APPROVAL_REQUIRED
+            || status == WalletRegistrationStatus.APPROVAL_SIGNED
+            || status == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN);
   }
 
   private static void requireExecutionIntentId(String executionIntentId) {

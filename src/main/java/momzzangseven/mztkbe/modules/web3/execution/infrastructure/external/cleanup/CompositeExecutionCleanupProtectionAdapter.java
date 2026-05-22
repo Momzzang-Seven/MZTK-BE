@@ -147,6 +147,10 @@ public class CompositeExecutionCleanupProtectionAdapter
   private WalletRegistrationExecutionCleanupCandidate toWalletRegistrationCandidate(
       ExecutionIntentCleanupView view) {
     return new WalletRegistrationExecutionCleanupCandidate(
-        view.id(), view.publicId(), view.resourceType().name(), view.actionType().name());
+        view.id(),
+        view.publicId(),
+        view.resourceId(),
+        view.resourceType().name(),
+        view.actionType().name());
   }
 }

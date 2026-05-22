@@ -64,7 +64,8 @@ class WalletRegistrationFinalizationProcessor {
                     new Web3InvalidInputException(
                         "registrationId not found: " + command.registrationId()));
 
-    if (isStaleIntent(session, command.executionIntentId())) {
+    boolean staleIntent = isStaleIntent(session, command.executionIntentId());
+    if (staleIntent && !canFinalizeRecoveredStaleIntent(session)) {
       log.info(
           "Skipping stale wallet finalization event: registrationId={}, sessionIntent={}, eventIntent={}",
           session.getPublicId(),
@@ -93,7 +94,10 @@ class WalletRegistrationFinalizationProcessor {
 
     LocalDateTime now = LocalDateTime.now(appClock);
     WalletRegistrationSession confirmed =
-        session.markApprovalConfirmed(command.executionIntentId(), null, null, "CONFIRMED", now);
+        staleIntent
+            ? session.markRecoveredApprovalConfirmed(command.executionIntentId(), "CONFIRMED", now)
+            : session.markApprovalConfirmed(
+                command.executionIntentId(), null, null, "CONFIRMED", now);
 
     UserWallet wallet = finalizeWallet(confirmed, command.executionIntentId());
     WalletRegistrationSession registered =
@@ -104,6 +108,15 @@ class WalletRegistrationFinalizationProcessor {
   private boolean isStaleIntent(WalletRegistrationSession session, String executionIntentId) {
     return session.getLatestExecutionIntentId() == null
         || !session.getLatestExecutionIntentId().equals(executionIntentId);
+  }
+
+  private boolean canFinalizeRecoveredStaleIntent(WalletRegistrationSession session) {
+    Integer retryCount = session.getRetryCount();
+    return retryCount != null
+        && retryCount > 0
+        && (session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN);
   }
 
   private boolean isFinalizable(WalletRegistrationSession session) {

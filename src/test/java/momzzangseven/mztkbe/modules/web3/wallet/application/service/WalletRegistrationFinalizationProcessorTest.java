@@ -299,17 +299,34 @@ class WalletRegistrationFinalizationProcessorTest {
   }
 
   @Test
-  void finalizeConfirmed_whenOldReceiptTimeoutIntentAlreadyRetried_noopsAsStale() {
+  void finalizeConfirmed_whenOldReceiptTimeoutIntentAlreadyRetried_finalizesRecoveredSuccess() {
     WalletRegistrationSession retried =
         pendingSession()
             .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4))
             .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(5));
+    UserWallet savedWallet =
+        UserWallet.builder()
+            .id(77L)
+            .userId(USER_ID)
+            .walletAddress(WALLET_ADDRESS)
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
     givenFinalizationSession(retried);
+    when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(List.of());
+    when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(saveWalletAndFlushPort.saveAndFlush(any())).thenReturn(savedWallet);
 
     processor.finalizeConfirmed(command());
 
-    verify(saveSessionPort, never()).save(any());
-    verify(saveWalletAndFlushPort, never()).saveAndFlush(any());
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.REGISTERED);
+    assertThat(captor.getValue().getLatestExecutionIntentId()).isEqualTo(INTENT_ID);
+    assertThat(captor.getValue().getLatestTransactionId()).isNull();
+    assertThat(captor.getValue().getLatestTransactionHash()).isNull();
   }
 
   @Test

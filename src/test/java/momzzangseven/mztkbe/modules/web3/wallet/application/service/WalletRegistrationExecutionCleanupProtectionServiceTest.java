@@ -32,7 +32,7 @@ class WalletRegistrationExecutionCleanupProtectionServiceTest {
   @Test
   void filterDeletableFinalizedIntentIds_protectsNonTerminalWalletRegistrationIntent() {
     WalletRegistrationExecutionCleanupCandidate candidate = candidate(1L, "intent-1");
-    when(loadSessionPort.loadByLatestExecutionIntentId("intent-1"))
+    when(loadSessionPort.loadByPublicId("registration-1"))
         .thenReturn(Optional.of(session("intent-1")));
 
     List<Long> result = service.filterDeletableFinalizedIntentIds(List.of(candidate));
@@ -45,8 +45,21 @@ class WalletRegistrationExecutionCleanupProtectionServiceTest {
     WalletRegistrationExecutionCleanupCandidate candidate = candidate(1L, "intent-1");
     WalletRegistrationSession timeoutFailed =
         session("intent-1").markApprovalFailed("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(1));
-    when(loadSessionPort.loadByLatestExecutionIntentId("intent-1"))
-        .thenReturn(Optional.of(timeoutFailed));
+    when(loadSessionPort.loadByPublicId("registration-1")).thenReturn(Optional.of(timeoutFailed));
+
+    List<Long> result = service.filterDeletableFinalizedIntentIds(List.of(candidate));
+
+    assertThat(result).isEmpty();
+  }
+
+  @Test
+  void filterDeletableFinalizedIntentIds_protectsOldRetriedIntentByRegistrationId() {
+    WalletRegistrationExecutionCleanupCandidate candidate = candidate(1L, "intent-1");
+    WalletRegistrationSession retried =
+        pendingOnchainSession("intent-1")
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(3))
+            .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(4));
+    when(loadSessionPort.loadByPublicId("registration-1")).thenReturn(Optional.of(retried));
 
     List<Long> result = service.filterDeletableFinalizedIntentIds(List.of(candidate));
 
@@ -58,8 +71,7 @@ class WalletRegistrationExecutionCleanupProtectionServiceTest {
     WalletRegistrationExecutionCleanupCandidate candidate = candidate(1L, "intent-1");
     WalletRegistrationSession registered =
         pendingOnchainSession("intent-1").markRegistered(77L, NOW.plusSeconds(3));
-    when(loadSessionPort.loadByLatestExecutionIntentId("intent-1"))
-        .thenReturn(Optional.of(registered));
+    when(loadSessionPort.loadByPublicId("registration-1")).thenReturn(Optional.of(registered));
 
     List<Long> result = service.filterDeletableFinalizedIntentIds(List.of(candidate));
 
@@ -69,6 +81,7 @@ class WalletRegistrationExecutionCleanupProtectionServiceTest {
   @Test
   void filterDeletableFinalizedIntentIds_allowsUnreferencedWalletRegistrationIntentDeletion() {
     WalletRegistrationExecutionCleanupCandidate candidate = candidate(1L, "intent-1");
+    when(loadSessionPort.loadByPublicId("registration-1")).thenReturn(Optional.empty());
     when(loadSessionPort.loadByLatestExecutionIntentId("intent-1")).thenReturn(Optional.empty());
 
     List<Long> result = service.filterDeletableFinalizedIntentIds(List.of(candidate));
@@ -78,7 +91,7 @@ class WalletRegistrationExecutionCleanupProtectionServiceTest {
 
   private static WalletRegistrationExecutionCleanupCandidate candidate(Long id, String intentId) {
     return new WalletRegistrationExecutionCleanupCandidate(
-        id, intentId, "WALLET_REGISTRATION", "WALLET_ESCROW_APPROVE");
+        id, intentId, "registration-1", "WALLET_REGISTRATION", "WALLET_ESCROW_APPROVE");
   }
 
   private static WalletRegistrationSession session(String intentId) {

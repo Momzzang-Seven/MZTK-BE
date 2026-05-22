@@ -65,6 +65,7 @@ public interface WalletRegistrationSessionJpaRepository
       select count(s) > 0
       from WalletRegistrationSessionEntity s
       where (s.userId = :userId or s.walletAddress = :walletAddress)
+        and s.status in :statuses
         and (
           s.createdAt > :createdAt
           or (s.createdAt = :createdAt and s.id > :sessionId)
@@ -73,6 +74,7 @@ public interface WalletRegistrationSessionJpaRepository
   boolean existsNewerByUserIdOrWalletAddress(
       @Param("userId") Long userId,
       @Param("walletAddress") String walletAddress,
+      @Param("statuses") Collection<WalletRegistrationStatus> statuses,
       @Param("createdAt") LocalDateTime createdAt,
       @Param("sessionId") Long sessionId);
 }

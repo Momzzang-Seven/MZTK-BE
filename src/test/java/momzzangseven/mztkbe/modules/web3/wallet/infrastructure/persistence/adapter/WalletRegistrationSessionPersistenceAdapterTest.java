@@ -98,14 +98,28 @@ class WalletRegistrationSessionPersistenceAdapterTest {
   }
 
   @Test
-  void existsNewerByUserIdOrWalletAddress_delegatesToRepositoryQuery() {
-    when(repository.existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, NOW, 10L))
+  void existsNewerByUserIdOrWalletAddress_delegatesToRepositoryQueryWithAuthoritativeStatuses() {
+    when(repository.existsNewerByUserIdOrWalletAddress(
+            eq(1L), eq(WALLET_ADDRESS), any(), eq(NOW), eq(10L)))
         .thenReturn(true);
 
     boolean exists = adapter.existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, NOW, 10L);
 
     assertThat(exists).isTrue();
-    verify(repository).existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, NOW, 10L);
+    ArgumentCaptor<Collection<WalletRegistrationStatus>> statusesCaptor =
+        ArgumentCaptor.forClass(Collection.class);
+    verify(repository)
+        .existsNewerByUserIdOrWalletAddress(
+            eq(1L), eq(WALLET_ADDRESS), statusesCaptor.capture(), eq(NOW), eq(10L));
+    assertThat(statusesCaptor.getValue())
+        .containsExactlyInAnyOrder(
+            WalletRegistrationStatus.APPROVAL_REQUIRED,
+            WalletRegistrationStatus.APPROVAL_SIGNED,
+            WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
+            WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.FINALIZATION_FAILED,
+            WalletRegistrationStatus.LOCAL_CONFLICT,
+            WalletRegistrationStatus.REGISTERED);
   }
 
   @Test

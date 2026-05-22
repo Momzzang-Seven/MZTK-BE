@@ -72,7 +72,11 @@ class CompositeExecutionCleanupProtectionAdapterTest {
             walletProtection.filterDeletableFinalizedIntentIds(
                 List.of(
                     new WalletRegistrationExecutionCleanupCandidate(
-                        4L, "intent-4", "WALLET_REGISTRATION", "WALLET_ESCROW_APPROVE"))))
+                        4L,
+                        "intent-4",
+                        "registration-1",
+                        "WALLET_REGISTRATION",
+                        "WALLET_ESCROW_APPROVE"))))
         .willReturn(List.of());
     CompositeExecutionCleanupProtectionAdapter adapter =
         new CompositeExecutionCleanupProtectionAdapter(
@@ -169,7 +173,11 @@ class CompositeExecutionCleanupProtectionAdapterTest {
             walletProtection.filterDeletableFinalizedIntentIds(
                 List.of(
                     new WalletRegistrationExecutionCleanupCandidate(
-                        1L, "intent-1", "WALLET_REGISTRATION", "WALLET_ESCROW_APPROVE"))))
+                        1L,
+                        "intent-1",
+                        "registration-1",
+                        "WALLET_REGISTRATION",
+                        "WALLET_ESCROW_APPROVE"))))
         .willReturn(List.of(1L));
     CompositeExecutionCleanupProtectionAdapter adapter =
         new CompositeExecutionCleanupProtectionAdapter(

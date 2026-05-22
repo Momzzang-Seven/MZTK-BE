@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.persistence.LockModeType;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.entity.WalletRegistrationSessionEntity;
 import org.junit.jupiter.api.DisplayName;
@@ -34,8 +35,17 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
   }
 
   @Test
-  void existsNewerByUserIdOrWalletAddress_usesAnyStatusAndCreatedAtIdTieBreak() {
+  void existsNewerByUserIdOrWalletAddress_usesAuthoritativeStatusesAndCreatedAtIdTieBreak() {
     LocalDateTime createdAt = LocalDateTime.parse("2026-05-13T10:00:00");
+    EnumSet<WalletRegistrationStatus> authoritativeStatuses =
+        EnumSet.of(
+            WalletRegistrationStatus.APPROVAL_REQUIRED,
+            WalletRegistrationStatus.APPROVAL_SIGNED,
+            WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
+            WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.FINALIZATION_FAILED,
+            WalletRegistrationStatus.LOCAL_CONFLICT,
+            WalletRegistrationStatus.REGISTERED);
     WalletRegistrationSessionEntity base =
         repository.saveAndFlush(
             session(
@@ -64,6 +74,22 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
             "intent-newer-wallet",
             WalletRegistrationStatus.EXPIRED,
             createdAt.plusMinutes(2)));
+
+    assertThat(
+            repository.existsNewerByUserIdOrWalletAddress(
+                1L, "0x" + "a".repeat(40), authoritativeStatuses, createdAt, base.getId()))
+        .isFalse();
+
+    repository.saveAndFlush(
+        session(
+            "registration-newer-active",
+            1L,
+            "0x" + "e".repeat(40),
+            "nonce-newer-active",
+            "intent-newer-active",
+            WalletRegistrationStatus.APPROVAL_REQUIRED,
+            createdAt.plusMinutes(3)));
+
     WalletRegistrationSessionEntity sameTimestampBase =
         repository.saveAndFlush(
             session(
@@ -87,16 +113,43 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
 
     assertThat(
             repository.existsNewerByUserIdOrWalletAddress(
-                1L, "0x" + "a".repeat(40), createdAt, base.getId()))
+                1L, "0x" + "a".repeat(40), authoritativeStatuses, createdAt, base.getId()))
         .isTrue();
     assertThat(
             repository.existsNewerByUserIdOrWalletAddress(
-                3L, "0x" + "d".repeat(40), createdAt, sameTimestampBase.getId()))
-        .isTrue();
-    assertThat(
-            repository.existsNewerByUserIdOrWalletAddress(
-                3L, "0x" + "c".repeat(40), createdAt, sameTimestampHigherId.getId()))
+                3L,
+                "0x" + "d".repeat(40),
+                authoritativeStatuses,
+                createdAt,
+                sameTimestampBase.getId()))
         .isFalse();
+    assertThat(
+            repository.existsNewerByUserIdOrWalletAddress(
+                3L,
+                "0x" + "c".repeat(40),
+                authoritativeStatuses,
+                createdAt,
+                sameTimestampHigherId.getId()))
+        .isFalse();
+
+    repository.saveAndFlush(
+        session(
+            "registration-same-timestamp-active",
+            3L,
+            "0x" + "e".repeat(40),
+            "nonce-same-timestamp-active",
+            "intent-same-timestamp-active",
+            WalletRegistrationStatus.APPROVAL_REQUIRED,
+            createdAt));
+
+    assertThat(
+            repository.existsNewerByUserIdOrWalletAddress(
+                3L,
+                "0x" + "d".repeat(40),
+                authoritativeStatuses,
+                createdAt,
+                sameTimestampBase.getId()))
+        .isTrue();
   }
 
   private static WalletRegistrationSessionEntity session(

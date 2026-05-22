@@ -46,6 +46,15 @@ public class WalletRegistrationSessionPersistenceAdapter
           WalletRegistrationStatus.APPROVAL_RETRYABLE,
           WalletRegistrationStatus.FINALIZATION_FAILED,
           WalletRegistrationStatus.LOCAL_CONFLICT);
+  private static final EnumSet<WalletRegistrationStatus> AUTHORITATIVE_NEWER_STATUSES =
+      EnumSet.of(
+          WalletRegistrationStatus.APPROVAL_REQUIRED,
+          WalletRegistrationStatus.APPROVAL_SIGNED,
+          WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
+          WalletRegistrationStatus.APPROVAL_RETRYABLE,
+          WalletRegistrationStatus.FINALIZATION_FAILED,
+          WalletRegistrationStatus.LOCAL_CONFLICT,
+          WalletRegistrationStatus.REGISTERED);
   private static final PageRequest ONE_LATEST = PageRequest.of(0, 1);
 
   private final WalletRegistrationSessionJpaRepository repository;
@@ -121,7 +130,7 @@ public class WalletRegistrationSessionPersistenceAdapter
       return false;
     }
     return repository.existsNewerByUserIdOrWalletAddress(
-        userId, walletAddress, createdAt, sessionId);
+        userId, walletAddress, AUTHORITATIVE_NEWER_STATUSES, createdAt, sessionId);
   }
 
   @Override

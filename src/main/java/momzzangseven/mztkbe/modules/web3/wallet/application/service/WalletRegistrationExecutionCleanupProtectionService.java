@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationExecutionCleanupCandidate;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
@@ -42,10 +43,19 @@ public class WalletRegistrationExecutionCleanupProtectionService
     if (!isWalletApproval(candidate)) {
       return false;
     }
-    return loadSessionPort
-        .loadByLatestExecutionIntentId(candidate.executionIntentId())
-        .map(this::requiresRecoveryReference)
-        .orElse(false);
+    return loadSession(candidate).map(this::requiresRecoveryReference).orElse(false);
+  }
+
+  private Optional<WalletRegistrationSession> loadSession(
+      WalletRegistrationExecutionCleanupCandidate candidate) {
+    if (candidate.resourceId() != null && !candidate.resourceId().isBlank()) {
+      Optional<WalletRegistrationSession> byRegistrationId =
+          loadSessionPort.loadByPublicId(candidate.resourceId());
+      if (byRegistrationId.isPresent()) {
+        return byRegistrationId;
+      }
+    }
+    return loadSessionPort.loadByLatestExecutionIntentId(candidate.executionIntentId());
   }
 
   private boolean isWalletApproval(WalletRegistrationExecutionCleanupCandidate candidate) {
