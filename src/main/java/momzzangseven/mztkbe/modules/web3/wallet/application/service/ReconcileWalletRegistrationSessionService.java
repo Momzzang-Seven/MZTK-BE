@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ReconcileWalletR
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ReconcileWalletRegistrationSessionResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RetryWalletRegistrationFinalizationCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ExpireWalletRegistrationSessionUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.FinalizeWalletRegistrationUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalSubmittedUseCase;
@@ -91,6 +92,15 @@ public class ReconcileWalletRegistrationSessionService
               session.getPublicId(), executionState.executionIntentId()));
       return ReconcileWalletRegistrationSessionResult.recoveredResult();
     }
+    if (WalletRegistrationReceiptTimeout.isCurrent(executionState)) {
+      markTerminatedUseCase.execute(
+          new MarkWalletRegistrationApprovalTerminatedCommand(
+              session.getPublicId(),
+              executionState.executionIntentId(),
+              WalletRegistrationReceiptTimeout.ERROR_CODE,
+              WalletRegistrationReceiptTimeout.ERROR_REASON));
+      return ReconcileWalletRegistrationSessionResult.recoveredResult();
+    }
     if (isExpiredSignRequest(executionState) || isTerminalApprovalStatus(executionState)) {
       markTerminatedUseCase.execute(
           new MarkWalletRegistrationApprovalTerminatedCommand(
@@ -150,6 +160,7 @@ public class ReconcileWalletRegistrationSessionService
       WalletApprovalExecutionStateView executionState) {
     return isSucceededTransactionBeforeExecutionConfirmed(executionState)
         || "CONFIRMED".equals(executionState.executionIntentStatus())
+        || WalletRegistrationReceiptTimeout.isCurrent(executionState)
         || isSubmitted(executionState)
         || "FAILED_ONCHAIN".equals(executionState.executionIntentStatus())
         || "FAILED_ONCHAIN".equals(executionState.transactionStatus());

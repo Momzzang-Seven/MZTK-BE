@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.WalletRegistrationLocalConflictException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletAndFlushPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
@@ -88,7 +89,14 @@ class WalletRegistrationFinalizationProcessor {
     return session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        || isReceiptTimeoutLateSuccess(session)
         || session.getStatus().isConfirmedButNotFinalized();
+  }
+
+  private boolean isReceiptTimeoutLateSuccess(WalletRegistrationSession session) {
+    return (session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED)
+        && WalletRegistrationReceiptTimeout.isRecordedOn(session);
   }
 
   private UserWallet finalizeWallet(WalletRegistrationSession session, String executionIntentId) {

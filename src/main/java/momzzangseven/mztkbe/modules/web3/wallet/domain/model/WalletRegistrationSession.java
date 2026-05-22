@@ -16,6 +16,8 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class WalletRegistrationSession {
 
+  private static final String RECEIPT_TIMEOUT = "RECEIPT_TIMEOUT";
+
   private final Long id;
   private final String publicId;
   private final Long userId;
@@ -181,7 +183,8 @@ public class WalletRegistrationSession {
     if (status != WalletRegistrationStatus.APPROVAL_REQUIRED
         && status != WalletRegistrationStatus.APPROVAL_SIGNED
         && status != WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
-        && !status.isConfirmedButNotFinalized()) {
+        && !status.isConfirmedButNotFinalized()
+        && !isReceiptTimeoutLateSuccessStatus()) {
       throw new IllegalStateException("session cannot be confirmed from " + status);
     }
 
@@ -352,9 +355,16 @@ public class WalletRegistrationSession {
 
   private void requireFinalizationFailureStatus() {
     if (status != WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
-        && !status.isConfirmedButNotFinalized()) {
+        && !status.isConfirmedButNotFinalized()
+        && !isReceiptTimeoutLateSuccessStatus()) {
       throw new IllegalStateException("session cannot record finalization failure from " + status);
     }
+  }
+
+  private boolean isReceiptTimeoutLateSuccessStatus() {
+    return (status == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || status == WalletRegistrationStatus.APPROVAL_FAILED)
+        && RECEIPT_TIMEOUT.equals(lastErrorCode);
   }
 
   private static void requireExecutionIntentId(String executionIntentId) {

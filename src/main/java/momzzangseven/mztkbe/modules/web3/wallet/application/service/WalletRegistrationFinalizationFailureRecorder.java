@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -66,7 +67,10 @@ class WalletRegistrationFinalizationFailureRecorder {
         || !session.getLatestExecutionIntentId().equals(command.executionIntentId())) {
       return;
     }
-    if (session.getStatus() == WalletRegistrationStatus.REGISTERED || session.isTerminal()) {
+    if (session.getStatus() == WalletRegistrationStatus.REGISTERED) {
+      return;
+    }
+    if (session.isTerminal() && !isReceiptTimeoutLateSuccess(session)) {
       return;
     }
     if (!isFinalizationFailureStatus(session)) {
@@ -87,6 +91,13 @@ class WalletRegistrationFinalizationFailureRecorder {
     return session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        || isReceiptTimeoutLateSuccess(session)
         || session.getStatus().isConfirmedButNotFinalized();
+  }
+
+  private boolean isReceiptTimeoutLateSuccess(WalletRegistrationSession session) {
+    return (session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED)
+        && WalletRegistrationReceiptTimeout.isRecordedOn(session);
   }
 }
