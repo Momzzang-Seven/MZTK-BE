@@ -11,6 +11,7 @@ public record ReplayWalletRegistrationApprovalResponseDTO(
     String executionIntentStatus,
     String transactionStatus,
     String walletRegistrationStatus,
+    boolean newerWalletRegistrationExists,
     String walletLastErrorCode,
     String walletLastErrorReason) {
 
@@ -25,6 +26,7 @@ public record ReplayWalletRegistrationApprovalResponseDTO(
         result.executionIntentStatus(),
         result.transactionStatus(),
         result.walletRegistrationStatus(),
+        result.newerWalletRegistrationExists(),
         result.walletLastErrorCode(),
         result.walletLastErrorReason());
   }

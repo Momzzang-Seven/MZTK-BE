@@ -10,4 +10,5 @@ public record WalletRegistrationRecoveryStateView(
     String latestTransactionHash,
     String lastErrorCode,
     String lastErrorReason,
+    boolean newerWalletRegistrationExists,
     Long registeredWalletId) {}

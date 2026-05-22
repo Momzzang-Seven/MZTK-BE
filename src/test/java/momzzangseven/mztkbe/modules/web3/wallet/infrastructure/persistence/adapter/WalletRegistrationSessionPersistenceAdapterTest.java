@@ -98,6 +98,24 @@ class WalletRegistrationSessionPersistenceAdapterTest {
   }
 
   @Test
+  void existsNewerByUserIdOrWalletAddress_delegatesToRepositoryQuery() {
+    when(repository.existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, NOW, 10L))
+        .thenReturn(true);
+
+    boolean exists = adapter.existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, NOW, 10L);
+
+    assertThat(exists).isTrue();
+    verify(repository).existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, NOW, 10L);
+  }
+
+  @Test
+  void existsNewerByUserIdOrWalletAddress_whenRequiredInputMissing_returnsFalse() {
+    boolean exists = adapter.existsNewerByUserIdOrWalletAddress(null, WALLET_ADDRESS, NOW, 10L);
+
+    assertThat(exists).isFalse();
+  }
+
+  @Test
   void lockByPublicIdForUpdate_delegatesToRepositoryLockMethod() {
     when(repository.findByPublicIdForUpdate(PUBLIC_ID)).thenReturn(Optional.of(entity()));
 

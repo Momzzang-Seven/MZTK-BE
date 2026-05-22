@@ -9,5 +9,6 @@ public record ReplayWalletRegistrationApprovalResult(
     String executionIntentStatus,
     String transactionStatus,
     String walletRegistrationStatus,
+    boolean newerWalletRegistrationExists,
     String walletLastErrorCode,
     String walletLastErrorReason) {}

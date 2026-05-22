@@ -12,8 +12,14 @@ public record ReplayWalletRegistrationApprovalCommand(
 
   public void validate() {
     validatePositive(operatorId, "operatorId");
-    validateOptionalText(registrationId, "registrationId");
-    validateOptionalText(executionIntentId, "executionIntentId");
+    validateOptionalText(
+        registrationId,
+        "registrationId",
+        ReplayWalletRegistrationApprovalInputLimits.REGISTRATION_ID_MAX_LENGTH);
+    validateOptionalText(
+        executionIntentId,
+        "executionIntentId",
+        ReplayWalletRegistrationApprovalInputLimits.EXECUTION_INTENT_ID_MAX_LENGTH);
     if (transactionId != null && transactionId <= 0) {
       throw new Web3InvalidInputException("transactionId must be positive");
     }
@@ -21,8 +27,10 @@ public record ReplayWalletRegistrationApprovalCommand(
       throw new Web3InvalidInputException(
           "registrationId, transactionId, or executionIntentId is required");
     }
-    validateRequired(reason, "reason");
-    validateRequired(evidence, "evidence");
+    validateRequired(
+        reason, "reason", ReplayWalletRegistrationApprovalInputLimits.REASON_MAX_LENGTH);
+    validateRequired(
+        evidence, "evidence", ReplayWalletRegistrationApprovalInputLimits.EVIDENCE_MAX_LENGTH);
   }
 
   public String auditTargetId() {
@@ -41,15 +49,25 @@ public record ReplayWalletRegistrationApprovalCommand(
     }
   }
 
-  private static void validateRequired(String value, String fieldName) {
+  private static void validateRequired(String value, String fieldName, int maxLength) {
     if (!hasText(value)) {
       throw new Web3InvalidInputException(fieldName + " is required");
     }
+    validateLength(value, fieldName, maxLength);
   }
 
-  private static void validateOptionalText(String value, String fieldName) {
+  private static void validateOptionalText(String value, String fieldName, int maxLength) {
     if (value != null && value.isBlank()) {
       throw new Web3InvalidInputException(fieldName + " must not be blank");
+    }
+    if (value != null) {
+      validateLength(value, fieldName, maxLength);
+    }
+  }
+
+  private static void validateLength(String value, String fieldName, int maxLength) {
+    if (value.length() > maxLength) {
+      throw new Web3InvalidInputException(fieldName + " must not exceed " + maxLength);
     }
   }
 

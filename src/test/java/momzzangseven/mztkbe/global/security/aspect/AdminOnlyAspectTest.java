@@ -26,6 +26,9 @@ import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerati
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
 import momzzangseven.mztkbe.modules.post.application.service.ModeratePostService;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ReplayWalletRegistrationApprovalCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ReplayWalletRegistrationApprovalResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.service.ReplayWalletRegistrationApprovalService;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
@@ -347,6 +350,49 @@ class AdminOnlyAspectTest {
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
     verify(recordAdminAuditPort).record(captor.capture());
     assertThat(captor.getValue().targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
+  }
+
+  @Test
+  @DisplayName("wallet registration replay 성공 audit detail에는 replay outcome과 post wallet 상태가 기록된다")
+  void around_forWalletRegistrationReplay_recordsResultDetail() throws Throwable {
+    Method method =
+        ReplayWalletRegistrationApprovalService.class.getMethod(
+            "execute", ReplayWalletRegistrationApprovalCommand.class);
+    ReplayWalletRegistrationApprovalCommand input =
+        new ReplayWalletRegistrationApprovalCommand(
+            99L, null, 24L, null, "manual replay", "ops-ticket-450");
+    ReplayWalletRegistrationApprovalResult result =
+        new ReplayWalletRegistrationApprovalResult(
+            "FINALIZATION_FAILED",
+            true,
+            "registration-1",
+            24L,
+            "intent-1",
+            "CONFIRMED",
+            "SUCCEEDED",
+            "FINALIZATION_FAILED",
+            false,
+            "LOCAL_CONFLICT",
+            "wallet address already has an active owner");
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenReturn(result);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("WALLET_REGISTRATION_APPROVAL_REPLAY");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
+    assertThat(command.targetId()).isEqualTo("24");
+    assertThat(command.detail()).containsEntry("outcome", "FINALIZATION_FAILED");
+    assertThat(command.detail()).containsEntry("replayInvoked", true);
+    assertThat(command.detail()).containsEntry("executionIntentStatus", "CONFIRMED");
+    assertThat(command.detail()).containsEntry("transactionStatus", "SUCCEEDED");
+    assertThat(command.detail()).containsEntry("walletRegistrationStatus", "FINALIZATION_FAILED");
+    assertThat(command.detail()).containsEntry("newerWalletRegistrationExists", false);
+    assertThat(command.detail()).containsEntry("walletLastErrorCode", "LOCAL_CONFLICT");
   }
 
   @Test

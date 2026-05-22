@@ -78,6 +78,7 @@ class WalletRegistrationRecoveryControllerTest {
                 "CONFIRMED",
                 "SUCCEEDED",
                 "REGISTERED",
+                false,
                 null,
                 null));
 
@@ -99,7 +100,8 @@ class WalletRegistrationRecoveryControllerTest {
         .andExpect(jsonPath("$.data.registrationId").value("registration-1"))
         .andExpect(jsonPath("$.data.transactionId").value(24))
         .andExpect(jsonPath("$.data.executionIntentId").value("intent-1"))
-        .andExpect(jsonPath("$.data.walletRegistrationStatus").value("REGISTERED"));
+        .andExpect(jsonPath("$.data.walletRegistrationStatus").value("REGISTERED"))
+        .andExpect(jsonPath("$.data.newerWalletRegistrationExists").value(false));
 
     ArgumentCaptor<ReplayWalletRegistrationApprovalCommand> captor =
         ArgumentCaptor.forClass(ReplayWalletRegistrationApprovalCommand.class);
@@ -154,6 +156,30 @@ class WalletRegistrationRecoveryControllerTest {
                             "transactionId", 24L,
                             "reason", " ",
                             "evidence", "ops-ticket-450"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(replayUseCase);
+  }
+
+  @Test
+  @DisplayName(
+      "POST /admin/web3/wallet-registrations/replay-confirmed-approval evidence 과대 payload면 400")
+  void replayConfirmedApproval_oversizedEvidence_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/wallet-registrations/replay-confirmed-approval")
+                .with(adminPrincipal(9L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "transactionId",
+                            24L,
+                            "reason",
+                            "manual-confirmation",
+                            "evidence",
+                            "x".repeat(1001)))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 

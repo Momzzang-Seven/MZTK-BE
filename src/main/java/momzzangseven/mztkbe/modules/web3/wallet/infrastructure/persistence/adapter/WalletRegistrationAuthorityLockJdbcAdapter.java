@@ -7,6 +7,7 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
 import org.springframework.jdbc.core.ConnectionCallback;
@@ -51,21 +52,21 @@ public class WalletRegistrationAuthorityLockJdbcAdapter
   private static List<Long> lockKeys(Long userId, String walletAddress) {
     return List.of(
             namespacedKey(USER_NAMESPACE, userId.toString()),
-            namespacedKey(WALLET_NAMESPACE, walletAddress.toLowerCase()))
+            namespacedKey(WALLET_NAMESPACE, walletAddress.toLowerCase(Locale.ROOT)))
         .stream()
         .sorted()
         .toList();
   }
 
   private static long namespacedKey(int namespace, String value) {
-    return ((long) namespace << 32) | (stableHash32(value) & 0xffffffffL);
+    return stableHash64(namespace + ":" + value);
   }
 
-  private static int stableHash32(String value) {
+  private static long stableHash64(String value) {
     try {
       byte[] digest =
           MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-      return ByteBuffer.wrap(digest).getInt();
+      return ByteBuffer.wrap(digest).getLong();
     } catch (NoSuchAlgorithmException exception) {
       throw new IllegalStateException("SHA-256 digest is unavailable", exception);
     }

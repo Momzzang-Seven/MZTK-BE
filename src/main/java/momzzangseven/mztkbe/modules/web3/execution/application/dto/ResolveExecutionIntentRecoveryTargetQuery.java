@@ -1,13 +1,13 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTypeCode;
 
 /** Query for resolving an execution recovery target by intent, transaction, or resource. */
 public record ResolveExecutionIntentRecoveryTargetQuery(
     String executionIntentId,
     Long transactionId,
-    ExecutionResourceType resourceType,
+    ExecutionResourceTypeCode resourceType,
     String resourceId) {
 
   public ResolveExecutionIntentRecoveryTargetQuery {
@@ -23,5 +23,20 @@ public record ResolveExecutionIntentRecoveryTargetQuery(
     if (resourceId != null && !resourceId.isBlank() && resourceType == null) {
       throw new Web3InvalidInputException("resourceType is required when resourceId is set");
     }
+  }
+
+  public static ResolveExecutionIntentRecoveryTargetQuery byExecutionIntentId(
+      String executionIntentId) {
+    return new ResolveExecutionIntentRecoveryTargetQuery(executionIntentId, null, null, null);
+  }
+
+  public static ResolveExecutionIntentRecoveryTargetQuery byTransactionId(Long transactionId) {
+    return new ResolveExecutionIntentRecoveryTargetQuery(null, transactionId, null, null);
+  }
+
+  public static ResolveExecutionIntentRecoveryTargetQuery walletRegistration(
+      String registrationId) {
+    return new ResolveExecutionIntentRecoveryTargetQuery(
+        null, null, ExecutionResourceTypeCode.WALLET_REGISTRATION, registrationId);
   }
 }

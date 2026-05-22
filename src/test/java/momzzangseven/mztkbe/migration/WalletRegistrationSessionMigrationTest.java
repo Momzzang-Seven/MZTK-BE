@@ -24,4 +24,19 @@ class WalletRegistrationSessionMigrationTest {
     assertThat(sql).contains("uk_web3_wallet_registration_sessions_latest_intent");
     assertThat(sql).contains("ck_web3_wallet_registration_sessions_status");
   }
+
+  @Test
+  void migrationDefinesSupersededLookupIndexes() throws Exception {
+    String sql =
+        Files.readString(
+            Path.of(
+                "src/main/resources/db/migration/"
+                    + "V079__add_wallet_registration_superseded_lookup_indexes.sql"));
+
+    assertThat(sql)
+        .contains("idx_web3_wallet_registration_sessions_user_created_id")
+        .contains("ON web3_wallet_registration_sessions(user_id, created_at DESC, id DESC)")
+        .contains("idx_web3_wallet_registration_sessions_wallet_created_id")
+        .contains("ON web3_wallet_registration_sessions(wallet_address, created_at DESC, id DESC)");
+  }
 }

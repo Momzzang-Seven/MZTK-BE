@@ -5,8 +5,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayConfirmedExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
@@ -18,8 +18,11 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionT
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
+import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
+@Transactional
+@Slf4j
 public class ReplayConfirmedExecutionIntentService
     implements ReplayConfirmedExecutionIntentUseCase {
 
@@ -75,11 +78,22 @@ public class ReplayConfirmedExecutionIntentService
   }
 
   private boolean replayConfirmed(ExecutionIntent intent) {
-    ExecutionActionHandlerPort actionHandler = resolveActionHandler(intent);
-    ExecutionActionPlan actionPlan = actionHandler.buildActionPlan(intent);
-    runAfterCommitPort.runAfterCommit(
-        () -> actionHandler.afterExecutionConfirmed(intent, actionPlan));
+    runAfterCommitPort.runAfterCommit(() -> afterExecutionConfirmedSafely(intent));
     return true;
+  }
+
+  private void afterExecutionConfirmedSafely(ExecutionIntent intent) {
+    try {
+      ExecutionActionHandlerPort handler = resolveActionHandler(intent);
+      handler.afterExecutionConfirmed(intent, handler.buildActionPlan(intent));
+    } catch (RuntimeException ex) {
+      log.error(
+          "Execution intent replay confirmed but post-confirm sync failed: "
+              + "executionIntentId={}, actionType={}",
+          intent.getPublicId(),
+          intent.getActionType(),
+          ex);
+    }
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {

@@ -344,16 +344,13 @@ public class ExecutionIntentServiceConfig {
       LoadExecutionTransactionPort loadExecutionTransactionPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       RunAfterCommitPort runAfterCommitPort,
-      PlatformTransactionManager transactionManager,
       Clock appClock) {
-    ReplayConfirmedExecutionIntentService delegate =
-        new ReplayConfirmedExecutionIntentService(
-            executionIntentPersistencePort,
-            loadExecutionTransactionPort,
-            executionActionHandlerPorts,
-            runAfterCommitPort,
-            appClock);
-    return new TransactionalReplayConfirmedExecutionIntentUseCase(delegate, transactionManager);
+    return new ReplayConfirmedExecutionIntentService(
+        executionIntentPersistencePort,
+        loadExecutionTransactionPort,
+        executionActionHandlerPorts,
+        runAfterCommitPort,
+        appClock);
   }
 
   @Bean

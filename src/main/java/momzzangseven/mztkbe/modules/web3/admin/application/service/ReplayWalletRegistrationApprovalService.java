@@ -31,7 +31,16 @@ public class ReplayWalletRegistrationApprovalService
       actionType = "WALLET_REGISTRATION_APPROVAL_REPLAY",
       targetType = AuditTargetType.WEB3_TRANSACTION,
       operatorId = "#command.operatorId()",
-      targetId = "#command.auditTargetId()")
+      targetId = "#command.auditTargetId()",
+      detail = {
+        "outcome=#result?.outcome()",
+        "replayInvoked=#result?.replayInvoked()",
+        "executionIntentStatus=#result?.executionIntentStatus()",
+        "transactionStatus=#result?.transactionStatus()",
+        "walletRegistrationStatus=#result?.walletRegistrationStatus()",
+        "newerWalletRegistrationExists=#result?.newerWalletRegistrationExists()",
+        "walletLastErrorCode=#result?.walletLastErrorCode()"
+      })
   public ReplayWalletRegistrationApprovalResult execute(
       ReplayWalletRegistrationApprovalCommand command) {
     if (command == null) {
@@ -103,6 +112,9 @@ public class ReplayWalletRegistrationApprovalService
         && !postState.latestExecutionIntentId().equals(target.executionIntentId())) {
       return "STALE_SUPERSEDED";
     }
+    if (postState.newerWalletRegistrationExists()) {
+      return "STALE_SUPERSEDED";
+    }
     return switch (postState.status()) {
       case "REGISTERED" -> "REGISTERED";
       case "FINALIZATION_FAILED" -> "FINALIZATION_FAILED";
@@ -122,6 +134,7 @@ public class ReplayWalletRegistrationApprovalService
         null,
         null,
         null,
+        false,
         null,
         null);
   }
@@ -140,6 +153,7 @@ public class ReplayWalletRegistrationApprovalService
         target.executionIntentStatus(),
         target.transactionStatus(),
         postState == null ? null : postState.status(),
+        postState != null && postState.newerWalletRegistrationExists(),
         postState == null ? null : postState.lastErrorCode(),
         postState == null ? null : postState.lastErrorReason());
   }

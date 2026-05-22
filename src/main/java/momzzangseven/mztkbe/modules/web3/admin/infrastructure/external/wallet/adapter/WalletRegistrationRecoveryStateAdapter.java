@@ -36,6 +36,7 @@ public class WalletRegistrationRecoveryStateAdapter
         result.latestTransactionHash(),
         result.lastErrorCode(),
         result.lastErrorReason(),
+        result.newerWalletRegistrationExists(),
         result.registeredWalletId());
   }
 }

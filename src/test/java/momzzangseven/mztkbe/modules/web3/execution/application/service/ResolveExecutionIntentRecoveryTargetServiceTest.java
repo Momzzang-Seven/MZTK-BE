@@ -49,12 +49,13 @@ class ResolveExecutionIntentRecoveryTargetServiceTest {
 
     var result =
         service
-            .execute(new ResolveExecutionIntentRecoveryTargetQuery(null, 24L, null, null))
+            .execute(ResolveExecutionIntentRecoveryTargetQuery.byTransactionId(24L))
             .orElseThrow();
 
     assertThat(result.executionIntentId()).isEqualTo("intent-1");
+    assertThat(result.resourceType()).isEqualTo("WALLET_REGISTRATION");
     assertThat(result.resourceId()).isEqualTo("registration-1");
-    assertThat(result.actionType()).isEqualTo(ExecutionActionType.WALLET_ESCROW_APPROVE);
+    assertThat(result.actionType()).isEqualTo("WALLET_ESCROW_APPROVE");
     assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SUCCEEDED);
   }
 
@@ -66,12 +67,10 @@ class ResolveExecutionIntentRecoveryTargetServiceTest {
 
     var result =
         service
-            .execute(
-                new ResolveExecutionIntentRecoveryTargetQuery(
-                    null, null, ExecutionResourceType.WALLET_REGISTRATION, "registration-1"))
+            .execute(ResolveExecutionIntentRecoveryTargetQuery.walletRegistration("registration-1"))
             .orElseThrow();
 
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.executionIntentStatus()).isEqualTo("PENDING_ONCHAIN");
   }
 
   private ExecutionIntent intent() {

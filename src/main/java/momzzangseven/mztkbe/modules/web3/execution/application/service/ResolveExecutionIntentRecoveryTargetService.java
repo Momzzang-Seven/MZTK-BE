@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ResolveEx
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
@@ -40,7 +41,7 @@ public class ResolveExecutionIntentRecoveryTargetService
     }
     if (query.resourceType() != null) {
       return executionIntentPersistencePort.findLatestByResource(
-          query.resourceType(), query.resourceId());
+          ExecutionResourceType.valueOf(query.resourceType().name()), query.resourceId());
     }
     throw new Web3InvalidInputException(
         "executionIntentId, transactionId, or resource target is required");
@@ -53,10 +54,10 @@ public class ResolveExecutionIntentRecoveryTargetService
             : loadExecutionTransactionPort.findById(intent.getSubmittedTxId());
     return new ResolveExecutionIntentRecoveryTargetResult(
         intent.getPublicId(),
-        intent.getResourceType(),
+        intent.getResourceType().name(),
         intent.getResourceId(),
-        intent.getActionType(),
-        intent.getStatus(),
+        intent.getActionType().name(),
+        intent.getStatus().name(),
         transaction.map(ExecutionTransactionSummary::transactionId).orElse(null),
         transaction.map(ExecutionTransactionSummary::status).orElse(null),
         transaction.map(ExecutionTransactionSummary::txHash).orElse(null));

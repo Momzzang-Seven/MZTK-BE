@@ -18,6 +18,8 @@ import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoar
 import momzzangseven.mztkbe.modules.admin.board.application.service.UnblockAdminBoardPostService;
 import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
 import momzzangseven.mztkbe.modules.post.application.service.ModeratePostService;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ReplayWalletRegistrationApprovalCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.service.ReplayWalletRegistrationApprovalService;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminRefundUseCase;
@@ -162,6 +164,32 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation.targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
     assertThat(annotation.operatorId()).isEqualTo("#command.operatorId()");
     assertThat(annotation.targetId()).isEqualTo("#command.transactionId()");
+  }
+
+  @Test
+  @DisplayName("Wallet registration approval replay는 운영 결과 audit detail 표현식을 가진다")
+  void replayWalletRegistrationApprovalService_recordsReplayResultDetail()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        ReplayWalletRegistrationApprovalService.class
+            .getMethod("execute", ReplayWalletRegistrationApprovalCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("WALLET_REGISTRATION_APPROVAL_REPLAY");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorId()");
+    assertThat(annotation.targetId()).isEqualTo("#command.auditTargetId()");
+    assertThat(annotation.detail())
+        .containsExactly(
+            "outcome=#result?.outcome()",
+            "replayInvoked=#result?.replayInvoked()",
+            "executionIntentStatus=#result?.executionIntentStatus()",
+            "transactionStatus=#result?.transactionStatus()",
+            "walletRegistrationStatus=#result?.walletRegistrationStatus()",
+            "newerWalletRegistrationExists=#result?.newerWalletRegistrationExists()",
+            "walletLastErrorCode=#result?.walletLastErrorCode()");
+    assertThat(detailKeys(annotation)).doesNotContainAnyElementsOf(RESERVED_AUDIT_DETAIL_KEYS);
   }
 
   @Test

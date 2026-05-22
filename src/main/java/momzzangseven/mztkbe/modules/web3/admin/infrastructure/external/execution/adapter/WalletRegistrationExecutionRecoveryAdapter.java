@@ -10,7 +10,6 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ResolveExecut
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ResolveExecutionIntentRecoveryTargetResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ResolveExecutionIntentRecoveryTargetUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -25,22 +24,20 @@ public class WalletRegistrationExecutionRecoveryAdapter
   @Override
   public Optional<WalletRegistrationApprovalReplayTarget> resolveByRegistrationId(
       String registrationId) {
-    return resolve(
-        new ResolveExecutionIntentRecoveryTargetQuery(
-            null, null, ExecutionResourceType.WALLET_REGISTRATION, registrationId));
+    return resolve(ResolveExecutionIntentRecoveryTargetQuery.walletRegistration(registrationId));
   }
 
   @Override
   public Optional<WalletRegistrationApprovalReplayTarget> resolveByTransactionId(
       Long transactionId) {
-    return resolve(new ResolveExecutionIntentRecoveryTargetQuery(null, transactionId, null, null));
+    return resolve(ResolveExecutionIntentRecoveryTargetQuery.byTransactionId(transactionId));
   }
 
   @Override
   public Optional<WalletRegistrationApprovalReplayTarget> resolveByExecutionIntentId(
       String executionIntentId) {
     return resolve(
-        new ResolveExecutionIntentRecoveryTargetQuery(executionIntentId, null, null, null));
+        ResolveExecutionIntentRecoveryTargetQuery.byExecutionIntentId(executionIntentId));
   }
 
   @Override
@@ -63,10 +60,10 @@ public class WalletRegistrationExecutionRecoveryAdapter
       ResolveExecutionIntentRecoveryTargetResult result) {
     return new WalletRegistrationApprovalReplayTarget(
         result.executionIntentId(),
-        result.resourceType().name(),
+        result.resourceType(),
         result.resourceId(),
-        result.actionType().name(),
-        result.executionIntentStatus().name(),
+        result.actionType(),
+        result.executionIntentStatus(),
         result.transactionId(),
         result.transactionStatus() == null ? null : result.transactionStatus().name(),
         result.txHash());

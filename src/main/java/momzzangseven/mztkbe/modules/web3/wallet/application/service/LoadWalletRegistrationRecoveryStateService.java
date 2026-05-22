@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.LoadWalletRegist
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationRecoveryStateResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.LoadWalletRegistrationRecoveryStateUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +27,19 @@ public class LoadWalletRegistrationRecoveryStateService
     }
     return loadSessionPort
         .loadByPublicId(query.registrationId())
-        .map(WalletRegistrationRecoveryStateResult::from);
+        .map(
+            session ->
+                WalletRegistrationRecoveryStateResult.from(
+                    session, hasNewerAuthoritativeSession(session)));
+  }
+
+  private boolean hasNewerAuthoritativeSession(WalletRegistrationSession session) {
+    return session.getId() != null
+        && session.getCreatedAt() != null
+        && loadSessionPort.existsNewerByUserIdOrWalletAddress(
+            session.getUserId(),
+            session.getWalletAddress(),
+            session.getCreatedAt(),
+            session.getId());
   }
 }

@@ -13,9 +13,11 @@ public record WalletRegistrationRecoveryStateResult(
     String latestTransactionHash,
     String lastErrorCode,
     String lastErrorReason,
+    boolean newerWalletRegistrationExists,
     Long registeredWalletId) {
 
-  public static WalletRegistrationRecoveryStateResult from(WalletRegistrationSession session) {
+  public static WalletRegistrationRecoveryStateResult from(
+      WalletRegistrationSession session, boolean newerWalletRegistrationExists) {
     return new WalletRegistrationRecoveryStateResult(
         session.getPublicId(),
         session.getUserId(),
@@ -26,6 +28,7 @@ public record WalletRegistrationRecoveryStateResult(
         session.getLatestTransactionHash(),
         session.getLastErrorCode(),
         session.getLastErrorReason(),
+        newerWalletRegistrationExists,
         session.getRegisteredWalletId());
   }
 }
