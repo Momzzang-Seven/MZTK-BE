@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.admin.infrastructure.external.marketplace.adapter;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.config.ConditionalOnMarketplaceAdminEnabled;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CalculateMarketplaceAdminSettlementReviewQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ExecuteMarketplaceAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminSettleReasonCode;
@@ -10,7 +11,6 @@ import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceA
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminSettlementReviewResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.ForceMarketplaceAdminSettlementPort;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.GetMarketplaceAdminSettlementReviewPort;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnMarketplaceAdminEnabled;
 import org.springframework.stereotype.Component;
 
 @Component

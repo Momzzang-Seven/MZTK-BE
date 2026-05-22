@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.config;
 
 import java.time.Clock;
+import momzzangseven.mztkbe.global.config.ConditionalOnMarketplaceAdminEnabled;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApplyReservationEscrowExecutionHookUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApproveReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CalculateMarketplaceAdminRefundReviewUseCase;
@@ -76,7 +77,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.RecoverReservationEscrowService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.RejectReservationService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ReservationChainReadRepairService;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnMarketplaceAdminEnabled;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

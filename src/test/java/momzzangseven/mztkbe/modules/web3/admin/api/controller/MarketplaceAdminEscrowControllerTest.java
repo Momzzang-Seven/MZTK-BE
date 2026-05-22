@@ -1,14 +1,17 @@
 package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminEscrowReviewResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionAuthorityView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionPhase;
@@ -19,8 +22,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Mark
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminTokenView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import momzzangseven.mztkbe.modules.web3.admin.api.dto.ForceMarketplaceAdminRefundRequestDTO;
-import momzzangseven.mztkbe.modules.web3.admin.api.dto.ForceMarketplaceAdminSettlementRequestDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.web3.EscrowTransactionAdapter;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminRefundResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminSettlementCommand;
@@ -33,45 +35,86 @@ import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceMarketpl
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceMarketplaceAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.GetMarketplaceAdminRefundReviewUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.GetMarketplaceAdminSettlementReviewUseCase;
-import org.junit.jupiter.api.BeforeEach;
+import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceAdminExecutionConfigurationValidator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.annotation.Transactional;
 
-@ExtendWith(MockitoExtension.class)
-@DisplayName("MarketplaceAdminEscrowController")
+@TestPropertySource(
+    properties = {
+      "web3.reward-token.enabled=true",
+      "web3.eip7702.enabled=false",
+      "web3.execution.internal.enabled=true",
+      "web3.marketplace.admin.enabled=true"
+    })
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+@DisplayName("MarketplaceAdminEscrowController direct EIP-1559 계약 테스트 (MockMvc + H2)")
 class MarketplaceAdminEscrowControllerTest {
 
-  @Mock private GetMarketplaceAdminRefundReviewUseCase getRefundReviewUseCase;
-  @Mock private GetMarketplaceAdminSettlementReviewUseCase getSettlementReviewUseCase;
-  @Mock private ForceMarketplaceAdminRefundUseCase forceRefundUseCase;
-  @Mock private ForceMarketplaceAdminSettlementUseCase forceSettlementUseCase;
+  @Autowired protected MockMvc mockMvc;
 
-  private MarketplaceAdminEscrowController controller;
+  @MockitoBean private GetMarketplaceAdminRefundReviewUseCase getRefundReviewUseCase;
+  @MockitoBean private GetMarketplaceAdminSettlementReviewUseCase getSettlementReviewUseCase;
+  @MockitoBean private ForceMarketplaceAdminRefundUseCase forceRefundUseCase;
+  @MockitoBean private ForceMarketplaceAdminSettlementUseCase forceSettlementUseCase;
 
-  @BeforeEach
-  void setUp() {
-    controller =
-        new MarketplaceAdminEscrowController(
-            getRefundReviewUseCase,
-            getSettlementReviewUseCase,
-            forceRefundUseCase,
-            forceSettlementUseCase);
-  }
+  @MockitoBean
+  private MarketplaceAdminExecutionConfigurationValidator
+      marketplaceAdminExecutionConfigurationValidator;
+
+  @MockitoBean private EscrowTransactionAdapter escrowTransactionAdapter;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
+          .MarkTransactionSucceededUseCase
+      txMarkTransactionSucceededUseCase;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
+          .TransactionReceiptWorker
+      txTransactionReceiptWorker;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
+          .TransactionIssuerWorker
+      txTransactionIssuerWorker;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
+          .SignedRecoveryWorker
+      txSignedRecoveryWorker;
 
   @Test
-  @DisplayName("refund review delegates reservation id without reading security context")
-  void getRefundReview_success() {
+  @DisplayName("GET /admin/web3/marketplace/reservations/{reservationId}/refund-review 성공")
+  void getRefundReview_success() throws Exception {
     given(getRefundReviewUseCase.execute(any(GetMarketplaceAdminRefundReviewQuery.class)))
         .willReturn(new GetMarketplaceAdminRefundReviewResult(sampleReview()));
 
-    var response = controller.getRefundReview(77L);
+    mockMvc
+        .perform(
+            get("/admin/web3/marketplace/reservations/77/refund-review").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.reservationId").value(77))
+        .andExpect(jsonPath("$.data.processable").value(true))
+        .andExpect(jsonPath("$.data.adminExecutionPhase").value("IDLE"))
+        .andExpect(jsonPath("$.data.authority.requiresUserSignature").value(false));
 
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().getData().reservationId()).isEqualTo(77L);
     ArgumentCaptor<GetMarketplaceAdminRefundReviewQuery> captor =
         ArgumentCaptor.forClass(GetMarketplaceAdminRefundReviewQuery.class);
     verify(getRefundReviewUseCase).execute(captor.capture());
@@ -79,15 +122,20 @@ class MarketplaceAdminEscrowControllerTest {
   }
 
   @Test
-  @DisplayName("settlement review delegates reservation id without reading security context")
-  void getSettlementReview_success() {
+  @DisplayName("GET /admin/web3/marketplace/reservations/{reservationId}/settlement-review 성공")
+  void getSettlementReview_success() throws Exception {
     given(getSettlementReviewUseCase.execute(any(GetMarketplaceAdminSettlementReviewQuery.class)))
         .willReturn(new GetMarketplaceAdminSettlementReviewResult(sampleReview()));
 
-    var response = controller.getSettlementReview(77L);
+    mockMvc
+        .perform(
+            get("/admin/web3/marketplace/reservations/77/settlement-review")
+                .with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.reservationId").value(77))
+        .andExpect(jsonPath("$.data.adminExecutionPhase").value("IDLE"));
 
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().getData().reservationId()).isEqualTo(77L);
     ArgumentCaptor<GetMarketplaceAdminSettlementReviewQuery> captor =
         ArgumentCaptor.forClass(GetMarketplaceAdminSettlementReviewQuery.class);
     verify(getSettlementReviewUseCase).execute(captor.capture());
@@ -95,21 +143,31 @@ class MarketplaceAdminEscrowControllerTest {
   }
 
   @Test
-  @DisplayName("refund execute delegates operator/reservation/reason/memo/confirmation")
-  void refund_success() {
+  @DisplayName("POST /admin/web3/marketplace/reservations/{reservationId}/refund 성공")
+  void refund_success() throws Exception {
     given(forceRefundUseCase.execute(any(ForceMarketplaceAdminRefundCommand.class)))
         .willReturn(
             new ForceMarketplaceAdminRefundResult(sampleExecution("MARKETPLACE_ADMIN_REFUND")));
 
-    var response =
-        controller.refund(
-            9L,
-            77L,
-            new ForceMarketplaceAdminRefundRequestDTO(
-                MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, "memo", false));
+    mockMvc
+        .perform(
+            post("/admin/web3/marketplace/reservations/77/refund")
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "reasonCode": "TRAINER_TIMEOUT",
+                      "memo": "memo",
+                      "confirmManualRefund": false
+                    }
+                    """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.actionType").value("MARKETPLACE_ADMIN_REFUND"))
+        .andExpect(jsonPath("$.data.executionIntent.id").value("intent-1"))
+        .andExpect(jsonPath("$.data.execution.requiresUserSignature").value(false));
 
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().getData().actionType()).isEqualTo("MARKETPLACE_ADMIN_REFUND");
     ArgumentCaptor<ForceMarketplaceAdminRefundCommand> captor =
         ArgumentCaptor.forClass(ForceMarketplaceAdminRefundCommand.class);
     verify(forceRefundUseCase).execute(captor.capture());
@@ -122,21 +180,31 @@ class MarketplaceAdminEscrowControllerTest {
   }
 
   @Test
-  @DisplayName("settlement execute delegates operator/reservation/reason/memo/confirmation")
-  void settle_success() {
+  @DisplayName("POST /admin/web3/marketplace/reservations/{reservationId}/settle 성공")
+  void settle_success() throws Exception {
     given(forceSettlementUseCase.execute(any(ForceMarketplaceAdminSettlementCommand.class)))
         .willReturn(
             new ForceMarketplaceAdminSettlementResult(sampleExecution("MARKETPLACE_ADMIN_SETTLE")));
 
-    var response =
-        controller.settle(
-            9L,
-            77L,
-            new ForceMarketplaceAdminSettlementRequestDTO(
-                MarketplaceAdminSettleReasonCode.ADMIN_MANUAL_SETTLE, "memo", true));
+    mockMvc
+        .perform(
+            post("/admin/web3/marketplace/reservations/77/settle")
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "reasonCode": "ADMIN_MANUAL_SETTLE",
+                      "memo": "memo",
+                      "confirmEarlySettle": true
+                    }
+                    """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.actionType").value("MARKETPLACE_ADMIN_SETTLE"))
+        .andExpect(jsonPath("$.data.executionIntent.id").value("intent-1"))
+        .andExpect(jsonPath("$.data.execution.requiresUserSignature").value(false));
 
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().getData().actionType()).isEqualTo("MARKETPLACE_ADMIN_SETTLE");
     ArgumentCaptor<ForceMarketplaceAdminSettlementCommand> captor =
         ArgumentCaptor.forClass(ForceMarketplaceAdminSettlementCommand.class);
     verify(forceSettlementUseCase).execute(captor.capture());
@@ -149,16 +217,32 @@ class MarketplaceAdminEscrowControllerTest {
   }
 
   @Test
-  @DisplayName("execute requires authenticated operator id")
-  void execute_requiresOperatorId() {
-    assertThatThrownBy(
-            () ->
-                controller.refund(
-                    null,
-                    77L,
-                    new ForceMarketplaceAdminRefundRequestDTO(
-                        MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, null, false)))
-        .isInstanceOf(UserNotAuthenticatedException.class);
+  @DisplayName("marketplace admin endpoint 는 USER 권한이면 403")
+  void marketplaceAdminEndpoint_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(
+            get("/admin/web3/marketplace/reservations/77/refund-review").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
+
+    verifyNoInteractions(getRefundReviewUseCase);
+  }
+
+  private RequestPostProcessor adminPrincipal(Long userId) {
+    return principal(userId, "ROLE_ADMIN");
+  }
+
+  private RequestPostProcessor userPrincipal(Long userId) {
+    return principal(userId, "ROLE_USER");
+  }
+
+  private RequestPostProcessor principal(Long userId, String authority) {
+    UsernamePasswordAuthenticationToken token =
+        new UsernamePasswordAuthenticationToken(
+            userId, null, List.of(new SimpleGrantedAuthority(authority)));
+    SecurityContext context = SecurityContextHolder.createEmptyContext();
+    context.setAuthentication(token);
+    return org.springframework.security.test.web.servlet.request
+        .SecurityMockMvcRequestPostProcessors.securityContext(context);
   }
 
   private MarketplaceAdminEscrowReviewResult sampleReview() {

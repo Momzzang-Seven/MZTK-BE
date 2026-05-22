@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.exte
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.config.ConditionalOnMarketplaceAdminEnabled;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareMarketplaceAdminEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationAdminExecutionDraft;
@@ -17,7 +18,6 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildM
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.SubmitMarketplaceAdminExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAdminExecutionRequestSource;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnMarketplaceAdminEnabled;
 import org.springframework.stereotype.Component;
 
 @Component
