@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ResolveExecutionIntentRecoveryTargetQuery;
@@ -60,17 +61,82 @@ class ResolveExecutionIntentRecoveryTargetServiceTest {
   }
 
   @Test
-  void execute_whenRegistrationIdProvided_resolvesLatestWalletRegistrationIntent() {
-    when(executionIntentPersistencePort.findLatestByResource(
-            ExecutionResourceType.WALLET_REGISTRATION, "registration-1"))
-        .thenReturn(Optional.of(intent()));
+  void execute_whenRegistrationIdProvidedAndOnlyOneIntentExists_resolvesThatIntent() {
+    when(executionIntentPersistencePort.findByResource(
+            ExecutionResourceType.WALLET_REGISTRATION, "registration-1", 100))
+        .thenReturn(List.of(intent()));
 
     var result =
         service
             .execute(ResolveExecutionIntentRecoveryTargetQuery.walletRegistration("registration-1"))
             .orElseThrow();
 
+    assertThat(result.resolutionOutcome()).isEqualTo("RESOLVED");
     assertThat(result.executionIntentStatus()).isEqualTo("PENDING_ONCHAIN");
+  }
+
+  @Test
+  void execute_whenRegistrationIdHasOldSucceededReceipt_resolvesOldReplayableIntent() {
+    ExecutionIntent oldTimeoutIntent = intent().toBuilder().submittedTxId(24L).build();
+    ExecutionIntent latestRetryIntent =
+        intent().toBuilder()
+            .id(2L)
+            .publicId("intent-2")
+            .status(ExecutionIntentStatus.AWAITING_SIGNATURE)
+            .submittedTxId(null)
+            .createdAt(LocalDateTime.parse("2026-05-13T09:10:00"))
+            .build();
+    when(executionIntentPersistencePort.findByResource(
+            ExecutionResourceType.WALLET_REGISTRATION, "registration-1", 100))
+        .thenReturn(List.of(latestRetryIntent, oldTimeoutIntent));
+    when(loadExecutionTransactionPort.findById(24L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    24L, ExecutionTransactionStatus.SUCCEEDED, "0x" + "a".repeat(64))));
+
+    var result =
+        service
+            .execute(ResolveExecutionIntentRecoveryTargetQuery.walletRegistration("registration-1"))
+            .orElseThrow();
+
+    assertThat(result.resolutionOutcome()).isEqualTo("RESOLVED");
+    assertThat(result.executionIntentId()).isEqualTo("intent-1");
+    assertThat(result.transactionId()).isEqualTo(24L);
+  }
+
+  @Test
+  void execute_whenRegistrationIdHasMultipleReplayableCandidates_returnsAmbiguousResult() {
+    ExecutionIntent first = intent().toBuilder().submittedTxId(24L).build();
+    ExecutionIntent second =
+        intent().toBuilder()
+            .id(2L)
+            .publicId("intent-2")
+            .submittedTxId(25L)
+            .createdAt(LocalDateTime.parse("2026-05-13T09:10:00"))
+            .build();
+    when(executionIntentPersistencePort.findByResource(
+            ExecutionResourceType.WALLET_REGISTRATION, "registration-1", 100))
+        .thenReturn(List.of(second, first));
+    when(loadExecutionTransactionPort.findById(24L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    24L, ExecutionTransactionStatus.SUCCEEDED, "0x" + "a".repeat(64))));
+    when(loadExecutionTransactionPort.findById(25L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    25L, ExecutionTransactionStatus.SUCCEEDED, "0x" + "b".repeat(64))));
+
+    var result =
+        service
+            .execute(ResolveExecutionIntentRecoveryTargetQuery.walletRegistration("registration-1"))
+            .orElseThrow();
+
+    assertThat(result.resolutionOutcome()).isEqualTo("TARGET_AMBIGUOUS");
+    assertThat(result.executionIntentId()).isNull();
+    assertThat(result.resourceId()).isEqualTo("registration-1");
   }
 
   @Test

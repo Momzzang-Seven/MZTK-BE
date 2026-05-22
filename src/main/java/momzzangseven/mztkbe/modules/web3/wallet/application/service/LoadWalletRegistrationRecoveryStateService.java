@@ -8,10 +8,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrati
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.LoadWalletRegistrationRecoveryStateUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-@Service
 @RequiredArgsConstructor
 public class LoadWalletRegistrationRecoveryStateService
     implements LoadWalletRegistrationRecoveryStateUseCase {
@@ -19,7 +16,6 @@ public class LoadWalletRegistrationRecoveryStateService
   private final LoadWalletRegistrationSessionPort loadSessionPort;
 
   @Override
-  @Transactional(readOnly = true)
   public Optional<WalletRegistrationRecoveryStateResult> execute(
       LoadWalletRegistrationRecoveryStateQuery query) {
     if (query == null) {

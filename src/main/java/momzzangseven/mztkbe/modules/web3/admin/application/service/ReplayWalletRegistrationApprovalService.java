@@ -21,6 +21,7 @@ public class ReplayWalletRegistrationApprovalService
 
   private static final String RESOURCE_WALLET_REGISTRATION = "WALLET_REGISTRATION";
   private static final String ACTION_WALLET_APPROVE = "WALLET_ESCROW_APPROVE";
+  private static final String RESOLUTION_AMBIGUOUS = "TARGET_AMBIGUOUS";
 
   private final ResolveWalletRegistrationApprovalReplayTargetPort resolveTargetPort;
   private final ReplayConfirmedWalletApprovalPort replayConfirmedWalletApprovalPort;
@@ -67,6 +68,9 @@ public class ReplayWalletRegistrationApprovalService
   private ReplayWalletRegistrationApprovalResult replay(
       ReplayWalletRegistrationApprovalCommand command,
       WalletRegistrationApprovalReplayTarget target) {
+    if (RESOLUTION_AMBIGUOUS.equals(target.resolutionOutcome())) {
+      return result(RESOLUTION_AMBIGUOUS, false, target, null);
+    }
     if (!matchesCommand(command, target)) {
       return result("TARGET_MISMATCH", false, target, null);
     }
@@ -108,12 +112,12 @@ public class ReplayWalletRegistrationApprovalService
     if (postState == null) {
       return replayed ? "POST_STATE_NOT_FOUND" : "NOT_REPLAYABLE";
     }
+    if (postState.newerWalletRegistrationExists()) {
+      return "NEWER_ATTEMPT_EXISTS";
+    }
     if (postState.latestExecutionIntentId() != null
         && !postState.latestExecutionIntentId().equals(target.executionIntentId())) {
       return "STALE_SUPERSEDED";
-    }
-    if (postState.newerWalletRegistrationExists()) {
-      return "NEWER_ATTEMPT_EXISTS";
     }
     return switch (postState.status()) {
       case "REGISTERED" -> "REGISTERED";

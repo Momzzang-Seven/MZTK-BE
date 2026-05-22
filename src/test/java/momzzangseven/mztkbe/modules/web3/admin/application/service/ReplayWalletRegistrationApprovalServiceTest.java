@@ -67,6 +67,19 @@ class ReplayWalletRegistrationApprovalServiceTest {
   }
 
   @Test
+  void execute_whenRegistrationIdOnlyIsAmbiguous_requiresExplicitTargetIdentifier() {
+    when(resolveTargetPort.resolveByRegistrationId("registration-1"))
+        .thenReturn(Optional.of(ambiguousTarget()));
+
+    var result = service.execute(command("registration-1", null, null));
+
+    assertThat(result.outcome()).isEqualTo("TARGET_AMBIGUOUS");
+    assertThat(result.replayInvoked()).isFalse();
+    assertThat(result.registrationId()).isEqualTo("registration-1");
+    verifyNoInteractions(replayConfirmedWalletApprovalPort, loadRecoveryStatePort);
+  }
+
+  @Test
   void execute_whenWalletLatestIntentChanged_returnsStaleSuperseded() {
     when(resolveTargetPort.resolveByExecutionIntentId("intent-1"))
         .thenReturn(Optional.of(target()));
@@ -192,6 +205,21 @@ class ReplayWalletRegistrationApprovalServiceTest {
   }
 
   @Test
+  void execute_whenNewerWalletRegistrationExistsAndIntentChanged_returnsNewerAttemptExists() {
+    when(resolveTargetPort.resolveByExecutionIntentId("intent-1"))
+        .thenReturn(Optional.of(target()));
+    when(replayConfirmedWalletApprovalPort.replay("intent-1", "WALLET_ESCROW_APPROVE"))
+        .thenReturn(true);
+    when(loadRecoveryStatePort.load("registration-1"))
+        .thenReturn(Optional.of(state("APPROVAL_PENDING_ONCHAIN", "intent-2", true)));
+
+    var result = service.execute(command(null, null, "intent-1"));
+
+    assertThat(result.outcome()).isEqualTo("NEWER_ATTEMPT_EXISTS");
+    assertThat(result.newerWalletRegistrationExists()).isTrue();
+  }
+
+  @Test
   void execute_whenTargetIsNotWalletApproval_doesNotReplay() {
     WalletRegistrationApprovalReplayTarget notWallet =
         new WalletRegistrationApprovalReplayTarget(
@@ -242,6 +270,19 @@ class ReplayWalletRegistrationApprovalServiceTest {
         24L,
         "SUCCEEDED",
         "0x" + "a".repeat(64));
+  }
+
+  private WalletRegistrationApprovalReplayTarget ambiguousTarget() {
+    return new WalletRegistrationApprovalReplayTarget(
+        "TARGET_AMBIGUOUS",
+        null,
+        "WALLET_REGISTRATION",
+        "registration-1",
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   private WalletRegistrationRecoveryStateView state(String status) {

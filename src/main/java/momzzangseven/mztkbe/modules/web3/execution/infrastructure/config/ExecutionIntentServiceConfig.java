@@ -359,8 +359,12 @@ public class ExecutionIntentServiceConfig {
   @Bean
   ResolveExecutionIntentRecoveryTargetUseCase resolveExecutionIntentRecoveryTargetUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      LoadExecutionTransactionPort loadExecutionTransactionPort) {
-    return new ResolveExecutionIntentRecoveryTargetService(
-        executionIntentPersistencePort, loadExecutionTransactionPort);
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      PlatformTransactionManager transactionManager) {
+    ResolveExecutionIntentRecoveryTargetService delegate =
+        new ResolveExecutionIntentRecoveryTargetService(
+            executionIntentPersistencePort, loadExecutionTransactionPort);
+    return new TransactionalResolveExecutionIntentRecoveryTargetUseCase(
+        delegate, transactionManager);
   }
 }

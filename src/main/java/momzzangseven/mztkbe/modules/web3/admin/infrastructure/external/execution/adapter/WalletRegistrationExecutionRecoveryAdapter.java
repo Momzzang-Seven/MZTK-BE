@@ -59,6 +59,7 @@ public class WalletRegistrationExecutionRecoveryAdapter
   private WalletRegistrationApprovalReplayTarget toTarget(
       ResolveExecutionIntentRecoveryTargetResult result) {
     return new WalletRegistrationApprovalReplayTarget(
+        result.resolutionOutcome(),
         result.executionIntentId(),
         result.resourceType(),
         result.resourceId(),
