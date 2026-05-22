@@ -100,18 +100,17 @@ class WalletRegistrationSessionPersistenceAdapterTest {
 
   @Test
   void existsNewerByUserIdOrWalletAddress_delegatesToRepositoryQueryWithAuthoritativeStatuses() {
-    when(repository.existsNewerByUserIdOrWalletAddress(
-            eq(1L), eq(WALLET_ADDRESS), any(), eq(NOW), eq(10L)))
+    when(repository.existsNewerByUserIdOrWalletAddress(eq(1L), eq(WALLET_ADDRESS), any(), eq(10L)))
         .thenReturn(true);
 
-    boolean exists = adapter.existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, NOW, 10L);
+    boolean exists = adapter.existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, 10L);
 
     assertThat(exists).isTrue();
     ArgumentCaptor<Collection<WalletRegistrationStatus>> statusesCaptor =
         ArgumentCaptor.forClass(Collection.class);
     verify(repository)
         .existsNewerByUserIdOrWalletAddress(
-            eq(1L), eq(WALLET_ADDRESS), statusesCaptor.capture(), eq(NOW), eq(10L));
+            eq(1L), eq(WALLET_ADDRESS), statusesCaptor.capture(), eq(10L));
     assertThat(statusesCaptor.getValue())
         .containsExactlyInAnyOrder(
             WalletRegistrationStatus.APPROVAL_REQUIRED,
@@ -125,7 +124,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
 
   @Test
   void existsNewerByUserIdOrWalletAddress_whenRequiredInputMissing_returnsFalse() {
-    boolean exists = adapter.existsNewerByUserIdOrWalletAddress(null, WALLET_ADDRESS, NOW, 10L);
+    boolean exists = adapter.existsNewerByUserIdOrWalletAddress(null, WALLET_ADDRESS, 10L);
 
     assertThat(exists).isFalse();
   }

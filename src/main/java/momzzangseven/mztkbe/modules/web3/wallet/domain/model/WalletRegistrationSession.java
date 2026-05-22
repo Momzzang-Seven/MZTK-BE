@@ -377,6 +377,29 @@ public class WalletRegistrationSession {
     return false;
   }
 
+  /** Returns whether legacy receipt-timeout evidence is missing for the current latest intent. */
+  public boolean needsReceiptTimeoutExecutionIntentBackfill() {
+    return RECEIPT_TIMEOUT.equals(lastErrorCode)
+        && latestExecutionIntentId != null
+        && !latestExecutionIntentId.isBlank()
+        && !hasReceiptTimeoutExecutionIntent(latestExecutionIntentId);
+  }
+
+  /**
+   * Backfills receipt-timeout evidence for sessions created before the durable history column
+   * existed.
+   */
+  public WalletRegistrationSession backfillReceiptTimeoutExecutionIntent(LocalDateTime now) {
+    requireNow(now);
+    if (!needsReceiptTimeoutExecutionIntentBackfill()) {
+      return this;
+    }
+    return toBuilder()
+        .receiptTimeoutExecutionIntentIds(rememberReceiptTimeoutIntent(RECEIPT_TIMEOUT))
+        .updatedAt(now)
+        .build();
+  }
+
   private void requireExecutableStatus() {
     if (!canCreateApprovalIntent()) {
       throw new IllegalStateException("approval intent cannot be created from " + status);

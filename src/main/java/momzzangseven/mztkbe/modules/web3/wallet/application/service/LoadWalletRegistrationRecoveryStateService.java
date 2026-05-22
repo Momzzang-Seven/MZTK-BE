@@ -31,11 +31,7 @@ public class LoadWalletRegistrationRecoveryStateService
 
   private boolean hasNewerAuthoritativeSession(WalletRegistrationSession session) {
     return session.getId() != null
-        && session.getCreatedAt() != null
         && loadSessionPort.existsNewerByUserIdOrWalletAddress(
-            session.getUserId(),
-            session.getWalletAddress(),
-            session.getCreatedAt(),
-            session.getId());
+            session.getUserId(), session.getWalletAddress(), session.getId());
   }
 }

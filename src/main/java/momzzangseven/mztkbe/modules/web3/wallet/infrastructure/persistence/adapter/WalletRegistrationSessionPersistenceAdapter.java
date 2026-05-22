@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.adapter;
 
-import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -125,12 +124,12 @@ public class WalletRegistrationSessionPersistenceAdapter
 
   @Override
   public boolean existsNewerByUserIdOrWalletAddress(
-      Long userId, String walletAddress, LocalDateTime createdAt, Long sessionId) {
-    if (userId == null || walletAddress == null || createdAt == null || sessionId == null) {
+      Long userId, String walletAddress, Long sessionId) {
+    if (userId == null || walletAddress == null || sessionId == null) {
       return false;
     }
     return repository.existsNewerByUserIdOrWalletAddress(
-        userId, walletAddress, AUTHORITATIVE_NEWER_STATUSES, createdAt, sessionId);
+        userId, walletAddress, AUTHORITATIVE_NEWER_STATUSES, sessionId);
   }
 
   @Override

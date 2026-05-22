@@ -36,6 +36,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class WalletRegistrationFinalizationProcessorTest {
@@ -73,6 +75,17 @@ class WalletRegistrationFinalizationProcessorTest {
             deleteWalletAndFlushPort,
             recordWalletEventPort,
             CLOCK);
+  }
+
+  @Test
+  void finalizeConfirmed_runsInIndependentTransaction() throws Exception {
+    Transactional transactional =
+        WalletRegistrationFinalizationProcessor.class
+            .getMethod("finalizeConfirmed", FinalizeWalletRegistrationCommand.class)
+            .getAnnotation(Transactional.class);
+
+    assertThat(transactional).isNotNull();
+    assertThat(transactional.propagation()).isEqualTo(Propagation.REQUIRES_NEW);
   }
 
   @Test
@@ -318,7 +331,7 @@ class WalletRegistrationFinalizationProcessorTest {
     when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
     when(saveWalletAndFlushPort.saveAndFlush(any())).thenReturn(savedWallet);
 
-    processor.finalizeConfirmed(command());
+    WalletRegistrationFinalizationResult result = processor.finalizeConfirmed(command());
 
     ArgumentCaptor<WalletRegistrationSession> captor =
         ArgumentCaptor.forClass(WalletRegistrationSession.class);
@@ -327,6 +340,7 @@ class WalletRegistrationFinalizationProcessorTest {
     assertThat(captor.getValue().getLatestExecutionIntentId()).isEqualTo(INTENT_ID);
     assertThat(captor.getValue().getLatestTransactionId()).isNull();
     assertThat(captor.getValue().getLatestTransactionHash()).isNull();
+    assertThat(result.supersededExecutionIntentId()).isEqualTo("intent-2");
   }
 
   @Test
@@ -351,13 +365,14 @@ class WalletRegistrationFinalizationProcessorTest {
     when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
     when(saveWalletAndFlushPort.saveAndFlush(any())).thenReturn(savedWallet);
 
-    processor.finalizeConfirmed(command());
+    WalletRegistrationFinalizationResult result = processor.finalizeConfirmed(command());
 
     ArgumentCaptor<WalletRegistrationSession> captor =
         ArgumentCaptor.forClass(WalletRegistrationSession.class);
     verify(saveSessionPort).save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.REGISTERED);
     assertThat(captor.getValue().getLatestExecutionIntentId()).isEqualTo(INTENT_ID);
+    assertThat(result.supersededExecutionIntentId()).isEqualTo("intent-2");
   }
 
   @Test
@@ -387,7 +402,7 @@ class WalletRegistrationFinalizationProcessorTest {
   void finalizeConfirmed_whenNewerSameUserOrWalletSessionExists_noops() {
     WalletRegistrationSession session = pendingSession().toBuilder().id(1L).createdAt(NOW).build();
     givenFinalizationSession(session);
-    when(loadSessionPort.existsNewerByUserIdOrWalletAddress(USER_ID, WALLET_ADDRESS, NOW, 1L))
+    when(loadSessionPort.existsNewerByUserIdOrWalletAddress(USER_ID, WALLET_ADDRESS, 1L))
         .thenReturn(true);
 
     processor.finalizeConfirmed(command());

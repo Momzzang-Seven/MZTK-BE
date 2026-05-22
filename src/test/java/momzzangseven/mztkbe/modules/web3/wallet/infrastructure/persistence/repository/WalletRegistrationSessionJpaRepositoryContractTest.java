@@ -37,7 +37,7 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
   }
 
   @Test
-  void existsNewerByUserIdOrWalletAddress_usesAuthoritativeStatusesAndCreatedAtIdTieBreak() {
+  void existsNewerByUserIdOrWalletAddress_usesAuthoritativeStatusesAndIdOrdering() {
     LocalDateTime createdAt = LocalDateTime.parse("2026-05-13T10:00:00");
     EnumSet<WalletRegistrationStatus> authoritativeStatuses =
         EnumSet.of(
@@ -79,7 +79,7 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
 
     assertThat(
             repository.existsNewerByUserIdOrWalletAddress(
-                1L, "0x" + "a".repeat(40), authoritativeStatuses, createdAt, base.getId()))
+                1L, "0x" + "a".repeat(40), authoritativeStatuses, base.getId()))
         .isFalse();
 
     repository.saveAndFlush(
@@ -90,7 +90,7 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
             "nonce-newer-active",
             "intent-newer-active",
             WalletRegistrationStatus.APPROVAL_REQUIRED,
-            createdAt.plusMinutes(3)));
+            createdAt.minusMinutes(3)));
 
     WalletRegistrationSessionEntity sameTimestampBase =
         repository.saveAndFlush(
@@ -115,23 +115,15 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
 
     assertThat(
             repository.existsNewerByUserIdOrWalletAddress(
-                1L, "0x" + "a".repeat(40), authoritativeStatuses, createdAt, base.getId()))
+                1L, "0x" + "a".repeat(40), authoritativeStatuses, base.getId()))
         .isTrue();
     assertThat(
             repository.existsNewerByUserIdOrWalletAddress(
-                3L,
-                "0x" + "d".repeat(40),
-                authoritativeStatuses,
-                createdAt,
-                sameTimestampBase.getId()))
+                3L, "0x" + "d".repeat(40), authoritativeStatuses, sameTimestampBase.getId()))
         .isFalse();
     assertThat(
             repository.existsNewerByUserIdOrWalletAddress(
-                3L,
-                "0x" + "c".repeat(40),
-                authoritativeStatuses,
-                createdAt,
-                sameTimestampHigherId.getId()))
+                3L, "0x" + "c".repeat(40), authoritativeStatuses, sameTimestampHigherId.getId()))
         .isFalse();
 
     repository.saveAndFlush(
@@ -146,11 +138,7 @@ class WalletRegistrationSessionJpaRepositoryContractTest {
 
     assertThat(
             repository.existsNewerByUserIdOrWalletAddress(
-                3L,
-                "0x" + "d".repeat(40),
-                authoritativeStatuses,
-                createdAt,
-                sameTimestampBase.getId()))
+                3L, "0x" + "d".repeat(40), authoritativeStatuses, sameTimestampBase.getId()))
         .isTrue();
   }
 

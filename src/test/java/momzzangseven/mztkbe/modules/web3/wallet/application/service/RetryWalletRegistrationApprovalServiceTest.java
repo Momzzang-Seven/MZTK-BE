@@ -132,6 +132,40 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   @Test
+  void execute_whenLegacyReceiptTimeoutRetryableBackfillsOldIntentBeforeNewIntent() {
+    WalletRegistrationSession legacyRetryable =
+        approvalRequiredSession()
+            .markApprovalRetryable(
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON,
+                NOW.plusSeconds(2))
+            .toBuilder()
+            .receiptTimeoutExecutionIntentIds(null)
+            .build();
+    WalletRegistrationSession backfilled =
+        legacyRetryable.backfillReceiptTimeoutExecutionIntent(NOW);
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(legacyRetryable), Optional.of(backfilled));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(state("EXPIRED", null, null, NOW.minusMinutes(1))));
+    when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    givenApprovalAvailable();
+    givenMinimumRemainingTtl(30L);
+    when(buildDraftPort.build(any())).thenReturn(draft());
+    when(submitDraftPort.submit(any())).thenReturn(intentResult(RETRY_INTENT_ID));
+
+    WalletRegistrationStatusResult result = service.execute(command(USER_ID));
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort, org.mockito.Mockito.times(2)).save(captor.capture());
+    assertThat(captor.getAllValues().get(0).hasReceiptTimeoutExecutionIntent(INTENT_ID)).isTrue();
+    assertThat(captor.getAllValues().get(1).getLatestExecutionIntentId())
+        .isEqualTo(RETRY_INTENT_ID);
+    assertThat(result.latestExecutionIntentId()).isEqualTo(RETRY_INTENT_ID);
+  }
+
+  @Test
   void execute_whenApprovalRequiredStillSignable_reusesCurrentSignRequest() {
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalRequiredSession()));

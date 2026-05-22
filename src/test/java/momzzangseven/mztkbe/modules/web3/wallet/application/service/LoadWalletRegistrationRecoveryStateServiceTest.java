@@ -35,14 +35,14 @@ class LoadWalletRegistrationRecoveryStateServiceTest {
   void execute_includesNewerAuthoritativeSessionFlag() {
     WalletRegistrationSession session = session();
     when(loadSessionPort.loadByPublicId("registration-1")).thenReturn(Optional.of(session));
-    when(loadSessionPort.existsNewerByUserIdOrWalletAddress(7L, WALLET_ADDRESS, NOW, 1L))
+    when(loadSessionPort.existsNewerByUserIdOrWalletAddress(7L, WALLET_ADDRESS, 1L))
         .thenReturn(true);
 
     var result = service.execute(new LoadWalletRegistrationRecoveryStateQuery("registration-1"));
 
     assertThat(result).isPresent();
     assertThat(result.orElseThrow().newerWalletRegistrationExists()).isTrue();
-    verify(loadSessionPort).existsNewerByUserIdOrWalletAddress(7L, WALLET_ADDRESS, NOW, 1L);
+    verify(loadSessionPort).existsNewerByUserIdOrWalletAddress(7L, WALLET_ADDRESS, 1L);
   }
 
   private WalletRegistrationSession session() {

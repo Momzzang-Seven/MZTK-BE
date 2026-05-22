@@ -165,6 +165,29 @@ class WalletRegistrationSessionTest {
   }
 
   @Test
+  void backfillReceiptTimeoutExecutionIntent_restoresLegacyHistory() {
+    WalletRegistrationSession legacyRetryable =
+        signedSession()
+            .markApprovalPendingOnchain(
+                EXECUTION_INTENT_ID,
+                10L,
+                "0x" + "b".repeat(64),
+                "PENDING_ONCHAIN",
+                NOW.plusSeconds(3))
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4))
+            .toBuilder()
+            .receiptTimeoutExecutionIntentIds(null)
+            .build();
+
+    WalletRegistrationSession backfilled =
+        legacyRetryable.backfillReceiptTimeoutExecutionIntent(NOW.plusSeconds(5));
+
+    assertThat(legacyRetryable.needsReceiptTimeoutExecutionIntentBackfill()).isTrue();
+    assertThat(backfilled.hasReceiptTimeoutExecutionIntent(EXECUTION_INTENT_ID)).isTrue();
+    assertThat(backfilled.needsReceiptTimeoutExecutionIntentBackfill()).isFalse();
+  }
+
+  @Test
   void nonReceiptTimeoutApprovalFailedSession_cannotFinalize() {
     WalletRegistrationSession failed =
         signedSession()

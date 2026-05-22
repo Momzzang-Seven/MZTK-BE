@@ -81,6 +81,7 @@ public class RetryWalletRegistrationApprovalService
     }
 
     LocalDateTime now = LocalDateTime.now(appClock);
+    session = backfillReceiptTimeoutExecutionIntentIfNeeded(session, now);
     Optional<WalletApprovalExecutionStateView> currentState = loadCurrentState(session);
     Optional<RetryApprovalPreparation> receiptTimeoutPreparation =
         prepareReceiptTimeoutRetry(session, currentState, now);
@@ -127,6 +128,14 @@ public class RetryWalletRegistrationApprovalService
     }
     validateApprovalAvailable();
     return Optional.of(RetryApprovalPreparation.forCreation(saved));
+  }
+
+  private WalletRegistrationSession backfillReceiptTimeoutExecutionIntentIfNeeded(
+      WalletRegistrationSession session, LocalDateTime now) {
+    if (!session.needsReceiptTimeoutExecutionIntentBackfill()) {
+      return session;
+    }
+    return saveSessionPort.save(session.backfillReceiptTimeoutExecutionIntent(now));
   }
 
   private WalletRegistrationStatusResult attachCreatedIntent(
