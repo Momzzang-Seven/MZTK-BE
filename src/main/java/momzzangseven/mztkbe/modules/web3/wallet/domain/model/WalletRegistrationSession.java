@@ -25,6 +25,7 @@ public class WalletRegistrationSession {
   private final String challengeNonce;
   private final WalletRegistrationStatus status;
   private final String latestExecutionIntentId;
+  private final String receiptTimeoutExecutionIntentIds;
   private final Long latestTransactionId;
   private final String latestTransactionHash;
   private final String lastExecutionStatus;
@@ -215,7 +216,7 @@ public class WalletRegistrationSession {
       String executionIntentId, String executionStatus, LocalDateTime now) {
     requireExecutionIntentId(executionIntentId);
     requireNow(now);
-    if (!canRecoverReplacedApprovalIntent()) {
+    if (!canRecoverReplacedApprovalIntent(executionIntentId)) {
       throw new IllegalStateException("session cannot recover replaced approval from " + status);
     }
 
@@ -267,6 +268,7 @@ public class WalletRegistrationSession {
         .status(WalletRegistrationStatus.APPROVAL_RETRYABLE)
         .lastErrorCode(errorCode)
         .lastErrorReason(errorReason)
+        .receiptTimeoutExecutionIntentIds(rememberReceiptTimeoutIntent(errorCode))
         .updatedAt(now)
         .build();
   }
@@ -283,6 +285,7 @@ public class WalletRegistrationSession {
         .status(WalletRegistrationStatus.APPROVAL_FAILED)
         .lastErrorCode(errorCode)
         .lastErrorReason(errorReason)
+        .receiptTimeoutExecutionIntentIds(rememberReceiptTimeoutIntent(errorCode))
         .updatedAt(now)
         .build();
   }
@@ -358,6 +361,22 @@ public class WalletRegistrationSession {
     return !status.isNonTerminal();
   }
 
+  /** Returns whether an older intent is recorded as receipt-timeout recovery evidence. */
+  public boolean hasReceiptTimeoutExecutionIntent(String executionIntentId) {
+    if (executionIntentId == null || executionIntentId.isBlank()) {
+      return false;
+    }
+    if (receiptTimeoutExecutionIntentIds == null || receiptTimeoutExecutionIntentIds.isBlank()) {
+      return false;
+    }
+    for (String recorded : receiptTimeoutExecutionIntentIds.split(",")) {
+      if (executionIntentId.equals(recorded)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private void requireExecutableStatus() {
     if (!canCreateApprovalIntent()) {
       throw new IllegalStateException("approval intent cannot be created from " + status);
@@ -391,11 +410,14 @@ public class WalletRegistrationSession {
         && RECEIPT_TIMEOUT.equals(lastErrorCode);
   }
 
-  private boolean canRecoverReplacedApprovalIntent() {
-    return safeRetryCount() > 0
+  private boolean canRecoverReplacedApprovalIntent(String executionIntentId) {
+    return hasReceiptTimeoutExecutionIntent(executionIntentId)
         && (status == WalletRegistrationStatus.APPROVAL_REQUIRED
             || status == WalletRegistrationStatus.APPROVAL_SIGNED
-            || status == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN);
+            || status == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+            || status == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || status == WalletRegistrationStatus.APPROVAL_FAILED
+            || status.isConfirmedButNotFinalized());
   }
 
   private static void requireExecutionIntentId(String executionIntentId) {
@@ -412,6 +434,19 @@ public class WalletRegistrationSession {
 
   private int safeRetryCount() {
     return retryCount == null ? 0 : retryCount;
+  }
+
+  private String rememberReceiptTimeoutIntent(String errorCode) {
+    if (!RECEIPT_TIMEOUT.equals(errorCode)
+        || latestExecutionIntentId == null
+        || latestExecutionIntentId.isBlank()
+        || hasReceiptTimeoutExecutionIntent(latestExecutionIntentId)) {
+      return receiptTimeoutExecutionIntentIds;
+    }
+    if (receiptTimeoutExecutionIntentIds == null || receiptTimeoutExecutionIntentIds.isBlank()) {
+      return latestExecutionIntentId;
+    }
+    return receiptTimeoutExecutionIntentIds + "," + latestExecutionIntentId;
   }
 
   private static void validateIdentity(

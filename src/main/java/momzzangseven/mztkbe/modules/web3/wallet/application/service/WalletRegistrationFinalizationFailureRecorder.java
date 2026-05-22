@@ -73,28 +73,49 @@ class WalletRegistrationFinalizationFailureRecorder {
       String errorCode,
       String errorReason,
       boolean localConflict) {
-    if (session.getLatestExecutionIntentId() == null
-        || !session.getLatestExecutionIntentId().equals(command.executionIntentId())) {
+    boolean staleIntent = isStaleIntent(session, command.executionIntentId());
+    boolean recoveredStaleIntent =
+        staleIntent && canRecordRecoveredStaleIntent(session, command.executionIntentId());
+    if (staleIntent && !recoveredStaleIntent) {
       return;
     }
     if (session.getStatus() == WalletRegistrationStatus.REGISTERED) {
       return;
     }
-    if (session.isTerminal() && !isReceiptTimeoutLateSuccess(session)) {
+    if (session.isTerminal() && !isReceiptTimeoutLateSuccess(session) && !recoveredStaleIntent) {
       return;
     }
-    if (!isFinalizationFailureStatus(session)) {
+    if (!recoveredStaleIntent && !isFinalizationFailureStatus(session)) {
       return;
     }
 
     LocalDateTime now = LocalDateTime.now(appClock);
     WalletRegistrationSession confirmed =
-        session.markApprovalConfirmed(command.executionIntentId(), null, null, "CONFIRMED", now);
+        recoveredStaleIntent
+            ? session.markRecoveredApprovalConfirmed(command.executionIntentId(), "CONFIRMED", now)
+            : session.markApprovalConfirmed(
+                command.executionIntentId(), null, null, "CONFIRMED", now);
     WalletRegistrationSession failed =
         localConflict
             ? confirmed.markLocalConflict(errorCode, errorReason, now)
             : confirmed.markFinalizationFailed(errorCode, errorReason, now);
     saveSessionPort.save(failed);
+  }
+
+  private boolean isStaleIntent(WalletRegistrationSession session, String executionIntentId) {
+    return session.getLatestExecutionIntentId() == null
+        || !session.getLatestExecutionIntentId().equals(executionIntentId);
+  }
+
+  private boolean canRecordRecoveredStaleIntent(
+      WalletRegistrationSession session, String executionIntentId) {
+    return session.hasReceiptTimeoutExecutionIntent(executionIntentId)
+        && (session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED
+            || session.getStatus().isConfirmedButNotFinalized());
   }
 
   private boolean isFinalizationFailureStatus(WalletRegistrationSession session) {

@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrati
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.FilterWalletRegistrationExecutionCleanupCandidatesUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,7 +44,9 @@ public class WalletRegistrationExecutionCleanupProtectionService
     if (!isWalletApproval(candidate)) {
       return false;
     }
-    return loadSession(candidate).map(this::requiresRecoveryReference).orElse(false);
+    return loadSession(candidate)
+        .map(session -> requiresRecoveryReference(session, candidate.executionIntentId()))
+        .orElse(false);
   }
 
   private Optional<WalletRegistrationSession> loadSession(
@@ -63,8 +66,13 @@ public class WalletRegistrationExecutionCleanupProtectionService
         && ACTION_WALLET_APPROVE.equals(candidate.actionType());
   }
 
-  private boolean requiresRecoveryReference(WalletRegistrationSession session) {
+  private boolean requiresRecoveryReference(
+      WalletRegistrationSession session, String executionIntentId) {
+    if (session.getStatus() == WalletRegistrationStatus.REGISTERED) {
+      return false;
+    }
     return session.getStatus().isNonTerminal()
-        || WalletRegistrationReceiptTimeout.isRecordedOn(session);
+        || WalletRegistrationReceiptTimeout.isRecordedOn(session)
+        || session.hasReceiptTimeoutExecutionIntent(executionIntentId);
   }
 }

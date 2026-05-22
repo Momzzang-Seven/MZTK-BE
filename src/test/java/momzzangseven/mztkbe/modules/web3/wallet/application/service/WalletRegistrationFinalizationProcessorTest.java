@@ -330,6 +330,37 @@ class WalletRegistrationFinalizationProcessorTest {
   }
 
   @Test
+  void
+      finalizeConfirmed_whenOldReceiptTimeoutIntentRetriedAndNewIntentFailed_finalizesOldSuccess() {
+    WalletRegistrationSession retriedFailed =
+        pendingSession()
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4))
+            .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(5))
+            .markApprovalFailed("FAILED_ONCHAIN", "second attempt failed", NOW.plusSeconds(6));
+    UserWallet savedWallet =
+        UserWallet.builder()
+            .id(77L)
+            .userId(USER_ID)
+            .walletAddress(WALLET_ADDRESS)
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    givenFinalizationSession(retriedFailed);
+    when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(List.of());
+    when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(saveWalletAndFlushPort.saveAndFlush(any())).thenReturn(savedWallet);
+
+    processor.finalizeConfirmed(command());
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.REGISTERED);
+    assertThat(captor.getValue().getLatestExecutionIntentId()).isEqualTo(INTENT_ID);
+  }
+
+  @Test
   void finalizeConfirmed_whenSessionMissing_throwsInvalidInput() {
     when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.empty());
 

@@ -65,7 +65,9 @@ class WalletRegistrationFinalizationProcessor {
                         "registrationId not found: " + command.registrationId()));
 
     boolean staleIntent = isStaleIntent(session, command.executionIntentId());
-    if (staleIntent && !canFinalizeRecoveredStaleIntent(session)) {
+    boolean recoveredStaleIntent =
+        staleIntent && canFinalizeRecoveredStaleIntent(session, command.executionIntentId());
+    if (staleIntent && !recoveredStaleIntent) {
       log.info(
           "Skipping stale wallet finalization event: registrationId={}, sessionIntent={}, eventIntent={}",
           session.getPublicId(),
@@ -76,7 +78,7 @@ class WalletRegistrationFinalizationProcessor {
     if (session.getStatus() == WalletRegistrationStatus.REGISTERED) {
       return;
     }
-    if (!isFinalizable(session)) {
+    if (!recoveredStaleIntent && !isFinalizable(session)) {
       log.info(
           "Skipping wallet finalization from non-finalizable status: registrationId={}, status={}",
           session.getPublicId(),
@@ -110,13 +112,15 @@ class WalletRegistrationFinalizationProcessor {
         || !session.getLatestExecutionIntentId().equals(executionIntentId);
   }
 
-  private boolean canFinalizeRecoveredStaleIntent(WalletRegistrationSession session) {
-    Integer retryCount = session.getRetryCount();
-    return retryCount != null
-        && retryCount > 0
+  private boolean canFinalizeRecoveredStaleIntent(
+      WalletRegistrationSession session, String executionIntentId) {
+    return session.hasReceiptTimeoutExecutionIntent(executionIntentId)
         && (session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
             || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
-            || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN);
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED
+            || session.getStatus().isConfirmedButNotFinalized());
   }
 
   private boolean isFinalizable(WalletRegistrationSession session) {

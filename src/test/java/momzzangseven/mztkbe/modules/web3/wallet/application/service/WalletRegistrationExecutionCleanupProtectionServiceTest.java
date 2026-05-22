@@ -67,6 +67,21 @@ class WalletRegistrationExecutionCleanupProtectionServiceTest {
   }
 
   @Test
+  void filterDeletableFinalizedIntentIds_protectsOldReceiptTimeoutIntentAfterNewIntentFailed() {
+    WalletRegistrationExecutionCleanupCandidate candidate = candidate(1L, "intent-1");
+    WalletRegistrationSession retriedFailed =
+        pendingOnchainSession("intent-1")
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(3))
+            .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(4))
+            .markApprovalFailed("FAILED_ONCHAIN", "second attempt failed", NOW.plusSeconds(5));
+    when(loadSessionPort.loadByPublicId("registration-1")).thenReturn(Optional.of(retriedFailed));
+
+    List<Long> result = service.filterDeletableFinalizedIntentIds(List.of(candidate));
+
+    assertThat(result).isEmpty();
+  }
+
+  @Test
   void filterDeletableFinalizedIntentIds_allowsRegisteredSessionIntentDeletion() {
     WalletRegistrationExecutionCleanupCandidate candidate = candidate(1L, "intent-1");
     WalletRegistrationSession registered =

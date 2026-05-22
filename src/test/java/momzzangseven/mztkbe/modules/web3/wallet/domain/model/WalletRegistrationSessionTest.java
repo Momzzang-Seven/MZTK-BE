@@ -140,6 +140,31 @@ class WalletRegistrationSessionTest {
   }
 
   @Test
+  void receiptTimeoutIntentHistorySurvivesRetryAndAllowsRecoveredConfirmation() {
+    WalletRegistrationSession failedRetry =
+        signedSession()
+            .markApprovalPendingOnchain(
+                EXECUTION_INTENT_ID,
+                10L,
+                "0x" + "b".repeat(64),
+                "PENDING_ONCHAIN",
+                NOW.plusSeconds(3))
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4))
+            .attachApprovalIntentPreservingDeadline("approval-intent-2", NOW.plusSeconds(5))
+            .markApprovalFailed("FAILED_ONCHAIN", "second attempt failed", NOW.plusSeconds(6));
+
+    WalletRegistrationSession recovered =
+        failedRetry.markRecoveredApprovalConfirmed(
+            EXECUTION_INTENT_ID, "CONFIRMED", NOW.plusSeconds(7));
+
+    assertThat(failedRetry.hasReceiptTimeoutExecutionIntent(EXECUTION_INTENT_ID)).isTrue();
+    assertThat(recovered.getStatus()).isEqualTo(WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN);
+    assertThat(recovered.getLatestExecutionIntentId()).isEqualTo(EXECUTION_INTENT_ID);
+    assertThat(recovered.markRegistered(77L, NOW.plusSeconds(8)).getStatus())
+        .isEqualTo(WalletRegistrationStatus.REGISTERED);
+  }
+
+  @Test
   void nonReceiptTimeoutApprovalFailedSession_cannotFinalize() {
     WalletRegistrationSession failed =
         signedSession()

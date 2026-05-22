@@ -77,6 +77,25 @@ class WalletRegistrationFinalizationFailureRecorderTest {
     verify(saveSessionPort, never()).save(any());
   }
 
+  @Test
+  void recordLocalConflict_whenOldReceiptTimeoutIntentWasRetried_recordsRecoveredFailure() {
+    WalletRegistrationSession retriedFailed =
+        approvalRequiredSession()
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(2))
+            .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(3))
+            .markApprovalFailed("FAILED_ONCHAIN", "second attempt failed", NOW.plusSeconds(4));
+    givenRecordableSession(retriedFailed);
+
+    recorder.recordLocalConflict(command(), "LOCAL_CONFLICT", "active wallet");
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.LOCAL_CONFLICT);
+    assertThat(captor.getValue().getLatestExecutionIntentId()).isEqualTo(INTENT_ID);
+    assertThat(captor.getValue().getLastErrorReason()).isEqualTo("active wallet");
+  }
+
   private static FinalizeWalletRegistrationCommand command() {
     return new FinalizeWalletRegistrationCommand(REGISTRATION_ID, INTENT_ID);
   }

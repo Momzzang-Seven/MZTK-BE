@@ -79,6 +79,9 @@ public class WalletRegistrationSessionEntity {
   @Column(name = "latest_execution_intent_id", length = 100)
   private String latestExecutionIntentId;
 
+  @Column(name = "receipt_timeout_execution_intent_ids", columnDefinition = "TEXT")
+  private String receiptTimeoutExecutionIntentIds;
+
   @Column(name = "latest_transaction_id")
   private Long latestTransactionId;
 
