@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverExpiredMarketplaceAdminExecutionAttemptCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverExpiredMarketplaceAdminExecutionAttemptResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverExpiredMarketplaceAdminExecutionAttemptUseCase;
@@ -26,7 +27,8 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 public class RecoverExpiredMarketplaceAdminExecutionAttemptService
     implements RecoverExpiredMarketplaceAdminExecutionAttemptUseCase {
 
-  private static final String ERROR_CODE = "PREPARATION_EXPIRED";
+  private static final String ERROR_CODE =
+      MarketplaceAdminReviewValidationCode.ADMIN_PREPARATION_EXPIRED.name();
 
   private final LoadReservationActionStatePort loadReservationActionStatePort;
   private final SaveReservationActionStatePort saveReservationActionStatePort;

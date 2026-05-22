@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import java.math.BigInteger;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.UUID;
@@ -17,11 +18,15 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Mark
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminSettleReasonCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareMarketplaceAdminEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationAdminExecutionDraft;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.SubmitMarketplaceAdminEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BindReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BuildMarketplaceAdminReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
@@ -38,6 +43,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 
 @Slf4j
 public class MarketplaceAdminExecutionOrchestrator {
@@ -48,12 +54,14 @@ public class MarketplaceAdminExecutionOrchestrator {
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final LoadReservationEscrowPort loadReservationEscrowPort;
+  private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   private final SaveReservationEscrowPort saveReservationEscrowPort;
   private final LoadReservationActionStatePort loadReservationActionStatePort;
   private final SaveReservationActionStatePort saveReservationActionStatePort;
   private final BindReservationActionStatePort bindReservationActionStatePort;
   private final BuildMarketplaceAdminReservationExecutionPort buildExecutionPort;
   private final SubmitMarketplaceAdminReservationExecutionPort submitExecutionPort;
+  private final ReservationExecutionCandidateGuard executionCandidateGuard;
   private final RunReservationTransactionPort transactionPort;
   private final Clock clock;
 
@@ -61,23 +69,32 @@ public class MarketplaceAdminExecutionOrchestrator {
       LoadReservationPort loadReservationPort,
       SaveReservationPort saveReservationPort,
       LoadReservationEscrowPort loadReservationEscrowPort,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
       SaveReservationEscrowPort saveReservationEscrowPort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       BindReservationActionStatePort bindReservationActionStatePort,
       BuildMarketplaceAdminReservationExecutionPort buildExecutionPort,
       SubmitMarketplaceAdminReservationExecutionPort submitExecutionPort,
+      LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+      LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort,
       RunReservationTransactionPort transactionPort,
       Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.saveReservationPort = saveReservationPort;
     this.loadReservationEscrowPort = loadReservationEscrowPort;
+    this.loadReservationEscrowOrderPort = loadReservationEscrowOrderPort;
     this.saveReservationEscrowPort = saveReservationEscrowPort;
     this.loadReservationActionStatePort = loadReservationActionStatePort;
     this.saveReservationActionStatePort = saveReservationActionStatePort;
     this.bindReservationActionStatePort = bindReservationActionStatePort;
     this.buildExecutionPort = buildExecutionPort;
     this.submitExecutionPort = submitExecutionPort;
+    this.executionCandidateGuard =
+        loadReservationExecutionStatePort == null || loadReservationExecutionCandidatePort == null
+            ? null
+            : new ReservationExecutionCandidateGuard(
+                loadReservationExecutionStatePort, loadReservationExecutionCandidatePort);
     this.transactionPort = transactionPort;
     this.clock = clock;
   }
@@ -161,12 +178,23 @@ public class MarketplaceAdminExecutionOrchestrator {
   private MarketplaceAdminExecutionResult buildAndBind(AdminPhaseA phaseA, String pollingSuffix) {
     ReservationAdminExecutionDraft draft;
     try {
+      PhaseBChainInspection chainInspection =
+          transactionPort.notSupported(() -> inspectPhaseBChain(phaseA));
+      if (!chainInspection.proceed()) {
+        AdminPhaseBChainMismatchException mismatch =
+            new AdminPhaseBChainMismatchException(chainInspection);
+        cleanupUnboundPreparation(phaseA, ReservationActionStateStatus.STALE, mismatch);
+        throw conflict(chainInspection.code());
+      }
       draft =
           transactionPort.notSupported(
               () ->
                   phaseA.action() == ReservationEscrowAction.ADMIN_REFUND
                       ? buildExecutionPort.buildRefund(phaseA.prepareCommand())
                       : buildExecutionPort.buildSettlement(phaseA.prepareCommand()));
+    } catch (AdminPhaseBTransientException e) {
+      cleanupUnboundPreparation(phaseA, ReservationActionStateStatus.PREPARATION_FAILED, e);
+      throw e;
     } catch (RuntimeException e) {
       cleanupUnboundPreparation(phaseA, ReservationActionStateStatus.PREPARATION_FAILED, e);
       throw e;
@@ -348,18 +376,11 @@ public class MarketplaceAdminExecutionOrchestrator {
               || !phaseA.actionState().getAttemptToken().equals(actionState.getAttemptToken())) {
             return null;
           }
-          loadReservationPort
-              .findByIdWithLock(phaseA.reservation().getId())
-              .ifPresent(
-                  reservation -> saveReservationPort.save(reservation.rollbackToPriorState()));
-          loadReservationEscrowPort
-              .findByReservationIdWithLock(phaseA.reservation().getId())
-              .ifPresent(
-                  escrow ->
-                      saveReservationEscrowPort.save(
-                          escrow.toBuilder()
-                              .escrowStatus(actionState.getPriorEscrowStatus())
-                              .build()));
+          if (cause instanceof AdminPhaseBChainMismatchException mismatch) {
+            syncAuthoritativePhaseBOutcome(actionState, mismatch.inspection());
+          } else {
+            rollbackUnboundPreparation(phaseA, actionState);
+          }
           saveReservationActionStatePort.save(
               actionState.toBuilder()
                   .status(terminalStatus)
@@ -371,6 +392,131 @@ public class MarketplaceAdminExecutionOrchestrator {
                   .build());
           return null;
         });
+  }
+
+  private void rollbackUnboundPreparation(
+      AdminPhaseA phaseA, MarketplaceReservationActionState actionState) {
+    loadReservationPort
+        .findByIdWithLock(phaseA.reservation().getId())
+        .ifPresent(reservation -> saveReservationPort.save(reservation.rollbackToPriorState()));
+    loadReservationEscrowPort
+        .findByReservationIdWithLock(phaseA.reservation().getId())
+        .ifPresent(
+            escrow ->
+                saveReservationEscrowPort.save(
+                    escrow.toBuilder().escrowStatus(actionState.getPriorEscrowStatus()).build()));
+  }
+
+  private void syncAuthoritativePhaseBOutcome(
+      MarketplaceReservationActionState actionState, PhaseBChainInspection inspection) {
+    Reservation reservation =
+        loadReservationPort
+            .findByIdWithLock(actionState.getReservationId())
+            .orElseThrow(() -> new ReservationNotFoundException(actionState.getReservationId()));
+    Reservation updated = inspection.applyTo(reservation);
+    Reservation saved = saveReservationPort.save(updated);
+    loadReservationEscrowPort
+        .findByReservationIdWithLock(actionState.getReservationId())
+        .ifPresent(
+            escrow ->
+                saveReservationEscrowPort.save(
+                    escrow.toBuilder()
+                        .escrowStatus(saved.getEffectiveEscrowStatus())
+                        .contractDeadlineEpochSeconds(saved.getContractDeadlineEpochSeconds())
+                        .contractDeadlineAt(saved.getContractDeadlineAt())
+                        .lastFailureCode(inspection.code().name())
+                        .lastFailureMessage(inspection.message())
+                        .build()));
+  }
+
+  private PhaseBChainInspection inspectPhaseBChain(AdminPhaseA phaseA) {
+    ReservationEscrowOrderView order;
+    try {
+      order = loadReservationEscrowOrderPort.getOrder(phaseA.reservation().getOrderKey());
+    } catch (RuntimeException e) {
+      throw new AdminPhaseBTransientException(
+          MarketplaceAdminReviewValidationCode.CHAIN_LOOKUP_FAILED,
+          "marketplace chain order lookup failed",
+          e);
+    }
+    LocalDateTime deadlineAt = order == null ? null : deadlineAt(order.deadlineEpochSeconds());
+    if (order == null || order.isAbsent()) {
+      return PhaseBChainInspection.manualSync(
+          MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ABSENT,
+          "marketplace chain order is absent before admin execution",
+          order,
+          deadlineAt);
+    }
+    if (order.state() == ReservationEscrowOrderView.STATE_CREATED) {
+      if (deadlineAt != null && !deadlineAt.isAfter(LocalDateTime.now(clock))) {
+        return PhaseBChainInspection.deadlineSync(
+            MarketplaceAdminReviewValidationCode.CONTRACT_DEADLINE_EXPIRED,
+            "marketplace chain order deadline expired before admin execution",
+            order,
+            deadlineAt);
+      }
+      return PhaseBChainInspection.proceed(order);
+    }
+    return switch (order.state()) {
+      case ReservationEscrowOrderView.STATE_ADMIN_REFUNDED -> phaseBRefundedOutcome(phaseA, order);
+      case ReservationEscrowOrderView.STATE_ADMIN_SETTLED,
+              ReservationEscrowOrderView.STATE_CONFIRMED ->
+          phaseBSettledOutcome(phaseA, order);
+      case ReservationEscrowOrderView.STATE_DEADLINE_REFUNDED ->
+          PhaseBChainInspection.terminal(
+              MarketplaceAdminReviewValidationCode.CHAIN_MISMATCH_REQUIRES_SYNC,
+              "marketplace chain order was already deadline-refunded before admin execution",
+              order,
+              ReservationStatus.DEADLINE_REFUNDED,
+              ReservationEscrowStatus.DEADLINE_REFUNDED,
+              deadlineAt);
+      default ->
+          PhaseBChainInspection.manualSync(
+              MarketplaceAdminReviewValidationCode.CHAIN_ORDER_NOT_CREATED,
+              "marketplace chain order is not in CREATED state before admin execution",
+              order,
+              deadlineAt);
+    };
+  }
+
+  private PhaseBChainInspection phaseBRefundedOutcome(
+      AdminPhaseA phaseA, ReservationEscrowOrderView order) {
+    if (phaseA.action() != ReservationEscrowAction.ADMIN_REFUND) {
+      return PhaseBChainInspection.manualSync(
+          MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_REFUNDED,
+          "marketplace chain order was already refunded before admin settlement",
+          order,
+          deadlineAt(order.deadlineEpochSeconds()));
+    }
+    return PhaseBChainInspection.terminal(
+        MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_REFUNDED,
+        "marketplace chain order was already admin-refunded before admin execution",
+        order,
+        ReservationStatus.TIMEOUT_CANCELLED,
+        ReservationEscrowStatus.REFUNDED,
+        deadlineAt(order.deadlineEpochSeconds()));
+  }
+
+  private PhaseBChainInspection phaseBSettledOutcome(
+      AdminPhaseA phaseA, ReservationEscrowOrderView order) {
+    if (phaseA.action() != ReservationEscrowAction.ADMIN_SETTLE) {
+      return PhaseBChainInspection.manualSync(
+          MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_SETTLED,
+          "marketplace chain order was already settled before admin refund",
+          order,
+          deadlineAt(order.deadlineEpochSeconds()));
+    }
+    ReservationStatus terminalStatus =
+        order.state() == ReservationEscrowOrderView.STATE_CONFIRMED
+            ? ReservationStatus.SETTLED
+            : ReservationStatus.AUTO_SETTLED;
+    return PhaseBChainInspection.terminal(
+        MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_SETTLED,
+        "marketplace chain order was already settled before admin execution",
+        order,
+        terminalStatus,
+        ReservationEscrowStatus.SETTLED,
+        deadlineAt(order.deadlineEpochSeconds()));
   }
 
   private void validateBaseExecutable(
@@ -390,6 +536,10 @@ public class MarketplaceAdminExecutionOrchestrator {
         || (latestActionState != null
             && latestActionState.getStatus() != null
             && latestActionState.getStatus().isActive())) {
+      throw conflict(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS);
+    }
+    if (executionCandidateGuard != null
+        && executionCandidateGuard.hasBlockingExecutionForAction(reservation, action)) {
       throw conflict(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS);
     }
   }
@@ -561,9 +711,118 @@ public class MarketplaceAdminExecutionOrchestrator {
     if (cause instanceof AdminPhaseCStaleException staleException) {
       return staleException.code();
     }
+    if (cause instanceof AdminPhaseBTransientException transientException) {
+      return transientException.code().name();
+    }
+    if (cause instanceof AdminPhaseBChainMismatchException mismatchException) {
+      return mismatchException.inspection().code().name();
+    }
     return cause instanceof momzzangseven.mztkbe.global.error.BusinessException businessException
         ? businessException.getCode()
         : cause.getClass().getSimpleName();
+  }
+
+  private LocalDateTime deadlineAt(Long epochSeconds) {
+    if (epochSeconds == null) {
+      return null;
+    }
+    return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), clock.getZone());
+  }
+
+  private static final class AdminPhaseBTransientException extends RuntimeException {
+
+    private final MarketplaceAdminReviewValidationCode code;
+
+    private AdminPhaseBTransientException(
+        MarketplaceAdminReviewValidationCode code, String message, RuntimeException cause) {
+      super(message, cause);
+      this.code = code;
+    }
+
+    private MarketplaceAdminReviewValidationCode code() {
+      return code;
+    }
+  }
+
+  private static final class AdminPhaseBChainMismatchException
+      extends MarketplaceReservationStateException {
+
+    private final PhaseBChainInspection inspection;
+
+    private AdminPhaseBChainMismatchException(PhaseBChainInspection inspection) {
+      super(ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS, inspection.message());
+      this.inspection = inspection;
+    }
+
+    private PhaseBChainInspection inspection() {
+      return inspection;
+    }
+  }
+
+  private record PhaseBChainInspection(
+      boolean proceed,
+      MarketplaceAdminReviewValidationCode code,
+      String message,
+      ReservationEscrowOrderView order,
+      ReservationStatus outcomeStatus,
+      ReservationEscrowStatus outcomeEscrowStatus,
+      boolean deadlineSync,
+      LocalDateTime deadlineAt) {
+
+    private static PhaseBChainInspection proceed(ReservationEscrowOrderView order) {
+      return new PhaseBChainInspection(
+          true, MarketplaceAdminReviewValidationCode.OK, null, order, null, null, false, null);
+    }
+
+    private static PhaseBChainInspection deadlineSync(
+        MarketplaceAdminReviewValidationCode code,
+        String message,
+        ReservationEscrowOrderView order,
+        LocalDateTime deadlineAt) {
+      return new PhaseBChainInspection(false, code, message, order, null, null, true, deadlineAt);
+    }
+
+    private static PhaseBChainInspection manualSync(
+        MarketplaceAdminReviewValidationCode code,
+        String message,
+        ReservationEscrowOrderView order,
+        LocalDateTime deadlineAt) {
+      return new PhaseBChainInspection(
+          false,
+          code,
+          message,
+          order,
+          ReservationStatus.MANUAL_SYNC_REQUIRED,
+          ReservationEscrowStatus.MANUAL_SYNC_REQUIRED,
+          false,
+          deadlineAt);
+    }
+
+    private static PhaseBChainInspection terminal(
+        MarketplaceAdminReviewValidationCode code,
+        String message,
+        ReservationEscrowOrderView order,
+        ReservationStatus outcomeStatus,
+        ReservationEscrowStatus outcomeEscrowStatus,
+        LocalDateTime deadlineAt) {
+      return new PhaseBChainInspection(
+          false, code, message, order, outcomeStatus, outcomeEscrowStatus, false, deadlineAt);
+    }
+
+    private Reservation applyTo(Reservation reservation) {
+      if (deadlineSync) {
+        return reservation.markDeadlineSyncRequired(code.name(), message);
+      }
+      Long deadlineEpochSeconds = order == null ? null : order.deadlineEpochSeconds();
+      return reservation.syncChainOutcome(
+          outcomeStatus,
+          outcomeEscrowStatus,
+          null,
+          deadlineEpochSeconds,
+          deadlineAt,
+          ReservationTerminalResolvedBy.CHAIN_SYNC,
+          code.name());
+    }
   }
 
   private static final class AdminPhaseCStaleException

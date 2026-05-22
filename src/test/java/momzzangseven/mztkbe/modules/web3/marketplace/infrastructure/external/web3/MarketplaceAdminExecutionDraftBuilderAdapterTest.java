@@ -13,13 +13,13 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminEscrowExecutionRequest;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminSignerWalletView;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceAdminEscrowCallDataPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceAdminSignerWalletPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.VerifyMarketplaceAdminSignerWalletPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAdminExecutionRequestSource;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
@@ -38,8 +38,8 @@ class MarketplaceAdminExecutionDraftBuilderAdapterTest {
   private static final String ESCROW = "0x4444444444444444444444444444444444444444";
   private static final String SIGNER = "0x5555555555555555555555555555555555555555";
 
-  @Mock private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
-  @Mock private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
+  @Mock private LoadMarketplaceAdminSignerWalletPort loadMarketplaceAdminSignerWalletPort;
+  @Mock private VerifyMarketplaceAdminSignerWalletPort verifyMarketplaceAdminSignerWalletPort;
   @Mock private LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   @Mock private BuildMarketplaceAdminEscrowCallDataPort buildCallDataPort;
   @Mock private MarketplaceContractCallSupport marketplaceContractCallSupport;
@@ -54,8 +54,8 @@ class MarketplaceAdminExecutionDraftBuilderAdapterTest {
     coreProperties.setChainId(11155111L);
     sut =
         new MarketplaceAdminExecutionDraftBuilderAdapter(
-            loadSponsorTreasuryWalletPort,
-            verifyTreasuryWalletForSignPort,
+            loadMarketplaceAdminSignerWalletPort,
+            verifyMarketplaceAdminSignerWalletPort,
             loadInternalExecutionEip1559TtlPort,
             coreProperties,
             escrowProperties,
@@ -100,7 +100,7 @@ class MarketplaceAdminExecutionDraftBuilderAdapterTest {
   @Test
   @DisplayName("sponsor signer가 없으면 draft build를 차단한다")
   void build_rejectsMissingSigner() {
-    given(loadSponsorTreasuryWalletPort.load()).willReturn(Optional.empty());
+    given(loadMarketplaceAdminSignerWalletPort.load()).willReturn(Optional.empty());
 
     assertThatThrownBy(() -> sut.build(request()))
         .isInstanceOf(Web3TransactionStateInvalidException.class)
@@ -112,8 +112,11 @@ class MarketplaceAdminExecutionDraftBuilderAdapterTest {
   @Test
   @DisplayName("relayer 미등록이면 draft build를 차단한다")
   void build_rejectsUnregisteredRelayer() {
-    given(loadSponsorTreasuryWalletPort.load())
-        .willReturn(Optional.of(new TreasuryWalletInfo("sponsor", "kms", SIGNER, true)));
+    given(loadMarketplaceAdminSignerWalletPort.load())
+        .willReturn(
+            Optional.of(
+                new MarketplaceAdminSignerWalletView(
+                    "marketplace-signer-treasury", "kms", SIGNER, true)));
     given(marketplaceContractCallSupport.isRelayerRegistered(ESCROW, SIGNER)).willReturn(false);
 
     assertThatThrownBy(() -> sut.build(request()))
@@ -124,8 +127,11 @@ class MarketplaceAdminExecutionDraftBuilderAdapterTest {
   }
 
   private void givenSignerReady() {
-    given(loadSponsorTreasuryWalletPort.load())
-        .willReturn(Optional.of(new TreasuryWalletInfo("sponsor", "kms", SIGNER, true)));
+    given(loadMarketplaceAdminSignerWalletPort.load())
+        .willReturn(
+            Optional.of(
+                new MarketplaceAdminSignerWalletView(
+                    "marketplace-signer-treasury", "kms", SIGNER, true)));
     given(marketplaceContractCallSupport.isRelayerRegistered(ESCROW, SIGNER)).willReturn(true);
   }
 

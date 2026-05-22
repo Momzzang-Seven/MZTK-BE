@@ -119,24 +119,31 @@ public class ReservationApplicationServiceConfig {
       LoadReservationPort loadReservationPort,
       SaveReservationPort saveReservationPort,
       LoadReservationEscrowPort loadReservationEscrowPort,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
       SaveReservationEscrowPort saveReservationEscrowPort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       SaveReservationActionStatePort saveReservationActionStatePort,
       BindReservationActionStatePort bindReservationActionStatePort,
       BuildMarketplaceAdminReservationExecutionPort buildMarketplaceAdminReservationExecutionPort,
       SubmitMarketplaceAdminReservationExecutionPort submitMarketplaceAdminReservationExecutionPort,
+      ObjectProvider<LoadReservationExecutionStatePort> loadReservationExecutionStatePortProvider,
+      ObjectProvider<LoadReservationExecutionCandidatePort>
+          loadReservationExecutionCandidatePortProvider,
       RunReservationTransactionPort transactionPort,
       Clock clock) {
     return new MarketplaceAdminExecutionOrchestrator(
         loadReservationPort,
         saveReservationPort,
         loadReservationEscrowPort,
+        loadReservationEscrowOrderPort,
         saveReservationEscrowPort,
         loadReservationActionStatePort,
         saveReservationActionStatePort,
         bindReservationActionStatePort,
         buildMarketplaceAdminReservationExecutionPort,
         submitMarketplaceAdminReservationExecutionPort,
+        loadReservationExecutionStatePortProvider.getIfAvailable(),
+        loadReservationExecutionCandidatePortProvider.getIfAvailable(),
         transactionPort,
         clock);
   }

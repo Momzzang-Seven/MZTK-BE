@@ -92,13 +92,13 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
     assertThat(actionCaptor.getValue().getStatus())
         .isEqualTo(ReservationActionStateStatus.PREPARATION_FAILED);
     assertThat(actionCaptor.getValue().getRetryable()).isTrue();
-    assertThat(actionCaptor.getValue().getErrorCode()).isEqualTo("PREPARATION_EXPIRED");
+    assertThat(actionCaptor.getValue().getErrorCode()).isEqualTo("ADMIN_PREPARATION_EXPIRED");
 
     ArgumentCaptor<MarketplaceReservationEscrow> escrowCaptor =
         ArgumentCaptor.forClass(MarketplaceReservationEscrow.class);
     then(saveReservationEscrowPort).should().save(escrowCaptor.capture());
     assertThat(escrowCaptor.getValue().getEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
-    assertThat(escrowCaptor.getValue().getLastFailureCode()).isEqualTo("PREPARATION_EXPIRED");
+    assertThat(escrowCaptor.getValue().getLastFailureCode()).isEqualTo("ADMIN_PREPARATION_EXPIRED");
   }
 
   @Test

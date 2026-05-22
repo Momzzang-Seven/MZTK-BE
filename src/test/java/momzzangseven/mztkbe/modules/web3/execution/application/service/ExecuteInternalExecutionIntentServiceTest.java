@@ -9,16 +9,18 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Map;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
 import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.InternalExecutionSignerGates;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.InternalExecutionSignerPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +44,7 @@ class ExecuteInternalExecutionIntentServiceTest {
       new ExecuteInternalExecutionIntentCommand(List.of(ExecutionActionType.QNA_ADMIN_SETTLE));
 
   @Mock private ExecuteTransactionalInternalExecutionIntentDelegatePort delegate;
-  @Mock private SponsorWalletPreflight sponsorWalletPreflight;
+  @Mock private InternalExecutionSignerPreflight internalExecutionSignerPreflight;
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
 
   private ExecuteInternalExecutionIntentService service;
@@ -51,7 +53,7 @@ class ExecuteInternalExecutionIntentServiceTest {
   void setUp() {
     service =
         new ExecuteInternalExecutionIntentService(
-            delegate, sponsorWalletPreflight, executionIntentPersistencePort);
+            delegate, internalExecutionSignerPreflight, executionIntentPersistencePort);
   }
 
   /**
@@ -70,20 +72,22 @@ class ExecuteInternalExecutionIntentServiceTest {
         new SponsorWalletGate(
             new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS, true),
             new TreasurySigner(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS));
-    when(sponsorWalletPreflight.preflight()).thenReturn(gate);
+    InternalExecutionSignerGates signerGates =
+        new InternalExecutionSignerGates(Map.of(ExecutionActionType.QNA_ADMIN_SETTLE, gate));
+    when(internalExecutionSignerPreflight.preflight(COMMAND.actionTypes())).thenReturn(signerGates);
     ExecuteInternalExecutionIntentResult expected = ExecuteInternalExecutionIntentResult.notFound();
-    when(delegate.execute(COMMAND, gate)).thenReturn(expected);
+    when(delegate.execute(COMMAND, signerGates)).thenReturn(expected);
 
     ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
 
     assertThat(result).isSameAs(expected);
-    verify(delegate).execute(COMMAND, gate);
+    verify(delegate).execute(COMMAND, signerGates);
   }
 
   @Test
   void execute_returnsPreflightSkippedWhenWalletInvalid_doesNotCallDelegate() {
     stubQueueHasWork();
-    when(sponsorWalletPreflight.preflight())
+    when(internalExecutionSignerPreflight.preflight(COMMAND.actionTypes()))
         .thenThrow(new Web3InvalidInputException("sponsor signer key is missing"));
 
     ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
@@ -98,7 +102,7 @@ class ExecuteInternalExecutionIntentServiceTest {
   @Test
   void execute_returnsPreflightSkippedWhenTreasuryStateRejects_doesNotCallDelegate() {
     stubQueueHasWork();
-    when(sponsorWalletPreflight.preflight())
+    when(internalExecutionSignerPreflight.preflight(COMMAND.actionTypes()))
         .thenThrow(new TreasuryWalletStateException("kms key not enabled"));
 
     ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
@@ -111,7 +115,7 @@ class ExecuteInternalExecutionIntentServiceTest {
   @Test
   void execute_returnsPreflightSkippedWhenKmsDescribeFails_doesNotCallDelegate() {
     stubQueueHasWork();
-    when(sponsorWalletPreflight.preflight())
+    when(internalExecutionSignerPreflight.preflight(COMMAND.actionTypes()))
         .thenThrow(new KmsKeyDescribeFailedException("KMS DescribeKey failed"));
 
     ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
@@ -133,7 +137,7 @@ class ExecuteInternalExecutionIntentServiceTest {
                 .awsErrorDetails(
                     AwsErrorDetails.builder().errorCode("AccessDeniedException").build())
                 .build();
-    when(sponsorWalletPreflight.preflight())
+    when(internalExecutionSignerPreflight.preflight(COMMAND.actionTypes()))
         .thenThrow(new KmsKeyDescribeFailedException("KMS DescribeKey failed", terminalCause));
 
     ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
@@ -158,7 +162,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.quarantined()).isFalse();
     // KMS DescribeKey 가 깨져 있어도 매 tick 마다 ERROR 가 찍히지 않으려면, claimable 이 없을 때
     // sponsor preflight 자체가 호출되지 않아야 한다.
-    verifyNoInteractions(sponsorWalletPreflight);
+    verifyNoInteractions(internalExecutionSignerPreflight);
     verify(delegate, never()).execute(any(), any());
   }
 

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.inOrder;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -50,6 +51,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -270,6 +272,16 @@ class ApplyReservationEscrowExecutionHookServiceTest {
     then(saveReservationActionStatePort).should().save(actionCaptor.capture());
     assertThat(actionCaptor.getValue().getStatus())
         .isEqualTo(ReservationActionStateStatus.CONFIRMED);
+
+    InOrder lockOrder =
+        inOrder(loadReservationActionStatePort, loadReservationPort, loadReservationEscrowPort);
+    lockOrder
+        .verify(loadReservationActionStatePort)
+        .findByExecutionIntentPublicIdWithLock("intent-action");
+    lockOrder
+        .verify(loadReservationPort)
+        .findByCurrentExecutionIntentPublicIdWithLock("intent-action");
+    lockOrder.verify(loadReservationEscrowPort).findByReservationIdWithLock(reservation.getId());
   }
 
   @Test

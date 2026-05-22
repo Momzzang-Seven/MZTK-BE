@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -16,13 +17,16 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceReservationStateException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminRefundReasonCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareMarketplaceAdminEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationAdminExecutionDraft;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.SubmitMarketplaceAdminEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BindReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BuildMarketplaceAdminReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
@@ -51,6 +55,7 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private LoadReservationEscrowPort loadReservationEscrowPort;
+  @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   @Mock private SaveReservationEscrowPort saveReservationEscrowPort;
   @Mock private LoadReservationActionStatePort loadReservationActionStatePort;
   @Mock private SaveReservationActionStatePort saveReservationActionStatePort;
@@ -67,14 +72,71 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
             loadReservationPort,
             saveReservationPort,
             loadReservationEscrowPort,
+            loadReservationEscrowOrderPort,
             saveReservationEscrowPort,
             loadReservationActionStatePort,
             saveReservationActionStatePort,
             bindReservationActionStatePort,
             buildExecutionPort,
             submitExecutionPort,
+            null,
+            null,
             ReservationTestTransactionPort.direct(),
             Clock.fixed(Instant.parse("2026-05-21T12:00:00Z"), ZoneOffset.UTC));
+  }
+
+  @Test
+  void phaseBAlreadyRefundedOrderSyncsTerminalInsteadOfRollback() {
+    AtomicReference<Reservation> reservationRef = new AtomicReference<>(pendingReservation());
+    AtomicReference<MarketplaceReservationEscrow> escrowRef = new AtomicReference<>(escrow());
+    AtomicReference<MarketplaceReservationActionState> actionStateRef = new AtomicReference<>();
+    given(loadReservationPort.findByIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(reservationRef.get()));
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0);
+              reservationRef.set(saved);
+              return saved;
+            });
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(escrowRef.get()));
+    given(saveReservationEscrowPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationEscrow saved = invocation.getArgument(0);
+              escrowRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(saveReservationActionStatePort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationActionState saved =
+                  invocation.<MarketplaceReservationActionState>getArgument(0).toBuilder()
+                      .id(20L)
+                      .build();
+              actionStateRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willAnswer(ignored -> Optional.of(actionStateRef.get()));
+    given(loadReservationEscrowOrderPort.getOrder(anyString()))
+        .willReturn(orderWithState(ReservationEscrowOrderView.STATE_ADMIN_REFUNDED));
+
+    assertThatThrownBy(
+            () ->
+                orchestrator.executeSchedulerRefund(
+                    "scheduler-run-1", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 1L))
+        .isInstanceOf(MarketplaceReservationStateException.class);
+
+    assertThat(reservationRef.get().getStatus()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
+    assertThat(reservationRef.get().getEffectiveEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertThat(actionStateRef.get().getStatus()).isEqualTo(ReservationActionStateStatus.STALE);
+    assertThat(actionStateRef.get().getErrorCode()).isEqualTo("CHAIN_ORDER_ALREADY_REFUNDED");
+    then(buildExecutionPort).shouldHaveNoInteractions();
   }
 
   @Test
@@ -132,6 +194,7 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
                         .status(ReservationActionStateStatus.INTENT_BOUND)
                         .executionIntentPublicId("intent-1")
                         .build()));
+    given(loadReservationEscrowOrderPort.getOrder(anyString())).willReturn(createdOrder());
 
     var result =
         orchestrator.executeSchedulerRefund(
@@ -188,5 +251,20 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
         .orderKey("0x00000000000000000000000000000000123e4567e89b12d3a456426614174000")
         .priceBaseUnits(BigInteger.valueOf(50_000))
         .build();
+  }
+
+  private ReservationEscrowOrderView createdOrder() {
+    return orderWithState(ReservationEscrowOrderView.STATE_CREATED);
+  }
+
+  private ReservationEscrowOrderView orderWithState(int state) {
+    return new ReservationEscrowOrderView(
+        "0x00000000000000000000000000000000123e4567e89b12d3a456426614174000",
+        "50000",
+        "0x3333333333333333333333333333333333333333",
+        Instant.parse("2026-05-22T12:00:00Z").getEpochSecond(),
+        state,
+        "0x1111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222");
   }
 }

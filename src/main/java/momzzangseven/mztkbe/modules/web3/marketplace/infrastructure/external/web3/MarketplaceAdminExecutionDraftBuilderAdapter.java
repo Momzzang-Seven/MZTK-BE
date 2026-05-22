@@ -6,12 +6,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminExecutionProvenanceActor;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminSignerWalletView;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraftCall;
@@ -19,6 +17,8 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.Marketplace
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceAdminEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceAdminExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceAdminSignerWalletPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.VerifyMarketplaceAdminSignerWalletPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAdminEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceAdminExecutionRequestSource;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionResourceStatus;
@@ -34,8 +34,8 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 @ConditionalOnAnyExecutionEnabled
 @ConditionalOnBean({
-  LoadSponsorTreasuryWalletPort.class,
-  VerifyTreasuryWalletForSignPort.class,
+  LoadMarketplaceAdminSignerWalletPort.class,
+  VerifyMarketplaceAdminSignerWalletPort.class,
   LoadInternalExecutionEip1559TtlPort.class
 })
 public class MarketplaceAdminExecutionDraftBuilderAdapter
@@ -46,8 +46,8 @@ public class MarketplaceAdminExecutionDraftBuilderAdapter
       "RELAYER_REGISTRATION_CHECK_FAILED";
   private static final String RELAYER_NOT_REGISTERED = "RELAYER_NOT_REGISTERED";
 
-  private final LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
-  private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
+  private final LoadMarketplaceAdminSignerWalletPort loadMarketplaceAdminSignerWalletPort;
+  private final VerifyMarketplaceAdminSignerWalletPort verifyMarketplaceAdminSignerWalletPort;
   private final LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   private final Web3CoreProperties web3CoreProperties;
   private final MarketplaceEscrowProperties marketplaceEscrowProperties;
@@ -61,7 +61,7 @@ public class MarketplaceAdminExecutionDraftBuilderAdapter
   public MarketplaceExecutionDraft build(MarketplaceAdminEscrowExecutionRequest request) {
     String callTarget =
         EvmAddress.of(marketplaceEscrowProperties.getMarketplaceContractAddress()).value();
-    TreasuryWalletInfo walletInfo = loadSigner();
+    MarketplaceAdminSignerWalletView walletInfo = loadSigner();
     String signerAddress = EvmAddress.of(walletInfo.walletAddress()).value();
     verifySigner(walletInfo);
     verifyRelayer(callTarget, signerAddress);
@@ -154,16 +154,16 @@ public class MarketplaceAdminExecutionDraftBuilderAdapter
             .plusSeconds(loadInternalExecutionEip1559TtlPort.loadTtlSeconds()));
   }
 
-  private TreasuryWalletInfo loadSigner() {
-    return loadSponsorTreasuryWalletPort
+  private MarketplaceAdminSignerWalletView loadSigner() {
+    return loadMarketplaceAdminSignerWalletPort
         .load()
         .filter(wallet -> wallet.active() && hasText(wallet.walletAddress()))
         .orElseThrow(() -> new Web3TransactionStateInvalidException(SERVER_SIGNER_UNAVAILABLE));
   }
 
-  private void verifySigner(TreasuryWalletInfo walletInfo) {
+  private void verifySigner(MarketplaceAdminSignerWalletView walletInfo) {
     try {
-      verifyTreasuryWalletForSignPort.verify(walletInfo.walletAlias());
+      verifyMarketplaceAdminSignerWalletPort.verify(walletInfo.walletAlias());
     } catch (RuntimeException ex) {
       throw new Web3TransactionStateInvalidException(SERVER_SIGNER_UNAVAILABLE, ex);
     }

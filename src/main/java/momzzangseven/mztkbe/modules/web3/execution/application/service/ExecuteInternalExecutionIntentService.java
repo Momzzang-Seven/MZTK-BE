@@ -1,5 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
@@ -7,11 +11,13 @@ import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.InternalExecutionSignerGates;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.InternalExecutionSignerPreflight;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 
 /**
@@ -19,10 +25,10 @@ import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorC
  *
  * <p>Mirrors the external {@code ExecuteExecutionIntentService} ↔ {@code
  * TransactionalExecuteExecutionIntentDelegate} split established by MOM-340 commit {@code
- * 5e973494}: sponsor-wallet preflight (load + active + structural + KMS DescribeKey verify) runs
+ * 5e973494}: signer-wallet preflight (load + active + structural + KMS DescribeKey verify) runs
  * OUTSIDE any transaction so KMS round-trip latency cannot pin a JDBC connection while a FOR UPDATE
  * intent lock is held by the delegate. Only after preflight succeeds does this orchestrator hand
- * the validated {@link SponsorWalletGate} to the transactional delegate.
+ * the validated signer gates to the transactional delegate.
  *
  * <p>On preflight failure, returns {@link ExecuteInternalExecutionIntentResult#preflightSkipped()}
  * without claiming an intent — no {@code ExecutionIntentTerminatedEvent} is published, no QnA
@@ -34,7 +40,7 @@ public class ExecuteInternalExecutionIntentService
     implements ExecuteInternalExecutionIntentUseCase {
 
   private final ExecuteTransactionalInternalExecutionIntentDelegatePort delegate;
-  private final SponsorWalletPreflight sponsorWalletPreflight;
+  private final InternalExecutionSignerPreflight internalExecutionSignerPreflight;
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
 
   @Override
@@ -47,28 +53,34 @@ public class ExecuteInternalExecutionIntentService
     if (!executionIntentPersistencePort.existsClaimableInternal(command.actionTypes())) {
       return ExecuteInternalExecutionIntentResult.preflightSkipped();
     }
-    SponsorWalletGate gate;
-    try {
-      gate = sponsorWalletPreflight.preflight();
-    } catch (Web3InvalidInputException e) {
-      logSkip("WALLET_INVALID", e);
-      return ExecuteInternalExecutionIntentResult.preflightSkipped();
-    } catch (TreasuryWalletStateException e) {
-      logSkip("WALLET_STATE", e);
-      return ExecuteInternalExecutionIntentResult.preflightSkipped();
-    } catch (KmsKeyDescribeFailedException e) {
-      // Terminal AWS KMS DescribeKey failures (AccessDenied / NotFound / Disabled / ...) are
-      // logged at ERROR with a distinct event tag so operators can alert on them — without
-      // surfacing as a crash or cascading any intent-level event. Intent claim is still skipped
-      // because the sponsor wallet itself is broken; no specific intent is at fault.
-      if (KmsClientErrorClassifier.isTerminal(e)) {
-        logTerminal("KMS_DESCRIBE_TERMINAL", e);
-      } else {
-        logSkip("KMS_DESCRIBE_FAILED", e);
-      }
+    InternalExecutionSignerGates signerGates = preflightAvailableSigners(command.actionTypes());
+    if (signerGates == null) {
       return ExecuteInternalExecutionIntentResult.preflightSkipped();
     }
-    return delegate.execute(command, gate);
+    ExecuteInternalExecutionIntentCommand executableCommand =
+        new ExecuteInternalExecutionIntentCommand(new ArrayList<>(signerGates.gates().keySet()));
+    return delegate.execute(executableCommand, signerGates);
+  }
+
+  private InternalExecutionSignerGates preflightAvailableSigners(
+      List<ExecutionActionType> actionTypes) {
+    Map<ExecutionActionType, SponsorWalletGate> gates = new EnumMap<>(ExecutionActionType.class);
+    for (ExecutionActionType actionType : actionTypes) {
+      try {
+        gates.putAll(internalExecutionSignerPreflight.preflight(List.of(actionType)).gates());
+      } catch (Web3InvalidInputException e) {
+        logSkip(actionType, "WALLET_INVALID", e);
+      } catch (TreasuryWalletStateException e) {
+        logSkip(actionType, "WALLET_STATE", e);
+      } catch (KmsKeyDescribeFailedException e) {
+        if (KmsClientErrorClassifier.isTerminal(e)) {
+          logTerminal(actionType, "KMS_DESCRIBE_TERMINAL", e);
+        } else {
+          logSkip(actionType, "KMS_DESCRIBE_FAILED", e);
+        }
+      }
+    }
+    return gates.isEmpty() ? null : new InternalExecutionSignerGates(gates);
   }
 
   /**
@@ -78,9 +90,10 @@ public class ExecuteInternalExecutionIntentService
    * {@code SELECT * FROM web3_execution_intents WHERE status='AWAITING_SIGNATURE'} query to find
    * the affected rows.
    */
-  private void logSkip(String reason, RuntimeException e) {
+  private void logSkip(ExecutionActionType actionType, String reason, RuntimeException e) {
     log.warn(
-        "event=INTERNAL_EXECUTION_PREFLIGHT_SKIPPED reason={} exception={} message={}",
+        "event=INTERNAL_EXECUTION_PREFLIGHT_SKIPPED actionType={} reason={} exception={} message={}",
+        actionType,
         reason,
         e.getClass().getSimpleName(),
         e.getMessage());
@@ -91,9 +104,10 @@ public class ExecuteInternalExecutionIntentService
    * KMS configuration errors (IAM deny, key not found, key disabled) that will not self-heal — pair
    * with the same {@code AWAITING_SIGNATURE} query to identify affected intents.
    */
-  private void logTerminal(String reason, RuntimeException e) {
+  private void logTerminal(ExecutionActionType actionType, String reason, RuntimeException e) {
     log.error(
-        "event=INTERNAL_EXECUTION_PREFLIGHT_TERMINAL_KMS reason={} exception={} message={}",
+        "event=INTERNAL_EXECUTION_PREFLIGHT_TERMINAL_KMS actionType={} reason={} exception={} message={}",
+        actionType,
         reason,
         e.getClass().getSimpleName(),
         e.getMessage());
