@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ResolveExecutionIntentRecoveryTargetUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
@@ -43,6 +44,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ReplayConfirmedExecutionIntentService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.ResolveExecutionIntentRecoveryTargetService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecutionTerminationHookService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
@@ -341,14 +343,28 @@ public class ExecutionIntentServiceConfig {
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       LoadExecutionTransactionPort loadExecutionTransactionPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
-      PlatformTransactionManager transactionManager,
-      Clock appClock) {
+      RunAfterCommitPort runAfterCommitPort,
+      Clock appClock,
+      PlatformTransactionManager transactionManager) {
     ReplayConfirmedExecutionIntentService delegate =
         new ReplayConfirmedExecutionIntentService(
             executionIntentPersistencePort,
             loadExecutionTransactionPort,
             executionActionHandlerPorts,
+            runAfterCommitPort,
             appClock);
     return new TransactionalReplayConfirmedExecutionIntentUseCase(delegate, transactionManager);
+  }
+
+  @Bean
+  ResolveExecutionIntentRecoveryTargetUseCase resolveExecutionIntentRecoveryTargetUseCase(
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      PlatformTransactionManager transactionManager) {
+    ResolveExecutionIntentRecoveryTargetService delegate =
+        new ResolveExecutionIntentRecoveryTargetService(
+            executionIntentPersistencePort, loadExecutionTransactionPort);
+    return new TransactionalResolveExecutionIntentRecoveryTargetUseCase(
+        delegate, transactionManager);
   }
 }

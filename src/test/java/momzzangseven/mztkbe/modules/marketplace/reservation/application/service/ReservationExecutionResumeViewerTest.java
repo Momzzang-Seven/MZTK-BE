@@ -59,6 +59,28 @@ class ReservationExecutionResumeViewerTest {
   }
 
   @Test
+  @DisplayName("UNCONFIRMED transaction은 support hint를 노출하지만 사용자 recover affordance는 열지 않는다")
+  void hydrate_unconfirmedTransaction_exposesOnchainUncertainHintWithoutViewerRecover() {
+    Reservation reservation =
+        baseReservation().toBuilder()
+            .status(ReservationStatus.REJECT_PENDING)
+            .escrowStatus(ReservationEscrowStatus.REJECT_PENDING)
+            .pendingAction(ReservationEscrowAction.TRAINER_REJECT)
+            .currentExecutionIntentPublicId("reject-intent-1")
+            .build();
+    ReservationExecutionResumeView view =
+        resumeView("MARKETPLACE_CLASS_CANCEL", "PENDING_ONCHAIN", "reject-intent-1", "UNCONFIRMED");
+
+    ReservationExecutionResumeView hydrated =
+        ReservationExecutionResumeViewer.hydrate(reservation, 1L, view);
+
+    assertThat(hydrated.recoveryStatus()).isEqualTo("ONCHAIN_UNCERTAIN");
+    assertThat(hydrated.recoveryReason()).isEqualTo("RECEIPT_TIMEOUT");
+    assertThat(hydrated.retryAllowed()).isFalse();
+    assertThat(hydrated.viewerCanRecover()).isFalse();
+  }
+
+  @Test
   @DisplayName("비참여자는 CONFIRMED current intent를 recovery 가능 상태로 보지 않는다")
   void hydrate_confirmedCurrentIntent_nonParticipantCannotRecover() {
     Reservation reservation =

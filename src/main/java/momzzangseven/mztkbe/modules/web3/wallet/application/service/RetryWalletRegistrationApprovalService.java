@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalEx
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionWriteView;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationStatusResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RetryWalletRegistrationApprovalUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.BuildWalletApprovalExecutionDraftPort;
@@ -80,9 +81,14 @@ public class RetryWalletRegistrationApprovalService
     }
 
     LocalDateTime now = LocalDateTime.now(appClock);
-    rejectExpiredSession(session, now);
-
+    session = backfillReceiptTimeoutExecutionIntentIfNeeded(session, now);
     Optional<WalletApprovalExecutionStateView> currentState = loadCurrentState(session);
+    Optional<RetryApprovalPreparation> receiptTimeoutPreparation =
+        prepareReceiptTimeoutRetry(session, currentState, now);
+    if (receiptTimeoutPreparation.isPresent()) {
+      return receiptTimeoutPreparation.get();
+    }
+    rejectExpiredSession(session, now);
     if (isReusableSignRequest(session, currentState, now)) {
       return RetryApprovalPreparation.reusable(
           WalletRegistrationStatusResult.from(session, currentState.orElse(null)));
@@ -93,6 +99,43 @@ public class RetryWalletRegistrationApprovalService
     WalletRegistrationSession prepared =
         retryable == session ? session : saveSessionPort.save(retryable);
     return RetryApprovalPreparation.forCreation(prepared);
+  }
+
+  private Optional<RetryApprovalPreparation> prepareReceiptTimeoutRetry(
+      WalletRegistrationSession session,
+      Optional<WalletApprovalExecutionStateView> currentState,
+      LocalDateTime now) {
+    if (session.getStatus() != WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        || currentState.filter(WalletRegistrationReceiptTimeout::isCurrent).isEmpty()) {
+      return Optional.empty();
+    }
+
+    WalletRegistrationSession updated =
+        WalletRegistrationReceiptTimeout.approvalTtlRemains(session, now)
+            ? session.markApprovalRetryable(
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON,
+                now)
+            : session.markApprovalFailed(
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON,
+                now);
+    WalletRegistrationSession saved = saveSessionPort.save(updated);
+    if (saved.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED) {
+      return Optional.of(
+          RetryApprovalPreparation.reusable(
+              WalletRegistrationStatusResult.from(saved, currentState.orElse(null), now)));
+    }
+    validateApprovalAvailable();
+    return Optional.of(RetryApprovalPreparation.forCreation(saved));
+  }
+
+  private WalletRegistrationSession backfillReceiptTimeoutExecutionIntentIfNeeded(
+      WalletRegistrationSession session, LocalDateTime now) {
+    if (!session.needsReceiptTimeoutExecutionIntentBackfill()) {
+      return session;
+    }
+    return saveSessionPort.save(session.backfillReceiptTimeoutExecutionIntent(now));
   }
 
   private WalletRegistrationStatusResult attachCreatedIntent(
@@ -110,6 +153,8 @@ public class RetryWalletRegistrationApprovalService
     LocalDateTime now = LocalDateTime.now(appClock);
     rejectExpiredSession(session, now);
     rejectStaleRetrySession(session, preparation);
+    rejectReusedRetryIntent(preparation, approvalIntent);
+    rejectNonSignableRetryIntent(approvalIntent);
 
     Optional<WalletApprovalExecutionStateView> currentState = loadCurrentState(session);
     WalletRegistrationSession retryable = ensureRetryable(session, currentState, now);
@@ -153,7 +198,8 @@ public class RetryWalletRegistrationApprovalService
                 preparation.registrationId(),
                 preparation.requesterUserId(),
                 preparation.walletAddress(),
-                preparation.sessionDeadline()));
+                preparation.sessionDeadline(),
+                preparation.nextRetryAttemptNo()));
     rejectDeadlineTooClose(draft.expiresAt(), now());
     try {
       return submitDraftPort.submit(draft);
@@ -232,8 +278,25 @@ public class RetryWalletRegistrationApprovalService
     }
   }
 
+  private void rejectReusedRetryIntent(
+      RetryApprovalPreparation preparation, WalletApprovalExecutionIntentResult approvalIntent) {
+    if (Objects.equals(approvalIntent.executionIntent().id(), preparation.previousIntentId())) {
+      throw new Web3InvalidInputException("wallet registration retry reused previous intent");
+    }
+  }
+
+  private void rejectNonSignableRetryIntent(WalletApprovalExecutionIntentResult approvalIntent) {
+    if (!"AWAITING_SIGNATURE".equals(approvalIntent.executionIntent().status())
+        || approvalIntent.signRequest() == null) {
+      throw new Web3InvalidInputException("wallet registration retry intent is not signable");
+    }
+  }
+
   private void cancelOrphanIntent(
       WalletApprovalExecutionIntentResult approvalIntent, RuntimeException exception) {
+    if (approvalIntent.existing()) {
+      return;
+    }
     try {
       cancelExecutionPort.cancelIfSignable(
           approvalIntent.executionIntent().id(),
@@ -259,10 +322,11 @@ public class RetryWalletRegistrationApprovalService
       String previousIntentId,
       Integer retryCount,
       LocalDateTime sessionDeadline,
+      Integer nextRetryAttemptNo,
       WalletRegistrationStatusResult reusableResult) {
 
     static RetryApprovalPreparation reusable(WalletRegistrationStatusResult result) {
-      return new RetryApprovalPreparation(null, null, null, null, null, null, result);
+      return new RetryApprovalPreparation(null, null, null, null, null, null, null, result);
     }
 
     static RetryApprovalPreparation forCreation(WalletRegistrationSession session) {
@@ -273,11 +337,16 @@ public class RetryWalletRegistrationApprovalService
           session.getLatestExecutionIntentId(),
           session.getRetryCount(),
           session.getApprovalExpiresAt(),
+          safeRetryCount(session) + 1,
           null);
     }
 
     boolean requiresNewIntent() {
       return reusableResult == null;
+    }
+
+    private static int safeRetryCount(WalletRegistrationSession session) {
+      return session.getRetryCount() == null ? 0 : session.getRetryCount();
     }
   }
 }

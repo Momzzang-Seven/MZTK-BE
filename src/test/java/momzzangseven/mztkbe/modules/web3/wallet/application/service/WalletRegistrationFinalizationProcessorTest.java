@@ -17,8 +17,10 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.WalletRegistrationLocalConflictException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletAndFlushPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RecordWalletEventPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletAndFlushPort;
@@ -34,6 +36,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class WalletRegistrationFinalizationProcessorTest {
@@ -48,6 +52,8 @@ class WalletRegistrationFinalizationProcessorTest {
   private static final String WALLET_ADDRESS = "0x" + "a".repeat(40);
 
   @Mock private LockWalletRegistrationSessionPort lockSessionPort;
+  @Mock private LoadWalletRegistrationSessionPort loadSessionPort;
+  @Mock private AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   @Mock private SaveWalletRegistrationSessionPort saveSessionPort;
   @Mock private LoadWalletPort loadWalletPort;
   @Mock private SaveWalletAndFlushPort saveWalletAndFlushPort;
@@ -61,12 +67,25 @@ class WalletRegistrationFinalizationProcessorTest {
     processor =
         new WalletRegistrationFinalizationProcessor(
             lockSessionPort,
+            loadSessionPort,
+            authorityLockPort,
             saveSessionPort,
             loadWalletPort,
             saveWalletAndFlushPort,
             deleteWalletAndFlushPort,
             recordWalletEventPort,
             CLOCK);
+  }
+
+  @Test
+  void finalizeConfirmed_runsInIndependentTransaction() throws Exception {
+    Transactional transactional =
+        WalletRegistrationFinalizationProcessor.class
+            .getMethod("finalizeConfirmed", FinalizeWalletRegistrationCommand.class)
+            .getAnnotation(Transactional.class);
+
+    assertThat(transactional).isNotNull();
+    assertThat(transactional.propagation()).isEqualTo(Propagation.REQUIRES_NEW);
   }
 
   @Test
@@ -80,7 +99,7 @@ class WalletRegistrationFinalizationProcessorTest {
             .status(WalletStatus.ACTIVE)
             .registeredAt(CLOCK.instant())
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
     when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
         .thenReturn(List.of());
     when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
@@ -93,6 +112,7 @@ class WalletRegistrationFinalizationProcessorTest {
     verify(saveSessionPort).save(sessionCaptor.capture());
     assertThat(sessionCaptor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.REGISTERED);
     assertThat(sessionCaptor.getValue().getRegisteredWalletId()).isEqualTo(77L);
+    verify(authorityLockPort).lock(USER_ID, WALLET_ADDRESS);
     verify(recordWalletEventPort).record(any(WalletEvent.class));
   }
 
@@ -115,7 +135,7 @@ class WalletRegistrationFinalizationProcessorTest {
             .status(WalletStatus.ACTIVE)
             .registeredAt(CLOCK.instant())
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
     when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
         .thenReturn(List.of());
     when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.of(existing));
@@ -147,7 +167,7 @@ class WalletRegistrationFinalizationProcessorTest {
             .status(WalletStatus.ACTIVE)
             .registeredAt(CLOCK.instant())
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
     when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
         .thenReturn(List.of());
     when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.of(existing));
@@ -170,7 +190,7 @@ class WalletRegistrationFinalizationProcessorTest {
             .status(WalletStatus.ACTIVE)
             .registeredAt(CLOCK.instant())
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
     when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
         .thenReturn(List.of(active));
 
@@ -202,7 +222,7 @@ class WalletRegistrationFinalizationProcessorTest {
             .status(WalletStatus.ACTIVE)
             .registeredAt(CLOCK.instant())
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
     when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
         .thenReturn(List.of(otherActive, matchingActive));
 
@@ -230,7 +250,7 @@ class WalletRegistrationFinalizationProcessorTest {
             .status(WalletStatus.ACTIVE)
             .registeredAt(CLOCK.instant())
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
     when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
         .thenReturn(List.of(matchingActive, otherActive));
 
@@ -250,7 +270,7 @@ class WalletRegistrationFinalizationProcessorTest {
             .status(WalletStatus.ACTIVE)
             .registeredAt(CLOCK.instant())
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
     when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
         .thenReturn(List.of(active));
 
@@ -270,7 +290,7 @@ class WalletRegistrationFinalizationProcessorTest {
             .status(WalletStatus.BLOCKED)
             .registeredAt(CLOCK.instant())
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
     when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
         .thenReturn(List.of());
     when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.of(blocked));
@@ -283,7 +303,7 @@ class WalletRegistrationFinalizationProcessorTest {
   @Test
   void finalizeConfirmed_whenStaleExecutionIntent_noops() {
     WalletRegistrationSession session = pendingSession();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
 
     processor.finalizeConfirmed(new FinalizeWalletRegistrationCommand(REGISTRATION_ID, "old"));
 
@@ -292,8 +312,72 @@ class WalletRegistrationFinalizationProcessorTest {
   }
 
   @Test
+  void finalizeConfirmed_whenOldReceiptTimeoutIntentAlreadyRetried_finalizesRecoveredSuccess() {
+    WalletRegistrationSession retried =
+        pendingSession()
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4))
+            .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(5));
+    UserWallet savedWallet =
+        UserWallet.builder()
+            .id(77L)
+            .userId(USER_ID)
+            .walletAddress(WALLET_ADDRESS)
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    givenFinalizationSession(retried);
+    when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(List.of());
+    when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(saveWalletAndFlushPort.saveAndFlush(any())).thenReturn(savedWallet);
+
+    WalletRegistrationFinalizationResult result = processor.finalizeConfirmed(command());
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.REGISTERED);
+    assertThat(captor.getValue().getLatestExecutionIntentId()).isEqualTo(INTENT_ID);
+    assertThat(captor.getValue().getLatestTransactionId()).isNull();
+    assertThat(captor.getValue().getLatestTransactionHash()).isNull();
+    assertThat(result.supersededExecutionIntentId()).isEqualTo("intent-2");
+  }
+
+  @Test
+  void
+      finalizeConfirmed_whenOldReceiptTimeoutIntentRetriedAndNewIntentFailed_finalizesOldSuccess() {
+    WalletRegistrationSession retriedFailed =
+        pendingSession()
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4))
+            .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(5))
+            .markApprovalFailed("FAILED_ONCHAIN", "second attempt failed", NOW.plusSeconds(6));
+    UserWallet savedWallet =
+        UserWallet.builder()
+            .id(77L)
+            .userId(USER_ID)
+            .walletAddress(WALLET_ADDRESS)
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    givenFinalizationSession(retriedFailed);
+    when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(List.of());
+    when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(saveWalletAndFlushPort.saveAndFlush(any())).thenReturn(savedWallet);
+
+    WalletRegistrationFinalizationResult result = processor.finalizeConfirmed(command());
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.REGISTERED);
+    assertThat(captor.getValue().getLatestExecutionIntentId()).isEqualTo(INTENT_ID);
+    assertThat(result.supersededExecutionIntentId()).isEqualTo("intent-2");
+  }
+
+  @Test
   void finalizeConfirmed_whenSessionMissing_throwsInvalidInput() {
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.empty());
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> processor.finalizeConfirmed(command()))
         .isInstanceOf(Web3InvalidInputException.class)
@@ -306,7 +390,7 @@ class WalletRegistrationFinalizationProcessorTest {
   @Test
   void finalizeConfirmed_whenAlreadyRegistered_noopsIdempotently() {
     WalletRegistrationSession session = pendingSession().markRegistered(77L, NOW.plusSeconds(4));
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
 
     processor.finalizeConfirmed(command());
 
@@ -315,10 +399,24 @@ class WalletRegistrationFinalizationProcessorTest {
   }
 
   @Test
+  void finalizeConfirmed_whenNewerSameUserOrWalletSessionExists_noops() {
+    WalletRegistrationSession session = pendingSession().toBuilder().id(1L).createdAt(NOW).build();
+    givenFinalizationSession(session);
+    when(loadSessionPort.existsNewerByUserIdOrWalletAddress(USER_ID, WALLET_ADDRESS, 1L))
+        .thenReturn(true);
+
+    processor.finalizeConfirmed(command());
+
+    verify(saveSessionPort, never()).save(any());
+    verify(saveWalletAndFlushPort, never()).saveAndFlush(any());
+    verify(loadWalletPort, never()).findWalletsByUserIdAndStatus(any(), any());
+  }
+
+  @Test
   void finalizeConfirmed_whenStatusIsNotFinalizable_noops() {
     WalletRegistrationSession session =
         approvalRequiredSession().markApprovalRetryable("EXPIRED", "expired", NOW.plusSeconds(2));
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenFinalizationSession(session);
 
     processor.finalizeConfirmed(command());
 
@@ -326,8 +424,65 @@ class WalletRegistrationFinalizationProcessorTest {
     verify(saveWalletAndFlushPort, never()).saveAndFlush(any());
   }
 
+  @Test
+  void finalizeConfirmed_whenReceiptTimeoutRetryable_finalizesLateSuccess() {
+    WalletRegistrationSession session =
+        pendingSession().markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4));
+    UserWallet savedWallet =
+        UserWallet.builder()
+            .id(77L)
+            .userId(USER_ID)
+            .walletAddress(WALLET_ADDRESS)
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    givenFinalizationSession(session);
+    when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(List.of());
+    when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(saveWalletAndFlushPort.saveAndFlush(any())).thenReturn(savedWallet);
+
+    processor.finalizeConfirmed(command());
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.REGISTERED);
+  }
+
+  @Test
+  void finalizeConfirmed_whenReceiptTimeoutFailed_finalizesLateSuccess() {
+    WalletRegistrationSession session =
+        pendingSession().markApprovalFailed("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(4));
+    UserWallet savedWallet =
+        UserWallet.builder()
+            .id(77L)
+            .userId(USER_ID)
+            .walletAddress(WALLET_ADDRESS)
+            .status(WalletStatus.ACTIVE)
+            .registeredAt(CLOCK.instant())
+            .build();
+    givenFinalizationSession(session);
+    when(loadWalletPort.findWalletsByUserIdAndStatus(USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(List.of());
+    when(loadWalletPort.findByWalletAddress(WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(saveWalletAndFlushPort.saveAndFlush(any())).thenReturn(savedWallet);
+
+    processor.finalizeConfirmed(command());
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.REGISTERED);
+  }
+
   private static FinalizeWalletRegistrationCommand command() {
     return new FinalizeWalletRegistrationCommand(REGISTRATION_ID, INTENT_ID);
+  }
+
+  private void givenFinalizationSession(WalletRegistrationSession session) {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
   }
 
   private static WalletRegistrationSession approvalRequiredSession() {

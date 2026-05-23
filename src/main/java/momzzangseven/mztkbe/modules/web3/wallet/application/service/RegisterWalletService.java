@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableExcepti
 import momzzangseven.mztkbe.global.error.wallet.WalletBlackListException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ExpireWalletRegistrationSessionCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.MarkWalletRegistrationApprovalTerminatedCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalCapability;
@@ -25,16 +26,20 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalEx
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationChallengeView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationDuplicateResolution;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationDuplicateResolutionType;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.DuplicateWalletRegistrationSessionException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ExpireWalletRegistrationSessionUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalTerminatedUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletApprovalAttemptUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationChallengePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.MarkWalletRegistrationChallengeExpiredPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.MarkWalletRegistrationChallengeUsedPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RunWalletRegistrationTransactionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.VerifyWalletOwnershipSignaturePort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -60,9 +65,12 @@ public class RegisterWalletService implements RegisterWalletUseCase {
   private final LoadWalletPort loadWalletPort;
   private final LoadWalletApprovalCapabilityPort loadWalletApprovalCapabilityPort;
   private final LoadWalletApprovalExecutionStatePort loadWalletApprovalExecutionStatePort;
+  private final AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   private final WalletRegistrationSessionDuplicateResolver duplicateResolver;
   private final RegisterWalletApprovalAttemptUseCase approvalAttemptUseCase;
   private final ExpireWalletRegistrationSessionUseCase expireSessionUseCase;
+  private final MarkWalletRegistrationApprovalTerminatedUseCase markTerminatedUseCase;
+  private final RunWalletRegistrationTransactionPort transactionPort;
   private final Clock appClock;
 
   @Override
@@ -77,34 +85,61 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     WalletRegistrationChallengeView challenge = loadWalletRegistrationChallenge(command);
     validateChallenge(challenge, command);
     verifyOwnershipSignature(challenge, command);
+
+    try {
+      return inTransaction(() -> createOrReuseRegistration(command, challenge));
+    } catch (DuplicateWalletRegistrationSessionException exception) {
+      return inTransaction(() -> recoverAfterCreateRace(command, challenge));
+    }
+  }
+
+  private RegisterWalletResult createOrReuseRegistration(
+      RegisterWalletCommand command, WalletRegistrationChallengeView challenge) {
     validateApprovalAvailable();
+    authorityLockPort.lock(command.userId(), command.walletAddress());
     validateLocalWalletEligibility(command);
 
     WalletRegistrationDuplicateResolution currentDuplicate =
-        resolveCurrentAfterExpiringElapsed(command.userId(), command.walletAddress());
+        resolveCurrentAfterReconciliation(command.userId(), command.walletAddress());
     if (currentDuplicate.shouldReuse()) {
       markChallengeUsed(challenge);
       return toPendingResult(currentDuplicate.session());
     }
     rejectDuplicateConflict(command, currentDuplicate);
 
+    return createPendingApproval(command);
+  }
+
+  private RegisterWalletResult recoverAfterCreateRace(
+      RegisterWalletCommand command, WalletRegistrationChallengeView challenge) {
+    validateApprovalAvailable();
+    authorityLockPort.lock(command.userId(), command.walletAddress());
+    validateLocalWalletEligibility(command);
+
+    WalletRegistrationDuplicateResolution raceResolution =
+        resolveAfterCreateRaceAfterReconciliation(command.userId(), command.walletAddress());
+    if (raceResolution.type() == WalletRegistrationDuplicateResolutionType.CREATE_NEW) {
+      return createPendingApproval(command);
+    }
+    if (raceResolution.shouldReuse()) {
+      markChallengeUsed(challenge);
+      return toPendingResult(raceResolution.session());
+    }
+    rejectDuplicateConflict(command, raceResolution);
+    throw new DuplicateWalletRegistrationSessionException(
+        command.userId(), command.walletAddress(), null);
+  }
+
+  private RegisterWalletResult createPendingApproval(RegisterWalletCommand command) {
     try {
       return approvalAttemptUseCase.createPendingApproval(command);
     } catch (Web3TransferException exception) {
       throw WalletApprovalSponsorLimitMapper.map(exception);
-    } catch (DuplicateWalletRegistrationSessionException exception) {
-      WalletRegistrationDuplicateResolution raceResolution =
-          resolveAfterCreateRaceAfterExpiringElapsed(command.userId(), command.walletAddress());
-      if (raceResolution.type() == WalletRegistrationDuplicateResolutionType.CREATE_NEW) {
-        return approvalAttemptUseCase.createPendingApproval(command);
-      }
-      if (raceResolution.shouldReuse()) {
-        markChallengeUsed(challenge);
-        return toPendingResult(raceResolution.session());
-      }
-      rejectDuplicateConflict(command, raceResolution);
-      throw exception;
     }
+  }
+
+  private <T> T inTransaction(java.util.function.Supplier<T> callback) {
+    return transactionPort.execute(callback);
   }
 
   private WalletRegistrationChallengeView loadWalletRegistrationChallenge(
@@ -185,29 +220,47 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     throw new WalletAlreadyExistsException(command.walletAddress());
   }
 
-  private WalletRegistrationDuplicateResolution resolveCurrentAfterExpiringElapsed(
+  private WalletRegistrationDuplicateResolution resolveCurrentAfterReconciliation(
       Long userId, String walletAddress) {
     WalletRegistrationDuplicateResolution resolution =
         duplicateResolver.resolveCurrent(userId, walletAddress);
-    if (expireElapsedDuplicate(resolution)) {
+    if (reconcileDuplicate(resolution)) {
       return duplicateResolver.resolveCurrent(userId, walletAddress);
     }
     return resolution;
   }
 
-  private WalletRegistrationDuplicateResolution resolveAfterCreateRaceAfterExpiringElapsed(
+  private WalletRegistrationDuplicateResolution resolveAfterCreateRaceAfterReconciliation(
       Long userId, String walletAddress) {
     WalletRegistrationDuplicateResolution resolution =
         duplicateResolver.resolveAfterCreateRace(userId, walletAddress);
-    if (expireElapsedDuplicate(resolution)) {
+    if (reconcileDuplicate(resolution)) {
       return duplicateResolver.resolveCurrent(userId, walletAddress);
     }
     return resolution;
   }
 
-  private boolean expireElapsedDuplicate(WalletRegistrationDuplicateResolution resolution) {
+  private boolean reconcileDuplicate(WalletRegistrationDuplicateResolution resolution) {
     WalletRegistrationSession session = resolution.session();
-    if (session == null || !isApprovalTtlElapsed(session)) {
+    if (session == null) {
+      return false;
+    }
+    if (session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        && session.getLatestExecutionIntentId() != null) {
+      Optional<WalletApprovalExecutionStateView> currentState =
+          loadWalletApprovalExecutionStatePort.loadByExecutionIntentId(
+              session.getUserId(), session.getLatestExecutionIntentId());
+      if (currentState.filter(WalletRegistrationReceiptTimeout::isCurrent).isPresent()) {
+        markTerminatedUseCase.execute(
+            new MarkWalletRegistrationApprovalTerminatedCommand(
+                session.getPublicId(),
+                session.getLatestExecutionIntentId(),
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON));
+        return true;
+      }
+    }
+    if (!isApprovalTtlElapsed(session)) {
       return false;
     }
     expireSessionUseCase.execute(new ExpireWalletRegistrationSessionCommand(session.getPublicId()));

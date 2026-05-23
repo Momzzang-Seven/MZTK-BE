@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import java.time.Clock;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ResolveExecutionIntentRecoveryTargetUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunExecutionTerminationHookUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -26,7 +27,10 @@ import momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter.Sponso
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @DisplayName("ExecutionIntentServiceConfig 단위 테스트")
 class ExecutionIntentServiceConfigTest {
@@ -93,9 +97,35 @@ class ExecutionIntentServiceConfigTest {
               assertThat(context).hasNotFailed();
               assertThat(context).hasSingleBean(RunExecutionTerminationHookUseCase.class);
               assertThat(context).hasSingleBean(ReplayConfirmedExecutionIntentUseCase.class);
+              assertThat(context).hasSingleBean(ResolveExecutionIntentRecoveryTargetUseCase.class);
               assertThat(context.getBean(RunExecutionTerminationHookUseCase.class))
                   .isInstanceOf(RunExecutionTerminationHookService.class);
               assertThat(context).doesNotHaveBean("runExecutionTerminationHookUseCase");
+            });
+  }
+
+  @Test
+  @DisplayName("confirmed replay use case는 infrastructure transaction wrapper로 노출된다")
+  void exposesReplayConfirmedUseCaseAsInfrastructureTransactionWrapper() {
+    contextRunner
+        .withPropertyValues(
+            "web3.reward-token.enabled=true",
+            "web3.eip7702.enabled=false",
+            "web3.execution.internal.enabled=true")
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              ReplayConfirmedExecutionIntentUseCase replayUseCase =
+                  context.getBean(ReplayConfirmedExecutionIntentUseCase.class);
+              assertThat(replayUseCase)
+                  .isInstanceOf(TransactionalReplayConfirmedExecutionIntentUseCase.class);
+              TransactionTemplate replayTransactionTemplate =
+                  (TransactionTemplate)
+                      ReflectionTestUtils.getField(replayUseCase, "transactionTemplate");
+              assertThat(replayTransactionTemplate.getPropagationBehavior())
+                  .isEqualTo(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+              assertThat(context.getBean(ResolveExecutionIntentRecoveryTargetUseCase.class))
+                  .isInstanceOf(TransactionalResolveExecutionIntentRecoveryTargetUseCase.class);
             });
   }
 }
