@@ -28,6 +28,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BuildMarketplaceAdminReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CancelReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ClaimReservationActionStateReplayPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadMarketplaceAdminExecutionAuthorityPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
@@ -229,15 +230,17 @@ public class ReservationApplicationServiceConfig {
   @ConditionalOnMarketplaceAdminEnabled
   ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase
       reconcileMarketplaceAdminTerminalExecutionAttemptUseCase(
-          LoadReservationActionStatePort loadReservationActionStatePort,
+          ClaimReservationActionStateReplayPort claimReservationActionStateReplayPort,
           LoadReservationExecutionStatePort loadReservationExecutionStatePort,
           ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
-          ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort) {
+          ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort,
+          Clock clock) {
     return new ReconcileMarketplaceAdminTerminalExecutionAttemptService(
-        loadReservationActionStatePort,
+        claimReservationActionStateReplayPort,
         loadReservationExecutionStatePort,
         replayConfirmedReservationExecutionPort,
-        replayTerminatedReservationExecutionPort);
+        replayTerminatedReservationExecutionPort,
+        clock);
   }
 
   @Bean

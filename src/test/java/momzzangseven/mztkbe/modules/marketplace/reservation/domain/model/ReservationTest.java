@@ -60,6 +60,24 @@ class ReservationTest {
   }
 
   @Test
+  @DisplayName("syncChainOutcome - null txHash preserves previous tx hash")
+  void syncChainOutcome_PreservesExistingTxHashWhenEvidenceTxHashMissing() {
+    Reservation reservation = createDefaultPendingReservation();
+
+    Reservation synced =
+        reservation.syncChainOutcome(
+            ReservationStatus.MANUAL_SYNC_REQUIRED,
+            ReservationEscrowStatus.MANUAL_SYNC_REQUIRED,
+            null,
+            null,
+            null,
+            ReservationTerminalResolvedBy.CHAIN_SYNC,
+            "CHAIN_ORDER_LOOKUP_FAILED");
+
+    assertThat(synced.getTxHash()).isEqualTo("tx-123");
+  }
+
+  @Test
   @DisplayName("approve - throws if not PENDING")
   void approve_ThrowsIfNotPending() {
     Reservation approved = createDefaultPendingReservation().approve();

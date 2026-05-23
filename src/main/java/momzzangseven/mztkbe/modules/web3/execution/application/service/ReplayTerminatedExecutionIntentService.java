@@ -32,18 +32,21 @@ public class ReplayTerminatedExecutionIntentService
 
   @Override
   public boolean execute(ReplayTerminatedExecutionIntentCommand command) {
+    ExecutionIntent intent = resolveReplayTarget(command);
+    return intent != null && replayTerminated(intent);
+  }
+
+  public ExecutionIntent resolveReplayTarget(ReplayTerminatedExecutionIntentCommand command) {
     command.validate();
     ExecutionActionType expectedActionType = parseActionType(command.expectedActionType());
-    ExecutionIntent intent =
-        executionIntentPersistencePort
-            .findByPublicIdForUpdate(command.executionIntentId())
-            .filter(candidate -> candidate.getActionType() == expectedActionType)
-            .flatMap(this::replayableTerminalOrRepairableFailedOnchain)
-            .orElse(null);
-    if (intent == null) {
-      return false;
-    }
+    return executionIntentPersistencePort
+        .findByPublicIdForUpdate(command.executionIntentId())
+        .filter(candidate -> candidate.getActionType() == expectedActionType)
+        .flatMap(this::replayableTerminalOrRepairableFailedOnchain)
+        .orElse(null);
+  }
 
+  public boolean replayTerminated(ExecutionIntent intent) {
     ExecutionActionHandlerPort actionHandler = resolveActionHandler(intent);
     ExecutionActionPlan actionPlan = actionHandler.buildActionPlan(intent);
     String failureReason = failureReason(intent);

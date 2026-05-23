@@ -110,6 +110,11 @@ public interface MarketplaceReservationActionStateJpaRepository
           WHERE a.status = 'INTENT_BOUND'
             AND a.execution_intent_public_id IS NOT NULL
             AND a.action_type IN ('ADMIN_REFUND', 'ADMIN_SETTLE')
+            AND (
+              a.error_code IS NULL
+              OR a.error_code <> 'RECONCILING'
+              OR a.updated_at <= :claimStaleBefore
+            )
             AND EXISTS (
               SELECT 1
               FROM web3_execution_intents i
@@ -135,7 +140,7 @@ public interface MarketplaceReservationActionStateJpaRepository
           """,
       nativeQuery = true)
   List<MarketplaceReservationActionStateEntity> findBoundAdminExecutionAttemptsForTerminalReplay(
-      @Param("batchSize") int batchSize);
+      @Param("claimStaleBefore") LocalDateTime claimStaleBefore, @Param("batchSize") int batchSize);
 
   @Query(
       "SELECT a.executionIntentPublicId FROM MarketplaceReservationActionStateEntity a "

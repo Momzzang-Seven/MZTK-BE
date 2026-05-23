@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.marketplace;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -633,20 +632,23 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
-  @DisplayName("admin termination evidence lookup failure remains retryable by throwing")
-  void buildTerminationEvidence_adminRefund_chainLookupFailureThrows() throws Exception {
+  @DisplayName("admin termination evidence marks chain lookup failures for manual sync")
+  void buildTerminationEvidence_adminRefund_chainLookupFailureMarksUnknown() throws Exception {
     ExecutionIntent intent =
         intent("intent-admin-refund", ExecutionActionType.MARKETPLACE_ADMIN_REFUND, adminPayload());
     willThrow(new IllegalStateException("rpc unavailable"))
         .given(getReservationEscrowOrderUseCase)
         .getOrder(ORDER_KEY);
 
-    assertThatThrownBy(
-            () ->
-                sut.buildTerminationEvidence(
-                    intent, null, ExecutionIntentStatus.FAILED_ONCHAIN, "receipt status unknown"))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("termination chain evidence lookup failed");
+    var evidence =
+        sut.buildTerminationEvidence(
+            intent, null, ExecutionIntentStatus.FAILED_ONCHAIN, "receipt status unknown");
+
+    assertThat(evidence.txHash()).isNull();
+    assertThat(evidence.hasTxHash()).isFalse();
+    assertThat(evidence.receiptStatus()).isEqualTo("MISSING");
+    assertThat(evidence.chainOrderState()).isEqualTo("UNKNOWN");
+    assertThat(evidence.evidenceErrorCode()).isEqualTo("CHAIN_ORDER_LOOKUP_FAILED");
   }
 
   private Reservation purchasePreparing(String pendingAttemptToken) {

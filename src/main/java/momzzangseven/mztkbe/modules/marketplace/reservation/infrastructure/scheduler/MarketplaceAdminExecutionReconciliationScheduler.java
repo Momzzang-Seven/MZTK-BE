@@ -23,12 +23,16 @@ public class MarketplaceAdminExecutionReconciliationScheduler {
 
   private final ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase reconcileUseCase;
   private final int batchSize;
+  private final int maxBatchesPerRun;
 
   public MarketplaceAdminExecutionReconciliationScheduler(
       ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase reconcileUseCase,
-      @Value("${web3.marketplace.admin.reconciliation.batch-size:100}") int batchSize) {
+      @Value("${web3.marketplace.admin.reconciliation.batch-size:100}") int batchSize,
+      @Value("${web3.marketplace.admin.reconciliation.max-batches-per-run:20}")
+          int maxBatchesPerRun) {
     this.reconcileUseCase = reconcileUseCase;
     this.batchSize = batchSize;
+    this.maxBatchesPerRun = Math.max(1, maxBatchesPerRun);
   }
 
   @Scheduled(
@@ -40,7 +44,7 @@ public class MarketplaceAdminExecutionReconciliationScheduler {
       int replayedTotal = 0;
       int skippedTotal = 0;
       int failedTotal = 0;
-      while (true) {
+      for (int batchNo = 0; batchNo < maxBatchesPerRun; batchNo++) {
         ReconcileMarketplaceAdminTerminalExecutionAttemptResult result =
             reconcileUseCase.execute(
                 new ReconcileMarketplaceAdminTerminalExecutionAttemptCommand(batchSize));

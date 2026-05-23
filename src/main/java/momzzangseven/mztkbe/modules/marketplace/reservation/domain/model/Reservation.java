@@ -624,7 +624,7 @@ public class Reservation {
     return toBuilder()
         .status(outcomeStatus)
         .escrowStatus(outcomeEscrowStatus)
-        .txHash(txHash)
+        .txHash(txHash == null || txHash.isBlank() ? this.txHash : txHash)
         .contractDeadlineEpochSeconds(contractDeadlineEpochSeconds)
         .contractDeadlineAt(contractDeadlineAt)
         .resolvedBy(resolvedBy)

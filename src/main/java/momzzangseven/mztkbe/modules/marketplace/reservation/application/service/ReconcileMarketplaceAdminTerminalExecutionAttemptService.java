@@ -1,12 +1,14 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ClaimReservationActionStateReplayPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayTerminatedReservationExecutionPort;
@@ -18,18 +20,22 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 public class ReconcileMarketplaceAdminTerminalExecutionAttemptService
     implements ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase {
 
-  private final LoadReservationActionStatePort loadReservationActionStatePort;
+  private static final long CLAIM_STALE_MINUTES = 5L;
+
+  private final ClaimReservationActionStateReplayPort claimReservationActionStateReplayPort;
   private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   private final ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   private final ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort;
+  private final Clock clock;
 
   @Override
   public ReconcileMarketplaceAdminTerminalExecutionAttemptResult execute(
       ReconcileMarketplaceAdminTerminalExecutionAttemptCommand command) {
     command.validate();
+    LocalDateTime claimStaleBefore = LocalDateTime.now(clock).minusMinutes(CLAIM_STALE_MINUTES);
     var candidates =
-        loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(
-            command.batchSize());
+        claimReservationActionStateReplayPort.claimBoundAdminExecutionAttemptsForTerminalReplay(
+            claimStaleBefore, command.batchSize());
     int replayed = 0;
     int skipped = 0;
     int failed = 0;

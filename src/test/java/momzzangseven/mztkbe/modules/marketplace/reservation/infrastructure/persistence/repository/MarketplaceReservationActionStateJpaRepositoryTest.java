@@ -30,7 +30,7 @@ class MarketplaceReservationActionStateJpaRepositoryTest {
       throws Exception {
     Method method =
         MarketplaceReservationActionStateJpaRepository.class.getDeclaredMethod(
-            "findBoundAdminExecutionAttemptsForTerminalReplay", int.class);
+            "findBoundAdminExecutionAttemptsForTerminalReplay", LocalDateTime.class, int.class);
     Query query = method.getAnnotation(Query.class);
 
     assertThat(query).isNotNull();

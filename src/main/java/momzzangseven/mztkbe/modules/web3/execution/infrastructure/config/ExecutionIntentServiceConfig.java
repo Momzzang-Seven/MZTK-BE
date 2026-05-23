@@ -373,12 +373,15 @@ public class ExecutionIntentServiceConfig {
       LoadExecutionTransactionPort loadExecutionTransactionPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       RunExecutionHookTransactionPort runExecutionHookTransactionPort,
-      Clock appClock) {
-    return new ReplayTerminatedExecutionIntentService(
-        executionIntentPersistencePort,
-        loadExecutionTransactionPort,
-        executionActionHandlerPorts,
-        runExecutionHookTransactionPort,
-        appClock);
+      Clock appClock,
+      PlatformTransactionManager transactionManager) {
+    ReplayTerminatedExecutionIntentService delegate =
+        new ReplayTerminatedExecutionIntentService(
+            executionIntentPersistencePort,
+            loadExecutionTransactionPort,
+            executionActionHandlerPorts,
+            runExecutionHookTransactionPort,
+            appClock);
+    return new TransactionalReplayTerminatedExecutionIntentUseCase(delegate, transactionManager);
   }
 }

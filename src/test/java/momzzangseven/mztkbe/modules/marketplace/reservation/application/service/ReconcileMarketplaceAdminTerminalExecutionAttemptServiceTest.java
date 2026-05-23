@@ -1,13 +1,17 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ClaimReservationActionStateReplayPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayTerminatedReservationExecutionPort;
@@ -22,7 +26,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
 
-  @Mock private LoadReservationActionStatePort loadReservationActionStatePort;
+  private final Clock clock = Clock.fixed(Instant.parse("2026-05-21T00:00:00Z"), ZoneOffset.UTC);
+
+  @Mock private ClaimReservationActionStateReplayPort claimReservationActionStateReplayPort;
   @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   @Mock private ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   @Mock private ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort;
@@ -30,7 +36,9 @@ class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
   @Test
   void execute_replaysBoundAdminTerminalHookCandidates() {
     var service = service();
-    given(loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(10))
+    given(
+            claimReservationActionStateReplayPort.claimBoundAdminExecutionAttemptsForTerminalReplay(
+                any(), org.mockito.ArgumentMatchers.eq(10)))
         .willReturn(List.of(actionState(1L, ReservationEscrowAction.ADMIN_REFUND, "intent-1")));
     given(loadReservationExecutionStatePort.loadState("intent-1"))
         .willReturn(
@@ -54,7 +62,9 @@ class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
   @Test
   void execute_replaysConfirmedAdminHookCandidates() {
     var service = service();
-    given(loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(10))
+    given(
+            claimReservationActionStateReplayPort.claimBoundAdminExecutionAttemptsForTerminalReplay(
+                any(), org.mockito.ArgumentMatchers.eq(10)))
         .willReturn(List.of(actionState(2L, ReservationEscrowAction.ADMIN_SETTLE, "intent-2")));
     given(loadReservationExecutionStatePort.loadState("intent-2"))
         .willReturn(
@@ -78,7 +88,9 @@ class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
   @Test
   void execute_replaysRepairableSucceededTransactionCandidate() {
     var service = service();
-    given(loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(10))
+    given(
+            claimReservationActionStateReplayPort.claimBoundAdminExecutionAttemptsForTerminalReplay(
+                any(), org.mockito.ArgumentMatchers.eq(10)))
         .willReturn(List.of(actionState(4L, ReservationEscrowAction.ADMIN_SETTLE, "intent-4")));
     given(loadReservationExecutionStatePort.loadState("intent-4"))
         .willReturn(
@@ -105,7 +117,9 @@ class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
   @Test
   void execute_replaysRepairableFailedOnchainTransactionCandidate() {
     var service = service();
-    given(loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(10))
+    given(
+            claimReservationActionStateReplayPort.claimBoundAdminExecutionAttemptsForTerminalReplay(
+                any(), org.mockito.ArgumentMatchers.eq(10)))
         .willReturn(List.of(actionState(5L, ReservationEscrowAction.ADMIN_REFUND, "intent-5")));
     given(loadReservationExecutionStatePort.loadState("intent-5"))
         .willReturn(
@@ -132,7 +146,9 @@ class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
   @Test
   void execute_skipsNonTerminalExecutionState() {
     var service = service();
-    given(loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(10))
+    given(
+            claimReservationActionStateReplayPort.claimBoundAdminExecutionAttemptsForTerminalReplay(
+                any(), org.mockito.ArgumentMatchers.eq(10)))
         .willReturn(List.of(actionState(3L, ReservationEscrowAction.ADMIN_REFUND, "intent-3")));
     given(loadReservationExecutionStatePort.loadState("intent-3"))
         .willReturn(
@@ -149,10 +165,11 @@ class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
 
   private ReconcileMarketplaceAdminTerminalExecutionAttemptService service() {
     return new ReconcileMarketplaceAdminTerminalExecutionAttemptService(
-        loadReservationActionStatePort,
+        claimReservationActionStateReplayPort,
         loadReservationExecutionStatePort,
         replayConfirmedReservationExecutionPort,
-        replayTerminatedReservationExecutionPort);
+        replayTerminatedReservationExecutionPort,
+        clock);
   }
 
   private MarketplaceReservationActionState actionState(

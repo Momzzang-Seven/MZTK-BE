@@ -53,7 +53,7 @@ class MarketplaceAdminExecutionReconciliationSchedulerTest {
     when(useCase.execute(org.mockito.ArgumentMatchers.any()))
         .thenReturn(new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(1, 1, 0, 0));
     MarketplaceAdminExecutionReconciliationScheduler scheduler =
-        new MarketplaceAdminExecutionReconciliationScheduler(useCase, 25);
+        new MarketplaceAdminExecutionReconciliationScheduler(useCase, 25, 20);
 
     scheduler.run();
 
@@ -70,11 +70,26 @@ class MarketplaceAdminExecutionReconciliationSchedulerTest {
             new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(25, 20, 5, 0),
             new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(3, 3, 0, 0));
     MarketplaceAdminExecutionReconciliationScheduler scheduler =
-        new MarketplaceAdminExecutionReconciliationScheduler(useCase, 25);
+        new MarketplaceAdminExecutionReconciliationScheduler(useCase, 25, 20);
 
     scheduler.run();
 
     verify(useCase, times(2)).execute(argThat(command -> command.batchSize() == 25));
+  }
+
+  @Test
+  @DisplayName("full batch가 계속 나오면 configured max batches에서 멈춘다")
+  void runStopsAtConfiguredMaxBatches() {
+    ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase useCase =
+        mock(ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class);
+    when(useCase.execute(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(25, 25, 0, 0));
+    MarketplaceAdminExecutionReconciliationScheduler scheduler =
+        new MarketplaceAdminExecutionReconciliationScheduler(useCase, 25, 3);
+
+    scheduler.run();
+
+    verify(useCase, times(3)).execute(argThat(command -> command.batchSize() == 25));
   }
 
   private ApplicationContextRunner contextRunner() {
@@ -83,6 +98,8 @@ class MarketplaceAdminExecutionReconciliationSchedulerTest {
         .withBean(
             ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class,
             () -> mock(ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class))
-        .withPropertyValues("web3.marketplace.admin.reconciliation.batch-size=25");
+        .withPropertyValues(
+            "web3.marketplace.admin.reconciliation.batch-size=25",
+            "web3.marketplace.admin.reconciliation.max-batches-per-run=20");
   }
 }

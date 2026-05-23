@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BindReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ClaimReservationActionStateReplayPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
@@ -26,7 +27,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class MarketplaceReservationActionStatePersistenceAdapter
     implements LoadReservationActionStatePort,
         SaveReservationActionStatePort,
-        BindReservationActionStatePort {
+        BindReservationActionStatePort,
+        ClaimReservationActionStateReplayPort {
+
+  private static final String RECONCILING_ERROR_CODE = "RECONCILING";
+  private static final String RECONCILING_ERROR_REASON =
+      "marketplace admin execution reconciliation in progress";
 
   private final MarketplaceReservationActionStateJpaRepository repository;
   private final Clock clock;
@@ -109,8 +115,28 @@ public class MarketplaceReservationActionStatePersistenceAdapter
   @Override
   public List<MarketplaceReservationActionState> findBoundAdminExecutionAttemptsForTerminalReplay(
       int batchSize) {
-    return repository.findBoundAdminExecutionAttemptsForTerminalReplay(batchSize).stream()
+    return repository
+        .findBoundAdminExecutionAttemptsForTerminalReplay(LocalDateTime.MIN, batchSize)
+        .stream()
         .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
+  @Transactional
+  public List<MarketplaceReservationActionState> claimBoundAdminExecutionAttemptsForTerminalReplay(
+      LocalDateTime claimStaleBefore, int batchSize) {
+    List<MarketplaceReservationActionStateEntity> candidates =
+        repository.findBoundAdminExecutionAttemptsForTerminalReplay(claimStaleBefore, batchSize);
+    return candidates.stream()
+        .map(this::toDomain)
+        .map(
+            actionState ->
+                actionState.toBuilder()
+                    .errorCode(RECONCILING_ERROR_CODE)
+                    .errorReason(RECONCILING_ERROR_REASON)
+                    .build())
+        .map(this::save)
         .toList();
   }
 
