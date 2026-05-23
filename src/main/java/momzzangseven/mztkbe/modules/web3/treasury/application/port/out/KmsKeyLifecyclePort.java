@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.port.out;
 
-import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
 
 /**
  * Out-port for KMS key lifecycle operations driven by treasury-side use cases (provision, disable,
@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
  * {@link #importKeyMaterial(String, byte[], byte[])}, and {@link #createAlias(String, String)} in
  * sequence. The retirement flow consumes {@link #disableKey(String)} (on {@code disable}) and
  * {@link #scheduleKeyDeletion(String, int)} (on {@code archive}). {@link #updateAlias(String,
- * String)} and {@link #describeAliasTarget(String)} support idempotent recovery when {@code
- * CreateAlias} encounters a stale alias from a prior failed provision run.
+ * String)} and {@link #describeAlias(String)} support idempotent recovery when {@code CreateAlias}
+ * encounters a stale alias from a prior failed provision run.
  */
 public interface KmsKeyLifecyclePort {
 
@@ -46,7 +46,7 @@ public interface KmsKeyLifecyclePort {
    *
    * <p>Implementations must translate AWS {@code AlreadyExistsException} into {@link
    * momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException} so the provisioning
-   * service can drive idempotent recovery via {@link #describeAliasTarget(String)} + {@link
+   * service can drive idempotent recovery via {@link #describeAlias(String)} + {@link
    * #updateAlias(String, String)} without depending on the AWS SDK.
    */
   void createAlias(String alias, String kmsKeyId);
@@ -59,15 +59,31 @@ public interface KmsKeyLifecyclePort {
   void updateAlias(String alias, String newKmsKeyId);
 
   /**
-   * Inspect the {@link KmsKeyState} of the key currently bound to {@code alias}. Returns {@link
-   * KmsKeyState#UNAVAILABLE} when the alias does not exist; the caller treats {@link
-   * KmsKeyState#PENDING_DELETION} / {@link KmsKeyState#DISABLED} as recoverable ghosts and
-   * everything else as a hard conflict.
+   * Inspect the alias and return both the {@link
+   * momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState} of the key it points at and
+   * the target key id itself. Used by callers that need to detect alias drift (alias points to a
+   * different key id than the wallet row records) on top of state-only state checks.
+   *
+   * <p>When the alias does not exist in AWS at all, implementations return {@code state ==
+   * UNAVAILABLE} together with {@code targetKmsKeyId == null}; otherwise {@code targetKmsKeyId} is
+   * non-null. The caller treats {@link
+   * momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState#PENDING_DELETION} / {@link
+   * momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState#DISABLED} as recoverable
+   * ghosts and everything else as a hard conflict (with id mismatch on {@code ENABLED} flagged
+   * separately).
    */
-  KmsKeyState describeAliasTarget(String alias);
+  AliasTargetInfo describeAlias(String alias);
 
   /** Disable the supplied key without scheduling deletion. Used by {@code disable()} flows. */
   void disableKey(String kmsKeyId);
+
+  /**
+   * Re-enable a previously {@link #disableKey} 'd key. Used by the ReEnableSameKey action (MOM-444
+   * C5) when an operator re-provisions an alias whose existing KMS key is DISABLED. AWS KMS {@code
+   * EnableKey} is idempotent on already-ENABLED keys, so the post-commit handler does not need to
+   * short-circuit.
+   */
+  void enableKey(String kmsKeyId);
 
   /**
    * Schedule the supplied key for permanent deletion with the given pending window (in days). Used

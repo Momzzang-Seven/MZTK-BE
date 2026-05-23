@@ -36,4 +36,14 @@ public final class QnaEscrowIdempotencyKeyFactory {
         + ":"
         + updateToken;
   }
+
+  public static String createAnswerUpdate(
+      Long requesterUserId, Long postId, Long answerId, Long updateVersion, String updateToken) {
+    String base =
+        create(QnaExecutionActionType.QNA_ANSWER_UPDATE, requesterUserId, postId, answerId);
+    if (updateVersion == null || updateToken == null || updateToken.isBlank()) {
+      return base;
+    }
+    return base + ":v" + updateVersion + ":" + updateToken;
+  }
 }

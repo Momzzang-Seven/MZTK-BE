@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -20,14 +21,18 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentIdempotencyMismatchPolicy;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
@@ -64,8 +69,10 @@ class CreateExecutionIntentServiceTest {
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   @Mock private LoadSponsorPolicyPort loadSponsorPolicyPort;
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
+  @Mock private LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort;
   @Mock private LoadEip1559TtlPort loadEip1559TtlPort;
   @Mock private BuildExecutionDigestPort buildExecutionDigestPort;
+  @Mock private BuildExecutionCallHashPort buildExecutionCallHashPort;
   @Mock private ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
@@ -83,16 +90,21 @@ class CreateExecutionIntentServiceTest {
             sponsorDailyUsagePersistencePort,
             loadExecutionChainIdPort,
             loadSponsorPolicyPort,
+            loadEip7702AuthorizationTtlPort,
             loadEip1559TtlPort,
             buildExecutionDigestPort,
+            buildExecutionCallHashPort,
             validateExecutionDraftPolicyPort,
             executionModeSelector,
             publishExecutionIntentTerminatedPort,
             FIXED_CLOCK);
+    lenient().when(loadEip7702AuthorizationTtlPort.loadMinimumRemainingSeconds()).thenReturn(30L);
   }
 
   @Test
   void execute_createsEip7702Intent_whenSponsorEligible() {
+    BigInteger expectedDeadlineEpoch =
+        BigInteger.valueOf(FIXED_NOW.plusSeconds(300).atZone(APP_ZONE).toEpochSecond());
     when(loadSponsorPolicyPort.loadSponsorPolicy())
         .thenReturn(
             new SponsorPolicy(
@@ -103,6 +115,7 @@ class CreateExecutionIntentServiceTest {
         .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
     when(buildExecutionDigestPort.buildExecutionDigestHex(any(), any(), any(), any()))
         .thenReturn("0x" + "d".repeat(64));
+    when(buildExecutionCallHashPort.hashCalls(any())).thenReturn("0x" + "9".repeat(64));
     when(loadExecutionChainIdPort.loadChainId()).thenReturn(11155111L);
     when(executionIntentPersistencePort.create(any()))
         .thenAnswer(invocation -> withId(invocation.getArgument(0), 1L));
@@ -116,8 +129,13 @@ class CreateExecutionIntentServiceTest {
     assertThat(result.signCount()).isEqualTo(2);
     assertThat(result.signRequest().authorization()).isNotNull();
     assertThat(result.signRequest().submit()).isNotNull();
+    assertThat(result.signRequest().submit().deadlineEpochSeconds())
+        .isEqualTo(expectedDeadlineEpoch.longValueExact());
     verify(validateExecutionDraftPolicyPort).validate(any(), any());
-    verify(buildExecutionDigestPort).buildExecutionDigestHex(any(), any(), any(), any());
+    verify(buildExecutionCallHashPort).hashCalls(any());
+    verify(buildExecutionDigestPort)
+        .buildExecutionDigestHex(
+            any(), any(), eq("0x" + "9".repeat(64)), eq(expectedDeadlineEpoch));
     verify(sponsorDailyUsagePersistencePort).update(any());
     verify(executionIntentPersistencePort)
         .create(argThat(intent -> intent.getSponsorUsageDateKst().equals(FIXED_DATE)));
@@ -150,6 +168,8 @@ class CreateExecutionIntentServiceTest {
                 true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
     when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
         .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
     doThrow(new Web3TransferException(ErrorCode.DELEGATE_NOT_ALLOWLISTED, false))
         .when(validateExecutionDraftPolicyPort)
         .validate(any(), any());
@@ -158,9 +178,84 @@ class CreateExecutionIntentServiceTest {
         .isInstanceOf(Web3TransferException.class)
         .hasMessageContaining(ErrorCode.DELEGATE_NOT_ALLOWLISTED.getMessage());
 
-    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
     verify(sponsorDailyUsagePersistencePort, never()).update(any());
     verify(executionIntentPersistencePort, never()).create(any());
+  }
+
+  @Test
+  void execute_rejectsExpiredEip7702Draft_beforeSponsorReservation() {
+    when(loadSponsorPolicyPort.loadSponsorPolicy())
+        .thenReturn(
+            new SponsorPolicy(
+                true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
+    when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
+        .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new CreateExecutionIntentCommand(
+                        transferDraftWithExpiresAt(true, FIXED_NOW.minusSeconds(1)))))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("EIP-7702 expiresAt must be in the future");
+
+    verify(sponsorDailyUsagePersistencePort, never()).update(any());
+    verify(buildExecutionDigestPort, never()).buildExecutionDigestHex(any(), any(), any(), any());
+    verify(executionIntentPersistencePort, never()).create(any());
+  }
+
+  @Test
+  void execute_rejectsEip7702Draft_whenDeadlineIsTooClose() {
+    when(loadSponsorPolicyPort.loadSponsorPolicy())
+        .thenReturn(
+            new SponsorPolicy(
+                true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
+    when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
+        .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
+    when(loadEip7702AuthorizationTtlPort.loadMinimumRemainingSeconds()).thenReturn(30L);
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new CreateExecutionIntentCommand(
+                        transferDraftWithExpiresAt(true, FIXED_NOW.plusSeconds(29)))))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("at least 30 seconds");
+
+    verify(sponsorDailyUsagePersistencePort, never()).update(any());
+    verify(buildExecutionDigestPort, never()).buildExecutionDigestHex(any(), any(), any(), any());
+    verify(executionIntentPersistencePort, never()).create(any());
+  }
+
+  @Test
+  void execute_fallsBackToEip1559_whenSponsorReservationRaceAndEip7702DeadlineTooClose() {
+    lenient().when(loadEip1559TtlPort.loadTtlSeconds()).thenReturn(90L);
+    when(loadSponsorPolicyPort.loadSponsorPolicy())
+        .thenReturn(
+            new SponsorPolicy(
+                true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("0.05")));
+    when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
+        .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(
+            SponsorDailyUsage.create(7L, FIXED_DATE).reserve(new BigInteger("50000000000000000")));
+    when(executionIntentPersistencePort.create(any()))
+        .thenAnswer(invocation -> withId(invocation.getArgument(0), 1L));
+
+    CreateExecutionIntentResult result =
+        service.execute(
+            new CreateExecutionIntentCommand(
+                transferDraftWithExpiresAt(true, FIXED_NOW.plusSeconds(29))));
+
+    assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
+    assertThat(result.expiresAt()).isEqualTo(FIXED_NOW.plusSeconds(90));
+    verify(validateExecutionDraftPolicyPort, never()).validate(any(), any());
+    verify(loadEip7702AuthorizationTtlPort, never()).loadMinimumRemainingSeconds();
+    verify(sponsorDailyUsagePersistencePort, never()).update(any());
   }
 
   @Test
@@ -228,6 +323,32 @@ class CreateExecutionIntentServiceTest {
   }
 
   @Test
+  void execute_expiresExistingAwaitingSignatureEip7702Intent_whenDeadlineIsTooClose() {
+    ExecutionIntent existing =
+        withId(existingEip7702Intent("intent-too-close", FIXED_NOW.plusSeconds(29)), 77L);
+
+    when(executionIntentPersistencePort.findLatestByRootIdempotencyKeyForUpdate("root-transfer-1"))
+        .thenReturn(Optional.of(existing));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    stubEip1559Creation();
+
+    CreateExecutionIntentResult result =
+        service.execute(new CreateExecutionIntentCommand(transferDraft(false)));
+
+    assertThat(result.existing()).isFalse();
+    verify(executionIntentPersistencePort)
+        .update(argThat(intent -> intent.getStatus() == ExecutionIntentStatus.EXPIRED));
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-too-close")
+                        && event.terminalStatus() == ExecutionIntentStatus.EXPIRED
+                        && event.failureReason().equals(ErrorCode.AUTH_EXPIRED.name())));
+  }
+
+  @Test
   void execute_cancelsExistingAwaitingSignatureIntentAndPublishesTermination_whenPayloadDiffers() {
     ExecutionIntent existing =
         withId(existingTransferIntent("intent-conflict", FIXED_NOW.plusSeconds(60)), 77L);
@@ -251,6 +372,27 @@ class CreateExecutionIntentServiceTest {
                     event.executionIntentId().equals("intent-conflict")
                         && event.terminalStatus() == ExecutionIntentStatus.CANCELED
                         && event.failureReason().equals(ErrorCode.IDEMPOTENCY_CONFLICT.name())));
+  }
+
+  @Test
+  void execute_rejectsPayloadMismatchWithoutCancelingExisting_whenRejectPolicyIsUsed() {
+    ExecutionIntent existing =
+        withId(existingTransferIntent("intent-conflict", FIXED_NOW.plusSeconds(60)), 77L);
+
+    when(executionIntentPersistencePort.findLatestByRootIdempotencyKeyForUpdate("root-transfer-1"))
+        .thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new CreateExecutionIntentCommand(
+                        transferDraft(true),
+                        ExecutionIntentIdempotencyMismatchPolicy.REJECT_ON_MISMATCH)))
+        .isInstanceOf(Web3TransferException.class);
+
+    verify(executionIntentPersistencePort, never()).update(any());
+    verify(publishExecutionIntentTerminatedPort, never()).publish(any());
+    verify(executionIntentPersistencePort, never()).create(any());
   }
 
   @Test
@@ -287,7 +429,46 @@ class CreateExecutionIntentServiceTest {
     verify(validateExecutionDraftPolicyPort, never()).validate(any(), any());
   }
 
+  @Test
+  void execute_createsDirectEip1559Intent_forMarketplaceAdminSettleDraft() {
+    when(executionIntentPersistencePort.create(any()))
+        .thenAnswer(invocation -> withId(invocation.getArgument(0), 93L));
+
+    CreateExecutionIntentResult result =
+        service.execute(new CreateExecutionIntentCommand(marketplaceAdminSettleDraft()));
+
+    assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
+    assertThat(result.signCount()).isEqualTo(1);
+    assertThat(result.signRequest().transaction()).isNotNull();
+    verify(loadSponsorPolicyPort, never()).loadSponsorPolicy();
+    verify(sponsorDailyUsagePersistencePort, never()).find(any(), any());
+    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
+    verify(validateExecutionDraftPolicyPort, never()).validate(any(), any());
+  }
+
+  @Test
+  void execute_createsDirectEip1559Intent_forMarketplaceAdminRefundDraft() {
+    when(executionIntentPersistencePort.create(any()))
+        .thenAnswer(invocation -> withId(invocation.getArgument(0), 94L));
+
+    CreateExecutionIntentResult result =
+        service.execute(new CreateExecutionIntentCommand(marketplaceAdminRefundDraft()));
+
+    assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
+    assertThat(result.signCount()).isEqualTo(1);
+    assertThat(result.signRequest().transaction()).isNotNull();
+    verify(loadSponsorPolicyPort, never()).loadSponsorPolicy();
+    verify(sponsorDailyUsagePersistencePort, never()).find(any(), any());
+    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
+    verify(validateExecutionDraftPolicyPort, never()).validate(any(), any());
+  }
+
   private ExecutionDraft transferDraft(boolean differentPayloadHash) {
+    return transferDraftWithExpiresAt(differentPayloadHash, FIXED_NOW.plusSeconds(300));
+  }
+
+  private ExecutionDraft transferDraftWithExpiresAt(
+      boolean differentPayloadHash, LocalDateTime expiresAt) {
     return new ExecutionDraft(
         ExecutionResourceTypeCode.TRANSFER,
         "web3:TRANSFER_SEND:7:req-1",
@@ -307,7 +488,7 @@ class CreateExecutionIntentServiceTest {
         "0x" + "5".repeat(64),
         unsignedTxSnapshot(),
         "0x" + "b".repeat(64),
-        FIXED_NOW.plusSeconds(300));
+        expiresAt);
   }
 
   private ExecutionIntent existingTransferIntent(String publicId, LocalDateTime expiresAt) {
@@ -331,6 +512,32 @@ class CreateExecutionIntentServiceTest {
         null,
         unsignedTxSnapshot(),
         "0x" + "b".repeat(64),
+        BigInteger.ZERO,
+        FIXED_DATE,
+        FIXED_NOW);
+  }
+
+  private ExecutionIntent existingEip7702Intent(String publicId, LocalDateTime expiresAt) {
+    return ExecutionIntent.create(
+        publicId,
+        "root-transfer-1",
+        1,
+        ExecutionResourceType.TRANSFER,
+        "web3:TRANSFER_SEND:7:req-1",
+        ExecutionActionType.TRANSFER_SEND,
+        7L,
+        8L,
+        ExecutionMode.EIP7702,
+        "0x" + "a".repeat(64),
+        "{\"payload\":true}",
+        "0x" + "3".repeat(40),
+        12L,
+        "0x" + "4".repeat(40),
+        expiresAt,
+        "0x" + "5".repeat(64),
+        "0x" + "6".repeat(64),
+        null,
+        null,
         BigInteger.ZERO,
         FIXED_DATE,
         FIXED_NOW);
@@ -402,6 +609,49 @@ class CreateExecutionIntentServiceTest {
         null,
         unsignedTxSnapshot(),
         "0x" + "1".repeat(64),
+        FIXED_NOW.plusSeconds(120));
+  }
+
+  private ExecutionDraft marketplaceAdminSettleDraft() {
+    return marketplaceAdminDraft(
+        ExecutionActionTypeCode.MARKETPLACE_ADMIN_SETTLE,
+        "root-marketplace-admin-settle-101",
+        "0x" + "2".repeat(64),
+        "{\"action\":\"MARKETPLACE_ADMIN_SETTLE\"}");
+  }
+
+  private ExecutionDraft marketplaceAdminRefundDraft() {
+    return marketplaceAdminDraft(
+        ExecutionActionTypeCode.MARKETPLACE_ADMIN_REFUND,
+        "root-marketplace-admin-refund-101",
+        "0x" + "3".repeat(64),
+        "{\"action\":\"MARKETPLACE_ADMIN_REFUND\"}");
+  }
+
+  private ExecutionDraft marketplaceAdminDraft(
+      ExecutionActionTypeCode actionType,
+      String rootIdempotencyKey,
+      String payloadHash,
+      String payloadSnapshotJson) {
+    return new ExecutionDraft(
+        ExecutionResourceTypeCode.ORDER,
+        "101",
+        ExecutionResourceStatusCode.PENDING_EXECUTION,
+        actionType,
+        7L,
+        8L,
+        rootIdempotencyKey,
+        payloadHash,
+        payloadSnapshotJson,
+        List.of(
+            new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x" + "2".repeat(8))),
+        false,
+        null,
+        null,
+        null,
+        null,
+        unsignedTxSnapshot(),
+        "0x" + "4".repeat(64),
         FIXED_NOW.plusSeconds(120));
   }
 

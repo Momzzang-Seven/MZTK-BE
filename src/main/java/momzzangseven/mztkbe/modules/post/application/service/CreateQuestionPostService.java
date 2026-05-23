@@ -2,17 +2,22 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
+import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreateQuestionPostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
+import momzzangseven.mztkbe.modules.post.application.port.out.PublishPostDeletedEventPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -37,6 +42,7 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
   private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+  private final PublishPostDeletedEventPort publishPostDeletedEventPort;
   private TransactionOperations transactionOperations;
 
   @Autowired
@@ -54,15 +60,21 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
 
     boolean managesQuestionCreate = questionLifecycleExecutionPort.managesQuestionCreateLifecycle();
     Post savedPost = runInTransaction(() -> savePost(command, managesQuestionCreate));
-    QuestionExecutionWriteView web3 =
-        questionLifecycleExecutionPort
-            .prepareQuestionCreate(
-                savedPost.getId(),
-                savedPost.getUserId(),
-                savedPost.getContent(),
-                savedPost.getReward())
-            .orElse(null);
-    recordPreparedCreateIntentIfPresent(managesQuestionCreate, savedPost.getId(), web3);
+    QuestionExecutionWriteView web3;
+    try {
+      web3 =
+          questionLifecycleExecutionPort
+              .prepareQuestionCreate(
+                  savedPost.getId(),
+                  savedPost.getUserId(),
+                  savedPost.getContent(),
+                  savedPost.getReward())
+              .orElse(null);
+    } catch (RuntimeException ex) {
+      cleanupUnboundCreatedQuestionIfManaged(managesQuestionCreate, savedPost.getId());
+      throw ex;
+    }
+    bindPreparedCreateIntentIfManaged(managesQuestionCreate, savedPost.getId(), web3);
 
     XpGrantResult xpResult = grantCreateXp(command.userId(), savedPost.getId());
 
@@ -113,24 +125,48 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
     return savedPost;
   }
 
-  private void recordPreparedCreateIntentIfPresent(
+  private void bindPreparedCreateIntentIfManaged(
       boolean managesQuestionCreate, Long postId, QuestionExecutionWriteView web3) {
-    if (!managesQuestionCreate
-        || web3 == null
-        || web3.executionIntent() == null
-        || web3.executionIntent().id() == null
-        || web3.executionIntent().id().isBlank()) {
+    if (!managesQuestionCreate) {
       return;
     }
-    runInTransaction(
-        () -> {
-          postPersistencePort
-              .loadPostForUpdate(postId)
-              .filter(post -> post.getType() == PostType.QUESTION)
-              .map(post -> post.markPublicationPending(web3.executionIntent().id()))
-              .ifPresent(postPersistencePort::savePost);
-          return null;
-        });
+    String executionIntentId = preparedCreateIntentId(web3);
+    if (executionIntentId == null) {
+      cleanupUnboundCreatedQuestion(postId);
+      throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT);
+    }
+
+    int updatedRows;
+    try {
+      updatedRows =
+          runInTransaction(
+              () ->
+                  postPersistencePort.updateQuestionPublicationStateIfExpected(
+                      postId,
+                      PostPublicationStatus.PENDING,
+                      null,
+                      null,
+                      null,
+                      PostPublicationStatus.PENDING,
+                      executionIntentId,
+                      null,
+                      null));
+    } catch (RuntimeException ex) {
+      if (isAlreadyBoundToCreateIntent(postId, executionIntentId)) {
+        return;
+      }
+      cancelPreparedIntentIfOwned(web3, "question create intent bind failed");
+      cleanupUnboundCreatedQuestion(postId);
+      throw ex;
+    }
+
+    if (updatedRows > 0 || isAlreadyBoundToCreateIntent(postId, executionIntentId)) {
+      return;
+    }
+
+    cancelPreparedIntentIfOwned(web3, "question create intent bind failed");
+    cleanupUnboundCreatedQuestion(postId);
+    throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT);
   }
 
   private XpGrantResult grantCreateXp(Long userId, Long postId) {
@@ -155,6 +191,56 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
       return supplier.get();
     }
     return transactionOperations.execute(status -> supplier.get());
+  }
+
+  private String preparedCreateIntentId(QuestionExecutionWriteView web3) {
+    if (web3 == null
+        || web3.executionIntent() == null
+        || web3.executionIntent().id() == null
+        || web3.executionIntent().id().isBlank()) {
+      return null;
+    }
+    return web3.executionIntent().id();
+  }
+
+  private boolean isAlreadyBoundToCreateIntent(Long postId, String executionIntentId) {
+    return runInTransaction(
+        () ->
+            postPersistencePort
+                .loadPostForUpdate(postId)
+                .filter(post -> post.matchesCurrentCreateExecutionIntent(executionIntentId))
+                .isPresent());
+  }
+
+  private void cancelPreparedIntentIfOwned(QuestionExecutionWriteView web3, String reason) {
+    if (web3 == null || web3.existing() || web3.executionIntent() == null) {
+      return;
+    }
+    questionLifecycleExecutionPort.cancelSignableIntent(web3.executionIntent().id(), reason);
+  }
+
+  private void cleanupUnboundCreatedQuestionIfManaged(boolean managesQuestionCreate, Long postId) {
+    if (managesQuestionCreate) {
+      cleanupUnboundCreatedQuestion(postId);
+    }
+  }
+
+  private void cleanupUnboundCreatedQuestion(Long postId) {
+    runInTransaction(
+        () -> {
+          postPersistencePort
+              .loadPostForUpdate(postId)
+              .filter(post -> post.getType() == PostType.QUESTION)
+              .filter(Post::isPublicationPending)
+              .filter(post -> post.getCurrentCreateExecutionIntentId() == null)
+              .ifPresent(
+                  post -> {
+                    postPersistencePort.deletePost(post);
+                    publishPostDeletedEventPort.publish(
+                        new PostDeletedEvent(post.getId(), post.getType()));
+                  });
+          return null;
+        });
   }
 
   private record XpGrantResult(boolean isXpGranted, Long grantedXp, String message) {}

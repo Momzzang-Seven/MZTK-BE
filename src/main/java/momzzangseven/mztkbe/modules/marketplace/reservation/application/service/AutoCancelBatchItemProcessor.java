@@ -1,16 +1,18 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Per-item transaction processor for the auto-cancel batch job.
@@ -19,25 +21,29 @@ import org.springframework.transaction.annotation.Transactional;
  * failures: if on-chain refund or strike recording fails for one reservation, the others in the
  * same scheduler run are not rolled back.
  *
- * <p>This class must be a separate Spring bean (not a private inner class) because Spring AOP
- * proxy-based transaction management only intercepts calls that cross bean boundaries.
+ * <p>Transaction boundaries are delegated to {@link RunReservationTransactionPort} so this
+ * application service does not depend on Spring transaction infrastructure.
  *
- * <p><b>Transaction ordering (DB-first, escrow-after):</b><br>
- * The reservation status is persisted first. Then the on-chain {@code adminRefund} call is made. If
- * the escrow call fails, the status remains TIMEOUT_CANCELLED in DB (correct terminal state) and
- * the strike is still recorded. The missing on-chain refund can be resolved by a reconciliation
- * job. This prevents the inverse failure (on-chain success + DB rollback) which would be harder to
- * detect and recover from.
+ * <p><b>Transaction ordering (DB-first, side-effects-after):</b><br>
+ * The reservation status is persisted first. Trainer strike recording and the on-chain {@code
+ * adminRefund} call run after commit. If either side effect fails, the status remains
+ * TIMEOUT_CANCELLED in DB (correct terminal state). Missing side effects can be resolved by a
+ * reconciliation job. This prevents the inverse failure (side effect success + DB rollback) which
+ * would be harder to detect and recover from.
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class AutoCancelBatchItemProcessor {
+
+  private static final String PENDING_TX_HASH = "ESCROW_DISPATCH_PENDING";
 
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
   private final RecordTrainerStrikePort recordTrainerStrikePort;
+  private final RunReservationTransactionPort runReservationTransactionPort;
+  private final RunReservationPostCommitPort runReservationPostCommitPort;
+  private final Clock clock;
 
   /**
    * Processes a single auto-cancel item in its own isolated transaction.
@@ -48,12 +54,20 @@ public class AutoCancelBatchItemProcessor {
    * be visible — the stale PENDING status would bypass the guard and trigger a duplicate on-chain
    * refund (double-compensation).
    *
-   * <p>Order: re-fetch with lock → validate status → persist TIMEOUT_CANCELLED → submit adminRefund
-   * on-chain → update txHash → record TIMEOUT strike. On failure: the individual transaction rolls
-   * back; the caller catches and logs.
+   * <p>Order: re-fetch with lock → validate status → persist TIMEOUT_CANCELLED → commit → record
+   * idempotent timeout strike → submit adminRefund on-chain → update txHash in a new short
+   * transaction. This prevents successful side effects from being rolled back locally by a commit
+   * failure.
    */
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void process(Reservation staleReservation) {
+    runReservationTransactionPort.requiresNew(
+        () -> {
+          processInTransaction(staleReservation);
+          return null;
+        });
+  }
+
+  private void processInTransaction(Reservation staleReservation) {
     // Re-fetch with pessimistic write lock to prevent concurrent state conflicts.
     // A USER_CANCELLED committed between the batch read and here would be invisible
     // in the stale object, causing a duplicate on-chain refund.
@@ -70,32 +84,94 @@ public class AutoCancelBatchItemProcessor {
                 });
 
     // Guard: re-validate status with the fresh locked row before any side-effect.
-    if (!reservation.getStatus().canTimeoutCancel()) {
+    LocalDateTime now = LocalDateTime.now(clock);
+    if (!reservation.getStatus().canTimeoutCancel()
+        || !reservation.isLegacySchedulerEligibleAt(now)) {
       log.info(
-          "AutoCancel skipped: reservation {} is no longer PENDING (status={})",
+          "AutoCancel skipped: reservation {} is not legacy scheduler eligible (status={}, flow={})",
           reservation.getId(),
-          reservation.getStatus());
+          reservation.getStatus(),
+          reservation.getEffectiveEscrowFlow());
       return;
     }
 
     // 1. Persist status first — DB is the source of truth.
-    Reservation cancelled = reservation.timeoutCancel("ESCROW_DISPATCH_PENDING");
+    Reservation cancelled = reservation.timeoutCancel(PENDING_TX_HASH);
     saveReservationPort.save(cancelled);
 
-    // 2. Submit on-chain refund — after DB save in REQUIRES_NEW.
-    String refundTxHash = submitEscrowTransactionPort.submitAdminRefund(reservation.getOrderId());
-
-    // 3. Write back the real txHash.
-    Reservation withTxHash = cancelled.updateTxHash(refundTxHash);
-    saveReservationPort.save(withTxHash);
-
-    // 4. Record trainer strike.
-    recordTrainerStrikePort.recordStrike(
-        reservation.getTrainerId(), TrainerStrikeEvent.REASON_TIMEOUT);
+    runReservationPostCommitPort.afterCommit(
+        "AutoCancel",
+        () ->
+            recordTimeoutStrikeAndSubmitAdminRefund(
+                reservation.getId(), reservation.getOrderId(), reservation.getTrainerId()));
 
     log.info(
-        "AutoCancel processed: reservationId={}, trainerId={}",
+        "AutoCancel committed local timeout state: reservationId={}, trainerId={}",
         reservation.getId(),
         reservation.getTrainerId());
+  }
+
+  private void recordTimeoutStrikeAndSubmitAdminRefund(
+      Long reservationId, String orderId, Long trainerId) {
+    recordTimeoutStrike(reservationId, trainerId);
+    submitAdminRefundAndWriteBack(reservationId, orderId, trainerId);
+  }
+
+  private void recordTimeoutStrike(Long reservationId, Long trainerId) {
+    try {
+      recordTrainerStrikePort.recordStrike(
+          trainerId,
+          TrainerStrikeEvent.REASON_TIMEOUT,
+          RecordTrainerStrikePort.SOURCE_MARKETPLACE_RESERVATION_TIMEOUT,
+          String.valueOf(reservationId));
+    } catch (RuntimeException e) {
+      log.error(
+          "AutoCancel timeout strike failed after local commit: reservationId={}, trainerId={}",
+          reservationId,
+          trainerId,
+          e);
+    }
+  }
+
+  private void submitAdminRefundAndWriteBack(Long reservationId, String orderId, Long trainerId) {
+    String refundTxHash;
+    try {
+      refundTxHash = submitEscrowTransactionPort.submitAdminRefund(orderId);
+    } catch (RuntimeException e) {
+      log.error(
+          "AutoCancel adminRefund failed after local commit: reservationId={}, trainerId={}",
+          reservationId,
+          trainerId,
+          e);
+      return;
+    }
+
+    runReservationPostCommitPort.requiresNew(
+        () ->
+            loadReservationPort
+                .findByIdWithLock(reservationId)
+                .ifPresentOrElse(
+                    current -> writeBackRefundTxHash(current, refundTxHash),
+                    () ->
+                        log.warn(
+                            "AutoCancel txHash write-back skipped: reservation {} no longer exists",
+                            reservationId)));
+  }
+
+  private void writeBackRefundTxHash(Reservation current, String refundTxHash) {
+    if (current.getStatus() != ReservationStatus.TIMEOUT_CANCELLED
+        || !PENDING_TX_HASH.equals(current.getTxHash())) {
+      log.info(
+          "AutoCancel txHash write-back skipped: reservationId={}, status={}, txHash={}",
+          current.getId(),
+          current.getStatus(),
+          current.getTxHash());
+      return;
+    }
+    saveReservationPort.save(current.updateTxHash(refundTxHash));
+    log.info(
+        "AutoCancel on-chain refund recorded: reservationId={}, txHash={}",
+        current.getId(),
+        refundTxHash);
   }
 }

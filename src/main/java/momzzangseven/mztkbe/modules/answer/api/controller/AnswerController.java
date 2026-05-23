@@ -14,12 +14,16 @@ import momzzangseven.mztkbe.modules.answer.application.dto.AnswerMutationResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.dto.DiscardAnswerUpdateCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.RecoverAnswerEscrowCommand;
+import momzzangseven.mztkbe.modules.answer.application.dto.RecoverAnswerUpdateCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.DiscardAnswerUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.RecoverAnswerEscrowUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.RecoverAnswerUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +53,8 @@ public class AnswerController {
   private final UpdateAnswerUseCase updateAnswerUseCase;
   private final DeleteAnswerUseCase deleteAnswerUseCase;
   private final RecoverAnswerEscrowUseCase recoverAnswerEscrowUseCase;
+  private final RecoverAnswerUpdateUseCase recoverAnswerUpdateUseCase;
+  private final DiscardAnswerUpdateUseCase discardAnswerUpdateUseCase;
 
   /** Creates an answer and returns nullable answer-create Web3 payload. */
   @PostMapping
@@ -120,6 +126,32 @@ public class AnswerController {
     AnswerMutationResult result =
         recoverAnswerEscrowUseCase.recoverAnswerCreate(
             new RecoverAnswerEscrowCommand(validatedUserId, postId, answerId));
+    return ResponseEntity.ok(ApiResponse.success(AnswerMutationResponse.from(result)));
+  }
+
+  @PostMapping("/{answerId}/web3/discard-update")
+  public ResponseEntity<ApiResponse<AnswerMutationResponse>> discardAnswerUpdate(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long postId,
+      @PathVariable Long answerId) {
+
+    Long validatedUserId = requireUserId(userId);
+    AnswerMutationResult result =
+        discardAnswerUpdateUseCase.discardAnswerUpdate(
+            new DiscardAnswerUpdateCommand(validatedUserId, postId, answerId));
+    return ResponseEntity.ok(ApiResponse.success(AnswerMutationResponse.from(result)));
+  }
+
+  @PostMapping("/{answerId}/web3/recover-update")
+  public ResponseEntity<ApiResponse<AnswerMutationResponse>> recoverAnswerUpdate(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long postId,
+      @PathVariable Long answerId) {
+
+    Long validatedUserId = requireUserId(userId);
+    AnswerMutationResult result =
+        recoverAnswerUpdateUseCase.recoverAnswerUpdate(
+            new RecoverAnswerUpdateCommand(validatedUserId, postId, answerId));
     return ResponseEntity.ok(ApiResponse.success(AnswerMutationResponse.from(result)));
   }
 

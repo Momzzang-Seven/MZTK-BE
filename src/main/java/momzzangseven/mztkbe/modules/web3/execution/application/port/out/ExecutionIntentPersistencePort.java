@@ -19,6 +19,9 @@ public interface ExecutionIntentPersistencePort {
   Optional<ExecutionIntent> findLatestByResource(
       ExecutionResourceType resourceType, String resourceId);
 
+  List<ExecutionIntent> findByResource(
+      ExecutionResourceType resourceType, String resourceId, int limit);
+
   default Map<String, ExecutionIntent> findLatestByResources(
       ExecutionResourceType resourceType, Collection<String> resourceIds) {
     Map<String, ExecutionIntent> results = new LinkedHashMap<>();
@@ -39,7 +42,12 @@ public interface ExecutionIntentPersistencePort {
   Optional<ExecutionIntent> findLatestActiveByResource(
       ExecutionResourceType resourceType, String resourceId);
 
+  List<ExecutionIntent> findActiveByResource(ExecutionResourceType resourceType, String resourceId);
+
   Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
+      ExecutionResourceType resourceType, String resourceId);
+
+  List<ExecutionIntent> findActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId);
 
   boolean existsActiveByResourceAndActionTypeNotForUpdate(

@@ -14,15 +14,18 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunInternalExecutionBatchService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteInternalExecutionIntentDelegate;
-import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.InternalExecutionSignerPreflight;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -30,7 +33,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnInternalExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.execution.internal", name = "enabled", havingValue = "true")
 public class InternalExecutionServiceConfig {
 
   @Bean
@@ -55,6 +58,7 @@ public class InternalExecutionServiceConfig {
           LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
           List<ExecutionActionHandlerPort> executionActionHandlerPorts,
           PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
+          RunAfterCommitPort runAfterCommitPort,
           Clock appClock) {
     return new TransactionalExecuteInternalExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -64,21 +68,31 @@ public class InternalExecutionServiceConfig {
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
+        runAfterCommitPort,
         appClock);
+  }
+
+  @Bean
+  InternalExecutionSignerPreflight internalExecutionSignerPreflight(
+      LoadInternalExecutionSignerWalletPort loadInternalExecutionSignerWalletPort,
+      VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort) {
+    return new InternalExecutionSignerPreflight(
+        loadInternalExecutionSignerWalletPort, verifyTreasuryWalletForSignPort);
   }
 
   @Bean
   ExecuteInternalExecutionIntentUseCase executeInternalExecutionIntentUseCase(
       TransactionalExecuteInternalExecutionIntentDelegate delegate,
-      SponsorWalletPreflight sponsorWalletPreflight,
+      InternalExecutionSignerPreflight internalExecutionSignerPreflight,
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       PlatformTransactionManager transactionManager) {
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
     transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     ExecuteTransactionalInternalExecutionIntentDelegatePort txWrappedDelegate =
-        (command, gate) -> transactionTemplate.execute(status -> delegate.execute(command, gate));
+        (command, signerGates) ->
+            transactionTemplate.execute(status -> delegate.execute(command, signerGates));
     return new ExecuteInternalExecutionIntentService(
-        txWrappedDelegate, sponsorWalletPreflight, executionIntentPersistencePort);
+        txWrappedDelegate, internalExecutionSignerPreflight, executionIntentPersistencePort);
   }
 
   @Bean

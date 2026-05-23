@@ -5,7 +5,12 @@ import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationRe
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardType;
 
-/** Output port for loading board moderation statistics into the admin dashboard. */
+/**
+ * Output port for loading cumulative board moderation action statistics into the admin dashboard.
+ *
+ * <p>Implementations must load from the append-only {@code admin_board_moderation_actions} read
+ * model, not from current post/comment visibility or moderation state.
+ */
 public interface LoadAdminBoardStatsPort {
 
   AdminBoardStatsView load();

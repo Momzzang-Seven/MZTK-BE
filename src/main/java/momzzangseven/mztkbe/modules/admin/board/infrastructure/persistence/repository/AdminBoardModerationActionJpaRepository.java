@@ -11,6 +11,10 @@ import org.springframework.data.jpa.repository.Query;
 public interface AdminBoardModerationActionJpaRepository
     extends JpaRepository<AdminBoardModerationActionEntity, Long> {
 
+  /**
+   * Counts all append-only moderation action rows by reason code, including both POST and COMMENT
+   * targets.
+   */
   @Query(
       "SELECT a.reasonCode AS reasonCode, COUNT(a.id) AS actionCount "
           + "FROM AdminBoardModerationActionEntity a "

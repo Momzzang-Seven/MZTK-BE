@@ -277,6 +277,10 @@ public class SecurityConfig {
                         HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded")
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(
+                        HttpMethod.POST,
+                        "/admin/web3/wallet-registrations/replay-confirmed-approval")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
                         HttpMethod.GET,
                         "/admin/web3/qna/questions/{postId}/answers/{answerId}/settlement-review")
                     .hasAuthority("ROLE_ADMIN")
@@ -289,6 +293,22 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/admin/web3/qna/questions/{postId}/refund")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        "/admin/web3/marketplace/reservations/{reservationId}/refund-review")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/admin/web3/marketplace/reservations/{reservationId}/refund")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        "/admin/web3/marketplace/reservations/{reservationId}/settlement-review")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/admin/web3/marketplace/reservations/{reservationId}/settle")
+                    .hasAuthority("ROLE_ADMIN")
 
                     // --- Image Endpoints ---
                     .requestMatchers(HttpMethod.POST, "/images/presigned-urls")
@@ -299,6 +319,8 @@ public class SecurityConfig {
                     // --- Actuator Endpoints ---
                     .requestMatchers("/actuator/info")
                     .authenticated()
+                    .requestMatchers("/actuator/prometheus")
+                    .permitAll()
                     .requestMatchers("/actuator/**")
                     .hasAuthority("ROLE_ADMIN")
 
@@ -333,9 +355,16 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/marketplace/me/reservations/*")
                     .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/marketplace/reservations/*")
+                    .authenticated()
                     .requestMatchers(HttpMethod.PATCH, "/marketplace/me/reservations/*/complete")
                     .authenticated()
                     .requestMatchers(HttpMethod.PATCH, "/marketplace/me/reservations/*/cancel")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.PATCH, "/marketplace/me/reservations/*/deadline-refund")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/marketplace/me/reservations/*/web3/recover")
                     .authenticated()
 
                     // Reservation — trainer-only actions
@@ -347,6 +376,9 @@ public class SecurityConfig {
                         HttpMethod.PATCH, "/marketplace/trainer/reservations/*/approve")
                     .hasAuthority("ROLE_TRAINER")
                     .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/reservations/*/reject")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(
+                        HttpMethod.POST, "/marketplace/trainer/reservations/*/web3/recover")
                     .hasAuthority("ROLE_TRAINER")
 
                     // --- Internal Endpoints ---

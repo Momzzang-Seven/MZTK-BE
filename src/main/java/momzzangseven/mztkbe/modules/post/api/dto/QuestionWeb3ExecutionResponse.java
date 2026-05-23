@@ -1,13 +1,16 @@
 package momzzangseven.mztkbe.modules.post.api.dto;
 
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionResumeView;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionResumeView;
 
 public record QuestionWeb3ExecutionResponse(
     Resource resource,
     String actionType,
     ExecutionIntent executionIntent,
     Execution execution,
-    Transaction transaction) {
+    Transaction transaction,
+    String recoveryStatus,
+    String recoveryReason,
+    Boolean retryAllowed) {
 
   public static QuestionWeb3ExecutionResponse from(QuestionExecutionResumeView view) {
     if (view == null) {
@@ -19,17 +22,22 @@ public record QuestionWeb3ExecutionResponse(
         new ExecutionIntent(
             view.executionIntent().id(),
             view.executionIntent().status(),
-            view.executionIntent().expiresAt()),
+            view.executionIntent().expiresAt(),
+            view.executionIntent().expiresAtEpochSeconds()),
         new Execution(view.execution().mode(), view.execution().signCount()),
         view.transaction() == null
             ? null
             : new Transaction(
-                view.transaction().id(), view.transaction().status(), view.transaction().txHash()));
+                view.transaction().id(), view.transaction().status(), view.transaction().txHash()),
+        view.recoveryStatus(),
+        view.recoveryReason(),
+        view.retryAllowed());
   }
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, java.time.LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, java.time.LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 

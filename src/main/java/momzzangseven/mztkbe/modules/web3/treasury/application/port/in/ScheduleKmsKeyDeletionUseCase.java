@@ -6,6 +6,11 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ScheduleKmsKey
  * Calls {@code KmsKeyLifecyclePort.scheduleKeyDeletion} and records the outcome to {@code
  * web3_treasury_kms_audits}. Invoked by an AFTER_COMMIT event handler so the DB row's {@code
  * ARCHIVED} state has already been persisted before this runs.
+ *
+ * <p>No DB-row CAS gate: the command pins a specific {@code kmsKeyId} at issue time and {@code
+ * scheduleKeyDeletion} is KMS-side idempotent. {@code ARCHIVED} is a terminal DB state, so no
+ * reverse-order race can re-activate the row and there is no follow-up event to contradict this
+ * call's intent ("schedule that key for deletion").
  */
 public interface ScheduleKmsKeyDeletionUseCase {
 

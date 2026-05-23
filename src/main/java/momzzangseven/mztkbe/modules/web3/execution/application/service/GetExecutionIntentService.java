@@ -1,18 +1,30 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
-import java.time.ZoneOffset;
+import java.time.Clock;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentCleanupView;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentCandidateResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentCandidatesQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateQuery;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCandidatesUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCleanupViewUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentStateUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.utils.Numeric;
@@ -25,11 +37,17 @@ import org.web3j.utils.Numeric;
  * <p>The result includes execution mode, sign count, conditional sign request payload, and linked
  * transaction summary when available.
  */
-public class GetExecutionIntentService implements GetExecutionIntentUseCase {
+public class GetExecutionIntentService
+    implements GetExecutionIntentUseCase,
+        GetExecutionIntentStateUseCase,
+        GetExecutionIntentCleanupViewUseCase,
+        GetExecutionIntentCandidatesUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
+  private final LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort;
+  private final Clock appClock;
 
   /** Loads an execution intent visible to the requester and maps it to read DTO contract. */
   @Override
@@ -52,20 +70,115 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
             : loadExecutionTransactionPort.findById(intent.getSubmittedTxId());
     ExecutionIntentViewMapper.ExecutionTransactionView transactionView =
         ExecutionIntentViewMapper.toTransactionView(transaction);
+    SignRequestUnavailableReason signRequestUnavailableReason =
+        signRequestUnavailableReason(intent);
 
     return new GetExecutionIntentResult(
         intent.getResourceType(),
         intent.getResourceId(),
         ExecutionIntentViewMapper.toResourceStatus(intent.getStatus()),
+        intent.getActionType(),
+        intent.getPayloadHash(),
+        intent.getPayloadSnapshotJson(),
         intent.getPublicId(),
         intent.getStatus(),
         intent.getExpiresAt(),
+        ExecutionDeadlineEpoch.toEpochSecondsLong(intent.getExpiresAt(), appClock),
         intent.getMode(),
         intent.getMode().requiredSignCount(),
-        intent.shouldExposeSignRequest() ? buildSignRequest(intent) : null,
+        signRequestUnavailableReason == null && intent.shouldExposeSignRequest()
+            ? buildSignRequest(intent)
+            : null,
+        signRequestUnavailableReason,
         transactionView.transactionId(),
         transactionView.transactionStatus(),
         transactionView.txHash());
+  }
+
+  /**
+   * Loads minimal execution state without requester ownership checks.
+   *
+   * <p>This method is intentionally state-only: it does not expose sign requests or transaction
+   * material, and is used by feature recovery guards before deciding whether a stale local pointer
+   * may be replaced.
+   */
+  @Override
+  public GetExecutionIntentStateResult execute(GetExecutionIntentStateQuery query) {
+    ExecutionIntent intent =
+        executionIntentPersistencePort
+            .findByPublicId(query.executionIntentId())
+            .orElseThrow(
+                () ->
+                    new Web3InvalidInputException(
+                        "executionIntentId not found: " + query.executionIntentId()));
+    Optional<ExecutionTransactionSummary> transaction =
+        intent.getSubmittedTxId() == null
+            ? Optional.empty()
+            : loadExecutionTransactionPort.findById(intent.getSubmittedTxId());
+    ExecutionIntentViewMapper.ExecutionTransactionView transactionView =
+        ExecutionIntentViewMapper.toTransactionView(transaction);
+    return new GetExecutionIntentStateResult(
+        intent.getPublicId(),
+        intent.getStatus(),
+        intent.getActionType(),
+        intent.getRequesterUserId(),
+        transactionView.transactionId(),
+        transactionView.transactionStatus(),
+        transactionView.txHash());
+  }
+
+  @Override
+  public List<GetExecutionIntentCandidateResult> execute(GetExecutionIntentCandidatesQuery query) {
+    if (query == null || query.resourceType() == null || query.resourceId() == null) {
+      return List.of();
+    }
+    return executionIntentPersistencePort
+        .findByResource(
+            ExecutionResourceType.valueOf(query.resourceType().name()),
+            query.resourceId(),
+            query.limit())
+        .stream()
+        .map(this::toCandidate)
+        .toList();
+  }
+
+  @Override
+  public List<ExecutionIntentCleanupView> getCleanupViewsByIds(List<Long> intentIds) {
+    if (intentIds == null || intentIds.isEmpty()) {
+      return List.of();
+    }
+    return executionIntentPersistencePort.findAllByIdsForUpdate(intentIds).stream()
+        .map(
+            intent ->
+                new ExecutionIntentCleanupView(
+                    intent.getId(),
+                    intent.getPublicId(),
+                    intent.getResourceType(),
+                    intent.getResourceId(),
+                    intent.getActionType(),
+                    intent.getRequesterUserId(),
+                    intent.getPayloadSnapshotJson()))
+        .toList();
+  }
+
+  private GetExecutionIntentCandidateResult toCandidate(ExecutionIntent intent) {
+    Optional<ExecutionTransactionSummary> transaction =
+        intent.getSubmittedTxId() == null
+            ? Optional.empty()
+            : loadExecutionTransactionPort.findById(intent.getSubmittedTxId());
+    ExecutionIntentViewMapper.ExecutionTransactionView transactionView =
+        ExecutionIntentViewMapper.toTransactionView(transaction);
+    return new GetExecutionIntentCandidateResult(
+        intent.getPublicId(),
+        intent.getStatus(),
+        intent.getResourceType(),
+        intent.getResourceId(),
+        intent.getActionType(),
+        intent.getRequesterUserId(),
+        transactionView.transactionId(),
+        transactionView.transactionStatus(),
+        transactionView.txHash(),
+        intent.getPayloadSnapshotJson());
   }
 
   private SignRequestBundle buildSignRequest(ExecutionIntent intent) {
@@ -77,7 +190,8 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
               intent.getAuthorityNonce(),
               intent.getAuthorizationPayloadHash()),
           new SignRequestBundle.SubmitSignRequest(
-              intent.getExecutionDigest(), intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC)));
+              intent.getExecutionDigest(),
+              ExecutionDeadlineEpoch.toEpochSecondsLong(intent.getExpiresAt(), appClock)));
     }
 
     if (intent.getUnsignedTxSnapshot() == null) {
@@ -96,5 +210,12 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
             Numeric.encodeQuantity(intent.getUnsignedTxSnapshot().maxPriorityFeePerGas()),
             Numeric.encodeQuantity(intent.getUnsignedTxSnapshot().maxFeePerGas()),
             intent.getUnsignedTxSnapshot().expectedNonce()));
+  }
+
+  private SignRequestUnavailableReason signRequestUnavailableReason(ExecutionIntent intent) {
+    return ExecutionSignRequestAvailability.unavailableReason(
+        intent,
+        java.time.LocalDateTime.now(appClock),
+        loadEip7702AuthorizationTtlPort.loadMinimumRemainingSeconds());
   }
 }

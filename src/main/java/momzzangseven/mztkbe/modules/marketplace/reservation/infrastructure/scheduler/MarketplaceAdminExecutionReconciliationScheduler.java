@@ -1,0 +1,71 @@
+package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.scheduler;
+
+import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.config.ConditionalOnMarketplaceAdminEnabled;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+/** Replays missed confirmed/terminal marketplace admin execution hooks. */
+@Slf4j
+@Component
+@ConditionalOnMarketplaceAdminEnabled
+@ConditionalOnProperty(
+    prefix = "web3.marketplace.admin.reconciliation",
+    name = "enabled",
+    havingValue = "true",
+    matchIfMissing = true)
+public class MarketplaceAdminExecutionReconciliationScheduler {
+
+  private final ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase reconcileUseCase;
+  private final int batchSize;
+  private final int maxBatchesPerRun;
+
+  public MarketplaceAdminExecutionReconciliationScheduler(
+      ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase reconcileUseCase,
+      @Value("${web3.marketplace.admin.reconciliation.batch-size:100}") int batchSize,
+      @Value("${web3.marketplace.admin.reconciliation.max-batches-per-run:20}")
+          int maxBatchesPerRun) {
+    this.reconcileUseCase = reconcileUseCase;
+    this.batchSize = batchSize;
+    this.maxBatchesPerRun = Math.max(1, maxBatchesPerRun);
+  }
+
+  @Scheduled(
+      cron = "${web3.marketplace.admin.reconciliation.cron:0 */5 * * * *}",
+      zone = "${web3.marketplace.admin.reconciliation.zone:Asia/Seoul}")
+  public void run() {
+    try {
+      int scannedTotal = 0;
+      int replayedTotal = 0;
+      int skippedTotal = 0;
+      int failedTotal = 0;
+      for (int batchNo = 0; batchNo < maxBatchesPerRun; batchNo++) {
+        ReconcileMarketplaceAdminTerminalExecutionAttemptResult result =
+            reconcileUseCase.execute(
+                new ReconcileMarketplaceAdminTerminalExecutionAttemptCommand(batchSize));
+        scannedTotal += result.scanned();
+        replayedTotal += result.replayed();
+        skippedTotal += result.skipped();
+        failedTotal += result.failed();
+        if (result.scanned() < batchSize) {
+          break;
+        }
+      }
+      if (scannedTotal > 0 || replayedTotal > 0 || skippedTotal > 0 || failedTotal > 0) {
+        log.info(
+            "marketplace admin execution hook reconciliation completed: scanned={}, replayed={}, skipped={}, failed={}",
+            scannedTotal,
+            replayedTotal,
+            skippedTotal,
+            failedTotal);
+      }
+    } catch (RuntimeException e) {
+      log.error("marketplace admin execution reconciliation scheduler failed", e);
+    }
+  }
+}

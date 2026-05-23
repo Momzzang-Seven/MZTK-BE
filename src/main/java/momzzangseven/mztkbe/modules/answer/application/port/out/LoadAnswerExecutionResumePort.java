@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionResumeView;
 
 /** Loads the latest answer execution resume summary when Web3 QnA wiring is enabled. */
 public interface LoadAnswerExecutionResumePort {

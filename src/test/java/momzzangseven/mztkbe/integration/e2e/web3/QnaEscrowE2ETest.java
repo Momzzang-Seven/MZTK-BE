@@ -5,15 +5,19 @@ import static org.mockito.ArgumentMatchers.any;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
@@ -41,6 +45,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.web3j.utils.Numeric;
 
 /**
  * QnA Escrow 전체 흐름 E2E 테스트 (Local Server + Real PostgreSQL).
@@ -82,6 +87,21 @@ class QnaEscrowE2ETest extends E2ETestBase {
 
   private static final String FAKE_DELEGATE_TARGET = "0x0000000000000000000000000000000000000001";
   private static final String FAKE_CALL_TARGET = "0x0000000000000000000000000000000000000002";
+  private static final String FAKE_AUTHORITY_ADDRESS = "0x" + "f".repeat(40);
+  private static final String FAKE_REWARD_TOKEN_ADDRESS =
+      "0x0000000000000000000000000000000000000000";
+  private static final String FAKE_CALLDATA = "0x1234abcd";
+  private static final String FAKE_SIGNATURE_HEX = "0x" + "00".repeat(65);
+  private static final int FAKE_REWARD_TOKEN_DECIMALS = 18;
+
+  /**
+   * Deterministic stub for the server-sig {@code signedAt} epoch second. Combined with the
+   * application's {@code web3.escrow.sig-validity-duration} (default 900) the expected
+   * client-facing {@code signatureMeta.signatureExpiresAt} is {@link #STUB_SIGNATURE_EXPIRES_AT}.
+   */
+  private static final long STUB_SIGNED_AT = 1_700_000_000L;
+
+  private static final long STUB_SIGNATURE_EXPIRES_AT = STUB_SIGNED_AT + 900L;
 
   @Autowired private JdbcTemplate jdbcTemplate;
 
@@ -119,6 +139,38 @@ class QnaEscrowE2ETest extends E2ETestBase {
                           req.questionUpdateToken())
                       : QnaEscrowIdempotencyKeyFactory.create(
                           req.actionType(), req.requesterUserId(), req.postId(), req.answerId());
+              // Production-realistic payload snapshot — required so that
+              // QuestionEscrowExecutionService#matchesQuestionCreatePayload can re-encode the
+              // 7-arg baseline from the stored payload and pass the AWAITING_SIGNATURE recover
+              // happy-path check (Order=29). The fields here mirror QnaExecutionDraftBuilderAdapter
+              // production output for the request inputs.
+              QnaEscrowExecutionPayload payloadSnapshot =
+                  new QnaEscrowExecutionPayload(
+                      req.actionType(),
+                      req.postId(),
+                      req.answerId(),
+                      FAKE_AUTHORITY_ADDRESS,
+                      req.tokenAddress(),
+                      amountForAction(req.actionType(), req.rewardAmountWei()),
+                      req.questionHash(),
+                      req.contentHash(),
+                      FAKE_CALL_TARGET,
+                      FAKE_CALLDATA,
+                      req.questionUpdateVersion(),
+                      req.questionUpdateToken(),
+                      req.answerUpdateVersion(),
+                      req.answerUpdateToken(),
+                      STUB_SIGNED_AT,
+                      FAKE_SIGNATURE_HEX);
+              String payloadJson = objectMapper.writeValueAsString(payloadSnapshot);
+              // §MOM-393 — production hashes payload.idempotencyView() (server-sig-independent),
+              // not the full payload. Mock must match so QuestionLifecycleExecutionAdapter#
+              // matchesPayloadHash accepts the stored snapshot during recover-create reload.
+              String viewJson = objectMapper.writeValueAsString(payloadSnapshot.idempotencyView());
+              String payloadHashHex =
+                  Numeric.toHexString(
+                      MessageDigest.getInstance("SHA-256")
+                          .digest(viewJson.getBytes(StandardCharsets.UTF_8)));
               return new QnaExecutionDraft(
                   req.resourceType(),
                   req.resourceId(),
@@ -127,21 +179,31 @@ class QnaEscrowE2ETest extends E2ETestBase {
                   req.requesterUserId(),
                   req.counterpartyUserId(),
                   rootIdempotencyKey,
-                  "0x" + "a".repeat(64),
-                  "{}",
+                  payloadHashHex,
+                  payloadJson,
                   List.of(
-                      new QnaExecutionDraftCall(FAKE_CALL_TARGET, BigInteger.ZERO, "0x1234abcd")),
+                      new QnaExecutionDraftCall(FAKE_CALL_TARGET, BigInteger.ZERO, FAKE_CALLDATA)),
                   true,
-                  "0x" + "f".repeat(40),
+                  FAKE_AUTHORITY_ADDRESS,
                   0L,
                   FAKE_DELEGATE_TARGET,
                   "0x" + "b".repeat(64),
                   null,
                   "0x" + "c".repeat(64),
+                  STUB_SIGNED_AT,
                   LocalDateTime.now().plusMinutes(30));
             });
 
     BDDMockito.doNothing().when(precheckQuestionFundingPort).precheck(any());
+  }
+
+  /** Mirrors {@code QnaExecutionDraftBuilderAdapter#amountForAction} for mock payload realism. */
+  private static BigInteger amountForAction(
+      QnaExecutionActionType actionType, BigInteger rewardAmountWei) {
+    return switch (actionType) {
+      case QNA_QUESTION_CREATE, QNA_QUESTION_DELETE, QNA_ANSWER_ACCEPT -> rewardAmountWei;
+      default -> BigInteger.ZERO;
+    };
   }
 
   @Test
@@ -156,6 +218,12 @@ class QnaEscrowE2ETest extends E2ETestBase {
 
     createdPostId = body.path("data").path("postId").asLong();
     assertThat(createdPostId).isPositive();
+
+    JsonNode createWeb3 = body.path("data").path("web3");
+    assertThat(createWeb3.path("signatureMeta").path("signedAt").asLong())
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(createWeb3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
 
     String intentStatus =
         jdbcTemplate.queryForObject(
@@ -271,6 +339,12 @@ class QnaEscrowE2ETest extends E2ETestBase {
                 bearerJsonHeaders(answerOwner.accessToken())),
             String.class);
     assertThat(createAnswerResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    JsonNode answerCreateWeb3 =
+        objectMapper.readTree(createAnswerResponse.getBody()).path("data").path("web3");
+    assertThat(answerCreateWeb3.path("signatureMeta").path("signedAt").asLong())
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(answerCreateWeb3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
 
     ResponseEntity<String> ownerReadResponse =
         restTemplate.exchange(
@@ -294,9 +368,9 @@ class QnaEscrowE2ETest extends E2ETestBase {
             String.class);
 
     assertThat(nonOwnerReadResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-    JsonNode nonOwnerAnswer =
-        objectMapper.readTree(nonOwnerReadResponse.getBody()).path("data").get(0);
-    assertThat(nonOwnerAnswer.path("web3Execution").isNull()).isTrue();
+    JsonNode nonOwnerAnswers = objectMapper.readTree(nonOwnerReadResponse.getBody()).path("data");
+    assertThat(nonOwnerAnswers.isArray()).isTrue();
+    assertThat(nonOwnerAnswers.size()).isZero();
   }
 
   @Test
@@ -368,6 +442,10 @@ class QnaEscrowE2ETest extends E2ETestBase {
         data.path("web3").path("executionIntent").path("id").asText();
     assertThat(data.path("web3").path("executionIntent").path("status").asText())
         .isEqualTo("AWAITING_SIGNATURE");
+    assertThat(data.path("web3").path("signatureMeta").path("signedAt").asLong())
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(data.path("web3").path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
     assertThat(getPostContent(postId)).isEqualTo("복구 후 본문");
     assertThat(getPostPublicationStatus(postId)).isEqualTo("PENDING");
     assertThat(getPostCurrentCreateExecutionIntentId(postId)).isEqualTo(recoveredExecutionIntentId);
@@ -375,6 +453,43 @@ class QnaEscrowE2ETest extends E2ETestBase {
     assertThat(getPostPublicationFailureReason(postId)).isNull();
     assertThat(getLatestQuestionCreateIntentStatus(postId)).isEqualTo("AWAITING_SIGNATURE");
     assertThat(countQuestionCreateIntents(postId)).isEqualTo(2);
+  }
+
+  /**
+   * §MOM-393 회귀 가드 — AWAITING_SIGNATURE intent 가 그대로 살아있는 상태에서 mutation 없이 recover-create 를 호출하는
+   * 시나리오 ({@code RecoverQuestionPostEscrowService#tryManagedDuplicateRecovery} 의 happy path). 이 분기가
+   * {@link
+   * momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort#loadQuestionCreateIntent}
+   * 의 callData 비교 로직을 실제로 trigger 하는 유일한 production 경로이며, MOM-393 의 broadcast/baseline 책임 분리 버그는
+   * 정확히 이 경로에서 5xx 로 노출된다.
+   */
+  @Test
+  @Order(29)
+  @DisplayName(
+      "POST /posts/{postId}/web3/recover-create — AWAITING_SIGNATURE intent 가 살아있고 mutation 없으면 동일 intent reload")
+  void recoverFailedQuestion_withAwaitingSignatureIntent_reloadsSameIntent() throws Exception {
+    Long postId = createQuestionPostId("새로고침 재요청 질문", "새로고침 재요청 본문", 35L);
+    String originalIntentId = getPostCurrentCreateExecutionIntentId(postId);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId + "/web3/recover-create",
+            HttpMethod.POST,
+            new HttpEntity<>(Map.of(), bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(response.getBody()).path("data");
+    assertThat(data.path("postId").asLong()).isEqualTo(postId);
+    assertThat(data.path("web3").path("actionType").asText()).isEqualTo("QNA_QUESTION_CREATE");
+    assertThat(data.path("web3").path("executionIntent").path("id").asText())
+        .isEqualTo(originalIntentId);
+    assertThat(data.path("web3").path("executionIntent").path("status").asText())
+        .isEqualTo("AWAITING_SIGNATURE");
+    assertThat(data.path("web3").path("signatureMeta").path("signedAt").asLong())
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(getPostPublicationStatus(postId)).isEqualTo("PENDING");
+    assertThat(countQuestionCreateIntents(postId)).isEqualTo(1);
   }
 
   @Test
@@ -554,6 +669,447 @@ class QnaEscrowE2ETest extends E2ETestBase {
     assertThat(getLatestQuestionUpdateRoot(postId)).contains(":v2:");
   }
 
+  @Test
+  @Order(28)
+  @DisplayName(
+      "[E-601] PUT /questions/{postId}/answers/{answerId} — content 없는 image-only 수정은 web3 가 null (signatureMeta 도 자연히 부재)")
+  void updateAnswer_imageOnly_responseHasNullWeb3AndOmitsSignatureMeta() throws Exception {
+    TestUser questionOwner = signupAndLogin("e-601-q-owner");
+    TestUser answerOwner = signupAndLogin("e-601-a-owner");
+    Long postId = insertOnchainReadyQuestion(questionOwner.userId(), "E-601 질문", "E-601 본문", 25L);
+    Long answerId = insertOnchainReadyAnswer(postId, answerOwner.userId(), "E-601 답변");
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers/" + answerId,
+            HttpMethod.PUT,
+            new HttpEntity<>(
+                Map.of("imageIds", List.of()), bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(response.getBody()).path("data");
+    JsonNode web3 = data.path("web3");
+    assertThat(web3.isNull() || web3.isMissingNode()).isTrue();
+    assertThat(countAnswerUpdateIntents(answerId)).isZero();
+  }
+
+  @Test
+  @Order(26)
+  @DisplayName(
+      "[E-501] 7 액션 응답의 (signatureExpiresAt - signedAt) 는 일관되게 sigValidityDuration (기본 900) 과 일치한다")
+  void allServerSigActions_signatureExpiresAtMinusSignedAt_equalsSigValidityDuration()
+      throws Exception {
+    long expectedDuration = STUB_SIGNATURE_EXPIRES_AT - STUB_SIGNED_AT;
+    assertThat(expectedDuration).isEqualTo(900L);
+
+    TestUser questionOwner = signupAndLogin("e-501-q-owner");
+    TestUser answerOwner = signupAndLogin("e-501-a-owner");
+
+    ResponseEntity<String> createQuestionResponse =
+        restTemplate.exchange(
+            baseUrl() + "/posts/question",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of(
+                    "title", "E-501 질문", "content", "E-501 본문", "reward", 30L, "tags", List.of()),
+                bearerJsonHeaders(questionOwner.accessToken())),
+            String.class);
+    assertThat(createQuestionResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    assertSignatureMetaDuration(
+        objectMapper.readTree(createQuestionResponse.getBody()).path("data").path("web3"),
+        expectedDuration);
+
+    Long onchainPostId =
+        insertOnchainReadyQuestion(questionOwner.userId(), "E-501 update 질문", "원본", 40L);
+    ResponseEntity<String> updateQuestionResponse =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + onchainPostId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(
+                Map.of("content", "E-501 update 본문"),
+                bearerJsonHeaders(questionOwner.accessToken())),
+            String.class);
+    assertThat(updateQuestionResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertSignatureMetaDuration(
+        objectMapper.readTree(updateQuestionResponse.getBody()).path("data").path("web3"),
+        expectedDuration);
+
+    Long answerId = insertOnchainReadyAnswer(onchainPostId, answerOwner.userId(), "E-501 답변");
+    markQuestionStateAnswered(onchainPostId);
+    expireQuestionUpdateIntent(onchainPostId);
+    syncQuestionProjectionHash(onchainPostId, "E-501 update 본문");
+    ResponseEntity<String> acceptResponse =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + onchainPostId + "/answers/" + answerId + "/accept",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(questionOwner.accessToken())),
+            String.class);
+    assertThat(acceptResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertSignatureMetaDuration(
+        objectMapper.readTree(acceptResponse.getBody()).path("data").path("web3"),
+        expectedDuration);
+  }
+
+  @Test
+  @Order(27)
+  @DisplayName(
+      "[E-701] BuildQnaExecutionDraftPort 가 RuntimeException 던지면 question intent 행이 남지 않는다")
+  void buildExecutionDraftPort_throws_questionTransactionRollsBack() throws Exception {
+    BDDMockito.willThrow(new IllegalStateException("E-701 simulated KMS failure"))
+        .given(buildQnaExecutionDraftPort)
+        .build(any());
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/question",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of(
+                    "title", "E-701 질문", "content", "E-701 본문", "reward", 30L, "tags", List.of()),
+                bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode().is5xxServerError()).isTrue();
+
+    Integer postsCount =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM posts WHERE user_id = ? AND title = ?",
+            Integer.class,
+            currentUserId,
+            "E-701 질문");
+    assertThat(postsCount).isZero();
+
+    Integer intentsCount =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_execution_intents "
+                + "WHERE resource_type = 'QUESTION' AND action_type = 'QNA_QUESTION_CREATE'",
+            Integer.class);
+    assertThat(intentsCount).isZero();
+  }
+
+  @Test
+  @Order(23)
+  @DisplayName(
+      "[E-401] GET /users/me/web3/execution-intents/{id} — 응답에 signatureMeta 키가 없다 (DTO 계약)")
+  void getExecutionIntent_responseOmitsSignatureMeta() throws Exception {
+    ResponseEntity<String> createResponse = createQuestionPost("E-401 질문", "E-401 본문", 30L);
+    assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    Long postId =
+        objectMapper.readTree(createResponse.getBody()).path("data").path("postId").asLong();
+    String intentPublicId =
+        jdbcTemplate.queryForObject(
+            "SELECT public_id FROM web3_execution_intents WHERE resource_id = ?",
+            String.class,
+            postId.toString());
+
+    ResponseEntity<String> getResponse =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/web3/execution-intents/" + intentPublicId,
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(getResponse.getBody()).path("data");
+    assertThat(data.path("resource").isMissingNode()).isFalse();
+    assertThat(data.path("executionIntent").isMissingNode()).isFalse();
+    assertThat(data.path("execution").isMissingNode()).isFalse();
+    assertThat(data.path("signatureMeta").isMissingNode()).isTrue();
+  }
+
+  @Test
+  @Order(24)
+  @DisplayName(
+      "[E-402] GET /posts/{postId} — 작성자 view 의 question.web3Execution summary 에 signatureMeta 키가 없다")
+  void getQuestionDetail_ownerView_questionWeb3ExecutionOmitsSignatureMeta() throws Exception {
+    Long postId = createQuestionPostId("E-402 질문", "E-402 본문", 30L);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(response.getBody()).path("data");
+    assertThat(data.path("question").path("web3Execution").path("actionType").asText())
+        .isEqualTo("QNA_QUESTION_CREATE");
+    assertThat(data.path("question").path("web3Execution").path("signatureMeta").isMissingNode())
+        .isTrue();
+  }
+
+  @Test
+  @Order(25)
+  @DisplayName(
+      "[E-403] GET /questions/{postId}/answers — 작성자 view 의 answer.web3Execution summary 에 signatureMeta 키가 없다")
+  void getAnswers_ownerView_answerWeb3ExecutionOmitsSignatureMeta() throws Exception {
+    TestUser questionOwner = signupAndLogin("e-403-q-owner");
+    TestUser answerOwner = signupAndLogin("e-403-a-owner");
+    Long postId = insertOnchainReadyQuestion(questionOwner.userId(), "E-403 질문", "E-403 본문", 30L);
+
+    ResponseEntity<String> createAnswerResponse =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("content", "E-403 답변 본문", "imageIds", List.of()),
+                bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+    assertThat(createAnswerResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+    ResponseEntity<String> readResponse =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+
+    assertThat(readResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode answers = objectMapper.readTree(readResponse.getBody()).path("data");
+    assertThat(answers.isArray()).isTrue();
+    assertThat(answers.size()).isPositive();
+    JsonNode firstAnswer = answers.get(0);
+    assertThat(firstAnswer.path("web3Execution").path("actionType").asText())
+        .isEqualTo("QNA_ANSWER_SUBMIT");
+    assertThat(firstAnswer.path("web3Execution").path("signatureMeta").isMissingNode()).isTrue();
+  }
+
+  @Test
+  @Order(20)
+  @DisplayName(
+      "[E-201] PUT /questions/{postId}/answers/{answerId} — VISIBLE 답변 수정 응답에 signatureMeta 가 노출된다")
+  void updateOnchainReadyAnswer_responseExposesAnswerUpdateSignatureMeta() throws Exception {
+    TestUser questionOwner = signupAndLogin("e-201-q-owner");
+    TestUser answerOwner = signupAndLogin("e-201-a-owner");
+    Long postId = insertOnchainReadyQuestion(questionOwner.userId(), "E-201 질문", "E-201 본문", 30L);
+    Long answerId = insertOnchainReadyAnswer(postId, answerOwner.userId(), "E-201 원본 답변");
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers/" + answerId,
+            HttpMethod.PUT,
+            new HttpEntity<>(
+                Map.of("content", "E-201 수정된 답변", "imageIds", List.of()),
+                bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode body = objectMapper.readTree(response.getBody());
+    assertThat(body.path("status").asText()).isEqualTo("SUCCESS");
+
+    JsonNode web3 = body.path("data").path("web3");
+    assertThat(web3.path("actionType").asText()).isEqualTo("QNA_ANSWER_UPDATE");
+    assertThat(web3.path("signatureMeta").path("signedAt").asLong()).isEqualTo(STUB_SIGNED_AT);
+    assertThat(web3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+
+    assertThat(countAnswerUpdateIntents(answerId)).isEqualTo(1);
+  }
+
+  @Test
+  @Order(21)
+  @DisplayName(
+      "[E-202] DELETE /questions/{postId}/answers/{answerId} — VISIBLE 답변 삭제 응답에 signatureMeta 가 노출된다")
+  void deleteOnchainReadyAnswer_responseExposesAnswerDeleteSignatureMeta() throws Exception {
+    TestUser questionOwner = signupAndLogin("e-202-q-owner");
+    TestUser answerOwner = signupAndLogin("e-202-a-owner");
+    Long postId = insertOnchainReadyQuestion(questionOwner.userId(), "E-202 질문", "E-202 본문", 25L);
+    Long answerId = insertOnchainReadyAnswer(postId, answerOwner.userId(), "E-202 답변 본문");
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers/" + answerId,
+            HttpMethod.DELETE,
+            new HttpEntity<>(bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode body = objectMapper.readTree(response.getBody());
+    assertThat(body.path("status").asText()).isEqualTo("SUCCESS");
+
+    JsonNode web3 = body.path("data").path("web3");
+    assertThat(web3.path("actionType").asText()).isEqualTo("QNA_ANSWER_DELETE");
+    assertThat(web3.path("signatureMeta").path("signedAt").asLong()).isEqualTo(STUB_SIGNED_AT);
+    assertThat(web3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+
+    assertThat(countAnswerDeleteIntents(answerId)).isEqualTo(1);
+  }
+
+  @Test
+  @Order(22)
+  @DisplayName(
+      "[E-203] POST /posts/{postId}/answers/{answerId}/accept — ACCEPT 응답에 signatureMeta 가 노출된다")
+  void acceptOnchainReadyAnswer_responseExposesAnswerAcceptSignatureMeta() throws Exception {
+    TestUser questionOwner = signupAndLogin("e-203-q-owner");
+    TestUser answerOwner = signupAndLogin("e-203-a-owner");
+    Long postId = insertOnchainReadyQuestion(questionOwner.userId(), "E-203 질문", "E-203 본문", 40L);
+    Long answerId = insertOnchainReadyAnswer(postId, answerOwner.userId(), "E-203 답변 본문");
+    markQuestionStateAnswered(postId);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId + "/answers/" + answerId + "/accept",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(questionOwner.accessToken())),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode body = objectMapper.readTree(response.getBody());
+    assertThat(body.path("status").asText()).isEqualTo("SUCCESS");
+
+    JsonNode data = body.path("data");
+    assertThat(data.path("acceptedAnswerId").asLong()).isEqualTo(answerId);
+    JsonNode web3 = data.path("web3");
+    assertThat(web3.path("actionType").asText()).isEqualTo("QNA_ANSWER_ACCEPT");
+    assertThat(web3.path("signatureMeta").path("signedAt").asLong()).isEqualTo(STUB_SIGNED_AT);
+    assertThat(web3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+
+    assertThat(countAnswerAcceptIntents(postId, answerId)).isEqualTo(1);
+  }
+
+  @Test
+  @Order(17)
+  @DisplayName("[E-101] PATCH /posts/{postId} — VISIBLE 질문 수정 응답에 signatureMeta 가 노출된다")
+  void updateOnchainReadyQuestion_responseExposesSignatureMeta() throws Exception {
+    Long postId = insertOnchainReadyQuestion(currentUserId, "E-101 질문", "E-101 원본 본문", 35L);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(Map.of("content", "E-101 수정 본문"), bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode body = objectMapper.readTree(response.getBody());
+    assertThat(body.path("status").asText()).isEqualTo("SUCCESS");
+
+    JsonNode web3 = body.path("data").path("web3");
+    assertThat(web3.path("actionType").asText()).isEqualTo("QNA_QUESTION_UPDATE");
+    assertThat(web3.path("signatureMeta").path("signedAt").asLong()).isEqualTo(STUB_SIGNED_AT);
+    assertThat(web3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+
+    assertThat(getPostContent(postId)).isEqualTo("E-101 수정 본문");
+    assertThat(countQuestionUpdateIntents(postId)).isEqualTo(1);
+  }
+
+  @Test
+  @Order(18)
+  @DisplayName(
+      "[E-102] DELETE /posts/{postId} — VISIBLE 질문 삭제 응답에 QNA_QUESTION_DELETE signatureMeta 가 노출된다")
+  void deleteOnchainReadyQuestion_responseExposesQuestionDeleteSignatureMeta() throws Exception {
+    Long postId = insertOnchainReadyQuestion(currentUserId, "E-102 질문", "E-102 원본 본문", 25L);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.DELETE,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode body = objectMapper.readTree(response.getBody());
+    assertThat(body.path("status").asText()).isEqualTo("SUCCESS");
+
+    JsonNode web3 = body.path("data").path("web3");
+    assertThat(web3.path("actionType").asText()).isEqualTo("QNA_QUESTION_DELETE");
+    assertThat(web3.path("signatureMeta").path("signedAt").asLong()).isEqualTo(STUB_SIGNED_AT);
+    assertThat(web3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+
+    assertThat(countQuestionDeleteIntents(postId)).isEqualTo(1);
+    assertThat(postExists(postId)).isTrue();
+  }
+
+  @Test
+  @Order(19)
+  @DisplayName("[E-104] PATCH 두 번 — 두 UPDATE 응답 모두 signatureMeta 를 노출한다")
+  void updateOnchainReadyQuestionTwice_bothResponsesExposeSignatureMeta() throws Exception {
+    Long postId = insertOnchainReadyQuestion(currentUserId, "E-104 질문", "E-104 원본 본문", 45L);
+
+    ResponseEntity<String> firstResponse =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(Map.of("content", "E-104 첫 번째 수정 본문"), bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode firstWeb3 = objectMapper.readTree(firstResponse.getBody()).path("data").path("web3");
+    assertThat(firstWeb3.path("actionType").asText()).isEqualTo("QNA_QUESTION_UPDATE");
+    assertThat(firstWeb3.path("signatureMeta").path("signedAt").asLong()).isEqualTo(STUB_SIGNED_AT);
+    assertThat(firstWeb3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+
+    ResponseEntity<String> secondResponse =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(Map.of("content", "E-104 두 번째 수정 본문"), bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode secondWeb3 = objectMapper.readTree(secondResponse.getBody()).path("data").path("web3");
+    assertThat(secondWeb3.path("actionType").asText()).isEqualTo("QNA_QUESTION_UPDATE");
+    assertThat(secondWeb3.path("signatureMeta").path("signedAt").asLong())
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(secondWeb3.path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+
+    assertThat(getPostContent(postId)).isEqualTo("E-104 두 번째 수정 본문");
+    assertThat(countQuestionUpdateIntents(postId)).isEqualTo(2);
+  }
+
+  @Test
+  @Order(16)
+  @DisplayName(
+      "POST /questions/{postId}/answers/{answerId}/web3/recover-create — 응답 web3.signatureMeta 가 노출된다")
+  void recoverFailedAnswer_responseExposesSignatureMeta() throws Exception {
+    TestUser questionOwner = signupAndLogin("answer-recover-q-owner");
+    TestUser answerOwner = signupAndLogin("answer-recover-a-owner");
+    Long postId =
+        insertOnchainReadyQuestion(
+            questionOwner.userId(), "answer recover 질문", "answer recover 본문", 30L);
+
+    ResponseEntity<String> createAnswerResponse =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("content", "answer recover 답변 본문", "imageIds", List.of()),
+                bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+    assertThat(createAnswerResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    Long answerId =
+        objectMapper
+            .readTree(createAnswerResponse.getBody())
+            .path("data")
+            .path("answerId")
+            .asLong();
+
+    markAnswerPublicationStatus(answerId, "FAILED");
+    expireAnswerCreateIntent(answerId);
+
+    ResponseEntity<String> recoverResponse =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/web3/recover-create",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+
+    assertThat(recoverResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode recoverData = objectMapper.readTree(recoverResponse.getBody()).path("data");
+    assertThat(recoverData.path("answerId").asLong()).isEqualTo(answerId);
+    assertThat(recoverData.path("web3").path("actionType").asText()).isEqualTo("QNA_ANSWER_SUBMIT");
+    assertThat(recoverData.path("web3").path("signatureMeta").path("signedAt").asLong())
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(recoverData.path("web3").path("signatureMeta").path("signatureExpiresAt").asLong())
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+  }
+
   private Long createQuestionPostId(String title, String content, Long reward) throws Exception {
     ResponseEntity<String> response = createQuestionPost(title, content, reward);
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -567,6 +1123,27 @@ class QnaEscrowE2ETest extends E2ETestBase {
         postId);
   }
 
+  private void markAnswerPublicationStatus(Long answerId, String publicationStatus) {
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE answers SET publication_status = ?, updated_at = NOW() WHERE id = ?",
+            publicationStatus,
+            answerId);
+    assertThat(updated).isEqualTo(1);
+  }
+
+  private void expireAnswerCreateIntent(Long answerId) {
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE web3_execution_intents "
+                + "SET status = 'EXPIRED', last_error_code = 'AUTH_EXPIRED', "
+                + "last_error_reason = 'expired for e2e', updated_at = NOW() "
+                + "WHERE resource_type = 'ANSWER' "
+                + "AND resource_id = ? AND action_type = 'QNA_ANSWER_SUBMIT'",
+            answerId.toString());
+    assertThat(updated).isEqualTo(1);
+  }
+
   private void expireQuestionCreateIntent(Long postId) {
     int updated =
         jdbcTemplate.update(
@@ -576,6 +1153,28 @@ class QnaEscrowE2ETest extends E2ETestBase {
                 + "WHERE resource_type = 'QUESTION' "
                 + "AND resource_id = ? AND action_type = 'QNA_QUESTION_CREATE'",
             postId.toString());
+    assertThat(updated).isEqualTo(1);
+  }
+
+  private void expireQuestionUpdateIntent(Long postId) {
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE web3_execution_intents "
+                + "SET status = 'EXPIRED', last_error_code = 'AUTH_EXPIRED', "
+                + "last_error_reason = 'expired for e2e', updated_at = NOW() "
+                + "WHERE resource_type = 'QUESTION' "
+                + "AND resource_id = ? AND action_type = 'QNA_QUESTION_UPDATE'",
+            postId.toString());
+    assertThat(updated).isPositive();
+  }
+
+  private void syncQuestionProjectionHash(Long postId, String content) {
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE web3_qna_questions SET question_hash = ?, updated_at = NOW() "
+                + "WHERE post_id = ?",
+            QnaContentHashFactory.hash(content),
+            postId);
     assertThat(updated).isEqualTo(1);
   }
 
@@ -641,6 +1240,116 @@ class QnaEscrowE2ETest extends E2ETestBase {
             Integer.class,
             postId.toString());
     return count == null ? 0 : count;
+  }
+
+  private int countQuestionDeleteIntents(Long postId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_execution_intents "
+                + "WHERE resource_type = 'QUESTION' "
+                + "AND resource_id = ? AND action_type = 'QNA_QUESTION_DELETE'",
+            Integer.class,
+            postId.toString());
+    return count == null ? 0 : count;
+  }
+
+  private int countAnswerUpdateIntents(Long answerId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_execution_intents "
+                + "WHERE resource_type = 'ANSWER' "
+                + "AND resource_id = ? AND action_type = 'QNA_ANSWER_UPDATE'",
+            Integer.class,
+            answerId.toString());
+    return count == null ? 0 : count;
+  }
+
+  private int countAnswerDeleteIntents(Long answerId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_execution_intents "
+                + "WHERE resource_type = 'ANSWER' "
+                + "AND resource_id = ? AND action_type = 'QNA_ANSWER_DELETE'",
+            Integer.class,
+            answerId.toString());
+    return count == null ? 0 : count;
+  }
+
+  private int countAnswerAcceptIntents(Long postId, Long answerId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_execution_intents "
+                + "WHERE resource_type = 'QUESTION' "
+                + "AND resource_id = ? AND action_type = 'QNA_ANSWER_ACCEPT'",
+            Integer.class,
+            postId.toString());
+    return count == null ? 0 : count;
+  }
+
+  private Long insertOnchainReadyAnswer(Long postId, Long answerOwnerId, String content) {
+    Instant now = Instant.now();
+    KeyHolder keyHolder = new GeneratedKeyHolder();
+    jdbcTemplate.update(
+        conn -> {
+          PreparedStatement ps =
+              conn.prepareStatement(
+                  "INSERT INTO answers "
+                      + "(post_id, user_id, content, is_accepted, publication_status, "
+                      + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                  new String[] {"id"});
+          ps.setLong(1, postId);
+          ps.setLong(2, answerOwnerId);
+          ps.setString(3, content);
+          ps.setBoolean(4, false);
+          ps.setString(5, "VISIBLE");
+          ps.setTimestamp(6, Timestamp.from(now));
+          ps.setTimestamp(7, Timestamp.from(now));
+          return ps;
+        },
+        keyHolder);
+
+    Number generatedKey = keyHolder.getKey();
+    if (generatedKey == null) {
+      throw new IllegalStateException("Failed to insert answer row");
+    }
+    Long answerId = generatedKey.longValue();
+
+    jdbcTemplate.update(
+        "INSERT INTO web3_qna_answers "
+            + "(answer_id, post_id, question_id, answer_key, responder_user_id, content_hash, "
+            + "accepted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        answerId,
+        postId,
+        QnaEscrowIdCodec.questionId(postId),
+        QnaEscrowIdCodec.answerId(answerId),
+        answerOwnerId,
+        QnaContentHashFactory.hash(content),
+        false,
+        Timestamp.from(now),
+        Timestamp.from(now));
+
+    jdbcTemplate.update(
+        "UPDATE web3_qna_questions SET answer_count = answer_count + 1, updated_at = NOW() "
+            + "WHERE post_id = ?",
+        postId);
+
+    return answerId;
+  }
+
+  private void markQuestionStateAnswered(Long postId) {
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE web3_qna_questions SET state = ?, updated_at = NOW() WHERE post_id = ?",
+            1100,
+            postId);
+    assertThat(updated).isEqualTo(1);
+  }
+
+  private void assertSignatureMetaDuration(JsonNode web3, long expectedDuration) {
+    long signedAt = web3.path("signatureMeta").path("signedAt").asLong();
+    long expiresAt = web3.path("signatureMeta").path("signatureExpiresAt").asLong();
+    assertThat(signedAt).isPositive();
+    assertThat(expiresAt - signedAt).isEqualTo(expectedDuration);
   }
 
   private String getQuestionUpdateStateStatus(Long postId, Long updateVersion) {
@@ -738,5 +1447,127 @@ class QnaEscrowE2ETest extends E2ETestBase {
             Map.of("title", title, "content", content, "reward", reward, "tags", List.of()),
             bearerJsonHeaders(accessToken)),
         String.class);
+  }
+
+  /**
+   * §MOM-393 follow-up review (comment 3234858579) — reload (recover-create) 가 매 prepare 마다 새
+   * server-sig 가 발급되어도 동일 AWAITING_SIGNATURE intent 를 재사용하고 stored signedAt 을 surface 해야 한다.
+   *
+   * <p>기존 Order=29 케이스는 {@link #STUB_SIGNED_AT} 만 사용해 server-sig refresh 시나리오를 검증하지 못한다. 본 테스트는
+   * build mock 을 호출별로 다른 {@code signedAt} 을 반환하도록 override 하고:
+   *
+   * <ul>
+   *   <li>응답의 {@code executionIntent.id} 가 첫 prepare 의 intent 와 동일해야 한다 (cancel + 새 attempt 발생 안 함)
+   *   <li>응답의 {@code signatureMeta.signedAt} 이 stored 값과 같아야 한다 (FE expiry mismatch 회귀 가드)
+   *   <li>{@code web3_execution_intents} 행 수가 1개 그대로여야 한다
+   * </ul>
+   *
+   * <p>회귀 가드: {@code CreateExecutionIntentResult.payloadSnapshotJson} 노출 + {@code
+   * SubmitQnaExecutionIntentAdapter} 의 reuse 분기에서 stored signedAt 사용 + {@code
+   * QnaExecutionDraftBuilderAdapter} 가 server-sig 무관 view 로 hash 산출 — 셋 중 하나라도 회귀하면 본 케이스가 fail.
+   */
+  @Test
+  @Order(101)
+  @DisplayName(
+      "[MOM-393] recover-create 시 매 build 마다 새 server-sig 가 발급되어도 동일 intent reuse + stored signedAt surface")
+  void recoverCreate_payloadHashStableAcrossServerSigRefresh() throws Exception {
+    AtomicLong signedAtCounter = new AtomicLong(STUB_SIGNED_AT);
+    // Reset the default @BeforeEach stub so the override below is the only Answer registered for
+    // build(any()). Using willAnswer(...).given(mock).method(any()) form (instead of
+    // given(mock.method(any()))) so that registering the new stub does not trigger the previously
+    // registered Answer with a null argument and dereference it inside the closure.
+    org.mockito.Mockito.reset(buildQnaExecutionDraftPort);
+    BDDMockito.doNothing().when(precheckQuestionFundingPort).precheck(any());
+    BDDMockito.willAnswer(
+            inv -> {
+              momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest req =
+                  inv.getArgument(0);
+              long currentSignedAt = signedAtCounter.getAndAdd(60L);
+              String rotatedCallData = FAKE_CALLDATA + Long.toHexString(currentSignedAt);
+              String rootIdempotencyKey =
+                  req.actionType() == QnaExecutionActionType.QNA_QUESTION_UPDATE
+                      ? QnaEscrowIdempotencyKeyFactory.createQuestionUpdate(
+                          req.requesterUserId(),
+                          req.postId(),
+                          req.questionUpdateVersion(),
+                          req.questionUpdateToken())
+                      : QnaEscrowIdempotencyKeyFactory.create(
+                          req.actionType(), req.requesterUserId(), req.postId(), req.answerId());
+              QnaEscrowExecutionPayload payloadSnapshot =
+                  new QnaEscrowExecutionPayload(
+                      req.actionType(),
+                      req.postId(),
+                      req.answerId(),
+                      FAKE_AUTHORITY_ADDRESS,
+                      req.tokenAddress(),
+                      amountForAction(req.actionType(), req.rewardAmountWei()),
+                      req.questionHash(),
+                      req.contentHash(),
+                      FAKE_CALL_TARGET,
+                      rotatedCallData,
+                      req.questionUpdateVersion(),
+                      req.questionUpdateToken(),
+                      req.answerUpdateVersion(),
+                      req.answerUpdateToken(),
+                      currentSignedAt,
+                      FAKE_SIGNATURE_HEX);
+              String payloadJson = objectMapper.writeValueAsString(payloadSnapshot);
+              String viewJson = objectMapper.writeValueAsString(payloadSnapshot.idempotencyView());
+              String payloadHashHex =
+                  Numeric.toHexString(
+                      MessageDigest.getInstance("SHA-256")
+                          .digest(viewJson.getBytes(StandardCharsets.UTF_8)));
+              return new QnaExecutionDraft(
+                  req.resourceType(),
+                  req.resourceId(),
+                  QnaExecutionResourceStatus.PENDING_EXECUTION,
+                  req.actionType(),
+                  req.requesterUserId(),
+                  req.counterpartyUserId(),
+                  rootIdempotencyKey,
+                  payloadHashHex,
+                  payloadJson,
+                  List.of(
+                      new QnaExecutionDraftCall(
+                          FAKE_CALL_TARGET, BigInteger.ZERO, rotatedCallData)),
+                  true,
+                  FAKE_AUTHORITY_ADDRESS,
+                  0L,
+                  FAKE_DELEGATE_TARGET,
+                  "0x" + "b".repeat(64),
+                  null,
+                  "0x" + "c".repeat(64),
+                  currentSignedAt,
+                  LocalDateTime.now().plusMinutes(30));
+            })
+        .given(buildQnaExecutionDraftPort)
+        .build(any());
+
+    Long postId = createQuestionPostId("재시도 안정성 질문", "재시도 안정성 본문", 35L);
+    String originalIntentId = getPostCurrentCreateExecutionIntentId(postId);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId + "/web3/recover-create",
+            HttpMethod.POST,
+            new HttpEntity<>(Map.of(), bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(response.getBody()).path("data");
+    assertThat(data.path("web3").path("executionIntent").path("id").asText())
+        .as("reuse 가 성공해야 함 (cancel + 새 attempt 발생 안 함)")
+        .isEqualTo(originalIntentId);
+    assertThat(data.path("web3").path("executionIntent").path("status").asText())
+        .isEqualTo("AWAITING_SIGNATURE");
+    assertThat(data.path("web3").path("signatureMeta").path("signedAt").asLong())
+        .as("응답의 signedAt 은 stored 값과 일치해야 함")
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(data.path("web3").path("signatureMeta").path("signatureExpiresAt").asLong())
+        .as("응답의 signatureExpiresAt 은 stored signedAt + validity 와 일치해야 함")
+        .isEqualTo(STUB_SIGNATURE_EXPIRES_AT);
+    assertThat(countQuestionCreateIntents(postId))
+        .as("같은 logical request 에 대해 intent 가 늘어나면 안 됨")
+        .isEqualTo(1);
   }
 }

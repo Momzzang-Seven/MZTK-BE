@@ -17,13 +17,12 @@ spring:
   flyway:
     enabled: false
 
-  # SQL 초기화 비활성화
   sql:
     init:
-      mode: never
+      mode: always
 
   jpa:
-    defer-datasource-initialization: false
+    defer-datasource-initialization: true
     open-in-view: false
     show-sql: false
     hibernate:
@@ -116,6 +115,23 @@ web3:
       batch-size: 200
       cron: "0 0 4 * * *"
       zone: "Asia/Seoul"
+    registration:
+      session:
+        ttl-seconds: 1800
+      recovery:
+        batch-size: 100
+        cron: "0 */5 * * * *"
+        zone: "Asia/Seoul"
+      finalization:
+        retry-backoff-seconds: 60
+      approval:
+        enabled: false
+        chain-id: 1
+        delegation-batch-impl-address: "0x0000000000000000000000000000000000000001"
+        token-contract-address: "0x0000000000000000000000000000000000000001"
+        qna-escrow-spender-address: "0x0000000000000000000000000000000000000002"
+        marketplace-escrow-spender-address: "0x0000000000000000000000000000000000000003"
+        ttl-seconds: 300
 
   # 보상 토큰 - 테스트에서는 비활성화
   reward-token:
@@ -158,6 +174,7 @@ web3:
       per-day-user-cap-eth: 0.02
     authorization:
       ttl-seconds: 300
+      min-remaining-ttl-seconds: 30
       eip1559-ttl-seconds: 90
       nonce-policy: ONCHAIN
       require-chain-id-match: true
@@ -167,6 +184,9 @@ web3:
         - "0x0000000000000000000000000000000000000001"
       allowed-call-targets:
         - "0x0000000000000000000000000000000000000001"
+        - "0x0000000000000000000000000000000000000002"
+        - "0x0000000000000000000000000000000000000003"
+      allowed-approve-spenders:
         - "0x0000000000000000000000000000000000000002"
         - "0x0000000000000000000000000000000000000003"
       allowed-target-contracts: []
@@ -192,6 +212,12 @@ web3:
   marketplace:
     admin:
       enabled: false
+      fail-fast: false
+      recovery:
+        enabled: false
+        batch-size: 100
+        cron: "0 */5 * * * *"
+        zone: "Asia/Seoul"
   escrow:
     marketplace-contract-address: "0x0000000000000000000000000000000000000002"
     qna-contract-address: "0x0000000000000000000000000000000000000003"
@@ -229,6 +255,12 @@ comment:
     zone: Asia/Seoul
 
 answer:
+  lifecycle:
+    cleanup:
+      # Avoid running PostgreSQL advisory-lock cleanup SQL inside broad H2 SpringBootTest contexts.
+      initial-delay-ms: 86400000
+    reconciliation:
+      initial-delay-ms: 86400000
   orphan-cleanup:
     batch-size: 100
     cron: "0 30 * * * *"

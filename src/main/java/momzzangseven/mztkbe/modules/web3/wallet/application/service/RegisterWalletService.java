@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
-import java.util.Map;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,247 +13,286 @@ import momzzangseven.mztkbe.global.error.signature.InvalidSignatureException;
 import momzzangseven.mztkbe.global.error.wallet.UnauthorizedWalletAccessException;
 import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyLinkedException;
+import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.global.error.wallet.WalletBlackListException;
-import momzzangseven.mztkbe.modules.web3.challenge.application.port.out.LoadChallengePort;
-import momzzangseven.mztkbe.modules.web3.challenge.application.port.out.SaveChallengePort;
-import momzzangseven.mztkbe.modules.web3.challenge.domain.model.Challenge;
-import momzzangseven.mztkbe.modules.web3.challenge.domain.model.ChallengePurpose;
-import momzzangseven.mztkbe.modules.web3.signature.application.port.out.VerifySignaturePort;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ExpireWalletRegistrationSessionCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.MarkWalletRegistrationApprovalTerminatedCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalCapability;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionWriteView;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationChallengeView;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationDuplicateResolution;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationDuplicateResolutionType;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
+import momzzangseven.mztkbe.modules.web3.wallet.application.exception.DuplicateWalletRegistrationSessionException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ExpireWalletRegistrationSessionUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalTerminatedUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletApprovalAttemptUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalCapabilityPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RecordWalletEventPort;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationChallengePort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.MarkWalletRegistrationChallengeExpiredPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.MarkWalletRegistrationChallengeUsedPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RunWalletRegistrationTransactionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.VerifyWalletOwnershipSignaturePort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
-import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletEvent;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Wallet registration service
+ * Wallet registration entry service.
  *
- * <p>Implements complete wallet registration flow with signature verification.
+ * <p>The service verifies wallet ownership and local eligibility, then creates a pending wallet
+ * registration session that requires EIP-7702 approval before the wallet becomes ACTIVE.
  */
 @Slf4j
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class RegisterWalletService implements RegisterWalletUseCase {
 
-  private final LoadChallengePort loadChallengePort;
-  private final SaveChallengePort saveChallengePort;
-  private final VerifySignaturePort verifySignaturePort;
+  private final LoadWalletRegistrationChallengePort loadChallengePort;
+  private final MarkWalletRegistrationChallengeUsedPort markChallengeUsedPort;
+  private final MarkWalletRegistrationChallengeExpiredPort markChallengeExpiredPort;
+  private final VerifyWalletOwnershipSignaturePort verifySignaturePort;
   private final LoadWalletPort loadWalletPort;
-  private final SaveWalletPort saveWalletPort;
-  private final DeleteWalletPort deleteWalletPort;
-  private final RecordWalletEventPort eventPort;
-  private final jakarta.persistence.EntityManager entityManager;
+  private final LoadWalletApprovalCapabilityPort loadWalletApprovalCapabilityPort;
+  private final LoadWalletApprovalExecutionStatePort loadWalletApprovalExecutionStatePort;
+  private final AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
+  private final WalletRegistrationSessionDuplicateResolver duplicateResolver;
+  private final RegisterWalletApprovalAttemptUseCase approvalAttemptUseCase;
+  private final ExpireWalletRegistrationSessionUseCase expireSessionUseCase;
+  private final MarkWalletRegistrationApprovalTerminatedUseCase markTerminatedUseCase;
+  private final RunWalletRegistrationTransactionPort transactionPort;
+  private final Clock appClock;
 
   @Override
   public RegisterWalletResult execute(RegisterWalletCommand command) {
     log.info(
-        "Registering wallet: userId={}, address={}, nonce={}",
+        "Registering wallet approval session: userId={}, address={}, nonce={}",
         command.userId(),
         command.walletAddress(),
         command.nonce());
 
-    // 1. Validate command
     command.validate();
-
-    // 2. Load challenge
-    Challenge challenge =
-        loadChallengePort
-            .findByNonceAndPurpose(command.nonce(), ChallengePurpose.WALLET_REGISTRATION)
-            .orElseThrow(() -> new ChallengeNotFoundException());
-
-    // 3. Validate challenge status
+    WalletRegistrationChallengeView challenge = loadWalletRegistrationChallenge(command);
     validateChallenge(challenge, command);
+    verifyOwnershipSignature(challenge, command);
 
-    // 4. Verify signature
-    boolean signatureValid =
-        verifySignaturePort.verify(
-            challenge.getMessage(), command.nonce(), command.signature(), command.walletAddress());
-
-    if (!signatureValid) {
-      log.warn(
-          "Invalid signature for wallet registration: nonce={}, address={}, user_id = {}",
-          command.nonce(),
-          command.walletAddress(),
-          command.userId());
-      throw new InvalidSignatureException();
+    try {
+      return inTransaction(() -> createOrReuseRegistration(command, challenge));
+    } catch (DuplicateWalletRegistrationSessionException exception) {
+      return inTransaction(() -> recoverAfterCreateRace(command, challenge));
     }
-
-    // Check if the user already has ACTIVE wallet
-    int existingWalletCount =
-        loadWalletPort.countWalletsByUserIdAndStatus(command.userId(), WalletStatus.ACTIVE);
-    if (existingWalletCount > 0) {
-      log.warn("User already has a wallet: userId={}", command.userId());
-      throw new WalletAlreadyLinkedException(command.userId().toString());
-    }
-
-    // Check if wallet exists in DB
-    Optional<UserWallet> existingWallet =
-        loadWalletPort.findByWalletAddress(command.walletAddress());
-
-    UserWallet savedWallet;
-
-    if (existingWallet.isEmpty()) {
-      // fresh register
-      savedWallet = registerNewWallet(command);
-    } else {
-      // re-register (UNLINKED or USER_DELETED)
-      savedWallet = reRegisterWallet(existingWallet.get(), command);
-    }
-
-    // Mark challenge as used
-    Challenge usedChallenge = challenge.markAsUsed();
-    saveChallengePort.save(usedChallenge);
-
-    log.info(
-        "Wallet registered successfully: walletId={}, userId={}, address={}",
-        savedWallet.getId(),
-        savedWallet.getUserId(),
-        savedWallet.getWalletAddress());
-
-    return RegisterWalletResult.from(savedWallet);
   }
 
-  /** Validate challenge state */
-  private void validateChallenge(Challenge challenge, RegisterWalletCommand command) {
-    // Check if already used
-    if (challenge.isUsed()) {
+  private RegisterWalletResult createOrReuseRegistration(
+      RegisterWalletCommand command, WalletRegistrationChallengeView challenge) {
+    validateApprovalAvailable();
+    authorityLockPort.lock(command.userId(), command.walletAddress());
+    validateLocalWalletEligibility(command);
+
+    WalletRegistrationDuplicateResolution currentDuplicate =
+        resolveCurrentAfterReconciliation(command.userId(), command.walletAddress());
+    if (currentDuplicate.shouldReuse()) {
+      markChallengeUsed(challenge);
+      return toPendingResult(currentDuplicate.session());
+    }
+    rejectDuplicateConflict(command, currentDuplicate);
+
+    return createPendingApproval(command);
+  }
+
+  private RegisterWalletResult recoverAfterCreateRace(
+      RegisterWalletCommand command, WalletRegistrationChallengeView challenge) {
+    validateApprovalAvailable();
+    authorityLockPort.lock(command.userId(), command.walletAddress());
+    validateLocalWalletEligibility(command);
+
+    WalletRegistrationDuplicateResolution raceResolution =
+        resolveAfterCreateRaceAfterReconciliation(command.userId(), command.walletAddress());
+    if (raceResolution.type() == WalletRegistrationDuplicateResolutionType.CREATE_NEW) {
+      return createPendingApproval(command);
+    }
+    if (raceResolution.shouldReuse()) {
+      markChallengeUsed(challenge);
+      return toPendingResult(raceResolution.session());
+    }
+    rejectDuplicateConflict(command, raceResolution);
+    throw new DuplicateWalletRegistrationSessionException(
+        command.userId(), command.walletAddress(), null);
+  }
+
+  private RegisterWalletResult createPendingApproval(RegisterWalletCommand command) {
+    try {
+      return approvalAttemptUseCase.createPendingApproval(command);
+    } catch (Web3TransferException exception) {
+      throw WalletApprovalSponsorLimitMapper.map(exception);
+    }
+  }
+
+  private <T> T inTransaction(java.util.function.Supplier<T> callback) {
+    return transactionPort.execute(callback);
+  }
+
+  private WalletRegistrationChallengeView loadWalletRegistrationChallenge(
+      RegisterWalletCommand command) {
+    return loadChallengePort.load(command.nonce()).orElseThrow(ChallengeNotFoundException::new);
+  }
+
+  /** Validates ownership challenge state without consuming it. */
+  private void validateChallenge(
+      WalletRegistrationChallengeView challenge, RegisterWalletCommand command) {
+    if (challenge.used()) {
       throw new ChallengeAlreadyUsedException();
     }
-
-    // Check if expired
-    if (challenge.isExpired()) {
-      // Mark as expired
-      Challenge expiredChallenge = challenge.markAsExpired();
-      saveChallengePort.save(expiredChallenge);
-
+    if (challenge.expired()) {
+      markChallengeExpiredPort.markExpired(challenge.nonce());
       throw new ChallengeExpiredException();
     }
-
-    // Check if belongs to user
     if (!challenge.matchesUser(command.userId())) {
       throw new UnauthorizedWalletAccessException();
     }
-
-    // Check if address matches
     if (!challenge.matchesAddress(command.walletAddress())) {
       throw new ChallengeMismatchWalletAddressException();
     }
   }
 
-  /**
-   * Register fresh wallet
-   *
-   * @param command
-   * @return
-   */
-  private UserWallet registerNewWallet(RegisterWalletCommand command) {
-    log.info(
-        "Registering new wallet: userId={}, address={}", command.userId(), command.walletAddress());
-
-    // 1. create wallet and save
-    UserWallet wallet =
-        UserWallet.create(command.userId(), command.walletAddress(), java.time.Instant.now());
-    UserWallet savedWallet = saveWalletPort.save(wallet);
-
-    // 2. record event
-    eventPort.record(
-        WalletEvent.registered(
-            savedWallet.getWalletAddress(),
-            savedWallet.getUserId(),
-            Map.of(
-                "source", "application",
-                "action", "new_registration")));
-
-    return savedWallet;
+  private void verifyOwnershipSignature(
+      WalletRegistrationChallengeView challenge, RegisterWalletCommand command) {
+    boolean signatureValid =
+        verifySignaturePort.verify(
+            challenge.message(), command.nonce(), command.signature(), command.walletAddress());
+    if (!signatureValid) {
+      log.warn(
+          "Invalid signature for wallet registration: nonce={}, address={}, userId={}",
+          command.nonce(),
+          command.walletAddress(),
+          command.userId());
+      throw new InvalidSignatureException();
+    }
   }
 
-  /**
-   * Re-register a wallet
-   *
-   * @param existingWallet
-   * @param command
-   * @return
-   */
-  private UserWallet reRegisterWallet(UserWallet existingWallet, RegisterWalletCommand command) {
-    // 1. Check if the wallet is BLOCKED
-    if (existingWallet.getStatus() == WalletStatus.BLOCKED) {
-      log.warn(
-          "Attempted to register blocked wallet: address={}", existingWallet.getWalletAddress());
-      throw new WalletBlackListException(existingWallet.getWalletAddress());
+  private void validateApprovalAvailable() {
+    WalletApprovalCapability capability = loadWalletApprovalCapabilityPort.load();
+    if (!capability.available()) {
+      throw new WalletApprovalUnavailableException(capability.reason());
+    }
+  }
+
+  private void validateLocalWalletEligibility(RegisterWalletCommand command) {
+    int existingWalletCount =
+        loadWalletPort.countWalletsByUserIdAndStatus(command.userId(), WalletStatus.ACTIVE);
+    if (existingWalletCount > 0) {
+      throw new WalletAlreadyLinkedException(command.userId().toString());
     }
 
-    // 2. Check if the wallet is in UNLINKED or USER_DELETED status, otherwise, the wallet already
-    // used by other user.
-    if (!existingWallet.canBeReRegistered()) {
-      log.error(
-          "Unexpected wallet status for re-registration: address={}, status={}",
-          existingWallet.getWalletAddress(),
-          existingWallet.getStatus());
-      throw new WalletAlreadyExistsException(existingWallet.getWalletAddress());
+    Optional<UserWallet> existingWallet =
+        loadWalletPort.findByWalletAddress(command.walletAddress());
+    if (existingWallet.isEmpty()) {
+      return;
     }
 
-    log.info(
-        "Re-registering wallet: address={}, previousUserId={}, previousStatus={}, newUserId={}",
-        existingWallet.getWalletAddress(),
-        existingWallet.getUserId(),
-        existingWallet.getStatus(),
-        command.userId());
+    UserWallet wallet = existingWallet.get();
+    if (wallet.getStatus() == WalletStatus.BLOCKED) {
+      throw new WalletBlackListException(wallet.getWalletAddress());
+    }
+    if (!wallet.canBeReRegistered()) {
+      throw new WalletAlreadyExistsException(wallet.getWalletAddress());
+    }
+  }
 
-    // 3. Cache wallet previous status and user id
-    Long previousUserId = existingWallet.getUserId();
-    WalletStatus previousStatus = existingWallet.getStatus();
+  private void rejectDuplicateConflict(
+      RegisterWalletCommand command, WalletRegistrationDuplicateResolution resolution) {
+    if (!resolution.isConflict()) {
+      return;
+    }
+    if (resolution.type() == WalletRegistrationDuplicateResolutionType.USER_HAS_PENDING_SESSION) {
+      throw new WalletAlreadyLinkedException(command.userId().toString());
+    }
+    throw new WalletAlreadyExistsException(command.walletAddress());
+  }
 
-    // 5. Delete old record
-    deleteWalletPort.deleteById(existingWallet.getId());
+  private WalletRegistrationDuplicateResolution resolveCurrentAfterReconciliation(
+      Long userId, String walletAddress) {
+    WalletRegistrationDuplicateResolution resolution =
+        duplicateResolver.resolveCurrent(userId, walletAddress);
+    if (reconcileDuplicate(resolution)) {
+      return duplicateResolver.resolveCurrent(userId, walletAddress);
+    }
+    return resolution;
+  }
 
-    // 5-1. Force flush to execute DELETE immediately before INSERT
-    // This prevents unique constraint violation when re-registering the same wallet address
-    entityManager.flush();
-    log.debug(
-        "Flushed DELETE operation for wallet re-registration: address={}",
-        existingWallet.getWalletAddress());
+  private WalletRegistrationDuplicateResolution resolveAfterCreateRaceAfterReconciliation(
+      Long userId, String walletAddress) {
+    WalletRegistrationDuplicateResolution resolution =
+        duplicateResolver.resolveAfterCreateRace(userId, walletAddress);
+    if (reconcileDuplicate(resolution)) {
+      return duplicateResolver.resolveCurrent(userId, walletAddress);
+    }
+    return resolution;
+  }
 
-    // 6. Record HARD_DELETED event
-    eventPort.record(
-        WalletEvent.hardDeleted(
-            existingWallet.getWalletAddress(),
-            previousUserId,
-            previousStatus,
-            Map.of(
-                "source", "application",
-                "action", "re_registration_cleanup",
-                "new_user_id", command.userId())));
+  private boolean reconcileDuplicate(WalletRegistrationDuplicateResolution resolution) {
+    WalletRegistrationSession session = resolution.session();
+    if (session == null) {
+      return false;
+    }
+    if (session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        && session.getLatestExecutionIntentId() != null) {
+      Optional<WalletApprovalExecutionStateView> currentState =
+          loadWalletApprovalExecutionStatePort.loadByExecutionIntentId(
+              session.getUserId(), session.getLatestExecutionIntentId());
+      if (currentState.filter(WalletRegistrationReceiptTimeout::isCurrent).isPresent()) {
+        markTerminatedUseCase.execute(
+            new MarkWalletRegistrationApprovalTerminatedCommand(
+                session.getPublicId(),
+                session.getLatestExecutionIntentId(),
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON));
+        return true;
+      }
+    }
+    if (!isApprovalTtlElapsed(session)) {
+      return false;
+    }
+    expireSessionUseCase.execute(new ExpireWalletRegistrationSessionCommand(session.getPublicId()));
+    return true;
+  }
 
-    // 7. INSERT new record into user_wallets
-    UserWallet newWallet =
-        UserWallet.create(command.userId(), command.walletAddress(), java.time.Instant.now());
-    UserWallet savedWallet = saveWalletPort.save(newWallet);
+  private boolean isApprovalTtlElapsed(WalletRegistrationSession session) {
+    return session.getStatus().isPreSubmissionExpirable()
+        && session.getApprovalExpiresAt() != null
+        && !session.getApprovalExpiresAt().isAfter(LocalDateTime.now(appClock));
+  }
 
-    // 8. Record REGISTERED event
-    eventPort.record(
-        WalletEvent.reRegistered(
-            savedWallet.getWalletAddress(),
-            savedWallet.getUserId(),
-            previousUserId,
-            previousStatus,
-            Map.of(
-                "source",
-                "application",
-                "action",
-                "re_registration",
-                "previous_user_id",
-                previousUserId,
-                "previous_status",
-                previousStatus.name())));
+  private RegisterWalletResult toPendingResult(WalletRegistrationSession session) {
+    if (session.getStatus() != WalletRegistrationStatus.APPROVAL_REQUIRED
+        || session.getLatestExecutionIntentId() == null) {
+      return RegisterWalletResult.pending(session, null);
+    }
+    WalletApprovalExecutionWriteView web3 =
+        loadWalletApprovalExecutionStatePort
+            .loadByExecutionIntentId(session.getUserId(), session.getLatestExecutionIntentId())
+            .filter(this::isRecoverableApprovalState)
+            .map(WalletApprovalExecutionWriteView::from)
+            .orElse(null);
+    return RegisterWalletResult.pending(session, web3);
+  }
 
-    return savedWallet;
+  private boolean isRecoverableApprovalState(WalletApprovalExecutionStateView state) {
+    return "AWAITING_SIGNATURE".equals(state.executionIntentStatus())
+        && (state.signRequest() != null || state.signRequestUnavailableReason() != null);
+  }
+
+  private void markChallengeUsed(WalletRegistrationChallengeView challenge) {
+    markChallengeUsedPort.markUsed(challenge.nonce());
   }
 }

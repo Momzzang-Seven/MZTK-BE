@@ -26,7 +26,7 @@ class LoadExecutionInternalIssuerPolicyAdapterTest {
   @Test
   void loadPolicy_mapsExecutionPolicyToQnaPolicy() {
     when(getInternalExecutionIssuerPolicyUseCase.getPolicy())
-        .thenReturn(new InternalExecutionIssuerPolicyView(true, true, true));
+        .thenReturn(new InternalExecutionIssuerPolicyView(true, true, true, false, false));
 
     var result = adapter.loadPolicy();
 

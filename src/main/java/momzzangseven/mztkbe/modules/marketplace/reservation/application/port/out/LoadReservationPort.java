@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.ou
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,6 +22,13 @@ public interface LoadReservationPort {
 
   /** Load a single reservation by its primary key with a pessimistic write lock. */
   Optional<Reservation> findByIdWithLock(Long reservationId);
+
+  /** Load a reservation by its bound shared execution public id with a pessimistic write lock. */
+  Optional<Reservation> findByCurrentExecutionIntentPublicIdWithLock(String publicId);
+
+  /** Load a buyer's non-terminal reservation for the exact slot/date/time with a write lock. */
+  Optional<Reservation> findActiveByBuyerAndSlotDateTimeWithLock(
+      Long buyerId, Long slotId, LocalDate reservationDate, LocalTime reservationTime);
 
   /**
    * Count active (PENDING or APPROVED) reservations for a single slot.
@@ -57,6 +65,14 @@ public interface LoadReservationPort {
    * @return active reservation count (PENDING + APPROVED)
    */
   int countActiveReservationsBySlotIdAndDateWithLock(Long slotId, LocalDate date);
+
+  /**
+   * Ensure and lock a slot/date capacity key before counting active reservations.
+   *
+   * <p>Used to serialize the first reservation on an empty date where no reservation row exists
+   * yet.
+   */
+  void lockSlotDateCapacityKey(Long slotId, LocalDate date);
 
   /**
    * Count active reservations grouped by date for a slot over a date range.

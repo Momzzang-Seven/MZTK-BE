@@ -3,7 +3,10 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
@@ -14,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
@@ -30,13 +34,16 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +58,8 @@ import org.springframework.transaction.annotation.AnnotationTransactionAttribute
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Runtime verification of {@link TransactionalExecuteExecutionIntentDelegate}'s
@@ -91,6 +100,7 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
+  private final RunAfterCommitPort runAfterCommitPort = new TestRunAfterCommitPort();
   private TransactionalExecuteExecutionIntentDelegate rawDelegate;
 
   @BeforeEach
@@ -106,9 +116,13 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
             publishExecutionIntentTerminatedPort,
+            runAfterCommitPort,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
+        .thenReturn(true);
+    lenient()
+        .when(executionActionHandlerPort.supports(any(ExecutionIntent.class)))
         .thenReturn(true);
     lenient()
         .when(executionActionHandlerPort.buildActionPlan(any()))
@@ -169,6 +183,53 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
         .isEqualTo(1);
   }
 
+  @Test
+  @DisplayName("broadcast 이후 afterSubmitted 훅 실패는 제출 상태 커밋을 롤백하지 않는다")
+  void afterSubmittedHookFailure_doesNotRollBackBroadcastState() {
+    RecordingTransactionManager tm = new RecordingTransactionManager();
+    ExecuteTransactionalExecutionIntentDelegatePort proxied = wrapWithTransactionProxy(tm);
+    ExecutionIntent intent =
+        existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.plusMinutes(5)).build();
+    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
+        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
+            "0xsigned",
+            "0xhash",
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot(),
+            intent.getUnsignedTxFingerprint());
+
+    stubFindAndTrackUpdates(intent);
+    when(eip1559TransactionCodecPort.decodeAndVerify(
+            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
+        .thenReturn(decoded);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.createAndFlush(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.TransactionRecord(
+                202L, ExecutionTransactionStatus.CREATED, null));
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", "rpc-1", null));
+    doThrow(new RuntimeException("hook failed"))
+        .when(executionActionHandlerPort)
+        .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
+
+    var result =
+        proxied.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(202L);
+    assertThat(tm.commits).isEqualTo(1);
+    assertThat(tm.rollbacks).isZero();
+    verify(executionTransactionGatewayPort).markPending(202L, "0xhash");
+    verify(executionActionHandlerPort)
+        .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
+  }
+
   private ExecuteTransactionalExecutionIntentDelegatePort wrapWithTransactionProxy(
       AbstractPlatformTransactionManager tm) {
     TransactionInterceptor interceptor =
@@ -184,6 +245,19 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
         new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS, true);
     TreasurySigner signer = new TreasurySigner(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS);
     return new SponsorWalletGate(info, signer);
+  }
+
+  private void stubFindAndTrackUpdates(ExecutionIntent initial) {
+    AtomicReference<ExecutionIntent> latest = new AtomicReference<>(initial);
+    when(executionIntentPersistencePort.findByPublicIdForUpdate(initial.getPublicId()))
+        .thenAnswer(invocation -> Optional.of(latest.get()));
+    when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
+        .thenAnswer(
+            invocation -> {
+              ExecutionIntent updated = invocation.getArgument(0);
+              latest.set(updated);
+              return updated;
+            });
   }
 
   private ExecutionIntent existingEip1559Intent() {
@@ -244,6 +318,58 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
     @Override
     protected void doRollback(DefaultTransactionStatus status) {
       rollbacks++;
+    }
+  }
+
+  private static class TestRunAfterCommitPort implements RunAfterCommitPort {
+
+    private boolean runningAfterCommitCallback;
+
+    @Override
+    public void runAfterCommit(Runnable action) {
+      if (canRegisterAfterCommitCallback()) {
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+              @Override
+              public void afterCommit() {
+                runAfterCommitCallback(action);
+              }
+            });
+        return;
+      }
+
+      action.run();
+    }
+
+    @Override
+    public void runAfterCommitWithoutTransaction(Runnable action) {
+      if (canRegisterAfterCommitCallback()) {
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+              @Override
+              public void afterCommit() {
+                runAfterCommitCallback(action);
+              }
+            });
+        return;
+      }
+
+      action.run();
+    }
+
+    private boolean canRegisterAfterCommitCallback() {
+      return TransactionSynchronizationManager.isSynchronizationActive()
+          && !runningAfterCommitCallback;
+    }
+
+    private void runAfterCommitCallback(Runnable action) {
+      boolean previous = runningAfterCommitCallback;
+      runningAfterCommitCallback = true;
+      try {
+        action.run();
+      } finally {
+        runningAfterCommitCallback = previous;
+      }
     }
   }
 }

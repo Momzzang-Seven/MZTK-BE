@@ -1,0 +1,62 @@
+package momzzangseven.mztkbe.modules.web3.marketplace.application.service;
+
+import java.math.BigInteger;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.PrecheckMarketplacePurchaseCommand;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.PrecheckMarketplacePurchaseUseCase;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplacePurchaseConfigPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.PrecheckMarketplacePurchaseFundingPort;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
+
+/**
+ * Application precheck for marketplace purchase invariants before reservation state is retained.
+ */
+public class PrecheckMarketplacePurchaseService implements PrecheckMarketplacePurchaseUseCase {
+
+  private final LoadMarketplacePurchaseConfigPort loadMarketplacePurchaseConfigPort;
+  private final PrecheckMarketplacePurchaseFundingPort precheckMarketplacePurchaseFundingPort;
+
+  public PrecheckMarketplacePurchaseService(
+      LoadMarketplacePurchaseConfigPort loadMarketplacePurchaseConfigPort,
+      PrecheckMarketplacePurchaseFundingPort precheckMarketplacePurchaseFundingPort) {
+    this.loadMarketplacePurchaseConfigPort = loadMarketplacePurchaseConfigPort;
+    this.precheckMarketplacePurchaseFundingPort = precheckMarketplacePurchaseFundingPort;
+  }
+
+  @Override
+  public void precheck(PrecheckMarketplacePurchaseCommand command) {
+    if (command.buyerUserId().equals(command.trainerUserId())) {
+      throw new Web3TransferException(
+          ErrorCode.MARKETPLACE_CANNOT_BUY_OWN_CLASS,
+          "buyer cannot purchase own marketplace class",
+          false);
+    }
+    String buyerWallet = EvmAddress.of(command.buyerWalletAddress()).value();
+    String trainerWallet = EvmAddress.of(command.trainerWalletAddress()).value();
+    if (buyerWallet.equals(trainerWallet)) {
+      throw new Web3TransferException(
+          ErrorCode.MARKETPLACE_CANNOT_BUY_OWN_CLASS,
+          "buyer wallet cannot purchase a class owned by the same trainer wallet",
+          false);
+    }
+    var config = loadMarketplacePurchaseConfigPort.loadPurchaseConfig();
+    BigInteger expectedPriceBaseUnits =
+        BigInteger.valueOf(command.bookedPriceAmountKrw())
+            .multiply(BigInteger.TEN.pow(config.decimals()));
+    if (!command.signedAmount().equals(expectedPriceBaseUnits)
+        || !command.priceBaseUnits().equals(expectedPriceBaseUnits)) {
+      throw new Web3TransferException(
+          ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
+          "signed amount does not match marketplace class price token base units",
+          false);
+    }
+    precheckMarketplacePurchaseFundingPort.precheck(
+        new PrecheckMarketplacePurchaseFundingPort.PurchaseFundingCheck(
+            buyerWallet,
+            trainerWallet,
+            config.escrowContractAddress(),
+            EvmAddress.of(command.tokenAddress()).value(),
+            expectedPriceBaseUnits));
+  }
+}

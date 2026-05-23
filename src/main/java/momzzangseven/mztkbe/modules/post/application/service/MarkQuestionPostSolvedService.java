@@ -19,7 +19,7 @@ public class MarkQuestionPostSolvedService implements MarkQuestionPostSolvedUseC
   @Transactional
   public int execute(MarkQuestionPostSolvedCommand command) {
     command.validate();
-    long answerCount = countAnswersPort.countAnswers(command.postId());
+    long answerCount = countAnswersPort.countPublicVisibleAnswers(command.postId());
     if (answerCount == 0) {
       return 0;
     }

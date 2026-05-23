@@ -34,6 +34,9 @@ import org.web3j.utils.Numeric;
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class Eip7702Web3jAdapter implements Eip7702ChainPort {
 
+  private static final BigInteger GAS_BUFFER_MULTIPLIER = BigInteger.TWO;
+  private static final BigInteger MIN_EIP7702_GAS_LIMIT = BigInteger.valueOf(250_000L);
+
   private final Web3CoreProperties web3CoreProperties;
   private final Eip7702Properties eip7702Properties;
 
@@ -84,13 +87,13 @@ public class Eip7702Web3jAdapter implements Eip7702ChainPort {
       EthEstimateGas mainResult =
           estimateGas(mainService, sponsorAddress, authorityAddress, data, authList);
       if (!mainResult.hasError()) {
-        return mainResult.getAmountUsed();
+        return applySponsorGasBuffer(mainResult.getAmountUsed());
       }
 
       EthEstimateGas subResult =
           estimateGas(subService, sponsorAddress, authorityAddress, data, authList);
       if (!subResult.hasError()) {
-        return subResult.getAmountUsed();
+        return applySponsorGasBuffer(subResult.getAmountUsed());
       }
 
       String errorMessage =
@@ -102,6 +105,22 @@ public class Eip7702Web3jAdapter implements Eip7702ChainPort {
       throw new Web3InvalidInputException(
           "eth_estimateGas failed: " + e.getClass().getSimpleName());
     }
+  }
+
+  private BigInteger applySponsorGasBuffer(BigInteger estimatedGas) {
+    if (estimatedGas == null || estimatedGas.signum() <= 0) {
+      throw new Web3InvalidInputException("eth_estimateGas returned non-positive gas");
+    }
+    BigInteger gasLimit = estimatedGas.multiply(GAS_BUFFER_MULTIPLIER).max(MIN_EIP7702_GAS_LIMIT);
+    long sponsorMaxGasLimit = eip7702Properties.getSponsor().getMaxGasLimit();
+    if (sponsorMaxGasLimit > 0) {
+      BigInteger maxGasLimit = BigInteger.valueOf(sponsorMaxGasLimit);
+      if (gasLimit.compareTo(maxGasLimit) > 0) {
+        throw new Web3InvalidInputException(
+            "estimated gas exceeds sponsor max gas limit after buffer");
+      }
+    }
+    return gasLimit;
   }
 
   @Override

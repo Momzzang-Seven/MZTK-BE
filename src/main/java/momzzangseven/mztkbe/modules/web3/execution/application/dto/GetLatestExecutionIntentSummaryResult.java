@@ -23,6 +23,7 @@ public record GetLatestExecutionIntentSummaryResult(
     String executionIntentId,
     ExecutionIntentStatus executionIntentStatus,
     LocalDateTime expiresAt,
+    long expiresAtEpochSeconds,
     ExecutionMode mode,
     int signCount,
     Long transactionId,
@@ -50,6 +51,9 @@ public record GetLatestExecutionIntentSummaryResult(
     }
     if (expiresAt == null) {
       throw new Web3InvalidInputException("expiresAt is required");
+    }
+    if (expiresAtEpochSeconds <= 0) {
+      throw new Web3InvalidInputException("expiresAtEpochSeconds must be positive");
     }
     if (mode == null) {
       throw new Web3InvalidInputException("mode is required");

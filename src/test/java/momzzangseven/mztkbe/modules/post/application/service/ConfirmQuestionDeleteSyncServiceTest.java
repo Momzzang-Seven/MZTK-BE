@@ -6,7 +6,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostAnswerIdsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -25,6 +27,7 @@ import org.springframework.context.ApplicationEventPublisher;
 class ConfirmQuestionDeleteSyncServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
+  @Mock private LoadPostAnswerIdsPort loadPostAnswerIdsPort;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @InjectMocks private ConfirmQuestionDeleteSyncService confirmQuestionDeleteSyncService;
@@ -34,11 +37,13 @@ class ConfirmQuestionDeleteSyncServiceTest {
   void confirmDeleted_removesPostAndPublishesEvent() {
     Post post = questionPost(101L);
     when(postPersistencePort.loadPostForUpdate(101L)).thenReturn(Optional.of(post));
+    when(loadPostAnswerIdsPort.loadAnswerIdsByPostId(101L)).thenReturn(List.of(201L, 202L));
 
     confirmQuestionDeleteSyncService.confirmDeleted(101L);
 
     verify(postPersistencePort).deletePost(post);
-    verify(eventPublisher).publishEvent(new PostDeletedEvent(101L, PostType.QUESTION));
+    verify(eventPublisher)
+        .publishEvent(new PostDeletedEvent(101L, PostType.QUESTION, List.of(201L, 202L)));
   }
 
   @Test

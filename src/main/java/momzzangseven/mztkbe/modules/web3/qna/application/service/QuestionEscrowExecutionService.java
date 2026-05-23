@@ -9,17 +9,21 @@ import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.web3.RetryableWeb3PreparationException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3PreparationFailureClassifier;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.MatchQuestionCreatePayloadCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaServerSigPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
@@ -32,15 +36,18 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 @RequiredArgsConstructor
 public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUseCase {
 
   private final PrecheckQuestionFundingPort precheckQuestionFundingPort;
   private final LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
+  private final LoadQnaServerSigPolicyPort loadQnaServerSigPolicyPort;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
+  private final BuildQnaEscrowCallDataPort buildQnaEscrowCallDataPort;
   private final BuildQnaExecutionDraftPort buildQnaExecutionDraftPort;
   private final SubmitQnaExecutionDraftPort submitQnaExecutionDraftPort;
 
@@ -49,15 +56,62 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
     if (postId == null) {
       return false;
     }
-    return loadQnaExecutionIntentStatePort
-        .loadLatestActiveByResource(QnaExecutionResourceType.QUESTION, String.valueOf(postId))
-        .isPresent();
+    return !loadQnaExecutionIntentStatePort
+        .loadActiveByResource(QnaExecutionResourceType.QUESTION, String.valueOf(postId))
+        .isEmpty();
   }
 
   @Override
   public void precheckQuestionCreate(PrecheckQuestionCreateCommand command) {
     command.validate();
     precheckQuestionFundingPort.precheck(command);
+  }
+
+  @Override
+  public boolean matchesQuestionCreatePayload(MatchQuestionCreatePayloadCommand command) {
+    command.validate();
+    QnaEscrowExecutionPayload payload = command.payload();
+    RewardContext rewardContext = loadRewardContext(command.rewardMztk());
+    String expectedQuestionHash = QnaContentHashFactory.hash(command.questionContent());
+    BigInteger expectedAmountWei = rewardContext.amountWei();
+    String expectedTokenAddress = EvmAddress.of(rewardContext.tokenAddress()).value();
+    String payloadTokenAddress = EvmAddress.of(payload.tokenAddress()).value();
+    String storedBaselineCallData =
+        buildQnaEscrowCallDataPort.encode(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            QnaEscrowIdCodec.questionId(payload.postId()),
+            null,
+            payloadTokenAddress,
+            payload.amountWei(),
+            payload.questionHash(),
+            null);
+    String expectedCallData =
+        buildQnaEscrowCallDataPort.encode(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            QnaEscrowIdCodec.questionId(command.postId()),
+            null,
+            expectedTokenAddress,
+            expectedAmountWei,
+            expectedQuestionHash,
+            null);
+
+    return payload.actionType() == QnaExecutionActionType.QNA_QUESTION_CREATE
+        && command.postId().equals(payload.postId())
+        && payload.answerId() == null
+        && expectedQuestionHash.equals(payload.questionHash())
+        && payload.contentHash() == null
+        && expectedAmountWei.equals(payload.amountWei())
+        && expectedTokenAddress.equals(payloadTokenAddress)
+        && expectedCallData.equals(storedBaselineCallData);
+  }
+
+  @Override
+  public QnaExecutionIntentResult.SignatureMeta signatureMetaForSignedAt(Long signedAt) {
+    if (signedAt == null) {
+      return null;
+    }
+    return new QnaExecutionIntentResult.SignatureMeta(
+        signedAt, signedAt + loadQnaServerSigPolicyPort.loadSigValidityDuration());
   }
 
   @Override
@@ -174,7 +228,9 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
                 questionHash,
                 null,
                 command.questionUpdateVersion(),
-                command.questionUpdateToken()));
+                command.questionUpdateToken(),
+                null,
+                null));
     boolean bound =
         qnaQuestionUpdateStatePersistencePort
             .bindExecutionIntent(

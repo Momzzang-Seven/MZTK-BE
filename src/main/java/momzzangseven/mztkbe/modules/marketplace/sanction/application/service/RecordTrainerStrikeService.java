@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.modules.marketplace.sanction.application.dto.RecordT
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.in.RecordTrainerStrikeUseCase;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.ManageTrainerSanctionPort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -23,18 +24,21 @@ public class RecordTrainerStrikeService implements RecordTrainerStrikeUseCase {
   private final ManageTrainerSanctionPort manageTrainerSanctionPort;
 
   @Override
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void execute(RecordTrainerStrikeCommand command) {
     log.debug(
         "RecordTrainerStrike: trainerId={}, reason={}", command.trainerId(), command.reason());
 
     ManageTrainerSanctionPort.RecordStrikeResult result =
-        manageTrainerSanctionPort.recordStrike(command.trainerId(), command.reason());
+        manageTrainerSanctionPort.recordStrike(
+            command.trainerId(), command.reason(), command.sourceType(), command.sourceId());
 
     log.info(
-        "Strike recorded: trainerId={}, reason={}, strikeCount={}, isBanned={}",
+        "Strike recorded: trainerId={}, reason={}, sourceType={}, sourceId={}, strikeCount={}, isBanned={}",
         command.trainerId(),
         command.reason(),
+        command.sourceType(),
+        command.sourceId(),
         result.strikeCount(),
         result.isBanned());
   }

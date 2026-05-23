@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.post.application.port.out;
 
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 
 public interface QuestionLifecycleExecutionPort {
 
@@ -14,6 +15,19 @@ public interface QuestionLifecycleExecutionPort {
 
   default boolean hasActiveQuestionIntent(Long postId) {
     return false;
+  }
+
+  default boolean cancelSignableIntent(String executionIntentId, String reason) {
+    return false;
+  }
+
+  default Optional<QuestionExecutionWriteView> loadQuestionCreateIntent(
+      Long postId,
+      Long requesterUserId,
+      String executionIntentId,
+      String questionContent,
+      Long rewardMztk) {
+    return Optional.empty();
   }
 
   default Optional<QuestionUpdateStatePreparation> beginQuestionUpdateState(

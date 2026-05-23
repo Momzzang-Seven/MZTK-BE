@@ -7,7 +7,6 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.wallet.api.dto.RegisterWalletRequestDTO;
 import momzzangseven.mztkbe.modules.web3.wallet.api.dto.RegisterWalletResponseDTO;
-import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.UnlinkWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
@@ -46,15 +45,11 @@ public class WalletController {
         validatedUserId,
         request.walletAddress());
 
-    RegisterWalletCommand command =
-        new RegisterWalletCommand(
-            validatedUserId, request.walletAddress(), request.signature(), request.nonce());
-
-    RegisterWalletResult result = registerWalletUseCase.execute(command);
+    RegisterWalletResult result = registerWalletUseCase.execute(request.toCommand(validatedUserId));
 
     RegisterWalletResponseDTO response = RegisterWalletResponseDTO.from(result);
 
-    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
+    return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(response));
   }
 
   /**

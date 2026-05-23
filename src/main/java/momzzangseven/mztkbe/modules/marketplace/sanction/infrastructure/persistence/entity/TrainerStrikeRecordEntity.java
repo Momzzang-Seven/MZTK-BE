@@ -32,6 +32,12 @@ public class TrainerStrikeRecordEntity {
   @Column(nullable = false)
   private String reason;
 
+  @Column(name = "source_type", length = 80)
+  private String sourceType;
+
+  @Column(name = "source_id", length = 120)
+  private String sourceId;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;

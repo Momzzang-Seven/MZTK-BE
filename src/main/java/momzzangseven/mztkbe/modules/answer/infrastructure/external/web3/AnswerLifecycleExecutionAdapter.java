@@ -2,21 +2,31 @@ package momzzangseven.mztkbe.modules.answer.infrastructure.external.web3;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerLifecycleAction;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerUpdateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.AnswerEscrowExecutionUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecutionPort {
 
   private final AnswerEscrowExecutionUseCase answerEscrowExecutionUseCase;
+  private final CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
+
+  @Override
+  public boolean managesAnswerLifecycle(AnswerLifecycleAction action) {
+    return action != null;
+  }
 
   @Override
   public boolean hasActiveAnswerIntent(Long answerId) {
@@ -28,6 +38,13 @@ public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecution
     answerEscrowExecutionUseCase.precheckAnswerCreate(
         new momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckAnswerCreateCommand(
             postId, questionContent));
+  }
+
+  @Override
+  public boolean cancelSignableIntent(String executionIntentId, String reason) {
+    return cancelExecutionIntentUseCase.cancelIfSignable(
+        new CancelExecutionIntentCommand(
+            executionIntentId, "ANSWER_LIFECYCLE_BIND_FAILED", reason));
   }
 
   @Override
@@ -127,6 +144,34 @@ public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecution
   }
 
   @Override
+  public Optional<AnswerExecutionWriteView> prepareAnswerUpdate(
+      Long postId,
+      Long answerId,
+      Long requesterUserId,
+      Long questionWriterUserId,
+      String questionContent,
+      Long rewardMztk,
+      String answerContent,
+      int activeAnswerCount,
+      Long updateVersion,
+      String updateToken) {
+    return Optional.of(
+        toView(
+            answerEscrowExecutionUseCase.prepareAnswerUpdate(
+                new PrepareAnswerUpdateCommand(
+                    postId,
+                    answerId,
+                    requesterUserId,
+                    questionWriterUserId,
+                    questionContent,
+                    rewardMztk,
+                    answerContent,
+                    activeAnswerCount,
+                    updateVersion,
+                    updateToken))));
+  }
+
+  @Override
   public Optional<AnswerExecutionWriteView> prepareAnswerDelete(
       Long postId,
       Long answerId,
@@ -157,11 +202,21 @@ public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecution
         new AnswerExecutionWriteView.ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new AnswerExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
-        result.existing());
+        result.existing(),
+        toSignatureMeta(result.signatureMeta()));
+  }
+
+  private AnswerExecutionWriteView.SignatureMeta toSignatureMeta(
+      QnaExecutionIntentResult.SignatureMeta meta) {
+    if (meta == null) {
+      return null;
+    }
+    return new AnswerExecutionWriteView.SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
   }
 
   private AnswerExecutionWriteView.SignRequest toSignRequest(

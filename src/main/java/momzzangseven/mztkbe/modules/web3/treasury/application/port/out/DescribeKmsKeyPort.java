@@ -17,4 +17,13 @@ public interface DescribeKmsKeyPort {
    * @return current lifecycle state of the key
    */
   KmsKeyState describe(String kmsKeyId);
+
+  /**
+   * Bypass the shared in-port's burst-absorber cache. Use ONLY from provisioning-recovery decision
+   * paths.
+   *
+   * @param kmsKeyId fully-qualified KMS key id (or alias)
+   * @return current lifecycle state of the key, freshly fetched
+   */
+  KmsKeyState describeFresh(String kmsKeyId);
 }

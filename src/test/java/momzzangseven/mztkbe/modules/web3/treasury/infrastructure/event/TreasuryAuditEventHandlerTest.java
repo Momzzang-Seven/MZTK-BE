@@ -11,7 +11,9 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import momzzangseven.mztkbe.modules.web3.treasury.application.service.TreasuryAuditRecorder;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletArchivedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletDisabledEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletKeyReplacedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletProvisionedEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletReactivatedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +25,8 @@ class TreasuryAuditEventHandlerTest {
 
   private static final String ALIAS = "reward-treasury";
   private static final String KMS_KEY_ID = "kms-key-1";
+  private static final String OLD_KMS_KEY_ID = "kms-key-0";
+  private static final String NEW_KMS_KEY_ID = "kms-key-2";
   private static final String ADDRESS = "0x" + "a".repeat(40);
   private static final Long OPERATOR_ID = 7L;
 
@@ -107,6 +111,52 @@ class TreasuryAuditEventHandlerTest {
             () ->
                 handler.onArchived(
                     new TreasuryWalletArchivedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID, 30)))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void onKeyReplaced_recordsSuccessAudit() {
+    handler.onKeyReplaced(
+        new TreasuryWalletKeyReplacedEvent(
+            ALIAS, OLD_KMS_KEY_ID, NEW_KMS_KEY_ID, ADDRESS, OPERATOR_ID, true));
+
+    verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
+    verifyNoMoreInteractions(treasuryAuditRecorder);
+  }
+
+  @Test
+  void onKeyReplaced_swallowsRecorderException() {
+    doThrow(new RuntimeException("audit insert failed"))
+        .when(treasuryAuditRecorder)
+        .record(anyLong(), any(), anyBoolean(), any());
+
+    assertThatCode(
+            () ->
+                handler.onKeyReplaced(
+                    new TreasuryWalletKeyReplacedEvent(
+                        ALIAS, OLD_KMS_KEY_ID, NEW_KMS_KEY_ID, ADDRESS, OPERATOR_ID, true)))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void onReactivated_recordsSuccessAudit() {
+    handler.onReactivated(
+        new TreasuryWalletReactivatedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID));
+
+    verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
+    verifyNoMoreInteractions(treasuryAuditRecorder);
+  }
+
+  @Test
+  void onReactivated_swallowsRecorderException() {
+    doThrow(new RuntimeException("audit insert failed"))
+        .when(treasuryAuditRecorder)
+        .record(anyLong(), any(), anyBoolean(), any());
+
+    assertThatCode(
+            () ->
+                handler.onReactivated(
+                    new TreasuryWalletReactivatedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID)))
         .doesNotThrowAnyException();
   }
 }

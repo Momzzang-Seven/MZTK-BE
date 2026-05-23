@@ -32,7 +32,11 @@ public interface ManageExecutionEip7702UseCase {
 
   String hashCalls(List<Eip7702ExecutionBatchCall> calls);
 
-  String encodeExecute(List<Eip7702ExecutionBatchCall> calls, byte[] executionSignature);
+  String encodeExecute(
+      List<Eip7702ExecutionBatchCall> calls,
+      String prepareId,
+      BigInteger deadlineEpochSeconds,
+      byte[] executionSignature);
 
   Eip7702ExecutionSignedPayload signAndEncode(Eip7702ExecutionSignCommand command);
 

@@ -3,17 +3,19 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.config;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetEip7702AuthorizationPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetSponsorPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayTerminatedExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ResolveExecutionIntentRecoveryTargetUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
@@ -21,40 +23,46 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionHookTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.CreateExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecutionModeSelector;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.GetEip7702AuthorizationPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetLatestExecutionIntentSummaryService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.GetSponsorPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentFailedOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ReplayConfirmedExecutionIntentService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.ReplayTerminatedExecutionIntentService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.ResolveExecutionIntentRecoveryTargetService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecutionTerminationHookService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnAnyExecutionEnabled
+@ConditionalOnExecutionModeEnabled
 public class ExecutionIntentServiceConfig {
 
   @Bean
@@ -62,6 +70,14 @@ public class ExecutionIntentServiceConfig {
   BuildExecutionDigestPort fallbackBuildExecutionDigestPort() {
     return (authorityAddress, executionIntentId, callDataHash, deadlineEpochSeconds) -> {
       throw new IllegalStateException("EIP-7702 execution digest is unavailable");
+    };
+  }
+
+  @Bean
+  @ConditionalOnMissingBean(BuildExecutionCallHashPort.class)
+  BuildExecutionCallHashPort fallbackBuildExecutionCallHashPort() {
+    return calls -> {
+      throw new IllegalStateException("EIP-7702 execution call hash is unavailable");
     };
   }
 
@@ -134,6 +150,17 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
+  @ConditionalOnMissingBean(LoadEip7702AuthorizationTtlPort.class)
+  @ConditionalOnProperty(
+      prefix = "web3.eip7702",
+      name = "enabled",
+      havingValue = "false",
+      matchIfMissing = true)
+  LoadEip7702AuthorizationTtlPort fallbackLoadEip7702AuthorizationTtlPort() {
+    return () -> 30L;
+  }
+
+  @Bean
   @ConditionalOnMissingBean(ValidateExecutionDraftPolicyPort.class)
   @ConditionalOnProperty(
       prefix = "web3.eip7702",
@@ -144,6 +171,17 @@ public class ExecutionIntentServiceConfig {
     return (delegateTarget, calls) -> {
       throw new IllegalStateException("EIP-7702 execution draft policy is unavailable");
     };
+  }
+
+  @Bean
+  GetSponsorPolicyUseCase getSponsorPolicyUseCase(LoadSponsorPolicyPort loadSponsorPolicyPort) {
+    return new GetSponsorPolicyService(loadSponsorPolicyPort);
+  }
+
+  @Bean
+  GetEip7702AuthorizationPolicyUseCase getEip7702AuthorizationPolicyUseCase(
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort) {
+    return new GetEip7702AuthorizationPolicyService(loadEip7702AuthorizationTtlPort);
   }
 
   @Bean
@@ -161,8 +199,10 @@ public class ExecutionIntentServiceConfig {
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
       LoadExecutionChainIdPort loadExecutionChainIdPort,
       LoadSponsorPolicyPort loadSponsorPolicyPort,
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort,
       LoadEip1559TtlPort loadEip1559TtlPort,
       BuildExecutionDigestPort buildExecutionDigestPort,
+      BuildExecutionCallHashPort buildExecutionCallHashPort,
       ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort,
       ExecutionModeSelector executionModeSelector,
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
@@ -172,8 +212,10 @@ public class ExecutionIntentServiceConfig {
         sponsorDailyUsagePersistencePort,
         loadExecutionChainIdPort,
         loadSponsorPolicyPort,
+        loadEip7702AuthorizationTtlPort,
         loadEip1559TtlPort,
         buildExecutionDigestPort,
+        buildExecutionCallHashPort,
         validateExecutionDraftPolicyPort,
         executionModeSelector,
         publishExecutionIntentTerminatedPort,
@@ -183,22 +225,28 @@ public class ExecutionIntentServiceConfig {
   @Bean
   CreateExecutionIntentUseCase createExecutionIntentUseCase(
       CreateExecutionIntentService delegate, PlatformTransactionManager transactionManager) {
-    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-    return new TransactionalCreateExecutionIntentUseCase(delegate, transactionTemplate);
+    return new TransactionalCreateExecutionIntentUseCase(
+        delegate, new TransactionTemplate(transactionManager));
   }
 
   @Bean
-  @ConditionalOnUserExecutionEnabled
-  GetExecutionIntentUseCase getExecutionIntentUseCase(
+  @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
+  GetExecutionIntentService getExecutionIntentUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       LoadExecutionTransactionPort loadExecutionTransactionPort,
-      LoadExecutionChainIdPort loadExecutionChainIdPort) {
+      LoadExecutionChainIdPort loadExecutionChainIdPort,
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort,
+      Clock appClock) {
     return new GetExecutionIntentService(
-        executionIntentPersistencePort, loadExecutionTransactionPort, loadExecutionChainIdPort);
+        executionIntentPersistencePort,
+        loadExecutionTransactionPort,
+        loadExecutionChainIdPort,
+        loadEip7702AuthorizationTtlPort,
+        appClock);
   }
 
   @Bean
-  @ConditionalOnUserExecutionEnabled
+  @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
   TransactionalExecuteExecutionIntentDelegate transactionalExecuteExecutionIntentDelegate(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
@@ -209,6 +257,7 @@ public class ExecutionIntentServiceConfig {
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
+      RunAfterCommitPort runAfterCommitPort,
       Clock appClock) {
     return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -220,6 +269,7 @@ public class ExecutionIntentServiceConfig {
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
+        runAfterCommitPort,
         appClock);
   }
 
@@ -232,7 +282,7 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
-  @ConditionalOnUserExecutionEnabled
+  @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
   ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
       ExecuteTransactionalExecutionIntentDelegatePort
           executeTransactionalExecutionIntentDelegatePort,
@@ -250,9 +300,10 @@ public class ExecutionIntentServiceConfig {
   @ConditionalOnBean(LoadExecutionTransactionPort.class)
   GetLatestExecutionIntentSummaryUseCase getLatestExecutionIntentSummaryUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      LoadExecutionTransactionPort loadExecutionTransactionPort) {
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      Clock appClock) {
     return new GetLatestExecutionIntentSummaryService(
-        executionIntentPersistencePort, loadExecutionTransactionPort);
+        executionIntentPersistencePort, loadExecutionTransactionPort, appClock);
   }
 
   @Bean
@@ -268,9 +319,10 @@ public class ExecutionIntentServiceConfig {
   MarkExecutionIntentSucceededUseCase markExecutionIntentSucceededUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunAfterCommitPort runAfterCommitPort,
       Clock appClock) {
     return new MarkExecutionIntentSucceededService(
-        executionIntentPersistencePort, executionActionHandlerPorts, appClock);
+        executionIntentPersistencePort, executionActionHandlerPorts, runAfterCommitPort, appClock);
   }
 
   @Bean
@@ -285,26 +337,67 @@ public class ExecutionIntentServiceConfig {
   @Bean
   RunExecutionTerminationHookService runExecutionTerminationHookService(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      List<ExecutionActionHandlerPort> executionActionHandlerPorts) {
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunExecutionHookTransactionPort runExecutionHookTransactionPort) {
     return new RunExecutionTerminationHookService(
-        executionIntentPersistencePort, executionActionHandlerPorts);
+        executionIntentPersistencePort,
+        executionActionHandlerPorts,
+        runExecutionHookTransactionPort);
+  }
+
+  @Bean
+  RunExecutionHookTransactionPort runExecutionHookTransactionPort(
+      PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    return action -> transactionTemplate.executeWithoutResult(status -> action.run());
   }
 
   @Bean
   ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      List<ExecutionActionHandlerPort> executionActionHandlerPorts) {
-    return new ReplayConfirmedExecutionIntentService(
-        executionIntentPersistencePort, executionActionHandlerPorts);
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunAfterCommitPort runAfterCommitPort,
+      Clock appClock,
+      PlatformTransactionManager transactionManager) {
+    ReplayConfirmedExecutionIntentService delegate =
+        new ReplayConfirmedExecutionIntentService(
+            executionIntentPersistencePort,
+            loadExecutionTransactionPort,
+            executionActionHandlerPorts,
+            runAfterCommitPort,
+            appClock);
+    return new TransactionalReplayConfirmedExecutionIntentUseCase(delegate, transactionManager);
   }
 
-  private record TransactionalCreateExecutionIntentUseCase(
-      CreateExecutionIntentService delegate, TransactionTemplate transactionTemplate)
-      implements CreateExecutionIntentUseCase {
+  @Bean
+  ReplayTerminatedExecutionIntentUseCase replayTerminatedExecutionIntentUseCase(
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunExecutionHookTransactionPort runExecutionHookTransactionPort,
+      Clock appClock,
+      PlatformTransactionManager transactionManager) {
+    ReplayTerminatedExecutionIntentService delegate =
+        new ReplayTerminatedExecutionIntentService(
+            executionIntentPersistencePort,
+            loadExecutionTransactionPort,
+            executionActionHandlerPorts,
+            runExecutionHookTransactionPort,
+            appClock);
+    return new TransactionalReplayTerminatedExecutionIntentUseCase(delegate, transactionManager);
+  }
 
-    @Override
-    public CreateExecutionIntentResult execute(CreateExecutionIntentCommand command) {
-      return transactionTemplate.execute(status -> delegate.execute(command));
-    }
+  @Bean
+  ResolveExecutionIntentRecoveryTargetUseCase resolveExecutionIntentRecoveryTargetUseCase(
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      PlatformTransactionManager transactionManager) {
+    ResolveExecutionIntentRecoveryTargetService delegate =
+        new ResolveExecutionIntentRecoveryTargetService(
+            executionIntentPersistencePort, loadExecutionTransactionPort);
+    return new TransactionalResolveExecutionIntentRecoveryTargetUseCase(
+        delegate, transactionManager);
   }
 }

@@ -4,36 +4,95 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionResumeView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RepairReservationChainReadUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionResumePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationEscrow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class GetReservationDetailServiceTest {
 
+  private static final Clock TEST_CLOCK =
+      Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private LoadClassSummaryPort loadClassSummaryPort;
   @Mock private LoadUserSummaryPort loadUserSummaryPort;
 
-  @InjectMocks private GetReservationDetailService sut;
+  private GetReservationDetailService sut;
+
+  @BeforeEach
+  void setUp() {
+    sut =
+        new GetReservationDetailService(
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            emptyResumePort(),
+            noOpRepairUseCase(),
+            null,
+            TEST_CLOCK);
+  }
+
+  private static LoadReservationExecutionResumePort emptyResumePort() {
+    return new LoadReservationExecutionResumePort() {
+      @Override
+      public Optional<ReservationExecutionResumeView> loadLatest(Long reservationId) {
+        return Optional.empty();
+      }
+
+      @Override
+      public Map<Long, ReservationExecutionResumeView> loadLatestBatch(
+          Collection<Long> reservationIds) {
+        return Map.of();
+      }
+    };
+  }
+
+  private static RepairReservationChainReadUseCase noOpRepairUseCase() {
+    return new RepairReservationChainReadUseCase() {
+      @Override
+      public Reservation repairOne(Reservation reservation) {
+        return reservation;
+      }
+
+      @Override
+      public List<Reservation> repairBatch(List<Reservation> reservations) {
+        return reservations;
+      }
+    };
+  }
 
   private Reservation sampleReservation(Long userId, Long trainerId) {
     return Reservation.builder()
@@ -64,7 +123,93 @@ class GetReservationDetailServiceTest {
 
     // then
     assertThat(result.reservationId()).isEqualTo(10L);
-    assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.PENDING);
+    assertThat(result.businessStatus()).isEqualTo(ReservationStatus.PENDING);
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - chain read repair 결과를 응답 매핑 전에 반영한다")
+  void execute_AppliesChainReadRepairBeforeMapping() {
+    Reservation original =
+        sampleReservation(1L, 2L).toBuilder()
+            .status(ReservationStatus.DEADLINE_SYNC_REQUIRED)
+            .build();
+    Reservation repaired = original.toBuilder().status(ReservationStatus.USER_CANCELLED).build();
+    RepairReservationChainReadUseCase repairUseCase = mock(RepairReservationChainReadUseCase.class);
+    GetReservationDetailService repairingSut =
+        new GetReservationDetailService(
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            null,
+            repairUseCase,
+            null,
+            TEST_CLOCK);
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(original));
+    given(repairUseCase.repairOne(original)).willReturn(repaired);
+    given(loadClassSummaryPort.findBySlotId(any())).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    GetReservationResult result = repairingSut.execute(new GetReservationQuery(10L, 1L));
+
+    assertThat(result.status()).isEqualTo(ReservationDisplayStatus.USER_CANCELLED);
+    assertThat(result.businessStatus()).isEqualTo(ReservationStatus.USER_CANCELLED);
+    then(repairUseCase).should().repairOne(original);
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - USER_EIP7702 txHash는 escrow projection lastTxHash를 우선 사용한다")
+  void execute_UsesEscrowLastTxHashBeforeReservationTxHash() {
+    Reservation reservation = sampleReservation(1L, 2L).toBuilder().txHash("legacy-tx").build();
+    LoadReservationEscrowPort escrowPort = mock(LoadReservationEscrowPort.class);
+    GetReservationDetailService escrowAwareSut =
+        new GetReservationDetailService(
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            null,
+            null,
+            escrowPort,
+            TEST_CLOCK);
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(escrowPort.findByReservationId(10L))
+        .willReturn(
+            Optional.of(
+                MarketplaceReservationEscrow.builder()
+                    .reservationId(10L)
+                    .lastTxHash("0xescrowtx")
+                    .build()));
+    given(loadClassSummaryPort.findBySlotId(any())).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    GetReservationResult result = escrowAwareSut.execute(new GetReservationQuery(10L, 1L));
+
+    assertThat(result.txHash()).isEqualTo("0xescrowtx");
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - escrow lastTxHash가 없으면 기존 reservation txHash를 fallback으로 유지한다")
+  void execute_FallsBackToReservationTxHashWhenEscrowTxHashMissing() {
+    Reservation reservation = sampleReservation(1L, 2L).toBuilder().txHash("legacy-tx").build();
+    LoadReservationEscrowPort escrowPort = mock(LoadReservationEscrowPort.class);
+    GetReservationDetailService escrowAwareSut =
+        new GetReservationDetailService(
+            loadReservationPort,
+            loadClassSummaryPort,
+            loadUserSummaryPort,
+            null,
+            null,
+            escrowPort,
+            TEST_CLOCK);
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(escrowPort.findByReservationId(10L))
+        .willReturn(Optional.of(MarketplaceReservationEscrow.builder().reservationId(10L).build()));
+    given(loadClassSummaryPort.findBySlotId(any())).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    GetReservationResult result = escrowAwareSut.execute(new GetReservationQuery(10L, 1L));
+
+    assertThat(result.txHash()).isEqualTo("legacy-tx");
   }
 
   @Test

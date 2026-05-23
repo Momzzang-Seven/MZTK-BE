@@ -65,7 +65,9 @@ public class GetPostService implements GetPostUseCase {
     long likeCount = postLikePersistencePort.countByTarget(PostLikeTargetType.POST, postId);
     long commentCount = countCommentsPort.countCommentsByPostId(postId);
     long answerCount =
-        PostType.QUESTION.equals(post.getType()) ? countAnswersPort.countAnswers(postId) : 0L;
+        PostType.QUESTION.equals(post.getType())
+            ? countAnswersPort.countPublicVisibleAnswers(postId)
+            : 0L;
     boolean liked =
         requesterUserId != null
             && postLikePersistencePort.exists(PostLikeTargetType.POST, postId, requesterUserId);

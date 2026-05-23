@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -9,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -56,6 +58,12 @@ class QuestionRewardExecutionActionHandlerTest {
   }
 
   @Test
+  void supportsIntent_distinguishesLegacyRewardPayloadFromQnaEscrowPayload() throws Exception {
+    assertThat(handler.supports(executionIntent())).isTrue();
+    assertThat(handler.supports(qnaEscrowIntent())).isFalse();
+  }
+
+  @Test
   void beforeExecute_logsLegacyIntentAndMarksSubmittedAfterBroadcast() throws Exception {
     ExecutionIntent intent = executionIntent();
     when(getQuestionRewardIntentSnapshotUseCase.execute(
@@ -69,6 +77,20 @@ class QuestionRewardExecutionActionHandlerTest {
     assertThat(plan.referenceType()).isEqualTo(ExecutionReferenceType.USER_TO_USER);
     assertThat(plan.calls()).hasSize(1);
     assertThat(plan.calls().getFirst().data()).isEqualTo("0x1234");
+    verify(markQuestionRewardIntentSubmittedUseCase)
+        .execute(new MarkQuestionRewardIntentSubmittedCommand(101L));
+  }
+
+  @Test
+  void afterTransactionSubmitted_swallowsLegacySyncFailure() throws Exception {
+    ExecutionIntent intent = executionIntent();
+    ExecutionActionPlan plan = handler.buildActionPlan(intent);
+    doThrow(new RuntimeException("legacy sync failed"))
+        .when(markQuestionRewardIntentSubmittedUseCase)
+        .execute(new MarkQuestionRewardIntentSubmittedCommand(101L));
+
+    handler.afterTransactionSubmitted(intent, plan, ExecutionTransactionStatus.PENDING);
+
     verify(markQuestionRewardIntentSubmittedUseCase)
         .execute(new MarkQuestionRewardIntentSubmittedCommand(101L));
   }
@@ -130,6 +152,56 @@ class QuestionRewardExecutionActionHandlerTest {
             BigInteger.valueOf(2_000_000_000L),
             BigInteger.valueOf(50_000_000_000L)),
         "0x" + "b".repeat(64),
+        BigInteger.ZERO,
+        LocalDate.of(2026, 4, 6),
+        LocalDateTime.now());
+  }
+
+  private ExecutionIntent qnaEscrowIntent() throws Exception {
+    String payload =
+        objectMapper.writeValueAsString(
+            Map.of(
+                "actionType",
+                "QNA_ANSWER_ACCEPT",
+                "postId",
+                101L,
+                "answerId",
+                201L,
+                "authorityAddress",
+                "0x" + "1".repeat(40),
+                "tokenAddress",
+                "0x" + "2".repeat(40),
+                "amountWei",
+                BigInteger.valueOf(500),
+                "questionHash",
+                "0x" + "a".repeat(64),
+                "contentHash",
+                "0x" + "b".repeat(64),
+                "callTarget",
+                "0x" + "3".repeat(40),
+                "callData",
+                "0x1234"));
+
+    return ExecutionIntent.create(
+        "intent-qna",
+        "qna:accept:101:201",
+        1,
+        ExecutionResourceType.QUESTION,
+        "101",
+        ExecutionActionType.QNA_ANSWER_ACCEPT,
+        7L,
+        22L,
+        ExecutionMode.EIP7702,
+        "0x" + "a".repeat(64),
+        payload,
+        "0x" + "1".repeat(40),
+        5L,
+        "0x" + "2".repeat(40),
+        LocalDateTime.now().plusMinutes(5),
+        "0x" + "3".repeat(64),
+        "0x" + "4".repeat(64),
+        null,
+        null,
         BigInteger.ZERO,
         LocalDate.of(2026, 4, 6),
         LocalDateTime.now());

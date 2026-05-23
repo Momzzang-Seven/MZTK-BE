@@ -4,5 +4,6 @@ public enum ExecutionResourceTypeCode {
   TRANSFER,
   QUESTION,
   ANSWER,
-  ORDER
+  ORDER,
+  WALLET_REGISTRATION
 }

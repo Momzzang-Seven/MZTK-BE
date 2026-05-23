@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.comment.infrastructure.external.answer.adap
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import org.springframework.stereotype.Component;
@@ -12,14 +12,14 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CommentAnswerAdapter implements LoadAnswerPort {
 
-  private final GetAnswerSummaryUseCase getAnswerSummaryUseCase;
-  private final GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
+  private final GetVisibleAnswerSummaryUseCase getVisibleAnswerSummaryUseCase;
+  private final GetVisibleAnswerSummaryForUpdateUseCase getVisibleAnswerSummaryForUpdateUseCase;
   private final GetPostContextUseCase getPostContextUseCase;
 
   @Override
   public Optional<AnswerCommentContext> loadAnswerCommentContext(Long answerId) {
-    return getAnswerSummaryUseCase
-        .getAnswerSummary(answerId)
+    return getVisibleAnswerSummaryUseCase
+        .getVisibleAnswerSummary(answerId)
         .map(
             answer ->
                 new AnswerCommentContext(
@@ -28,8 +28,8 @@ public class CommentAnswerAdapter implements LoadAnswerPort {
 
   @Override
   public Optional<AnswerCommentContext> loadAnswerCommentContextForUpdate(Long answerId) {
-    return getAnswerSummaryForUpdateUseCase
-        .getAnswerSummaryForUpdate(answerId)
+    return getVisibleAnswerSummaryForUpdateUseCase
+        .getVisibleAnswerSummaryForUpdate(answerId)
         .map(
             answer ->
                 new AnswerCommentContext(

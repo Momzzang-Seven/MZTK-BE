@@ -167,6 +167,11 @@ public enum ErrorCode {
       "WALLET_007", "Requested wallet is in block", HttpStatus.BAD_REQUEST // 400
       ),
 
+  WALLET_APPROVAL_UNAVAILABLE(
+      "WALLET_008",
+      "Wallet approval flow is currently unavailable",
+      HttpStatus.SERVICE_UNAVAILABLE),
+
   // ========================================
   // Web3 Errors (WEB3_xxx)
   // ========================================
@@ -220,6 +225,10 @@ public enum ErrorCode {
       "TREASURY_005",
       "KMS alias already exists for the requested role",
       HttpStatus.INTERNAL_SERVER_ERROR),
+  TREASURY_WALLET_NOT_PROVISIONED(
+      "TREASURY_006",
+      "Treasury wallet for the requested role is not provisioned or not active",
+      HttpStatus.SERVICE_UNAVAILABLE),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
@@ -295,6 +304,12 @@ public enum ErrorCode {
 
   DATA_INTEGRITY_VIOLATION(
       "INTERNAL_004", "A data conflict occurred. Please try again.", HttpStatus.CONFLICT // 409
+      ),
+
+  DATABASE_LOCK_TIMEOUT(
+      "INTERNAL_005",
+      "Requested resource is currently locked by another operation. Please try again shortly.",
+      HttpStatus.CONFLICT // 409
       ),
   // ========================================
   // Post Errors (POST_xxx)
@@ -393,6 +408,23 @@ public enum ErrorCode {
       "ANSWER_009", "Cannot update an answer on a solved post", HttpStatus.BAD_REQUEST),
   CANNOT_DELETE_ANSWER_ON_SOLVED_POST(
       "ANSWER_010", "Cannot delete an answer on a solved post", HttpStatus.BAD_REQUEST),
+  ANSWER_PUBLICATION_PENDING("ANSWER_011", "Answer publication is pending", HttpStatus.CONFLICT),
+  ANSWER_CREATE_RECOVERY_REQUIRED(
+      "ANSWER_012", "Answer create recovery is required", HttpStatus.CONFLICT),
+  ANSWER_CREATE_RECOVERY_UNAVAILABLE(
+      "ANSWER_013", "Answer create recovery is unavailable", HttpStatus.CONFLICT),
+  ANSWER_PUBLICATION_STATE_CONFLICT(
+      "ANSWER_014", "Answer publication state is inconsistent", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_ONCHAIN_IN_PROGRESS(
+      "ANSWER_015", "Answer update onchain mutation is in progress", HttpStatus.CONFLICT),
+  ANSWER_DELETE_ONCHAIN_IN_PROGRESS(
+      "ANSWER_016", "Answer delete onchain mutation is in progress", HttpStatus.CONFLICT),
+  ANSWER_PREPARATION_IN_PROGRESS(
+      "ANSWER_017", "Answer preparation is in progress", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_RECOVERY_UNAVAILABLE(
+      "ANSWER_018", "Answer update recovery is unavailable", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_DISCARD_UNAVAILABLE(
+      "ANSWER_019", "Answer update discard is unavailable", HttpStatus.CONFLICT),
   // ========================================
   // Image Errors (IMAGE_xxx)
   // ========================================
@@ -519,6 +551,45 @@ public enum ErrorCode {
       "MARKETPLACE_032",
       "Class is not currently active and cannot accept reservations",
       HttpStatus.CONFLICT),
+
+  MARKETPLACE_WEB3_DISABLED(
+      "MARKETPLACE_033", "Marketplace Web3 execution is disabled", HttpStatus.SERVICE_UNAVAILABLE),
+  MARKETPLACE_SWITCH_WALLET_REQUIRED(
+      "MARKETPLACE_034", "Switch to the wallet used for this reservation", HttpStatus.CONFLICT),
+  MARKETPLACE_ACTIVE_EXECUTION_CONFLICT(
+      "MARKETPLACE_035", "Marketplace execution is already in progress", HttpStatus.CONFLICT),
+  MARKETPLACE_DEADLINE_SYNC_REQUIRED(
+      "MARKETPLACE_036",
+      "Marketplace deadline must be synced before this action",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_DEADLINE_REFUND_REQUIRED(
+      "MARKETPLACE_037", "Reservation deadline expired; refund is required", HttpStatus.CONFLICT),
+  MARKETPLACE_DEADLINE_EXECUTION_WINDOW_EXPIRED(
+      "MARKETPLACE_038", "Reservation execution window has expired", HttpStatus.CONFLICT),
+  MARKETPLACE_INSUFFICIENT_ALLOWANCE(
+      "MARKETPLACE_039",
+      "Token allowance is insufficient for marketplace purchase",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_INSUFFICIENT_TOKEN_BALANCE(
+      "MARKETPLACE_040",
+      "Token balance is insufficient for marketplace purchase",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_CONFIRMED_REPAIR_REQUIRED(
+      "MARKETPLACE_041",
+      "Confirmed marketplace execution must be repaired first",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_APPROVAL_WINDOW_EXPIRED(
+      "MARKETPLACE_042", "Reservation approval window has expired", HttpStatus.CONFLICT),
+  MARKETPLACE_STALE_SIGN_REQUEST(
+      "MARKETPLACE_043", "Marketplace sign request is stale", HttpStatus.CONFLICT),
+  MARKETPLACE_EXECUTION_NOT_OWNED(
+      "MARKETPLACE_044", "Marketplace execution is not owned by this user", HttpStatus.FORBIDDEN),
+  MARKETPLACE_IDEMPOTENCY_CONFLICT(
+      "MARKETPLACE_045",
+      "Marketplace idempotency key conflicts with another request",
+      HttpStatus.CONFLICT),
+  MARKETPLACE_CANNOT_BUY_OWN_CLASS(
+      "MARKETPLACE_046", "Buyer cannot purchase their own class", HttpStatus.CONFLICT),
 
   MARKETPLACE_RESERVATION_PAST_TIME(
       "MARKETPLACE_031",

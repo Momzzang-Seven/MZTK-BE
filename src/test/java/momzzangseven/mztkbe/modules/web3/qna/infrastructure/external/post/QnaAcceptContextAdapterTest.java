@@ -7,8 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,18 +21,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class QnaAcceptContextAdapterTest {
 
   @Mock private GetPostContextUseCase getPostContextUseCase;
-  @Mock private GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
+  @Mock private GetVisibleAnswerSummaryForUpdateUseCase getVisibleAnswerSummaryForUpdateUseCase;
 
   private QnaAcceptContextAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new QnaAcceptContextAdapter(getPostContextUseCase, getAnswerSummaryForUpdateUseCase);
+    adapter =
+        new QnaAcceptContextAdapter(getPostContextUseCase, getVisibleAnswerSummaryForUpdateUseCase);
   }
 
   @Test
   void loadForUpdate_locksAnswerThenPostAndMapsContext() {
-    when(getAnswerSummaryForUpdateUseCase.getAnswerSummaryForUpdate(201L))
+    when(getVisibleAnswerSummaryForUpdateUseCase.getVisibleAnswerSummaryForUpdate(201L))
         .thenReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(201L, 101L, 22L, "답변")));
     when(getPostContextUseCase.getPostContextForUpdate(101L))
         .thenReturn(
@@ -49,14 +50,14 @@ class QnaAcceptContextAdapterTest {
     assertThat(result.orElseThrow().questionContent()).isEqualTo("질문");
     assertThat(result.orElseThrow().answerContent()).isEqualTo("답변");
     verify(getPostContextUseCase, never()).getPostContext(101L);
-    InOrder inOrder = inOrder(getAnswerSummaryForUpdateUseCase, getPostContextUseCase);
-    inOrder.verify(getAnswerSummaryForUpdateUseCase).getAnswerSummaryForUpdate(201L);
+    InOrder inOrder = inOrder(getVisibleAnswerSummaryForUpdateUseCase, getPostContextUseCase);
+    inOrder.verify(getVisibleAnswerSummaryForUpdateUseCase).getVisibleAnswerSummaryForUpdate(201L);
     inOrder.verify(getPostContextUseCase).getPostContextForUpdate(101L);
   }
 
   @Test
   void loadForUpdate_returnsEmptyWhenAnswerPostMismatch() {
-    when(getAnswerSummaryForUpdateUseCase.getAnswerSummaryForUpdate(201L))
+    when(getVisibleAnswerSummaryForUpdateUseCase.getVisibleAnswerSummaryForUpdate(201L))
         .thenReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(201L, 999L, 22L, "답변")));
     when(getPostContextUseCase.getPostContextForUpdate(101L))
         .thenReturn(

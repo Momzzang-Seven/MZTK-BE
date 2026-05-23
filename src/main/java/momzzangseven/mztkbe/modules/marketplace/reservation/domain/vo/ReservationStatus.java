@@ -9,6 +9,9 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo;
  */
 public enum ReservationStatus {
 
+  /** Local buyer/slot/date hold before purchase escrow is confirmed. */
+  HOLDING,
+
   /** User reservation complete; awaiting trainer approval. Funds deposited in escrow. */
   PENDING,
 
@@ -28,12 +31,65 @@ public enum ReservationStatus {
   SETTLED,
 
   /** User did not complete within 24 h after class end. Scheduler adminSettle → trainer paid. */
-  AUTO_SETTLED;
+  AUTO_SETTLED,
+
+  /** Local purchase state before an execution intent is bound. Scheduler-invisible. */
+  PURCHASE_PREPARING,
+
+  /** User purchase intent exists or is awaiting signature/on-chain result. Scheduler-invisible. */
+  PURCHASE_PENDING,
+
+  /** Buyer cancellation is awaiting signature/on-chain result. Scheduler-invisible. */
+  CANCEL_PENDING,
+
+  /** Trainer rejection is awaiting signature/on-chain result. Scheduler-invisible. */
+  REJECT_PENDING,
+
+  /** Buyer completion confirmation is awaiting signature/on-chain result. Scheduler-invisible. */
+  CONFIRM_PENDING,
+
+  /** Buyer deadline refund is awaiting signature/on-chain result. Scheduler-invisible. */
+  DEADLINE_REFUND_PENDING,
+
+  /** Manual admin or scheduler refund is being prepared/executed. Scheduler-invisible. */
+  ADMIN_REFUND_PENDING,
+
+  /** Manual admin or scheduler settlement is being prepared/executed. Scheduler-invisible. */
+  ADMIN_SETTLE_PENDING,
+
+  /** Purchase confirmed but the actual contract deadline cannot safely support completion. */
+  DEADLINE_RECOVERY_REQUIRED,
+
+  /** Existing escrow row needs chain deadline/order sync before user actions are allowed. */
+  DEADLINE_SYNC_REQUIRED,
+
+  /** Deadline expired and buyer deadline refund is the only user-managed recovery path. */
+  DEADLINE_REFUND_AVAILABLE,
+
+  /** Chain state cannot be safely mapped without manual repair. */
+  MANUAL_SYNC_REQUIRED,
+
+  /** Local purchase hold expired before becoming a non-cancelable chain execution. */
+  HOLD_EXPIRED,
+
+  /** Purchase/payment preparation failed and no active hold remains. */
+  PAYMENT_FAILED,
+
+  /** Buyer deadline refund completed on-chain. */
+  DEADLINE_REFUNDED;
 
   /** Returns true if this status is a terminal state with no further transitions. */
   public boolean isTerminal() {
     return switch (this) {
-      case USER_CANCELLED, REJECTED, TIMEOUT_CANCELLED, SETTLED, AUTO_SETTLED -> true;
+      case USER_CANCELLED,
+              REJECTED,
+              TIMEOUT_CANCELLED,
+              SETTLED,
+              AUTO_SETTLED,
+              HOLD_EXPIRED,
+              PAYMENT_FAILED,
+              DEADLINE_REFUNDED ->
+          true;
       default -> false;
     };
   }
@@ -54,6 +110,35 @@ public enum ReservationStatus {
     return this == PENDING;
   }
 
+  /** Returns true when this status must not be processed by legacy scheduler/admin jobs. */
+  public boolean isSchedulerInvisibleUserState() {
+    return switch (this) {
+      case HOLDING,
+              PURCHASE_PREPARING,
+              PURCHASE_PENDING,
+              CANCEL_PENDING,
+              REJECT_PENDING,
+              CONFIRM_PENDING,
+              DEADLINE_REFUND_PENDING,
+              ADMIN_REFUND_PENDING,
+              ADMIN_SETTLE_PENDING,
+              DEADLINE_RECOVERY_REQUIRED,
+              DEADLINE_SYNC_REQUIRED,
+              DEADLINE_REFUND_AVAILABLE,
+              MANUAL_SYNC_REQUIRED,
+              HOLD_EXPIRED,
+              PAYMENT_FAILED,
+              DEADLINE_REFUNDED ->
+          true;
+      default -> false;
+    };
+  }
+
+  /** Returns true when this status should occupy class capacity. */
+  public boolean countsTowardCapacity() {
+    return !isTerminal();
+  }
+
   /**
    * Returns whether a transition from this status to {@code next} is permitted by business rules.
    *
@@ -62,12 +147,70 @@ public enum ReservationStatus {
    */
   public boolean canTransitionTo(ReservationStatus next) {
     return switch (this) {
+      case HOLDING ->
+          next == PENDING
+              || next == HOLD_EXPIRED
+              || next == PAYMENT_FAILED
+              || next == DEADLINE_RECOVERY_REQUIRED
+              || next == DEADLINE_SYNC_REQUIRED;
       case PENDING ->
           next == APPROVED
               || next == USER_CANCELLED
               || next == REJECTED
-              || next == TIMEOUT_CANCELLED;
-      case APPROVED -> next == SETTLED || next == AUTO_SETTLED;
+              || next == TIMEOUT_CANCELLED
+              || next == HOLDING
+              || next == PURCHASE_PREPARING
+              || next == CANCEL_PENDING
+              || next == REJECT_PENDING
+              || next == ADMIN_REFUND_PENDING
+              || next == DEADLINE_REFUND_AVAILABLE;
+      case APPROVED ->
+          next == SETTLED
+              || next == AUTO_SETTLED
+              || next == CONFIRM_PENDING
+              || next == ADMIN_SETTLE_PENDING
+              || next == DEADLINE_REFUND_AVAILABLE;
+      case PURCHASE_PREPARING ->
+          next == PURCHASE_PENDING
+              || next == PENDING
+              || next == DEADLINE_RECOVERY_REQUIRED
+              || next == DEADLINE_SYNC_REQUIRED
+              || next == HOLD_EXPIRED
+              || next == PAYMENT_FAILED;
+      case PURCHASE_PENDING ->
+          next == PENDING
+              || next == HOLD_EXPIRED
+              || next == PAYMENT_FAILED
+              || next == DEADLINE_RECOVERY_REQUIRED
+              || next == DEADLINE_SYNC_REQUIRED;
+      case CANCEL_PENDING ->
+          next == USER_CANCELLED || next == PENDING || next == DEADLINE_REFUND_AVAILABLE;
+      case REJECT_PENDING ->
+          next == REJECTED || next == PENDING || next == DEADLINE_REFUND_AVAILABLE;
+      case CONFIRM_PENDING ->
+          next == SETTLED || next == APPROVED || next == DEADLINE_REFUND_AVAILABLE;
+      case DEADLINE_REFUND_AVAILABLE -> next == DEADLINE_REFUND_PENDING;
+      case DEADLINE_REFUND_PENDING ->
+          next == DEADLINE_REFUNDED || next == DEADLINE_REFUND_AVAILABLE;
+      case ADMIN_REFUND_PENDING ->
+          next == TIMEOUT_CANCELLED
+              || next == PENDING
+              || next == DEADLINE_SYNC_REQUIRED
+              || next == MANUAL_SYNC_REQUIRED;
+      case ADMIN_SETTLE_PENDING ->
+          next == AUTO_SETTLED
+              || next == APPROVED
+              || next == DEADLINE_SYNC_REQUIRED
+              || next == MANUAL_SYNC_REQUIRED;
+      case DEADLINE_RECOVERY_REQUIRED, DEADLINE_SYNC_REQUIRED -> next == DEADLINE_REFUND_AVAILABLE;
+      case MANUAL_SYNC_REQUIRED ->
+          next == USER_CANCELLED
+              || next == REJECTED
+              || next == TIMEOUT_CANCELLED
+              || next == SETTLED
+              || next == AUTO_SETTLED
+              || next == DEADLINE_REFUNDED
+              || next == DEADLINE_REFUND_AVAILABLE;
       default -> false;
     };
   }

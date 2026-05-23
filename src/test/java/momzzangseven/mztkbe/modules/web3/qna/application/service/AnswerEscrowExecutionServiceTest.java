@@ -7,14 +7,15 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.web3.RetryableWeb3PreparationException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerDeleteCommand;
@@ -33,6 +34,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +63,12 @@ class AnswerEscrowExecutionServiceTest {
         .when(loadQnaExecutionIntentStatePort.hasConflictingActiveIntent(any(), anyString(), any()))
         .thenReturn(false);
     lenient()
+        .when(loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(any(), anyString()))
+        .thenReturn(false);
+    lenient()
+        .when(loadQnaExecutionIntentStatePort.loadActiveByResource(any(), anyString()))
+        .thenReturn(List.of());
+    lenient()
         .when(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
         .thenReturn(Optional.empty());
   }
@@ -68,8 +76,7 @@ class AnswerEscrowExecutionServiceTest {
   @Test
   @DisplayName("prepareAnswerCreate fails when the question is not registered onchain")
   void prepareAnswerCreate_failsWhenQuestionProjectionIsMissing() {
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
-        .willReturn(Optional.empty());
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L)).willReturn(Optional.empty());
 
     assertThatThrownBy(
             () ->
@@ -83,7 +90,7 @@ class AnswerEscrowExecutionServiceTest {
   @DisplayName("prepareAnswerCreate submits draft without mutating projections")
   void prepareAnswerCreate_submitsWithoutPersistingProjections() {
     String storedQuestionHash = QnaContentHashFactory.hash("온체인 질문");
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
         .willReturn(Optional.of(questionProjection(storedQuestionHash)));
     given(buildQnaExecutionDraftPort.build(any()))
         .willReturn(draft(QnaExecutionActionType.QNA_ANSWER_SUBMIT));
@@ -113,7 +120,7 @@ class AnswerEscrowExecutionServiceTest {
   @Test
   @DisplayName("precheckAnswerCreate blocks when local question content differs from projection")
   void precheckAnswerCreate_blocksWhenQuestionHashDiffers() {
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
         .willReturn(Optional.of(questionProjection("온체인 질문")));
 
     assertThatThrownBy(
@@ -134,11 +141,11 @@ class AnswerEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-active",
                     QnaExecutionActionType.QNA_QUESTION_DELETE,
-                    ExecutionIntentStatus.AWAITING_SIGNATURE)));
+                    QnaExecutionIntentStatus.AWAITING_SIGNATURE)));
 
     assertThatThrownBy(
             () -> service.precheckAnswerCreate(new PrecheckAnswerCreateCommand(101L, "온체인 질문")))
-        .isInstanceOf(Web3InvalidInputException.class)
+        .isInstanceOf(RetryableWeb3PreparationException.class)
         .hasMessageContaining("active onchain mutation");
 
     verify(qnaProjectionPersistencePort, never()).findQuestionByPostIdForUpdate(any());
@@ -148,9 +155,8 @@ class AnswerEscrowExecutionServiceTest {
   @DisplayName(
       "recoverAnswerCreate recreates submit intent only after terminal submit and missing projection")
   void recoverAnswerCreate_recreatesWhenLatestSubmitIntentIsTerminal() {
-    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
-        .willReturn(Optional.empty());
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L)).willReturn(Optional.empty());
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
         .willReturn(Optional.of(questionProjection("온체인 질문")));
     given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
         .willReturn(
@@ -158,7 +164,7 @@ class AnswerEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-terminal",
                     QnaExecutionActionType.QNA_ANSWER_SUBMIT,
-                    ExecutionIntentStatus.EXPIRED)));
+                    QnaExecutionIntentStatus.EXPIRED)));
     given(buildQnaExecutionDraftPort.build(any()))
         .willReturn(draft(QnaExecutionActionType.QNA_ANSWER_SUBMIT));
     given(submitQnaExecutionDraftPort.submit(any()))
@@ -174,10 +180,9 @@ class AnswerEscrowExecutionServiceTest {
   @Test
   @DisplayName("prepareAnswerUpdate fails when the answer is not registered onchain")
   void prepareAnswerUpdate_failsWhenAnswerProjectionIsMissing() {
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
         .willReturn(Optional.of(questionProjection(QnaContentHashFactory.hash("질문 본문"))));
-    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
-        .willReturn(Optional.empty());
+    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L)).willReturn(Optional.empty());
 
     assertThatThrownBy(
             () ->
@@ -190,7 +195,7 @@ class AnswerEscrowExecutionServiceTest {
   @Test
   @DisplayName("prepareAnswerUpdate uses stored reward projection instead of current config")
   void prepareAnswerUpdate_usesStoredRewardProjection() {
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
         .willReturn(
             Optional.of(
                 QnaQuestionProjection.create(
@@ -200,7 +205,7 @@ class AnswerEscrowExecutionServiceTest {
                     "0x9999999999999999999999999999999999999999",
                     new BigInteger("123000000000000000000"),
                     QnaContentHashFactory.hash("온체인 질문"))));
-    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
+    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L))
         .willReturn(
             Optional.of(
                 QnaAnswerProjection.create(
@@ -231,9 +236,9 @@ class AnswerEscrowExecutionServiceTest {
   @DisplayName(
       "recoverAnswerUpdate recreates update intent when local answer content is newer than projection")
   void recoverAnswerUpdate_recreatesWhenProjectionStillStale() {
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
         .willReturn(Optional.of(questionProjection("온체인 질문")));
-    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
+    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L))
         .willReturn(Optional.of(answerProjection(QnaContentHashFactory.hash("온체인 답변"))));
     given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
         .willReturn(
@@ -241,7 +246,7 @@ class AnswerEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-terminal",
                     QnaExecutionActionType.QNA_ANSWER_UPDATE,
-                    ExecutionIntentStatus.CANCELED)));
+                    QnaExecutionIntentStatus.CANCELED)));
     given(buildQnaExecutionDraftPort.build(any()))
         .willReturn(draft(QnaExecutionActionType.QNA_ANSWER_UPDATE));
     given(submitQnaExecutionDraftPort.submit(any()))
@@ -258,7 +263,7 @@ class AnswerEscrowExecutionServiceTest {
   @Test
   @DisplayName("recoverAnswerUpdate skips recovery while the latest update intent is still active")
   void recoverAnswerUpdate_skipsWhenLatestUpdateIntentIsActive() {
-    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
+    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L))
         .willReturn(Optional.of(answerProjection(QnaContentHashFactory.hash("온체인 답변"))));
     given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
         .willReturn(
@@ -266,7 +271,7 @@ class AnswerEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-active",
                     QnaExecutionActionType.QNA_ANSWER_UPDATE,
-                    ExecutionIntentStatus.PENDING_ONCHAIN)));
+                    QnaExecutionIntentStatus.PENDING_ONCHAIN)));
 
     Optional<QnaExecutionIntentResult> result =
         service.recoverAnswerUpdate(
@@ -281,9 +286,9 @@ class AnswerEscrowExecutionServiceTest {
   @DisplayName("prepareAnswerDelete uses stored question hash and does not mutate projections")
   void prepareAnswerDelete_usesStoredQuestionHashWithoutMutation() {
     String storedQuestionHash = QnaContentHashFactory.hash("온체인 질문");
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
         .willReturn(Optional.of(questionProjection(storedQuestionHash)));
-    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
+    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L))
         .willReturn(
             Optional.of(
                 QnaAnswerProjection.create(
@@ -329,11 +334,123 @@ class AnswerEscrowExecutionServiceTest {
             () ->
                 service.prepareAnswerDelete(
                     new PrepareAnswerDeleteCommand(101L, 201L, 22L, 7L, "온체인 질문", 50L, 0)))
-        .isInstanceOf(Web3InvalidInputException.class)
+        .isInstanceOf(RetryableWeb3PreparationException.class)
         .hasMessageContaining("conflicting active answer execution intent");
 
     verify(qnaProjectionPersistencePort, never()).findQuestionByPostIdForUpdate(any());
     verify(qnaProjectionPersistencePort, never()).findAnswerByAnswerIdForUpdate(any());
+  }
+
+  // --- Phase B4 server-sig recover regression tests ---
+
+  @Test
+  @DisplayName("[R-1203] recoverAnswerCreate re-invokes prepare and freshly signs server-sig")
+  void recoverAnswerCreate_reInvokesPrepareAndFreshlySignsServerSig() {
+    // given: prepareAnswerCreate returned a draft with signedAt=FIRST; intent later expires +
+    // projection absent so recoverAnswerCreate re-runs prepare with a fresh sign.
+    long firstSignedAt = 1_768_224_000L;
+    long secondSignedAt = 1_768_224_900L;
+    QnaExecutionDraft firstDraft =
+        draft(
+            QnaExecutionActionType.QNA_ANSWER_SUBMIT,
+            firstSignedAt,
+            "0x" + "c".repeat(64),
+            "0x" + "a".repeat(64));
+    QnaExecutionDraft secondDraft =
+        draft(
+            QnaExecutionActionType.QNA_ANSWER_SUBMIT,
+            secondSignedAt,
+            "0x" + "d".repeat(64),
+            "0x" + "e".repeat(64));
+    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L)).willReturn(Optional.empty());
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
+        .willReturn(Optional.of(questionProjection(QnaContentHashFactory.hash("온체인 질문"))));
+    given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
+        .willReturn(
+            Optional.of(
+                new QnaExecutionIntentStateView(
+                    "intent-terminal",
+                    QnaExecutionActionType.QNA_ANSWER_SUBMIT,
+                    QnaExecutionIntentStatus.EXPIRED)));
+    given(buildQnaExecutionDraftPort.build(any())).willReturn(firstDraft, secondDraft);
+    given(submitQnaExecutionDraftPort.submit(firstDraft))
+        .willReturn(answerIntent("201", "intent-first", "QNA_ANSWER_SUBMIT", firstSignedAt));
+    given(submitQnaExecutionDraftPort.submit(secondDraft))
+        .willReturn(answerIntent("201", "intent-recovered", "QNA_ANSWER_SUBMIT", secondSignedAt));
+
+    // when: prepare, then recover
+    QnaExecutionIntentResult firstResult =
+        service.prepareAnswerCreate(
+            new PrepareAnswerCreateCommand(101L, 201L, 22L, 7L, "온체인 질문", 50L, "답변 본문", 1));
+    QnaExecutionIntentResult secondResult =
+        service.recoverAnswerCreate(
+            new PrepareAnswerCreateCommand(101L, 201L, 22L, 7L, "온체인 질문", 50L, "답변 본문", 1));
+
+    // then: build invoked twice → fresh signer pass per recover
+    verify(buildQnaExecutionDraftPort, times(2)).build(any());
+    assertThat(firstResult.signatureMeta().signedAt()).isEqualTo(firstSignedAt);
+    assertThat(secondResult.signatureMeta().signedAt()).isEqualTo(secondSignedAt);
+    assertThat(firstDraft.signedAt()).isEqualTo(firstSignedAt);
+    assertThat(secondDraft.signedAt()).isEqualTo(secondSignedAt);
+    assertThat(secondDraft.unsignedTxFingerprint())
+        .isNotEqualTo(firstDraft.unsignedTxFingerprint());
+  }
+
+  @Test
+  @DisplayName("[R-1204] recoverAnswerUpdate re-invokes prepare and freshly signs server-sig")
+  void recoverAnswerUpdate_reInvokesPrepareAndFreshlySignsServerSig() {
+    // given: prepareAnswerUpdate succeeds with a sig at FIRST; then the on-chain answer hash
+    // diverges from the local hash (still stale) AND there's a terminal update intent on the same
+    // root key so recoverAnswerUpdate re-runs prepare with a fresh sign.
+    long firstSignedAt = 1_768_224_000L;
+    long secondSignedAt = 1_768_224_900L;
+    QnaExecutionDraft firstDraft =
+        draft(
+            QnaExecutionActionType.QNA_ANSWER_UPDATE,
+            firstSignedAt,
+            "0x" + "c".repeat(64),
+            "0x" + "a".repeat(64));
+    QnaExecutionDraft secondDraft =
+        draft(
+            QnaExecutionActionType.QNA_ANSWER_UPDATE,
+            secondSignedAt,
+            "0x" + "d".repeat(64),
+            "0x" + "e".repeat(64));
+    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
+        .willReturn(Optional.of(questionProjection(QnaContentHashFactory.hash("질문 본문"))));
+    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L))
+        .willReturn(Optional.of(answerProjection(QnaContentHashFactory.hash("온체인 답변"))));
+    given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
+        .willReturn(
+            Optional.of(
+                new QnaExecutionIntentStateView(
+                    "intent-terminal",
+                    QnaExecutionActionType.QNA_ANSWER_UPDATE,
+                    QnaExecutionIntentStatus.CANCELED)));
+    given(buildQnaExecutionDraftPort.build(any())).willReturn(firstDraft, secondDraft);
+    given(submitQnaExecutionDraftPort.submit(firstDraft))
+        .willReturn(answerIntent("201", "intent-first", "QNA_ANSWER_UPDATE", firstSignedAt));
+    given(submitQnaExecutionDraftPort.submit(secondDraft))
+        .willReturn(
+            answerIntent("201", "intent-recovered-update", "QNA_ANSWER_UPDATE", secondSignedAt));
+
+    // when: prepare, then recover
+    QnaExecutionIntentResult firstResult =
+        service.prepareAnswerUpdate(
+            new PrepareAnswerUpdateCommand(101L, 201L, 22L, 7L, "질문 본문", 50L, "수정된 답변", 1));
+    Optional<QnaExecutionIntentResult> secondResult =
+        service.recoverAnswerUpdate(
+            new PrepareAnswerUpdateCommand(101L, 201L, 22L, 7L, "질문 본문", 50L, "수정된 답변", 1));
+
+    // then: build invoked twice across prepare→recover
+    verify(buildQnaExecutionDraftPort, times(2)).build(any());
+    assertThat(secondResult).isPresent();
+    assertThat(firstResult.signatureMeta().signedAt()).isEqualTo(firstSignedAt);
+    assertThat(secondResult.orElseThrow().signatureMeta().signedAt()).isEqualTo(secondSignedAt);
+    assertThat(firstDraft.signedAt()).isEqualTo(firstSignedAt);
+    assertThat(secondDraft.signedAt()).isEqualTo(secondSignedAt);
+    assertThat(secondDraft.unsignedTxFingerprint())
+        .isNotEqualTo(firstDraft.unsignedTxFingerprint());
   }
 
   private QnaQuestionProjection questionProjection(String questionHash) {
@@ -357,6 +474,19 @@ class AnswerEscrowExecutionServiceTest {
   }
 
   private QnaExecutionDraft draft(QnaExecutionActionType actionType) {
+    return draft(actionType, 1_768_224_000L, "0x" + "c".repeat(64), "0x" + "a".repeat(64));
+  }
+
+  /**
+   * Builds a draft with explicit server-sig fields so recover-tests can assert a fresh sign
+   * (distinct {@code signedAt} + {@code unsignedTxFingerprint}). The {@code rootIdempotencyKey} is
+   * intentionally fixed ("root-key") to mirror §5-4: signedAt-invariant.
+   */
+  private QnaExecutionDraft draft(
+      QnaExecutionActionType actionType,
+      long signedAt,
+      String unsignedTxFingerprint,
+      String payloadHash) {
     return new QnaExecutionDraft(
         QnaExecutionResourceType.ANSWER,
         "201",
@@ -365,7 +495,7 @@ class AnswerEscrowExecutionServiceTest {
         22L,
         7L,
         "root-key",
-        "0x" + "a".repeat(64),
+        payloadHash,
         "{}",
         List.of(
             new QnaExecutionDraftCall(
@@ -376,7 +506,8 @@ class AnswerEscrowExecutionServiceTest {
         "0x3333333333333333333333333333333333333333",
         "0x" + "b".repeat(64),
         null,
-        "0x" + "c".repeat(64),
+        unsignedTxFingerprint,
+        signedAt,
         LocalDateTime.now().plusMinutes(5));
   }
 
@@ -386,9 +517,22 @@ class AnswerEscrowExecutionServiceTest {
         new QnaExecutionIntentResult.Resource("ANSWER", resourceId, "PENDING_EXECUTION"),
         actionType,
         new QnaExecutionIntentResult.ExecutionIntent(
-            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0), 1_776_129_600L),
         new QnaExecutionIntentResult.Execution("EIP7702", 2),
         null,
         false);
+  }
+
+  private QnaExecutionIntentResult answerIntent(
+      String resourceId, String intentId, String actionType, long signedAt) {
+    return new QnaExecutionIntentResult(
+        new QnaExecutionIntentResult.Resource("ANSWER", resourceId, "PENDING_EXECUTION"),
+        actionType,
+        new QnaExecutionIntentResult.ExecutionIntent(
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+        new QnaExecutionIntentResult.Execution("EIP7702", 2),
+        null,
+        false,
+        new QnaExecutionIntentResult.SignatureMeta(signedAt, signedAt + 300));
   }
 }

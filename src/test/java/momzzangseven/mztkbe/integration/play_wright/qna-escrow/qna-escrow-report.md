@@ -18,6 +18,13 @@
 6. `QNA_ANSWER_DELETE`
 7. `QNA_ANSWER_ACCEPT`
 
+추가로 MOM-393 server-sig refactor 검증을 위해 다음 3개 Playwright 케이스를 동일 스펙 파일에
+추가합니다 (`playwright-server-sig-cases.md` 기준):
+
+- `PW-4` — EIP-1559 calldata 끝에 server-sig (`signedAt` + 65-byte 서명) ABI-encoded 봉입
+- `PW-8` — 만료 후 recover-create 시 `signedAt` strictly increasing (실 clock 기반)
+- `PW-9` — 만료된 server-sig intent execute 시 백엔드 `409 WEB3_013` 거부
+
 테스트 파일:
 - `src/test/java/momzzangseven/mztkbe/integration/play_wright/qna-escrow/qna-escrow.spec.ts`
 
@@ -40,6 +47,9 @@
 | `TC-QNA-G-02` | confirmed answer update | execute 후 `CONFIRMED`, answer content 갱신 |
 | `TC-QNA-G-03` | confirmed answer delete | execute 후 `CONFIRMED`, answer row 제거 |
 | `TC-QNA-G-04` | confirmed answer accept | execute 후 `CONFIRMED`, question solved + answer accepted 반영 |
+| `PW-4` | EIP-1559 calldata 끝에 server-sig (signedAt + 65B 서명) 봉입 검증 | 디코딩된 `signedAt === signatureMeta.signedAt`, signature `length === 65`, selector 일치 |
+| `PW-8` | 만료 후 recover-create 시 새로운 `signedAt` 발급 (strictly increasing) | `recoverSig.signedAt > originalSig.signedAt`, expiresAt 동일하게 strict 증가, duration `= 900` |
+| `PW-9` | 만료된 intent execute 거부 (recover 이후) | `409` / `WEB3_013`, DB intent status `EXPIRED` |
 
 ## 최신 검증 결과
 

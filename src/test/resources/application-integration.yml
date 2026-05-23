@@ -56,6 +56,13 @@ logging:
     root: WARN
     momzzangseven: INFO
 
+answer:
+  lifecycle:
+    cleanup:
+      initial-delay-ms: 86400000
+    reconciliation:
+      initial-delay-ms: 86400000
+
 # MZTK Web3 default values for E2E tests
 web3:
   chain-id: 1337

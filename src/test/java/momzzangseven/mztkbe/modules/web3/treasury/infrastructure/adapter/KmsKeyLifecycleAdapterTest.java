@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.AliasTargetInfo;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort.ImportParams;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -218,8 +219,8 @@ class KmsKeyLifecycleAdapterTest {
   }
 
   @Nested
-  @DisplayName("E. describeAliasTarget — KeyState 매핑")
-  class DescribeAliasTarget {
+  @DisplayName("E. describeAlias — KeyState + targetKmsKeyId 매핑")
+  class DescribeAlias {
 
     @ParameterizedTest(name = "[M-104] AWS={0} → KmsKeyState={1}")
     @CsvSource({
@@ -230,62 +231,73 @@ class KmsKeyLifecycleAdapterTest {
       "CREATING, UNAVAILABLE",
       "UPDATING, UNAVAILABLE"
     })
-    void describeAliasTarget_mapsAwsKeyState(String awsName, String expectedName) {
+    void describeAlias_mapsAwsKeyState(String awsName, String expectedName) {
       DescribeKeyResponse response =
           DescribeKeyResponse.builder()
-              .keyMetadata(KeyMetadata.builder().keyState(KeyState.valueOf(awsName)).build())
+              .keyMetadata(
+                  KeyMetadata.builder()
+                      .keyId(KMS_KEY_ID)
+                      .keyState(KeyState.valueOf(awsName))
+                      .build())
               .build();
       when(kmsClient.describeKey(any(DescribeKeyRequest.class))).thenReturn(response);
 
-      KmsKeyState result = adapter.describeAliasTarget(ALIAS);
+      AliasTargetInfo result = adapter.describeAlias(ALIAS);
 
-      assertThat(result).isSameAs(KmsKeyState.valueOf(expectedName));
+      assertThat(result.state()).isSameAs(KmsKeyState.valueOf(expectedName));
+      assertThat(result.targetKmsKeyId()).isEqualTo(KMS_KEY_ID);
     }
 
     @Test
-    @DisplayName("[M-104b] describeAliasTarget — keyState가 null이면 UNAVAILABLE")
-    void describeAliasTarget_nullKeyState_returnsUnavailable() {
+    @DisplayName("[M-104b] describeAlias — keyState가 null이면 UNAVAILABLE + targetKmsKeyId 보존")
+    void describeAlias_nullKeyState_returnsUnavailable() {
       DescribeKeyResponse response =
           DescribeKeyResponse.builder()
-              .keyMetadata(KeyMetadata.builder().keyState((KeyState) null).build())
+              .keyMetadata(
+                  KeyMetadata.builder().keyId(KMS_KEY_ID).keyState((KeyState) null).build())
               .build();
       when(kmsClient.describeKey(any(DescribeKeyRequest.class))).thenReturn(response);
 
-      assertThat(adapter.describeAliasTarget(ALIAS)).isSameAs(KmsKeyState.UNAVAILABLE);
+      AliasTargetInfo result = adapter.describeAlias(ALIAS);
+
+      assertThat(result.state()).isSameAs(KmsKeyState.UNAVAILABLE);
+      assertThat(result.targetKmsKeyId()).isEqualTo(KMS_KEY_ID);
     }
 
     @Test
-    @DisplayName("[M-104c] describeAliasTarget — NotFoundException → UNAVAILABLE (조용히)")
-    void describeAliasTarget_notFoundReturnsUnavailable() {
+    @DisplayName("[M-104c] describeAlias — NotFoundException → (UNAVAILABLE, null)")
+    void describeAlias_notFoundReturnsUnavailableWithNullTarget() {
       when(kmsClient.describeKey(any(DescribeKeyRequest.class)))
           .thenThrow(NotFoundException.builder().message("missing").build());
 
-      KmsKeyState result = adapter.describeAliasTarget(ALIAS);
+      AliasTargetInfo result = adapter.describeAlias(ALIAS);
 
-      assertThat(result).isSameAs(KmsKeyState.UNAVAILABLE);
+      assertThat(result.state()).isSameAs(KmsKeyState.UNAVAILABLE);
+      assertThat(result.targetKmsKeyId()).isNull();
     }
 
     @Test
-    @DisplayName("[M-104d] describeAliasTarget — 그 외 KmsException은 WARN 후 그대로 전파")
-    void describeAliasTarget_kmsExceptionPropagated() {
+    @DisplayName("[M-104d] describeAlias — 그 외 KmsException은 WARN 후 그대로 전파")
+    void describeAlias_kmsExceptionPropagated() {
       when(kmsClient.describeKey(any(DescribeKeyRequest.class)))
           .thenThrow(KmsInvalidStateException.builder().message("err").build());
 
-      assertThatThrownBy(() -> adapter.describeAliasTarget(ALIAS))
+      assertThatThrownBy(() -> adapter.describeAlias(ALIAS))
           .isInstanceOf(KmsInvalidStateException.class);
     }
 
     @Test
-    @DisplayName("[M-104e] describeAliasTarget — alias는 'alias/' 접두사로 정규화되어 KmsClient에 전달")
-    void describeAliasTarget_qualifiesAlias() {
+    @DisplayName("[M-104e] describeAlias — alias는 'alias/' 접두사로 정규화되어 KmsClient에 전달")
+    void describeAlias_qualifiesAlias() {
       DescribeKeyResponse response =
           DescribeKeyResponse.builder()
-              .keyMetadata(KeyMetadata.builder().keyState(KeyState.ENABLED).build())
+              .keyMetadata(
+                  KeyMetadata.builder().keyId(KMS_KEY_ID).keyState(KeyState.ENABLED).build())
               .build();
       when(kmsClient.describeKey(any(DescribeKeyRequest.class))).thenReturn(response);
       ArgumentCaptor<DescribeKeyRequest> captor = ArgumentCaptor.forClass(DescribeKeyRequest.class);
 
-      adapter.describeAliasTarget(ALIAS);
+      adapter.describeAlias(ALIAS);
 
       verify(kmsClient).describeKey(captor.capture());
       assertThat(captor.getValue().keyId()).isEqualTo(QUALIFIED_ALIAS);

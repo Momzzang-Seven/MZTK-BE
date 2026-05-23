@@ -24,7 +24,7 @@ class GetAdminBoardStatsServiceTest {
   @InjectMocks private GetAdminBoardStatsService service;
 
   @Test
-  @DisplayName("데이터가 없어도 reasonCode, boardType, targetType 전체 키를 0으로 반환한다")
+  @DisplayName("누적 moderation action 데이터가 없어도 reasonCode, boardType, targetType 전체 키를 0으로 반환한다")
   void execute_emptyStats_returnsZeroFilledMaps() {
     given(loadAdminBoardStatsPort.load())
         .willReturn(new LoadAdminBoardStatsPort.AdminBoardStatsView(Map.of(), Map.of(), Map.of()));
@@ -42,7 +42,7 @@ class GetAdminBoardStatsServiceTest {
   }
 
   @Test
-  @DisplayName("reasonCode, boardType, targetType 통계 값을 enum 이름 기반으로 반환한다")
+  @DisplayName("admin_board_moderation_actions 누적 통계 값을 enum 이름 기반으로 반환한다")
   void execute_stats_returnsCounts() {
     given(loadAdminBoardStatsPort.load())
         .willReturn(

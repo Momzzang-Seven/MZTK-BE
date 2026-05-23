@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 
 public interface QnaQuestionPublicationSyncPort {
 
@@ -9,6 +9,6 @@ public interface QnaQuestionPublicationSyncPort {
   void failQuestionCreate(
       Long postId,
       String executionIntentId,
-      ExecutionIntentStatus terminalStatus,
+      QnaExecutionIntentStatus terminalStatus,
       String failureReason);
 }

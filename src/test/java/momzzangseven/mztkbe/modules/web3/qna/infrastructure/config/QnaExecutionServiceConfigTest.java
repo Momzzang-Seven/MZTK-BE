@@ -10,14 +10,17 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUp
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaQuestionUpdateReconciliationUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaServerSigPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateConfirmationSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.service.AnswerEscrowExecutionService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.BeginQuestionUpdateStateService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QuestionEscrowExecutionService;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +38,7 @@ class QnaExecutionServiceConfigTest {
               PrecheckQuestionFundingPort.class, () -> mock(PrecheckQuestionFundingPort.class))
           .withBean(
               LoadQnaRewardTokenConfigPort.class, () -> mock(LoadQnaRewardTokenConfigPort.class))
+          .withBean(LoadQnaServerSigPolicyPort.class, () -> mock(LoadQnaServerSigPolicyPort.class))
           .withBean(
               QnaProjectionPersistencePort.class, () -> mock(QnaProjectionPersistencePort.class))
           .withBean(
@@ -46,6 +50,7 @@ class QnaExecutionServiceConfigTest {
           .withBean(
               LoadQnaExecutionIntentStatePort.class,
               () -> mock(LoadQnaExecutionIntentStatePort.class))
+          .withBean(BuildQnaEscrowCallDataPort.class, () -> mock(BuildQnaEscrowCallDataPort.class))
           .withBean(BuildQnaExecutionDraftPort.class, () -> mock(BuildQnaExecutionDraftPort.class))
           .withBean(
               SubmitQnaExecutionDraftPort.class, () -> mock(SubmitQnaExecutionDraftPort.class))
@@ -63,12 +68,13 @@ class QnaExecutionServiceConfigTest {
         .run(
             context -> {
               assertThat(context).hasSingleBean(QuestionEscrowExecutionService.class);
+              assertThat(context).hasSingleBean(AnswerEscrowExecutionService.class);
               assertThat(context).hasSingleBean(BeginQuestionUpdateStateService.class);
-              assertThat(context).hasSingleBean(AnswerEscrowExecutionUseCase.class);
               assertThat(context).hasSingleBean(GetQnaExecutionResumeViewUseCase.class);
               assertThat(context).hasSingleBean(RunQnaQuestionUpdateReconciliationUseCase.class);
               assertThat(context).hasBean("questionEscrowExecutionUseCase");
               assertThat(context).hasBean("beginQuestionUpdateStateUseCase");
+              assertThat(context).hasBean("answerEscrowExecutionUseCase");
               assertThat(
                       context.getBean(
                           "questionEscrowExecutionUseCase", QuestionEscrowExecutionUseCase.class))
@@ -77,6 +83,11 @@ class QnaExecutionServiceConfigTest {
                       context.getBean(
                           "beginQuestionUpdateStateUseCase", BeginQuestionUpdateStateUseCase.class))
                   .isNotSameAs(context.getBean(BeginQuestionUpdateStateService.class));
+              assertThat(context).hasBean("answerEscrowExecutionUseCase");
+              assertThat(
+                      context.getBean(
+                          "answerEscrowExecutionUseCase", AnswerEscrowExecutionUseCase.class))
+                  .isNotSameAs(context.getBean(AnswerEscrowExecutionService.class));
             });
   }
 

@@ -10,13 +10,13 @@ import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.Eip7702Executio
 import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.Eip7702ExecutionSignedPayload;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.ManageExecutionEip7702UseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.utils.Numeric;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPort {
 
   private final ManageExecutionEip7702UseCase manageExecutionEip7702UseCase;
@@ -88,7 +88,11 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
   }
 
   @Override
-  public String encodeExecute(List<BatchCall> calls, String executionSignatureHex) {
+  public String encodeExecute(
+      List<BatchCall> calls,
+      String prepareId,
+      BigInteger deadlineEpochSeconds,
+      String executionSignatureHex) {
     return manageExecutionEip7702UseCase.encodeExecute(
         calls.stream()
             .map(
@@ -96,6 +100,8 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
                     new Eip7702ExecutionBatchCall(
                         call.to(), call.value(), Numeric.hexStringToByteArray(call.dataHex())))
             .toList(),
+        prepareId,
+        deadlineEpochSeconds,
         Numeric.hexStringToByteArray(executionSignatureHex));
   }
 

@@ -1,13 +1,13 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.external.web3;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionResumeView;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionExecutionResumePort;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionResumeView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaExecutionResumeViewQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionResumeViewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class QuestionExecutionResumeAdapter implements LoadQuestionExecutionResumePort {
 
   private final GetQnaExecutionResumeViewUseCase getQnaExecutionResumeViewUseCase;
@@ -42,7 +42,8 @@ public class QuestionExecutionResumeAdapter implements LoadQuestionExecutionResu
         new QuestionExecutionResumeView.ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new QuestionExecutionResumeView.Execution(
             result.execution().mode(), result.execution().signCount()),
         result.transaction() == null
@@ -50,6 +51,9 @@ public class QuestionExecutionResumeAdapter implements LoadQuestionExecutionResu
             : new QuestionExecutionResumeView.Transaction(
                 result.transaction().id(),
                 result.transaction().status(),
-                result.transaction().txHash()));
+                result.transaction().txHash()),
+        result.recoveryStatus(),
+        result.recoveryReason(),
+        result.retryAllowed());
   }
 }

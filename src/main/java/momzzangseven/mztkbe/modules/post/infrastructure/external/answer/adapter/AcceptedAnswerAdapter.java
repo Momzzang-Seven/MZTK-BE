@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.post.infrastructure.external.answer.adapter
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.MarkAcceptedAnswerPort;
@@ -13,14 +13,14 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AcceptedAnswerAdapter implements LoadAcceptedAnswerPort, MarkAcceptedAnswerPort {
 
-  private final GetAnswerSummaryUseCase getAnswerSummaryUseCase;
-  private final GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
+  private final GetVisibleAnswerSummaryUseCase getVisibleAnswerSummaryUseCase;
+  private final GetVisibleAnswerSummaryForUpdateUseCase getVisibleAnswerSummaryForUpdateUseCase;
   private final MarkAnswerAcceptedUseCase markAnswerAcceptedUseCase;
 
   @Override
   public Optional<AcceptedAnswerInfo> loadAcceptedAnswer(Long answerId) {
-    return getAnswerSummaryUseCase
-        .getAnswerSummary(answerId)
+    return getVisibleAnswerSummaryUseCase
+        .getVisibleAnswerSummary(answerId)
         .map(
             answer ->
                 new AcceptedAnswerInfo(
@@ -29,8 +29,8 @@ public class AcceptedAnswerAdapter implements LoadAcceptedAnswerPort, MarkAccept
 
   @Override
   public Optional<AcceptedAnswerInfo> loadAcceptedAnswerForUpdate(Long answerId) {
-    return getAnswerSummaryForUpdateUseCase
-        .getAnswerSummaryForUpdate(answerId)
+    return getVisibleAnswerSummaryForUpdateUseCase
+        .getVisibleAnswerSummaryForUpdate(answerId)
         .map(
             answer ->
                 new AcceptedAnswerInfo(

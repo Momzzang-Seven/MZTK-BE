@@ -1,28 +1,46 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.external.web3;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.MatchQuestionCreatePayloadCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.web3j.utils.Numeric;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecutionPort {
 
   private final QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
   private final BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
+  private final CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
+  private final GetExecutionIntentUseCase getExecutionIntentUseCase;
+  private final ObjectMapper objectMapper;
 
   @Override
   public boolean managesAcceptLifecycle() {
@@ -37,6 +55,47 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   @Override
   public boolean hasActiveQuestionIntent(Long postId) {
     return questionEscrowExecutionUseCase.hasActiveQuestionIntent(postId);
+  }
+
+  @Override
+  public boolean cancelSignableIntent(String executionIntentId, String reason) {
+    return cancelExecutionIntentUseCase.cancelIfSignable(
+        new CancelExecutionIntentCommand(
+            executionIntentId, "QUESTION_LIFECYCLE_BIND_FAILED", reason));
+  }
+
+  @Override
+  public Optional<QuestionExecutionWriteView> loadQuestionCreateIntent(
+      Long postId,
+      Long requesterUserId,
+      String executionIntentId,
+      String questionContent,
+      Long rewardMztk) {
+    GetExecutionIntentResult result =
+        getExecutionIntentUseCase.execute(
+            new GetExecutionIntentQuery(requesterUserId, executionIntentId));
+    if (!"QUESTION".equals(result.resourceType().name())
+        || !String.valueOf(postId).equals(result.resourceId())
+        || !"QNA_QUESTION_CREATE".equals(result.actionType().name())
+        || !matchesPayloadHash(result.payloadHash(), result.payloadSnapshotJson())
+        || !matchesQuestionCreatePayload(
+            postId, questionContent, rewardMztk, result.payloadSnapshotJson())) {
+      return Optional.empty();
+    }
+    return Optional.of(toView(result, extractSignedAt(result.payloadSnapshotJson())));
+  }
+
+  private Long extractSignedAt(String payloadSnapshotJson) {
+    if (payloadSnapshotJson == null || payloadSnapshotJson.isBlank()) {
+      return null;
+    }
+    try {
+      return objectMapper
+          .readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class)
+          .signedAt();
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
+    }
   }
 
   @Override
@@ -151,11 +210,89 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
         new QuestionExecutionWriteView.ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new QuestionExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
-        result.existing());
+        null,
+        result.existing(),
+        toSignatureMeta(result.signatureMeta()));
+  }
+
+  private QuestionExecutionWriteView.SignatureMeta toSignatureMeta(
+      QnaExecutionIntentResult.SignatureMeta meta) {
+    if (meta == null) {
+      return null;
+    }
+    return new QuestionExecutionWriteView.SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
+  }
+
+  private QuestionExecutionWriteView toView(GetExecutionIntentResult result, Long signedAt) {
+    QuestionExecutionWriteView.SignatureMeta signatureMeta =
+        toSignatureMeta(questionEscrowExecutionUseCase.signatureMetaForSignedAt(signedAt));
+    return new QuestionExecutionWriteView(
+        new QuestionExecutionWriteView.Resource(
+            result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
+        "QNA_QUESTION_CREATE",
+        new QuestionExecutionWriteView.ExecutionIntent(
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
+        new QuestionExecutionWriteView.Execution(result.mode().name(), result.signCount()),
+        toSignRequest(result.signRequest()),
+        result.signRequestUnavailableReason() == null
+            ? null
+            : result.signRequestUnavailableReason().name(),
+        true,
+        signatureMeta);
+  }
+
+  private boolean matchesQuestionCreatePayload(
+      Long postId, String questionContent, Long rewardMztk, String payloadSnapshotJson) {
+    if (payloadSnapshotJson == null || payloadSnapshotJson.isBlank()) {
+      return false;
+    }
+    try {
+      QnaEscrowExecutionPayload payload =
+          objectMapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
+      return questionEscrowExecutionUseCase.matchesQuestionCreatePayload(
+          new MatchQuestionCreatePayloadCommand(postId, questionContent, rewardMztk, payload));
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
+    }
+  }
+
+  /**
+   * §MOM-393 — stored {@code payloadHash} is the SHA-256 of {@link
+   * QnaEscrowExecutionPayload#idempotencyView()} (server-sig-independent projection), not of the
+   * full snapshot JSON, so that idempotency reuse survives a refreshed server signature. This check
+   * therefore re-hashes the projection extracted from the stored snapshot. Tampering of the
+   * server-sig fields ({@code signedAt}, {@code signatureHex}, embedded {@code callData}) is caught
+   * separately by {@code executionDigest} (EIP-7702) and {@code unsignedTxFingerprint} (EIP-1559);
+   * this method covers the logical-identity portion of the snapshot only.
+   */
+  private boolean matchesPayloadHash(String payloadHash, String payloadSnapshotJson) {
+    if (payloadHash == null
+        || payloadHash.isBlank()
+        || payloadSnapshotJson == null
+        || payloadSnapshotJson.isBlank()) {
+      return false;
+    }
+    try {
+      QnaEscrowExecutionPayload payload =
+          objectMapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
+      String idempotencyViewJson = objectMapper.writeValueAsString(payload.idempotencyView());
+      byte[] digest =
+          MessageDigest.getInstance("SHA-256")
+              .digest(idempotencyViewJson.getBytes(StandardCharsets.UTF_8));
+      return payloadHash.equals(Numeric.toHexString(digest));
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 digest is unavailable", e);
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
+    }
   }
 
   private QuestionExecutionWriteView.SignRequest toSignRequest(

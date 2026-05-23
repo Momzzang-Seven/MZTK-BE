@@ -8,7 +8,7 @@ import momzzangseven.mztkbe.global.response.ImageItemResponse;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult.PostImageSlot;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionResumeView;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionResumeView;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -37,7 +37,10 @@ class PostDetailResponseTest {
             new QuestionExecutionResumeView.Resource("QUESTION", "10", "PENDING_EXECUTION"),
             "QNA_ANSWER_ACCEPT",
             new QuestionExecutionResumeView.ExecutionIntent(
-                "intent-10", "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+                "intent-10",
+                "AWAITING_SIGNATURE",
+                LocalDateTime.of(2026, 4, 14, 10, 0),
+                1_776_129_600L),
             new QuestionExecutionResumeView.Execution("EIP7702", 2),
             null),
         List.of("tag"),

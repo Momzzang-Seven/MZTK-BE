@@ -32,6 +32,7 @@ temp/
 # Documentation
 *.md
 docs/
+docs.local/
 
 # Test files
 **/test/**

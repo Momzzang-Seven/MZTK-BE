@@ -9,23 +9,26 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.PublishAnswerDeletedEventPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
 import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerDeleteStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ConfirmAnswerDeleteSyncService unit test")
 class ConfirmAnswerDeleteSyncServiceTest {
 
   @Mock private LoadAnswerPort loadAnswerPort;
+  @Mock private SaveAnswerPort saveAnswerPort;
   @Mock private DeleteAnswerPort deleteAnswerPort;
-  @Mock private ApplicationEventPublisher eventPublisher;
+  @Mock private PublishAnswerDeletedEventPort publishAnswerDeletedEventPort;
 
   @InjectMocks private ConfirmAnswerDeleteSyncService confirmAnswerDeleteSyncService;
 
@@ -34,10 +37,10 @@ class ConfirmAnswerDeleteSyncServiceTest {
   void confirmDeleted_removesAnswerAndPublishesEvent() {
     when(loadAnswerPort.loadAnswerForUpdate(201L)).thenReturn(Optional.of(answer(201L)));
 
-    confirmAnswerDeleteSyncService.confirmDeleted(201L);
+    confirmAnswerDeleteSyncService.confirmDeleted(201L, "intent-delete");
 
     verify(deleteAnswerPort).deleteAnswer(201L);
-    verify(eventPublisher).publishEvent(new AnswerDeletedEvent(201L));
+    verify(publishAnswerDeletedEventPort).publish(new AnswerDeletedEvent(201L));
   }
 
   @Test
@@ -45,10 +48,10 @@ class ConfirmAnswerDeleteSyncServiceTest {
   void confirmDeleted_ignoresMissingAnswer() {
     when(loadAnswerPort.loadAnswerForUpdate(201L)).thenReturn(Optional.empty());
 
-    confirmAnswerDeleteSyncService.confirmDeleted(201L);
+    confirmAnswerDeleteSyncService.confirmDeleted(201L, "intent-delete");
 
     verify(deleteAnswerPort, never()).deleteAnswer(201L);
-    verifyNoInteractions(eventPublisher);
+    verifyNoInteractions(publishAnswerDeletedEventPort);
   }
 
   private Answer answer(Long answerId) {
@@ -58,6 +61,8 @@ class ConfirmAnswerDeleteSyncServiceTest {
         .userId(7L)
         .content("답변 내용")
         .isAccepted(false)
+        .pendingDeleteStatus(AnswerDeleteStatus.PENDING)
+        .currentDeleteExecutionIntentId("intent-delete")
         .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
         .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
         .build();

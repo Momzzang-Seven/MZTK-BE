@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassReservationProjection;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSlotReservationProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
@@ -36,6 +38,12 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
   @Transactional(readOnly = true)
   public Optional<MarketplaceClass> findById(Long classId) {
     return loadClassPort.findById(classId);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<ClassReservationProjection> findReservationProjectionById(Long classId) {
+    return loadClassPort.findById(classId).map(this::toReservationProjection);
   }
 
   /**
@@ -112,8 +120,35 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
   }
 
   @Override
-  @Transactional(readOnly = true)
+  @Transactional
   public Optional<ClassSlot> findByIdWithLock(Long slotId) {
     return loadClassSlotPort.findByIdWithLock(slotId);
+  }
+
+  @Override
+  @Transactional
+  public Optional<ClassSlotReservationProjection> findReservationProjectionByIdWithLock(
+      Long slotId) {
+    return loadClassSlotPort.findByIdWithLock(slotId).map(this::toReservationSlotProjection);
+  }
+
+  private ClassReservationProjection toReservationProjection(MarketplaceClass cls) {
+    return new ClassReservationProjection(
+        cls.getId(),
+        cls.getTrainerId(),
+        cls.getPriceAmount(),
+        cls.getDurationMinutes(),
+        cls.getTitle(),
+        cls.isActive());
+  }
+
+  private ClassSlotReservationProjection toReservationSlotProjection(ClassSlot slot) {
+    return new ClassSlotReservationProjection(
+        slot.getId(),
+        slot.getClassId(),
+        slot.getDaysOfWeek(),
+        slot.getStartTime(),
+        slot.getCapacity(),
+        slot.isActive());
   }
 }

@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.then;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.dto.RecordTrainerStrikeCommand;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.ManageTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.ManageTrainerSanctionPort.RecordStrikeResult;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RecordTrainerStrikeService 단위 테스트")
@@ -25,6 +28,17 @@ class RecordTrainerStrikeServiceTest {
 
   private static final Long TRAINER_ID = 7L;
 
+  @Test
+  @DisplayName("[RS-00] 스트라이크 기록은 호출자 트랜잭션과 분리된 REQUIRES_NEW로 실행된다")
+  void execute_usesRequiresNewTransaction() throws NoSuchMethodException {
+    Transactional transactional =
+        RecordTrainerStrikeService.class
+            .getMethod("execute", RecordTrainerStrikeCommand.class)
+            .getAnnotation(Transactional.class);
+
+    Assertions.assertThat(transactional.propagation()).isEqualTo(Propagation.REQUIRES_NEW);
+  }
+
   @Nested
   @DisplayName("execute() — 성공 케이스")
   class 성공 {
@@ -35,7 +49,10 @@ class RecordTrainerStrikeServiceTest {
       // given
       given(
               manageTrainerSanctionPort.recordStrike(
-                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_TIMEOUT)))
+                  eq(TRAINER_ID),
+                  eq(RecordTrainerStrikeCommand.REASON_TIMEOUT),
+                  eq(null),
+                  eq(null)))
           .willReturn(new RecordStrikeResult(1, false));
 
       // when
@@ -45,7 +62,7 @@ class RecordTrainerStrikeServiceTest {
       // then
       then(manageTrainerSanctionPort)
           .should()
-          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_TIMEOUT);
+          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_TIMEOUT, null, null);
     }
 
     @Test
@@ -54,7 +71,7 @@ class RecordTrainerStrikeServiceTest {
       // given
       given(
               manageTrainerSanctionPort.recordStrike(
-                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_REJECT)))
+                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_REJECT), eq(null), eq(null)))
           .willReturn(new RecordStrikeResult(2, false));
 
       // when
@@ -64,7 +81,7 @@ class RecordTrainerStrikeServiceTest {
       // then
       then(manageTrainerSanctionPort)
           .should()
-          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_REJECT);
+          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_REJECT, null, null);
     }
 
     @Test
@@ -73,7 +90,10 @@ class RecordTrainerStrikeServiceTest {
       // given
       given(
               manageTrainerSanctionPort.recordStrike(
-                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_TIMEOUT)))
+                  eq(TRAINER_ID),
+                  eq(RecordTrainerStrikeCommand.REASON_TIMEOUT),
+                  eq(null),
+                  eq(null)))
           .willReturn(new RecordStrikeResult(3, true));
 
       // when: 예외 없이 완료되어야 함
@@ -83,7 +103,7 @@ class RecordTrainerStrikeServiceTest {
       // then
       then(manageTrainerSanctionPort)
           .should()
-          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_TIMEOUT);
+          .recordStrike(TRAINER_ID, RecordTrainerStrikeCommand.REASON_TIMEOUT, null, null);
     }
   }
 }

@@ -84,6 +84,7 @@ class CreateQuestionRewardExecutionIntentServiceTest {
             "intent-1",
             TransferExecutionIntentStatus.AWAITING_SIGNATURE,
             LocalDateTime.now().plusMinutes(5),
+            1L,
             TransferExecutionMode.EIP7702,
             2,
             TransferSignRequestBundle.forEip7702(
@@ -92,6 +93,7 @@ class CreateQuestionRewardExecutionIntentServiceTest {
                 new TransferSignRequestBundle.SubmitSignRequest(
                     "0x" + "5".repeat(64),
                     LocalDateTime.now().plusMinutes(5).toEpochSecond(ZoneOffset.UTC))),
+            null,
             false,
             null,
             null,

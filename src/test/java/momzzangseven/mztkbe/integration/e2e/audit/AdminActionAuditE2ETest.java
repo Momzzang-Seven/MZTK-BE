@@ -56,12 +56,18 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @TestPropertySource(
     properties = {
       "web3.reward-token.enabled=true",
+      "web3.eip7702.enabled=true",
+      "web3.eip7702.sponsor.enabled=true",
+      "web3.eip7702.sponsor.per-tx-cap-eth=0.1",
+      "web3.eip7702.sponsor.per-day-user-cap-eth=1.0",
       "web3.reward-token.treasury.provisioning.enabled=true"
     })
 @DisplayName("[E2E] admin_action_audits 통합 테이블 write path 테스트")
 class AdminActionAuditE2ETest extends E2ETestBase {
 
   private static final String ACTION_TX_MARK_SUCCEEDED = "TRANSACTION_MARK_SUCCEEDED";
+  private static final String ACTION_WALLET_REGISTRATION_REPLAY =
+      "WALLET_REGISTRATION_APPROVAL_REPLAY";
   private static final String ACTION_TREASURY_KEY_PROVISION = "TREASURY_KEY_PROVISION";
   private static final String TARGET_TYPE_WEB3_TRANSACTION = "WEB3_TRANSACTION";
   private static final String TARGET_TYPE_TREASURY_KEY = "TREASURY_KEY";
@@ -174,17 +180,17 @@ class AdminActionAuditE2ETest extends E2ETestBase {
   }
 
   /**
-   * Inserts a {@code web3_transactions} row in PENDING state — admin override should be rejected by
+   * Inserts a {@code web3_transactions} row in CREATED state — admin override should be rejected by
    * {@code Web3TransactionStateInvalidException} (only UNCONFIRMED is overridable).
    */
-  private long seedPendingTransaction(String txHash, Long toUserId) {
+  private long seedCreatedTransaction(Long toUserId) {
     LocalDateTime now = LocalDateTime.now();
-    String idempotencyKey = "e2e-audit-pending-" + UUID.randomUUID();
+    String idempotencyKey = "e2e-audit-created-" + UUID.randomUUID();
     jdbcTemplate.update(
         "INSERT INTO web3_transactions ("
             + "idempotency_key, reference_type, reference_id, from_user_id, to_user_id, "
-            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, signed_at, broadcasted_at, created_at, updated_at"
-            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            + "from_address, to_address, amount_wei, tx_type, status, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         idempotencyKey,
         "LEVEL_UP_REWARD",
         "ref-" + idempotencyKey,
@@ -194,10 +200,7 @@ class AdminActionAuditE2ETest extends E2ETestBase {
         "0x0000000000000000000000000000000000000002",
         BigInteger.valueOf(1_000_000L),
         "EIP1559",
-        "PENDING",
-        txHash,
-        now,
-        now,
+        "CREATED",
         now,
         now);
     Long id =
@@ -221,6 +224,36 @@ class AdminActionAuditE2ETest extends E2ETestBase {
                     inv.getArgument(0, String.class), true, true, "main", false, null));
   }
 
+  private void seedWalletApprovalExecutionIntent(
+      String intentId, String registrationId, Long requesterUserId) {
+    LocalDateTime now = LocalDateTime.now();
+    jdbcTemplate.update(
+        "INSERT INTO web3_execution_intents ("
+            + "public_id, root_idempotency_key, attempt_no, resource_type, resource_id, action_type, "
+            + "requester_user_id, mode, status, payload_hash, payload_snapshot_json, authority_address, "
+            + "authority_nonce, delegate_target, expires_at, reserved_sponsor_cost_wei, "
+            + "sponsor_usage_date_kst, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, ?, ?)",
+        intentId,
+        "e2e-wallet-replay-" + UUID.randomUUID(),
+        1,
+        "WALLET_REGISTRATION",
+        registrationId,
+        "WALLET_ESCROW_APPROVE",
+        requesterUserId,
+        "EIP7702",
+        "AWAITING_SIGNATURE",
+        "0x" + repeat('8', 64),
+        "{}",
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        0L,
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        now.plusMinutes(30),
+        BigInteger.ZERO,
+        now,
+        now);
+  }
+
   private ResponseEntity<String> markSucceeded(
       String accessToken, long txId, String txHash, String reason, String evidence) {
     Map<String, String> body =
@@ -233,6 +266,16 @@ class AdminActionAuditE2ETest extends E2ETestBase {
         baseUrl() + "/admin/web3/transactions/" + txId + "/mark-succeeded",
         HttpMethod.POST,
         new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
+        String.class);
+  }
+
+  private ResponseEntity<String> replayWalletRegistrationApproval(
+      String accessToken, Map<String, String> body) {
+    return restTemplate.exchange(
+        baseUrl() + "/admin/web3/wallet-registrations/replay-confirmed-approval",
+        HttpMethod.POST,
+        new HttpEntity<>(
+            body, accessToken == null ? jsonOnlyHeaders() : bearerJsonHeaders(accessToken)),
         String.class);
   }
 
@@ -350,7 +393,7 @@ class AdminActionAuditE2ETest extends E2ETestBase {
       throws Exception {
     AdminUser admin = createAdminAndLogin();
     String txHash = "0x" + repeat('b', 64);
-    long txId = seedPendingTransaction(txHash, admin.userId());
+    long txId = seedCreatedTransaction(admin.userId());
     stubReceiptSuccess(txHash); // would not be reached but harmless
 
     ResponseEntity<String> response =
@@ -375,11 +418,11 @@ class AdminActionAuditE2ETest extends E2ETestBase {
     assertThat(detail.at("/failureReason").asText())
         .isEqualTo("Web3TransactionStateInvalidException");
 
-    // 3. outer business transaction rolled back — status still PENDING
+    // 3. outer business transaction rolled back — status still CREATED
     String txStatus =
         jdbcTemplate.queryForObject(
             "SELECT status FROM web3_transactions WHERE id = ?", String.class, txId);
-    assertThat(txStatus).isEqualTo("PENDING");
+    assertThat(txStatus).isEqualTo("CREATED");
 
     // 4. out-of-scope regression: NO CS_OVERRIDE row was written by the inner audit path
     Integer csOverrideCount =
@@ -650,6 +693,84 @@ class AdminActionAuditE2ETest extends E2ETestBase {
             "SELECT COUNT(*) FROM admin_action_audits WHERE target_id = ?",
             Integer.class,
             String.valueOf(txId));
+    assertThat(auditCount).isZero();
+  }
+
+  // ============================================================
+  // E-12: wallet registration replay endpoint → real AdminOnly AOP/audit path
+  // ============================================================
+
+  @Test
+  @DisplayName("[E-12] wallet approval replay admin 호출 → 실제 @AdminOnly AOP audit row 적재")
+  void replayWalletRegistrationApproval_adminCall_recordsAdminOnlyAudit() throws Exception {
+    AdminUser admin = createAdminAndLogin();
+    String intentId = UUID.randomUUID().toString();
+    String registrationId = UUID.randomUUID().toString();
+    seedWalletApprovalExecutionIntent(intentId, registrationId, admin.userId());
+
+    ResponseEntity<String> response =
+        replayWalletRegistrationApproval(
+            admin.accessToken(),
+            Map.of(
+                "executionIntentId", intentId,
+                "reason", "manual replay",
+                "evidence", "ops-ticket-450"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data/outcome").asText()).isEqualTo("NOT_REPLAYABLE");
+    assertThat(root.at("/data/replayInvoked").asBoolean()).isFalse();
+    assertThat(root.at("/data/registrationId").asText()).isEqualTo(registrationId);
+    assertThat(root.at("/data/executionIntentId").asText()).isEqualTo(intentId);
+    assertThat(root.at("/data/executionIntentStatus").asText()).isEqualTo("AWAITING_SIGNATURE");
+
+    Map<String, Object> row =
+        jdbcTemplate.queryForMap(
+            "SELECT operator_id, success, target_type, detail_json FROM admin_action_audits "
+                + "WHERE action_type=? AND target_id=? AND operator_id=?",
+            ACTION_WALLET_REGISTRATION_REPLAY,
+            intentId,
+            admin.userId());
+    assertThat(((Number) row.get("operator_id")).longValue()).isEqualTo(admin.userId());
+    assertThat(row.get("success")).isEqualTo(true);
+    assertThat(row.get("target_type")).isEqualTo(TARGET_TYPE_WEB3_TRANSACTION);
+
+    JsonNode detail = objectMapper.readTree((String) row.get("detail_json"));
+    assertThat(detail.at("/outcome").asText()).isEqualTo("NOT_REPLAYABLE");
+    assertThat(detail.at("/replayInvoked").asBoolean()).isFalse();
+    assertThat(detail.at("/executionIntentStatus").asText()).isEqualTo("AWAITING_SIGNATURE");
+    assertThat(detail.at("/reason").asText()).isEqualTo("manual replay");
+    assertThat(detail.at("/evidence").asText()).isEqualTo("ops-ticket-450");
+    assertThat(detail.at("/arguments/command/executionIntentId").asText()).isEqualTo(intentId);
+  }
+
+  // ============================================================
+  // E-13: wallet registration replay authorization failure → no audit row
+  // ============================================================
+
+  @Test
+  @DisplayName("[E-13] wallet approval replay 비관리자/무인증 호출 → 차단 + audit row 미기록")
+  void replayWalletRegistrationApproval_nonAdminAndNoAuth_recordsNoAudit() {
+    TestUser user = signupAndLogin("ReplayRegularUser");
+    String intentId = UUID.randomUUID().toString();
+    Map<String, String> body =
+        Map.of(
+            "executionIntentId", intentId,
+            "reason", "forbidden replay",
+            "evidence", "ops-ticket-450");
+
+    ResponseEntity<String> forbidden = replayWalletRegistrationApproval(user.accessToken(), body);
+    ResponseEntity<String> unauthorized = replayWalletRegistrationApproval(null, body);
+
+    assertThat(forbidden.getStatusCode().value()).isIn(401, 403);
+    assertThat(unauthorized.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    Integer auditCount =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM admin_action_audits WHERE action_type=? AND target_id=?",
+            Integer.class,
+            ACTION_WALLET_REGISTRATION_REPLAY,
+            intentId);
     assertThat(auditCount).isZero();
   }
 

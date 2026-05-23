@@ -4,8 +4,9 @@ import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,45 +18,146 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT r FROM ReservationEntity r WHERE r.id = :id")
-  java.util.Optional<ReservationEntity> findByIdWithLock(@Param("id") Long id);
+  Optional<ReservationEntity> findByIdWithLock(@Param("id") Long id);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT r FROM ReservationEntity r WHERE r.currentExecutionIntentPublicId = :publicId")
+  Optional<ReservationEntity> findByCurrentExecutionIntentPublicIdWithLock(
+      @Param("publicId") String publicId);
+
+  @Query(
+      "SELECT r.currentExecutionIntentPublicId FROM ReservationEntity r "
+          + "WHERE r.currentExecutionIntentPublicId IN :publicIds")
+  List<String> findCurrentExecutionIntentPublicIdsIn(
+      @Param("publicIds") Collection<String> publicIds);
+
+  @Query(
+      "SELECT COUNT(r) FROM ReservationEntity r "
+          + "WHERE r.id = :reservationId "
+          + "AND r.currentExecutionIntentPublicId IS NULL "
+          + "AND r.pendingAction IN :pendingActions "
+          + "AND r.status IN :statuses")
+  long countUnboundPendingAction(
+      @Param("reservationId") Long reservationId,
+      @Param("pendingActions") Collection<String> pendingActions,
+      @Param("statuses") Collection<String> statuses);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.userId = :buyerId "
+          + "AND r.slotId = :slotId "
+          + "AND r.reservationDate = :reservationDate "
+          + "AND r.reservationTime = :reservationTime "
+          + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
+          + "ORDER BY r.id ASC")
+  List<ReservationEntity> findActiveByBuyerAndSlotDateTimeWithLock(
+      @Param("buyerId") Long buyerId,
+      @Param("slotId") Long slotId,
+      @Param("reservationDate") LocalDate reservationDate,
+      @Param("reservationTime") LocalTime reservationTime,
+      Pageable pageable);
 
   // NOTE: Status literals 'PENDING' / 'APPROVED' must match ReservationStatus enum names exactly.
   // If either constant is renamed, update this query accordingly.
   @Query(
-      "SELECT COUNT(r) FROM ReservationEntity r WHERE r.slotId = :slotId AND r.reservationDate = :reservationDate AND r.status IN ('PENDING', 'APPROVED')")
+      "SELECT COUNT(r) FROM ReservationEntity r "
+          + "LEFT JOIN MarketplaceReservationEscrowEntity e ON e.reservationId = r.id "
+          + "WHERE r.slotId = :slotId "
+          + "AND r.reservationDate = :reservationDate "
+          + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  ))")
   int countActiveBySlotIdAndDate(
-      @Param("slotId") Long slotId, @Param("reservationDate") LocalDate reservationDate);
+      @Param("slotId") Long slotId,
+      @Param("reservationDate") LocalDate reservationDate,
+      @Param("now") LocalDateTime now);
 
   @Query(
-      "SELECT COUNT(r) FROM ReservationEntity r WHERE r.slotId = :slotId AND r.status IN ('PENDING', 'APPROVED')")
-  int countActiveBySlotId(@Param("slotId") Long slotId);
+      "SELECT COUNT(r) FROM ReservationEntity r "
+          + "LEFT JOIN MarketplaceReservationEscrowEntity e ON e.reservationId = r.id "
+          + "WHERE r.slotId = :slotId "
+          + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  ))")
+  int countActiveBySlotId(@Param("slotId") Long slotId, @Param("now") LocalDateTime now);
 
   @Query(
-      "SELECT r.slotId, COUNT(r) FROM ReservationEntity r WHERE r.slotId IN :slotIds AND r.status IN ('PENDING', 'APPROVED') GROUP BY r.slotId")
-  List<Object[]> countActiveBySlotIdIn(@Param("slotIds") List<Long> slotIds);
+      "SELECT r.slotId, COUNT(r) FROM ReservationEntity r "
+          + "LEFT JOIN MarketplaceReservationEscrowEntity e ON e.reservationId = r.id "
+          + "WHERE r.slotId IN :slotIds "
+          + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  )) "
+          + "GROUP BY r.slotId")
+  List<Object[]> countActiveBySlotIdIn(
+      @Param("slotIds") List<Long> slotIds, @Param("now") LocalDateTime now);
 
-  /**
-   * Same as {@link #countActiveBySlotId} but acquires a pessimistic write lock on matched rows.
-   *
-   * <p>Prevents concurrent INSERT race conditions during reservation creation. Must be called
-   * within an active transaction.
-   *
-   * @param slotId target slot ID
-   * @return active reservation count (PENDING + APPROVED)
-   */
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  /** Counts active reservations after the slot/date capacity key has been locked by the caller. */
   @Query(
-      "SELECT COUNT(r) FROM ReservationEntity r WHERE r.slotId = :slotId AND r.reservationDate = :reservationDate AND r.status IN ('PENDING', 'APPROVED')")
+      "SELECT COUNT(r) FROM ReservationEntity r "
+          + "LEFT JOIN MarketplaceReservationEscrowEntity e ON e.reservationId = r.id "
+          + "WHERE r.slotId = :slotId "
+          + "AND r.reservationDate = :reservationDate "
+          + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  ))")
   int countActiveBySlotIdAndDateWithLock(
-      @Param("slotId") Long slotId, @Param("reservationDate") LocalDate reservationDate);
+      @Param("slotId") Long slotId,
+      @Param("reservationDate") LocalDate reservationDate,
+      @Param("now") LocalDateTime now);
 
   // NOTE: Keep 'PENDING' / 'APPROVED' literals in sync with ReservationStatus enum.
   @Query(
-      "SELECT r.reservationDate, COUNT(r) FROM ReservationEntity r WHERE r.slotId = :slotId AND r.reservationDate >= :startDate AND r.reservationDate < :endDate AND r.status IN ('PENDING', 'APPROVED') GROUP BY r.reservationDate")
+      "SELECT r.reservationDate, COUNT(r) FROM ReservationEntity r "
+          + "LEFT JOIN MarketplaceReservationEscrowEntity e ON e.reservationId = r.id "
+          + "WHERE r.slotId = :slotId "
+          + "AND r.reservationDate >= :startDate "
+          + "AND r.reservationDate < :endDate "
+          + "AND r.status NOT IN ('USER_CANCELLED', 'REJECTED', 'TIMEOUT_CANCELLED', 'SETTLED', 'AUTO_SETTLED', 'HOLD_EXPIRED', 'PAYMENT_FAILED', 'DEADLINE_REFUNDED') "
+          + "AND NOT (r.status IN ('HOLDING', 'PURCHASE_PREPARING') "
+          + "  AND e.holdExpiresAt IS NOT NULL AND e.holdExpiresAt <= :now "
+          + "  AND r.currentExecutionIntentPublicId IS NULL "
+          + "  AND NOT EXISTS ("
+          + "    SELECT 1 FROM MarketplaceReservationActionStateEntity a "
+          + "    WHERE a.reservationId = r.id "
+          + "    AND a.status = 'INTENT_BOUND' "
+          + "    AND a.executionIntentPublicId IS NOT NULL"
+          + "  )) "
+          + "GROUP BY r.reservationDate")
   List<Object[]> countActiveBySlotIdAndDateRange(
       @Param("slotId") Long slotId,
       @Param("startDate") LocalDate startDate,
-      @Param("endDate") LocalDate endDate);
+      @Param("endDate") LocalDate endDate,
+      @Param("now") LocalDateTime now);
 
   /**
    * Fetch PENDING reservations eligible for auto-cancellation.
@@ -73,11 +175,14 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
   @Query(
       "SELECT r FROM ReservationEntity r "
           + "WHERE r.status = 'PENDING' "
+          + "AND (r.escrowFlow IS NULL OR r.escrowFlow = 'LEGACY_DISPATCH') "
+          + "AND (r.contractDeadlineAt IS NULL OR r.contractDeadlineAt >= :now) "
           + "AND (r.createdAt < :nowMinusTimeout "
           + "  OR r.reservationDate < :windowDate "
           + "  OR (r.reservationDate = :windowDate AND r.reservationTime < :windowTime)) "
           + "ORDER BY r.id ASC")
   List<ReservationEntity> findPendingForAutoCancel(
+      @Param("now") LocalDateTime now,
       @Param("nowMinusTimeout") LocalDateTime nowMinusTimeout,
       @Param("windowDate") LocalDate windowDate,
       @Param("windowTime") LocalTime windowTime,
@@ -96,10 +201,22 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
   @Query(
       "SELECT r FROM ReservationEntity r "
           + "WHERE r.status = 'APPROVED' "
+          + "AND (r.escrowFlow IS NULL OR r.escrowFlow = 'LEGACY_DISPATCH') "
+          + "AND (r.contractDeadlineAt IS NULL OR r.contractDeadlineAt >= :now) "
           + "AND r.reservationDate <= :maxDate "
           + "ORDER BY r.id ASC")
   List<ReservationEntity> findApprovedCandidates(
-      @Param("maxDate") LocalDate maxDate, org.springframework.data.domain.Pageable pageable);
+      @Param("now") LocalDateTime now,
+      @Param("maxDate") LocalDate maxDate,
+      org.springframework.data.domain.Pageable pageable);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.userId = :buyerId "
+          + "AND r.createIdempotencyKeyHash = :keyHash")
+  Optional<ReservationEntity> findByBuyerIdAndCreateIdempotencyKeyHashWithLock(
+      @Param("buyerId") Long buyerId, @Param("keyHash") String keyHash);
 
   boolean existsBySlotId(Long slotId);
 
@@ -118,7 +235,7 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "AND (:status IS NULL OR r.status = :status) "
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC")
   List<ReservationEntity> findByUserId(
-      @Param("userId") Long userId, @Param("status") ReservationStatus status);
+      @Param("userId") Long userId, @Param("status") String status);
 
   /**
    * Cursor (keyset) paginated query for a user's reservations.
@@ -144,7 +261,7 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
   List<ReservationEntity> findByUserIdCursor(
       @Param("userId") Long userId,
-      @Param("status") ReservationStatus status,
+      @Param("status") String status,
       @Param("cursorDate") LocalDate cursorDate,
       @Param("cursorTime") LocalTime cursorTime,
       @Param("cursorId") Long cursorId,
@@ -188,7 +305,7 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "AND (:status IS NULL OR r.status = :status) "
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC")
   List<ReservationEntity> findByTrainerId(
-      @Param("trainerId") Long trainerId, @Param("status") ReservationStatus status);
+      @Param("trainerId") Long trainerId, @Param("status") String status);
 
   /**
    * Cursor (keyset) paginated query for a trainer's reservations.
@@ -208,7 +325,7 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
   List<ReservationEntity> findByTrainerIdCursor(
       @Param("trainerId") Long trainerId,
-      @Param("status") ReservationStatus status,
+      @Param("status") String status,
       @Param("cursorDate") LocalDate cursorDate,
       @Param("cursorTime") LocalTime cursorTime,
       @Param("cursorId") Long cursorId,

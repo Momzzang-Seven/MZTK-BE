@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.dto;
 
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
@@ -14,12 +15,17 @@ public record GetExecutionIntentResult(
     ExecutionResourceType resourceType,
     String resourceId,
     ExecutionResourceStatus resourceStatus,
+    ExecutionActionType actionType,
+    String payloadHash,
+    String payloadSnapshotJson,
     String executionIntentId,
     ExecutionIntentStatus executionIntentStatus,
     LocalDateTime expiresAt,
+    long expiresAtEpochSeconds,
     ExecutionMode mode,
     int signCount,
     SignRequestBundle signRequest,
+    SignRequestUnavailableReason signRequestUnavailableReason,
     Long transactionId,
     ExecutionTransactionStatus transactionStatus,
     String txHash) {
@@ -35,6 +41,12 @@ public record GetExecutionIntentResult(
     if (resourceStatus == null) {
       throw new Web3InvalidInputException("resourceStatus is required");
     }
+    if (actionType == null) {
+      throw new Web3InvalidInputException("actionType is required");
+    }
+    if (payloadHash == null || payloadHash.isBlank()) {
+      throw new Web3InvalidInputException("payloadHash is required");
+    }
     if (executionIntentId == null || executionIntentId.isBlank()) {
       throw new Web3InvalidInputException("executionIntentId is required");
     }
@@ -44,11 +56,18 @@ public record GetExecutionIntentResult(
     if (expiresAt == null) {
       throw new Web3InvalidInputException("expiresAt is required");
     }
+    if (expiresAtEpochSeconds <= 0) {
+      throw new Web3InvalidInputException("expiresAtEpochSeconds must be positive");
+    }
     if (mode == null) {
       throw new Web3InvalidInputException("mode is required");
     }
     if (signCount <= 0) {
       throw new Web3InvalidInputException("signCount must be positive");
+    }
+    if (signRequest != null && signRequestUnavailableReason != null) {
+      throw new Web3InvalidInputException(
+          "signRequestUnavailableReason must be null when signRequest is present");
     }
   }
 }

@@ -19,6 +19,8 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.RecoverAnswerEscr
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerPublicationStatus;
+import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -150,7 +152,7 @@ class AnswerControllerQnaEscrowIntegrationTest {
   @Test
   @DisplayName("PUT /questions/{postId}/answers/{answerId} — prepareAnswerUpdate 가 실제 어댑터 경로로 호출됨")
   void updateAnswer_invokesEscrowAdapterPath() throws Exception {
-    Long answerId = createAnswer(502L, "원본 답변");
+    Long answerId = createVisibleAnswer(502L, "원본 답변");
 
     mockMvc
         .perform(
@@ -168,7 +170,7 @@ class AnswerControllerQnaEscrowIntegrationTest {
   @DisplayName(
       "DELETE /questions/{postId}/answers/{answerId} — prepareAnswerDelete 가 실제 어댑터 경로로 호출됨")
   void deleteAnswer_invokesEscrowAdapterPath() throws Exception {
-    Long answerId = createAnswer(503L, "삭제될 답변");
+    Long answerId = createVisibleAnswer(503L, "삭제될 답변");
 
     mockMvc
         .perform(
@@ -215,6 +217,18 @@ class AnswerControllerQnaEscrowIntegrationTest {
     return body.path("data").path("answerId").asLong();
   }
 
+  private Long createVisibleAnswer(Long userId, String content) {
+    AnswerEntity answer =
+        answerJpaRepository.save(
+            AnswerEntity.builder()
+                .postId(questionPostId)
+                .userId(userId)
+                .content(content)
+                .publicationStatus(AnswerPublicationStatus.VISIBLE)
+                .build());
+    return answer.getId();
+  }
+
   private RequestPostProcessor userPrincipal(Long userId) {
     var authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
     var token = new UsernamePasswordAuthenticationToken(userId, null, authorities);
@@ -233,7 +247,7 @@ class AnswerControllerQnaEscrowIntegrationTest {
         new QnaExecutionIntentResult.Resource("ANSWER", "1", "PENDING_EXECUTION"),
         actionType,
         new QnaExecutionIntentResult.ExecutionIntent(
-            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0), 1_776_129_600L),
         new QnaExecutionIntentResult.Execution("EIP7702", 2),
         null,
         false);

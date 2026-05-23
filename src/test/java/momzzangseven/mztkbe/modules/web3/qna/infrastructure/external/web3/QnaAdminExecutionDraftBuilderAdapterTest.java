@@ -109,6 +109,16 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
     assertThat(draft.unsignedTxSnapshot().fromAddress())
         .isEqualTo("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
     assertThat(draft.unsignedTxSnapshot().nonce()).isZero();
+
+    // §B3 regression: admin path must not carry non-null server-sig values.
+    // Default Jackson config in this project (no @JsonInclude(NON_NULL) on the payload record)
+    // serializes null fields explicitly, so the JSON contains the keys with null values.
+    assertThat(draft.signedAt()).isNull();
+    String payloadJson = draft.payloadSnapshotJson();
+    assertThat(payloadJson).contains("\"signedAt\":null").contains("\"signatureHex\":null");
+    assertThat(payloadJson)
+        .doesNotContain("\"signedAt\":1")
+        .doesNotContain("\"signatureHex\":\"0x");
   }
 
   @Test
