@@ -84,6 +84,28 @@ class CalculateMarketplaceAdminSettlementReviewServiceTest {
         .containsExactly(MarketplaceAdminReviewValidationCode.EARLY_SETTLE_CONFIRMATION_REQUIRED);
   }
 
+  @Test
+  @DisplayName("class end 전에는 timeout settle과 manual settle을 모두 차단한다")
+  void settlementReviewBlocksWhenClassHasNotEnded() {
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(approvedClassNotEnded()));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(Optional.empty());
+
+    var result = service.execute(new CalculateMarketplaceAdminSettlementReviewQuery(1L, true));
+
+    assertThat(result.processable()).isFalse();
+    assertThat(result.reasonOptions()).hasSize(2);
+    assertThat(result.reasonOptions())
+        .extracting("reasonCode")
+        .containsExactly("BUYER_CONFIRMATION_TIMEOUT", "ADMIN_MANUAL_SETTLE");
+    assertThat(result.reasonOptions())
+        .extracting("blockingCode")
+        .containsExactly(
+            MarketplaceAdminReviewValidationCode.CLASS_NOT_ENDED,
+            MarketplaceAdminReviewValidationCode.CLASS_NOT_ENDED);
+  }
+
   private Reservation approvedEndedMoreThan24hAgo() {
     return Reservation.builder()
         .id(1L)
@@ -92,6 +114,23 @@ class CalculateMarketplaceAdminSettlementReviewServiceTest {
         .slotId(30L)
         .reservationDate(LocalDate.of(2026, 5, 19))
         .reservationTime(LocalTime.of(10, 0))
+        .durationMinutes(60)
+        .status(ReservationStatus.APPROVED)
+        .escrowStatus(ReservationEscrowStatus.LOCKED)
+        .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+        .priceBaseUnits("1000000000000000000")
+        .version(8L)
+        .build();
+  }
+
+  private Reservation approvedClassNotEnded() {
+    return Reservation.builder()
+        .id(1L)
+        .userId(10L)
+        .trainerId(20L)
+        .slotId(30L)
+        .reservationDate(LocalDate.of(2026, 5, 21))
+        .reservationTime(LocalTime.of(12, 0))
         .durationMinutes(60)
         .status(ReservationStatus.APPROVED)
         .escrowStatus(ReservationEscrowStatus.LOCKED)

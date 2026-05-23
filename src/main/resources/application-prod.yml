@@ -90,6 +90,7 @@ web3:
       recovery:
         enabled: ${WEB3_MARKETPLACE_ADMIN_RECOVERY_ENABLED:true}
         batch-size: ${WEB3_MARKETPLACE_ADMIN_RECOVERY_BATCH_SIZE:100}
+        max-batches-per-run: ${WEB3_MARKETPLACE_ADMIN_RECOVERY_MAX_BATCHES_PER_RUN:20}
         cron: "${WEB3_MARKETPLACE_ADMIN_RECOVERY_CRON:0 */5 * * * *}"
         zone: "${WEB3_MARKETPLACE_ADMIN_RECOVERY_ZONE:Asia/Seoul}"
       reconciliation:

@@ -61,7 +61,7 @@ class MarketplaceAdminExecutionAttemptMaintenanceSchedulerTest {
     when(useCase.execute(any()))
         .thenReturn(new RecoverExpiredMarketplaceAdminExecutionAttemptResult(10, 7, 3, 0));
     MarketplaceAdminExecutionAttemptMaintenanceScheduler scheduler =
-        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(useCase, clock, 25);
+        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(useCase, clock, 25, 20);
 
     scheduler.run();
 
@@ -78,11 +78,26 @@ class MarketplaceAdminExecutionAttemptMaintenanceSchedulerTest {
             new RecoverExpiredMarketplaceAdminExecutionAttemptResult(25, 20, 5, 0),
             new RecoverExpiredMarketplaceAdminExecutionAttemptResult(2, 2, 0, 0));
     MarketplaceAdminExecutionAttemptMaintenanceScheduler scheduler =
-        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(useCase, clock, 25);
+        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(useCase, clock, 25, 20);
 
     scheduler.run();
 
     verify(useCase, times(2)).execute(argThat(command -> command.batchSize() == 25));
+  }
+
+  @Test
+  @DisplayName("full batch가 계속 처리되면 maxBatchesPerRun에서 멈춘다")
+  void runStopsAtMaxBatchesPerRun() {
+    RecoverExpiredMarketplaceAdminExecutionAttemptUseCase useCase =
+        mock(RecoverExpiredMarketplaceAdminExecutionAttemptUseCase.class);
+    when(useCase.execute(any()))
+        .thenReturn(new RecoverExpiredMarketplaceAdminExecutionAttemptResult(25, 25, 0, 0));
+    MarketplaceAdminExecutionAttemptMaintenanceScheduler scheduler =
+        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(useCase, clock, 25, 3);
+
+    scheduler.run();
+
+    verify(useCase, times(3)).execute(argThat(command -> command.batchSize() == 25));
   }
 
   private ApplicationContextRunner contextRunner() {
@@ -92,6 +107,8 @@ class MarketplaceAdminExecutionAttemptMaintenanceSchedulerTest {
             RecoverExpiredMarketplaceAdminExecutionAttemptUseCase.class,
             () -> mock(RecoverExpiredMarketplaceAdminExecutionAttemptUseCase.class))
         .withBean(Clock.class, () -> clock)
-        .withPropertyValues("web3.marketplace.admin.recovery.batch-size=25");
+        .withPropertyValues(
+            "web3.marketplace.admin.recovery.batch-size=25",
+            "web3.marketplace.admin.recovery.max-batches-per-run=20");
   }
 }

@@ -25,14 +25,17 @@ public class MarketplaceAdminExecutionAttemptMaintenanceScheduler {
   private final RecoverExpiredMarketplaceAdminExecutionAttemptUseCase recoverUseCase;
   private final Clock clock;
   private final int batchSize;
+  private final int maxBatchesPerRun;
 
   public MarketplaceAdminExecutionAttemptMaintenanceScheduler(
       RecoverExpiredMarketplaceAdminExecutionAttemptUseCase recoverUseCase,
       Clock clock,
-      @Value("${web3.marketplace.admin.recovery.batch-size:100}") int batchSize) {
+      @Value("${web3.marketplace.admin.recovery.batch-size:100}") int batchSize,
+      @Value("${web3.marketplace.admin.recovery.max-batches-per-run:20}") int maxBatchesPerRun) {
     this.recoverUseCase = recoverUseCase;
     this.clock = clock;
     this.batchSize = batchSize;
+    this.maxBatchesPerRun = maxBatchesPerRun;
   }
 
   @Scheduled(
@@ -43,7 +46,7 @@ public class MarketplaceAdminExecutionAttemptMaintenanceScheduler {
       int recoveredTotal = 0;
       int skippedTotal = 0;
       int failedTotal = 0;
-      while (true) {
+      for (int batchNo = 0; batchNo < maxBatchesPerRun; batchNo++) {
         RecoverExpiredMarketplaceAdminExecutionAttemptResult result =
             recoverUseCase.execute(
                 new RecoverExpiredMarketplaceAdminExecutionAttemptCommand(

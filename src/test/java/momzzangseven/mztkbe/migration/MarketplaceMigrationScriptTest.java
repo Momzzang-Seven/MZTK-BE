@@ -62,11 +62,11 @@ class MarketplaceMigrationScriptTest {
   }
 
   @Test
-  @DisplayName("V079 adds marketplace admin pending and provenance constraints")
+  @DisplayName("V080 adds marketplace admin pending and provenance constraints")
   void marketplaceAdminExecutionSurfaceMigration() throws IOException {
-    String v079 = migration("V079__add_marketplace_admin_execution_surface.sql");
+    String v080 = migration("V080__add_marketplace_admin_execution_surface.sql");
 
-    assertThat(v079)
+    assertThat(v080)
         .contains("ADD COLUMN IF NOT EXISTS resolved_by")
         .contains("ADD COLUMN IF NOT EXISTS terminal_reason_code")
         .contains("'ADMIN_REFUND_PENDING', 'ADMIN_SETTLE_PENDING'")
@@ -75,6 +75,7 @@ class MarketplaceMigrationScriptTest {
         .contains("SET request_source = 'USER'")
         .contains("ALTER COLUMN actor_user_id DROP NOT NULL")
         .contains("reason_code IS NULL OR reason_code IN")
+        .contains("AND reason_code IS NOT NULL")
         .contains("request_source IN ('USER', 'MANUAL_ADMIN', 'SCHEDULER')")
         .contains("request_source = 'SCHEDULER'")
         .contains("actor_type = 'SYSTEM'")

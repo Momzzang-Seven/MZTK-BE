@@ -120,12 +120,14 @@ ALTER TABLE marketplace_reservation_action_states
     ADD CONSTRAINT chk_marketplace_reservation_action_states_reason_code_required CHECK (
         (
             action_type = 'ADMIN_REFUND'
+            AND reason_code IS NOT NULL
             AND reason_code IN (
                 'TRAINER_TIMEOUT', 'SESSION_START_WINDOW_TIMEOUT', 'ADMIN_MANUAL_REFUND'
             )
         )
         OR (
             action_type = 'ADMIN_SETTLE'
+            AND reason_code IS NOT NULL
             AND reason_code IN ('BUYER_CONFIRMATION_TIMEOUT', 'ADMIN_MANUAL_SETTLE')
         )
         OR (action_type NOT IN ('ADMIN_REFUND', 'ADMIN_SETTLE') AND reason_code IS NULL)
