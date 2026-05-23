@@ -20,19 +20,19 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 public class ReconcileMarketplaceAdminTerminalExecutionAttemptService
     implements ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase {
 
-  private static final long CLAIM_STALE_MINUTES = 5L;
-
   private final ClaimReservationActionStateReplayPort claimReservationActionStateReplayPort;
   private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   private final ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   private final ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort;
   private final Clock clock;
+  private final long claimStaleMinutes;
 
   @Override
   public ReconcileMarketplaceAdminTerminalExecutionAttemptResult execute(
       ReconcileMarketplaceAdminTerminalExecutionAttemptCommand command) {
     command.validate();
-    LocalDateTime claimStaleBefore = LocalDateTime.now(clock).minusMinutes(CLAIM_STALE_MINUTES);
+    LocalDateTime claimStaleBefore =
+        LocalDateTime.now(clock).minusMinutes(Math.max(1L, claimStaleMinutes));
     var candidates =
         claimReservationActionStateReplayPort.claimBoundAdminExecutionAttemptsForTerminalReplay(
             claimStaleBefore, command.batchSize());

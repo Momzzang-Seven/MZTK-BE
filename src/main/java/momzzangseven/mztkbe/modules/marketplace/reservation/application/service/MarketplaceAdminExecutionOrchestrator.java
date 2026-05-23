@@ -553,7 +553,7 @@ public class MarketplaceAdminExecutionOrchestrator {
       throw conflict(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS);
     }
     if (executionCandidateGuard != null
-        && executionCandidateGuard.hasBlockingExecutionForAction(reservation, action)) {
+        && executionCandidateGuard.hasBlockingExecutionForAnyMarketplaceAction(reservation)) {
       throw conflict(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS);
     }
   }

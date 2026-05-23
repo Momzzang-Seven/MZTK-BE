@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptCommand;
@@ -20,6 +21,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -163,13 +165,38 @@ class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
     assertThat(result.failed()).isZero();
   }
 
+  @Test
+  void execute_usesConfiguredClaimStaleWindow() {
+    var service =
+        new ReconcileMarketplaceAdminTerminalExecutionAttemptService(
+            claimReservationActionStateReplayPort,
+            loadReservationExecutionStatePort,
+            replayConfirmedReservationExecutionPort,
+            replayTerminatedReservationExecutionPort,
+            clock,
+            17L);
+    given(
+            claimReservationActionStateReplayPort.claimBoundAdminExecutionAttemptsForTerminalReplay(
+                any(), org.mockito.ArgumentMatchers.eq(10)))
+        .willReturn(List.of());
+
+    service.execute(new ReconcileMarketplaceAdminTerminalExecutionAttemptCommand(10));
+
+    ArgumentCaptor<LocalDateTime> captor = ArgumentCaptor.forClass(LocalDateTime.class);
+    verify(claimReservationActionStateReplayPort)
+        .claimBoundAdminExecutionAttemptsForTerminalReplay(
+            captor.capture(), org.mockito.ArgumentMatchers.eq(10));
+    assertThat(captor.getValue()).isEqualTo(LocalDateTime.of(2026, 5, 20, 23, 43));
+  }
+
   private ReconcileMarketplaceAdminTerminalExecutionAttemptService service() {
     return new ReconcileMarketplaceAdminTerminalExecutionAttemptService(
         claimReservationActionStateReplayPort,
         loadReservationExecutionStatePort,
         replayConfirmedReservationExecutionPort,
         replayTerminatedReservationExecutionPort,
-        clock);
+        clock,
+        5L);
   }
 
   private MarketplaceReservationActionState actionState(

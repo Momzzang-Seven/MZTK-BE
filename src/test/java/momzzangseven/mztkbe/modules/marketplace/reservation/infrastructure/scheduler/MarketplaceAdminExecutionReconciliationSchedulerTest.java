@@ -92,6 +92,23 @@ class MarketplaceAdminExecutionReconciliationSchedulerTest {
     verify(useCase, times(3)).execute(argThat(command -> command.batchSize() == 25));
   }
 
+  @Test
+  @DisplayName("batch 안에 failed row가 있어도 다음 batch를 계속 시도한다")
+  void runContinuesAfterFailedRowsInFullBatch() {
+    ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase useCase =
+        mock(ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class);
+    when(useCase.execute(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(25, 20, 4, 1),
+            new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(2, 2, 0, 0));
+    MarketplaceAdminExecutionReconciliationScheduler scheduler =
+        new MarketplaceAdminExecutionReconciliationScheduler(useCase, 25, 20);
+
+    scheduler.run();
+
+    verify(useCase, times(2)).execute(argThat(command -> command.batchSize() == 25));
+  }
+
   private ApplicationContextRunner contextRunner() {
     return new ApplicationContextRunner()
         .withUserConfiguration(MarketplaceAdminExecutionReconciliationScheduler.class)

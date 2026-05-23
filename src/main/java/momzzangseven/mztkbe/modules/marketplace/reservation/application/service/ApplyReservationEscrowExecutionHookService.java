@@ -44,8 +44,11 @@ public class ApplyReservationEscrowExecutionHookService
   private static final String ADMIN_SETTLE = "MARKETPLACE_ADMIN_SETTLE";
   private static final String TRAINER = "TRAINER";
   private static final String CHAIN_CREATED = "CREATED";
+  private static final String CHAIN_CONFIRMED = "CONFIRMED";
+  private static final String CHAIN_CANCELLED = "CANCELLED";
   private static final String CHAIN_ADMIN_REFUNDED = "ADMIN_REFUNDED";
   private static final String CHAIN_ADMIN_SETTLED = "ADMIN_SETTLED";
+  private static final String CHAIN_DEADLINE_REFUNDED = "DEADLINE_REFUNDED";
   private static final String RECEIPT_REVERTED = "REVERTED";
   private static final String EVIDENCE_UNAVAILABLE = "EVIDENCE_UNAVAILABLE";
   private static final String CHAIN_MISMATCH_REQUIRES_SYNC = "CHAIN_MISMATCH_REQUIRES_SYNC";
@@ -264,6 +267,24 @@ public class ApplyReservationEscrowExecutionHookService
       markAdminActionStateConfirmed(command, updated, actionState);
       return;
     }
+    ChainTerminalOutcome chainTerminalOutcome = chainTerminalOutcome(evidence);
+    if (chainTerminalOutcome != null) {
+      Reservation updated =
+          reservation.syncChainOutcome(
+              chainTerminalOutcome.status(),
+              chainTerminalOutcome.escrowStatus(),
+              evidence.txHash(),
+              reservation.getContractDeadlineEpochSeconds(),
+              reservation.getContractDeadlineAt(),
+              ReservationTerminalResolvedBy.CHAIN_SYNC,
+              CHAIN_MISMATCH_REQUIRES_SYNC);
+      saveReservationPort.save(updated);
+      syncEscrowProjection(
+          updated, evidence.txHash(), CHAIN_MISMATCH_REQUIRES_SYNC, command.failureReason());
+      markActionStateStale(
+          command, updated, CHAIN_MISMATCH_REQUIRES_SYNC, command.failureReason(), actionState);
+      return;
+    }
     if (isRollbackSafeAdminTermination(command, evidence)) {
       Reservation updated = reservation.rollbackToPriorState();
       saveReservationPort.save(updated);
@@ -295,6 +316,29 @@ public class ApplyReservationEscrowExecutionHookService
   private boolean isConfirmedByChain(String actionType, String chainOrderState) {
     return (ADMIN_REFUND.equals(actionType) && CHAIN_ADMIN_REFUNDED.equals(chainOrderState))
         || (ADMIN_SETTLE.equals(actionType) && CHAIN_ADMIN_SETTLED.equals(chainOrderState));
+  }
+
+  private ChainTerminalOutcome chainTerminalOutcome(
+      ReservationEscrowExecutionTerminationEvidence evidence) {
+    if (evidence.chainOrderState() == null) {
+      return null;
+    }
+    return switch (evidence.chainOrderState()) {
+      case CHAIN_CONFIRMED ->
+          new ChainTerminalOutcome(ReservationStatus.SETTLED, ReservationEscrowStatus.SETTLED);
+      case CHAIN_CANCELLED ->
+          new ChainTerminalOutcome(
+              ReservationStatus.USER_CANCELLED, ReservationEscrowStatus.REFUNDED);
+      case CHAIN_ADMIN_SETTLED ->
+          new ChainTerminalOutcome(ReservationStatus.AUTO_SETTLED, ReservationEscrowStatus.SETTLED);
+      case CHAIN_ADMIN_REFUNDED ->
+          new ChainTerminalOutcome(
+              ReservationStatus.TIMEOUT_CANCELLED, ReservationEscrowStatus.REFUNDED);
+      case CHAIN_DEADLINE_REFUNDED ->
+          new ChainTerminalOutcome(
+              ReservationStatus.DEADLINE_REFUNDED, ReservationEscrowStatus.DEADLINE_REFUNDED);
+      default -> null;
+    };
   }
 
   private boolean isRollbackSafeAdminTermination(
@@ -939,4 +983,7 @@ public class ApplyReservationEscrowExecutionHookService
       return new ChainOrderLookup(null, failure);
     }
   }
+
+  private record ChainTerminalOutcome(
+      ReservationStatus status, ReservationEscrowStatus escrowStatus) {}
 }

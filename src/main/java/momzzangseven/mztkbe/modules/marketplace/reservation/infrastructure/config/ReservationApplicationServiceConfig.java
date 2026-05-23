@@ -234,13 +234,17 @@ public class ReservationApplicationServiceConfig {
           LoadReservationExecutionStatePort loadReservationExecutionStatePort,
           ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
           ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort,
+          @org.springframework.beans.factory.annotation.Value(
+                  "${web3.marketplace.admin.reconciliation.claim-stale-minutes:5}")
+              long claimStaleMinutes,
           Clock clock) {
     return new ReconcileMarketplaceAdminTerminalExecutionAttemptService(
         claimReservationActionStateReplayPort,
         loadReservationExecutionStatePort,
         replayConfirmedReservationExecutionPort,
         replayTerminatedReservationExecutionPort,
-        clock);
+        clock,
+        claimStaleMinutes);
   }
 
   @Bean

@@ -35,6 +35,8 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 
 final class MarketplaceAdminReviewSupport {
 
+  private static final String RECONCILING_ERROR_CODE = "RECONCILING";
+
   private MarketplaceAdminReviewSupport() {}
 
   static Context load(
@@ -85,7 +87,7 @@ final class MarketplaceAdminReviewSupport {
         preflight == null ? null : preflight.chainCheckedAt(),
         reservation.getVersion(),
         phase,
-        nextPollAfterMs(phase),
+        nextPollAfterMs(phase, activeAttempt),
         pollingEndpoint,
         reservation.getTxHash(),
         preflight == null
@@ -351,26 +353,48 @@ final class MarketplaceAdminReviewSupport {
       MarketplaceAdminExecutionPhase phase,
       ReservationExecutionStateView executionState) {
     boolean closed = !actionState.getStatus().isActive();
+    String errorCode =
+        RECONCILING_ERROR_CODE.equals(actionState.getErrorCode())
+            ? null
+            : actionState.getErrorCode();
+    String errorReason =
+        RECONCILING_ERROR_CODE.equals(actionState.getErrorCode())
+            ? null
+            : actionState.getErrorReason();
     return new MarketplaceAdminExecutionAttemptView(
         actionState.getId(),
         actionState.getStatus(),
-        MarketplaceAdminAttemptFailureStageResolver.resolve(actionState),
+        RECONCILING_ERROR_CODE.equals(actionState.getErrorCode())
+            ? null
+            : MarketplaceAdminAttemptFailureStageResolver.resolve(actionState),
         actionState.getExecutionIntentPublicId(),
         executionState == null ? null : executionState.status(),
         phase,
         executionState == null ? null : executionState.txHash(),
-        actionState.getErrorReason(),
-        actionState.getErrorCode(),
-        null,
+        errorReason,
+        errorCode,
+        evidenceErrorCode(errorCode),
         actionState.getRetryable(),
         closed ? actionState.getUpdatedAt() : null);
   }
 
-  private static Long nextPollAfterMs(MarketplaceAdminExecutionPhase phase) {
+  private static Long nextPollAfterMs(
+      MarketplaceAdminExecutionPhase phase, MarketplaceAdminExecutionAttemptView activeAttempt) {
     return switch (phase) {
       case QUEUED_FOR_SERVER_RELAYER, PENDING_ONCHAIN, CONFIRMED_PENDING_LOCAL_SYNC -> 2000L;
+      case FAILED_ONCHAIN, EXPIRED -> activeAttempt == null ? null : 2000L;
       default -> null;
     };
+  }
+
+  private static String evidenceErrorCode(String errorCode) {
+    if ("CHAIN_ORDER_LOOKUP_FAILED".equals(errorCode)
+        || "CHAIN_ORDER_EVIDENCE_UNAVAILABLE".equals(errorCode)
+        || "CHAIN_ORDER_STATE_UNSUPPORTED".equals(errorCode)
+        || "EVIDENCE_UNAVAILABLE".equals(errorCode)) {
+      return errorCode;
+    }
+    return null;
   }
 
   private static ReservationExecutionStateView loadExecutionState(
@@ -397,7 +421,8 @@ final class MarketplaceAdminReviewSupport {
         || "SUCCEEDED".equals(executionState.transactionStatus())) {
       return MarketplaceAdminExecutionPhase.CONFIRMED_PENDING_LOCAL_SYNC;
     }
-    if ("FAILED_ONCHAIN".equals(executionState.status())) {
+    if ("FAILED_ONCHAIN".equals(executionState.status())
+        || "FAILED_ONCHAIN".equals(executionState.transactionStatus())) {
       return MarketplaceAdminExecutionPhase.FAILED_ONCHAIN;
     }
     if ("EXPIRED".equals(executionState.status())

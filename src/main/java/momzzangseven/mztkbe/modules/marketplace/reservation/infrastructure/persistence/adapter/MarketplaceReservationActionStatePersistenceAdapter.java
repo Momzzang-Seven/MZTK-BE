@@ -113,16 +113,6 @@ public class MarketplaceReservationActionStatePersistenceAdapter
   }
 
   @Override
-  public List<MarketplaceReservationActionState> findBoundAdminExecutionAttemptsForTerminalReplay(
-      int batchSize) {
-    return repository
-        .findBoundAdminExecutionAttemptsForTerminalReplay(LocalDateTime.MIN, batchSize)
-        .stream()
-        .map(this::toDomain)
-        .toList();
-  }
-
-  @Override
   @Transactional
   public List<MarketplaceReservationActionState> claimBoundAdminExecutionAttemptsForTerminalReplay(
       LocalDateTime claimStaleBefore, int batchSize) {

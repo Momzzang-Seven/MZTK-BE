@@ -133,6 +133,40 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
   }
 
   @Test
+  @DisplayName("active bound attempt with failed tx keeps polling and hides reconciliation marker")
+  void refundReviewKeepsPollingForActiveFailedOnchainLocalSync() {
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(lockedPending()));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(
+            Optional.of(
+                intentBoundAttempt().toBuilder()
+                    .errorCode("RECONCILING")
+                    .errorReason("marketplace admin execution reconciliation in progress")
+                    .build()));
+    given(loadReservationExecutionStatePort.loadState("intent-1"))
+        .willReturn(
+            new ReservationExecutionStateView(
+                "intent-1",
+                "PENDING_ONCHAIN",
+                "MARKETPLACE_ADMIN_REFUND",
+                10L,
+                55L,
+                "FAILED_ONCHAIN",
+                "0xhash"));
+
+    var result = service.execute(new CalculateMarketplaceAdminRefundReviewQuery(1L, false));
+
+    assertThat(result.adminExecutionPhase())
+        .isEqualTo(MarketplaceAdminExecutionPhase.FAILED_ONCHAIN);
+    assertThat(result.nextPollAfterMs()).isEqualTo(2000L);
+    assertThat(result.activeExecution().failureStage()).isNull();
+    assertThat(result.activeExecution().errorCode()).isNull();
+    assertThat(result.activeExecution().failureReason()).isNull();
+    assertThat(result.activeExecution().evidenceErrorCode()).isNull();
+  }
+
+  @Test
   @DisplayName("refund review preflight exposes chain check time and server signer blocking")
   void refundReviewPreflightBlocksUnavailableServerSigner() {
     service =

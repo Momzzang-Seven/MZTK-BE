@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -25,12 +26,15 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Mark
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.PrepareMarketplaceAdminEscrowCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationAdminExecutionDraft;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionCandidateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.SubmitMarketplaceAdminEscrowResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BindReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.BuildMarketplaceAdminReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationEscrowPort;
@@ -65,6 +69,8 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
   @Mock private BindReservationActionStatePort bindReservationActionStatePort;
   @Mock private BuildMarketplaceAdminReservationExecutionPort buildExecutionPort;
   @Mock private SubmitMarketplaceAdminReservationExecutionPort submitExecutionPort;
+  @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  @Mock private LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort;
 
   private MarketplaceAdminExecutionOrchestrator orchestrator;
 
@@ -82,10 +88,53 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
             bindReservationActionStatePort,
             buildExecutionPort,
             submitExecutionPort,
-            null,
-            null,
+            loadReservationExecutionStatePort,
+            loadReservationExecutionCandidatePort,
             ReservationTestTransactionPort.direct(),
             Clock.fixed(Instant.parse("2026-05-21T12:00:00Z"), ZoneOffset.UTC));
+  }
+
+  @Test
+  void schedulerRefundBlocksAnyUnresolvedMarketplaceExecutionForSameReservation() {
+    Reservation reservation = pendingReservation();
+    given(loadReservationPort.findByIdWithLock(1L)).willReturn(Optional.of(reservation));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willReturn(Optional.of(escrow()));
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(
+            loadReservationExecutionCandidatePort.findByReservationResource(
+                1L, reservation.getOrderKey()))
+        .willReturn(
+            List.of(
+                new ReservationExecutionCandidateView(
+                    "intent-confirm-orphan",
+                    "PENDING_ONCHAIN",
+                    "MARKETPLACE_CLASS_CONFIRM",
+                    7L,
+                    10L,
+                    null,
+                    null,
+                    new ReservationExecutionCandidateView.PayloadEvidence(
+                        2,
+                        reservation.getId(),
+                        10L,
+                        20L,
+                        "attempt-confirm",
+                        reservation.getOrderKey(),
+                        "MARKETPLACE_CLASS_CONFIRM"),
+                    true)));
+
+    assertThatThrownBy(
+            () ->
+                orchestrator.executeSchedulerRefund(
+                    "scheduler-run-1", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 1L))
+        .isInstanceOf(MarketplaceReservationStateException.class)
+        .hasMessageContaining("ACTIVE_EXECUTION_EXISTS");
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(saveReservationActionStatePort).shouldHaveNoInteractions();
+    then(buildExecutionPort).shouldHaveNoInteractions();
   }
 
   @Test

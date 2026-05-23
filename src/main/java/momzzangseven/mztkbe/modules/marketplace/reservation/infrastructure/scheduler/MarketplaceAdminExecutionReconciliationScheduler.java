@@ -52,7 +52,7 @@ public class MarketplaceAdminExecutionReconciliationScheduler {
         replayedTotal += result.replayed();
         skippedTotal += result.skipped();
         failedTotal += result.failed();
-        if (result.scanned() < batchSize || result.failed() > 0) {
+        if (result.scanned() < batchSize) {
           break;
         }
       }
