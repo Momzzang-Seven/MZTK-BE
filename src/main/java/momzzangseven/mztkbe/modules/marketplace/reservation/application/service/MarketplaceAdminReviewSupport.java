@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
@@ -155,6 +156,26 @@ final class MarketplaceAdminReviewSupport {
               MarketplaceAdminReviewValidationCode.OK, "reservation is locally executable"));
     }
     return List.copyOf(items);
+  }
+
+  static List<MarketplaceAdminReviewValidationItem> unresolvedExecutionItems(
+      Context context,
+      LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+      LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort) {
+    if (loadReservationExecutionStatePort == null
+        || loadReservationExecutionCandidatePort == null) {
+      return List.of();
+    }
+    ReservationExecutionCandidateGuard guard =
+        new ReservationExecutionCandidateGuard(
+            loadReservationExecutionStatePort, loadReservationExecutionCandidatePort);
+    if (!guard.hasBlockingExecutionForAnyMarketplaceAction(context.reservation())) {
+      return List.of();
+    }
+    return List.of(
+        MarketplaceAdminReviewValidationItem.blocking(
+            MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS,
+            "reservation already has an unresolved marketplace execution"));
   }
 
   static MarketplaceAdminReviewValidationCode firstBlockingCode(

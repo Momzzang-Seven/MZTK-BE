@@ -102,6 +102,8 @@ public class ReservationApplicationServiceConfig {
       LoadReservationEscrowPort loadReservationEscrowPort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       ObjectProvider<LoadReservationExecutionStatePort> loadReservationExecutionStatePortProvider,
+      ObjectProvider<LoadReservationExecutionCandidatePort>
+          loadReservationExecutionCandidatePortProvider,
       ObjectProvider<LoadReservationEscrowOrderPort> loadReservationEscrowOrderPortProvider,
       ObjectProvider<LoadMarketplaceAdminExecutionAuthorityPort>
           loadMarketplaceAdminExecutionAuthorityPortProvider,
@@ -111,6 +113,7 @@ public class ReservationApplicationServiceConfig {
         loadReservationEscrowPort,
         loadReservationActionStatePort,
         loadReservationExecutionStatePortProvider.getIfAvailable(),
+        loadReservationExecutionCandidatePortProvider.getIfAvailable(),
         loadReservationEscrowOrderPortProvider.getIfAvailable(),
         loadMarketplaceAdminExecutionAuthorityPortProvider.getIfAvailable(),
         clock);
@@ -122,6 +125,8 @@ public class ReservationApplicationServiceConfig {
       LoadReservationEscrowPort loadReservationEscrowPort,
       LoadReservationActionStatePort loadReservationActionStatePort,
       ObjectProvider<LoadReservationExecutionStatePort> loadReservationExecutionStatePortProvider,
+      ObjectProvider<LoadReservationExecutionCandidatePort>
+          loadReservationExecutionCandidatePortProvider,
       ObjectProvider<LoadReservationEscrowOrderPort> loadReservationEscrowOrderPortProvider,
       ObjectProvider<LoadMarketplaceAdminExecutionAuthorityPort>
           loadMarketplaceAdminExecutionAuthorityPortProvider,
@@ -131,6 +136,7 @@ public class ReservationApplicationServiceConfig {
         loadReservationEscrowPort,
         loadReservationActionStatePort,
         loadReservationExecutionStatePortProvider.getIfAvailable(),
+        loadReservationExecutionCandidatePortProvider.getIfAvailable(),
         loadReservationEscrowOrderPortProvider.getIfAvailable(),
         loadMarketplaceAdminExecutionAuthorityPortProvider.getIfAvailable(),
         clock);

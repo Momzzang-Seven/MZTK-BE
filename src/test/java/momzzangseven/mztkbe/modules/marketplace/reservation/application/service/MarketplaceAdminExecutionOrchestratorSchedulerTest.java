@@ -240,7 +240,6 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
                     "scheduler-run-1", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 1L))
         .isInstanceOf(Web3TransferException.class);
 
-    assertThat(reservationRef.get().getStatus()).isEqualTo(ReservationStatus.PENDING);
     assertThat(actionStateRef.get().getStatus()).isEqualTo(ReservationActionStateStatus.STALE);
     assertThat(actionStateRef.get().getRetryable()).isFalse();
     assertThat(actionStateRef.get().getErrorCode())
@@ -462,7 +461,7 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
   }
 
   @Test
-  void phaseCSnapshotVersionMismatchClosesAttemptAsStaleBeforeSubmit() {
+  void phaseCIgnoresJpaVersionDriftAfterPhaseAPrepareCommit() {
     AtomicReference<Reservation> reservationRef = new AtomicReference<>(pendingReservation());
     AtomicReference<MarketplaceReservationEscrow> escrowRef = new AtomicReference<>(escrow());
     AtomicReference<MarketplaceReservationActionState> actionStateRef = new AtomicReference<>();
@@ -504,6 +503,83 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
         .willAnswer(
             ignored -> {
               reservationRef.set(reservationRef.get().toBuilder().version(8L).build());
+              return draft;
+            });
+    given(submitExecutionPort.submit(draft))
+        .willReturn(
+            new SubmitMarketplaceAdminEscrowResult(
+                "intent-1",
+                "AWAITING_SIGNATURE",
+                "EIP1559",
+                LocalDateTime.of(2026, 5, 21, 12, 10),
+                false));
+    given(bindReservationActionStatePort.bindExecutionIntent(eq(20L), anyString(), eq("intent-1")))
+        .willAnswer(
+            ignored ->
+                Optional.of(
+                    actionStateRef.get().toBuilder()
+                        .status(ReservationActionStateStatus.INTENT_BOUND)
+                        .executionIntentPublicId("intent-1")
+                        .build()));
+
+    var result =
+        orchestrator.executeSchedulerRefund(
+            "scheduler-run-1", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 1L);
+
+    assertThat(result.executionIntent().id()).isEqualTo("intent-1");
+    assertThat(actionStateRef.get().getStatus()).isEqualTo(ReservationActionStateStatus.PREPARING);
+    then(submitExecutionPort).should().submit(draft);
+    then(bindReservationActionStatePort)
+        .should()
+        .bindExecutionIntent(eq(20L), anyString(), eq("intent-1"));
+  }
+
+  @Test
+  void phaseCPreparedStatusMismatchClosesAttemptAsStaleBeforeSubmit() {
+    AtomicReference<Reservation> reservationRef = new AtomicReference<>(pendingReservation());
+    AtomicReference<MarketplaceReservationEscrow> escrowRef = new AtomicReference<>(escrow());
+    AtomicReference<MarketplaceReservationActionState> actionStateRef = new AtomicReference<>();
+    ReservationAdminExecutionDraft draft = new ReservationAdminExecutionDraft() {};
+    given(loadReservationPort.findByIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(reservationRef.get()));
+    given(saveReservationPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              Reservation saved = invocation.getArgument(0);
+              reservationRef.set(saved);
+              return saved;
+            });
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willAnswer(ignored -> Optional.of(escrowRef.get()));
+    given(saveReservationEscrowPort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationEscrow saved = invocation.getArgument(0);
+              escrowRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(saveReservationActionStatePort.save(any()))
+        .willAnswer(
+            invocation -> {
+              MarketplaceReservationActionState saved =
+                  invocation.<MarketplaceReservationActionState>getArgument(0).toBuilder()
+                      .id(20L)
+                      .build();
+              actionStateRef.set(saved);
+              return saved;
+            });
+    given(loadReservationActionStatePort.findByIdWithLock(20L))
+        .willAnswer(ignored -> Optional.of(actionStateRef.get()));
+    given(loadReservationEscrowOrderPort.getOrder(anyString())).willReturn(createdOrder());
+    given(buildExecutionPort.buildRefund(any()))
+        .willAnswer(
+            ignored -> {
+              escrowRef.set(
+                  escrowRef.get().toBuilder()
+                      .escrowStatus(ReservationEscrowStatus.ADMIN_SETTLE_PENDING)
+                      .build());
               return draft;
             });
 

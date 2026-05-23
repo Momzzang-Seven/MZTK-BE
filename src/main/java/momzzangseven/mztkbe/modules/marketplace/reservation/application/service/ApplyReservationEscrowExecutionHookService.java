@@ -45,7 +45,6 @@ public class ApplyReservationEscrowExecutionHookService
   private static final String TRAINER = "TRAINER";
   private static final String CHAIN_CREATED = "CREATED";
   private static final String CHAIN_CONFIRMED = "CONFIRMED";
-  private static final String CHAIN_CANCELLED = "CANCELLED";
   private static final String CHAIN_ADMIN_REFUNDED = "ADMIN_REFUNDED";
   private static final String CHAIN_ADMIN_SETTLED = "ADMIN_SETTLED";
   private static final String CHAIN_DEADLINE_REFUNDED = "DEADLINE_REFUNDED";
@@ -326,9 +325,6 @@ public class ApplyReservationEscrowExecutionHookService
     return switch (evidence.chainOrderState()) {
       case CHAIN_CONFIRMED ->
           new ChainTerminalOutcome(ReservationStatus.SETTLED, ReservationEscrowStatus.SETTLED);
-      case CHAIN_CANCELLED ->
-          new ChainTerminalOutcome(
-              ReservationStatus.USER_CANCELLED, ReservationEscrowStatus.REFUNDED);
       case CHAIN_ADMIN_SETTLED ->
           new ChainTerminalOutcome(ReservationStatus.AUTO_SETTLED, ReservationEscrowStatus.SETTLED);
       case CHAIN_ADMIN_REFUNDED ->

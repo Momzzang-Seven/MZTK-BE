@@ -5,7 +5,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -637,9 +636,6 @@ public class MarketplaceAdminExecutionOrchestrator {
         actionState.getStatus() == ReservationActionStateStatus.PREPARING
             && phaseA.actionState().getAttemptToken().equals(actionState.getAttemptToken())
             && actionState.getExecutionIntentPublicId() == null
-            && Objects.equals(actionState.getExpectedReservationVersion(), reservation.getVersion())
-            && Objects.equals(
-                actionState.getExpectedReservationVersion(), phaseA.reservation().getVersion())
             && reservation.getStatus() == phaseA.reservation().getStatus()
             && reservation.getEffectiveEscrowStatus()
                 == phaseA.reservation().getEffectiveEscrowStatus()

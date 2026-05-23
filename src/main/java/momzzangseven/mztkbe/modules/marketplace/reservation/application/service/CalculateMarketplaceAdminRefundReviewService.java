@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
@@ -32,6 +33,7 @@ public class CalculateMarketplaceAdminRefundReviewService
   private final LoadReservationEscrowPort loadReservationEscrowPort;
   private final LoadReservationActionStatePort loadReservationActionStatePort;
   private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  private final LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort;
   private final LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
   private final LoadMarketplaceAdminExecutionAuthorityPort
       loadMarketplaceAdminExecutionAuthorityPort;
@@ -65,6 +67,7 @@ public class CalculateMarketplaceAdminRefundReviewService
         loadReservationExecutionStatePort,
         null,
         null,
+        null,
         clock);
   }
 
@@ -76,10 +79,31 @@ public class CalculateMarketplaceAdminRefundReviewService
       LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
       LoadMarketplaceAdminExecutionAuthorityPort loadMarketplaceAdminExecutionAuthorityPort,
       Clock clock) {
+    this(
+        loadReservationPort,
+        loadReservationEscrowPort,
+        loadReservationActionStatePort,
+        loadReservationExecutionStatePort,
+        null,
+        loadReservationEscrowOrderPort,
+        loadMarketplaceAdminExecutionAuthorityPort,
+        clock);
+  }
+
+  public CalculateMarketplaceAdminRefundReviewService(
+      LoadReservationPort loadReservationPort,
+      LoadReservationEscrowPort loadReservationEscrowPort,
+      LoadReservationActionStatePort loadReservationActionStatePort,
+      LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+      LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort,
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort,
+      LoadMarketplaceAdminExecutionAuthorityPort loadMarketplaceAdminExecutionAuthorityPort,
+      Clock clock) {
     this.loadReservationPort = loadReservationPort;
     this.loadReservationEscrowPort = loadReservationEscrowPort;
     this.loadReservationActionStatePort = loadReservationActionStatePort;
     this.loadReservationExecutionStatePort = loadReservationExecutionStatePort;
+    this.loadReservationExecutionCandidatePort = loadReservationExecutionCandidatePort;
     this.loadReservationEscrowOrderPort = loadReservationEscrowOrderPort;
     this.loadMarketplaceAdminExecutionAuthorityPort = loadMarketplaceAdminExecutionAuthorityPort;
     this.clock = clock;
@@ -98,6 +122,13 @@ public class CalculateMarketplaceAdminRefundReviewService
     List<MarketplaceAdminReviewValidationItem> baseItems =
         new ArrayList<>(
             MarketplaceAdminReviewSupport.baseItems(context, ReservationStatus.PENDING));
+    List<MarketplaceAdminReviewValidationItem> unresolvedExecutionItems =
+        MarketplaceAdminReviewSupport.unresolvedExecutionItems(
+            context, loadReservationExecutionStatePort, loadReservationExecutionCandidatePort);
+    if (!unresolvedExecutionItems.isEmpty()) {
+      baseItems.removeIf(item -> item.code() == MarketplaceAdminReviewValidationCode.OK);
+      baseItems.addAll(unresolvedExecutionItems);
+    }
     MarketplaceAdminReviewSupport.PreflightResult preflight =
         MarketplaceAdminReviewSupport.preflight(
             context,

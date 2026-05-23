@@ -859,6 +859,48 @@ class ApplyReservationEscrowExecutionHookServiceTest {
   }
 
   @Test
+  void terminatedAdminHook_keepsCancelledChainStateManualSyncWithoutActorEvidence() {
+    Reservation reservation = adminRefundPendingReservation();
+    MarketplaceReservationActionState actionState =
+        activeActionState(
+            ReservationEscrowAction.ADMIN_REFUND, ReservationEscrowActorType.ADMIN, 77L);
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(reservation));
+    given(loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(actionState));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(reservation.getId()))
+        .willReturn(Optional.of(escrowProjection()));
+
+    service.afterExecutionTerminated(
+        new ReservationEscrowExecutionTerminatedCommand(
+            "intent-action",
+            "MARKETPLACE_ADMIN_REFUND",
+            "ADMIN",
+            reservation.getId(),
+            "attempt-1",
+            20L,
+            "FAILED_ONCHAIN",
+            "chain cancelled by unknown actor",
+            "TRAINER_TIMEOUT",
+            evidence("0xdead", true, "UNCONFIRMED", "UNKNOWN", "CANCELLED", null)));
+
+    ArgumentCaptor<Reservation> reservationCaptor = ArgumentCaptor.forClass(Reservation.class);
+    then(saveReservationPort).should().save(reservationCaptor.capture());
+    Reservation updated = reservationCaptor.getValue();
+    assertThat(updated.getStatus()).isEqualTo(ReservationStatus.MANUAL_SYNC_REQUIRED);
+    assertThat(updated.getEffectiveEscrowStatus())
+        .isEqualTo(ReservationEscrowStatus.MANUAL_SYNC_REQUIRED);
+    assertThat(updated.getResolvedBy()).isEqualTo(ReservationTerminalResolvedBy.CHAIN_SYNC);
+    assertThat(updated.getTerminalReasonCode()).isEqualTo("CHAIN_MISMATCH_REQUIRES_SYNC");
+
+    ArgumentCaptor<MarketplaceReservationActionState> actionCaptor =
+        ArgumentCaptor.forClass(MarketplaceReservationActionState.class);
+    then(saveReservationActionStatePort).should().save(actionCaptor.capture());
+    assertThat(actionCaptor.getValue().getStatus()).isEqualTo(ReservationActionStateStatus.STALE);
+    assertThat(actionCaptor.getValue().getErrorCode()).isEqualTo("CHAIN_MISMATCH_REQUIRES_SYNC");
+  }
+
+  @Test
   void terminatedAdminHook_marksManualSyncRequiredWhenExpiredWithoutTxButChainEvidenceUnknown() {
     Reservation reservation = adminRefundPendingReservation();
     MarketplaceReservationActionState actionState =

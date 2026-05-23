@@ -9,17 +9,20 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CalculateMarketplaceAdminRefundReviewQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionAuthorityView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionPhase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionCandidateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadMarketplaceAdminExecutionAuthorityPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionCandidatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
@@ -42,6 +45,7 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
   @Mock private LoadReservationEscrowPort loadReservationEscrowPort;
   @Mock private LoadReservationActionStatePort loadReservationActionStatePort;
   @Mock private LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  @Mock private LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort;
   @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
 
   @Mock
@@ -103,6 +107,46 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
     assertThat(result.baseBlockingCode())
         .isEqualTo(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS);
     assertThat(result.activeExecution()).isNotNull();
+  }
+
+  @Test
+  @DisplayName("refund review blocks orphan marketplace execution before execute POST")
+  void refundReviewBlocksOrphanMarketplaceExecution() {
+    service =
+        new CalculateMarketplaceAdminRefundReviewService(
+            loadReservationPort,
+            loadReservationEscrowPort,
+            loadReservationActionStatePort,
+            loadReservationExecutionStatePort,
+            loadReservationExecutionCandidatePort,
+            null,
+            null,
+            Clock.fixed(Instant.parse("2026-05-21T12:00:00Z"), ZoneOffset.UTC));
+    Reservation reservation = lockedPending();
+    given(loadReservationPort.findById(1L)).willReturn(Optional.of(reservation));
+    given(loadReservationEscrowPort.findByReservationId(1L)).willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findLatestByReservationId(1L))
+        .willReturn(Optional.empty());
+    given(loadReservationExecutionCandidatePort.findByReservationResource(1L, "0xorder"))
+        .willReturn(
+            List.of(
+                new ReservationExecutionCandidateView(
+                    "intent-confirm-orphan",
+                    "PENDING_ONCHAIN",
+                    "MARKETPLACE_CLASS_CONFIRM",
+                    10L,
+                    77L,
+                    null,
+                    null,
+                    new ReservationExecutionCandidateView.PayloadEvidence(
+                        2, 1L, 20L, 30L, "attempt-confirm", "0xorder", "MARKETPLACE_CLASS_CONFIRM"),
+                    true)));
+
+    var result = service.execute(new CalculateMarketplaceAdminRefundReviewQuery(1L, true));
+
+    assertThat(result.processable()).isFalse();
+    assertThat(result.baseBlockingCode())
+        .isEqualTo(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS);
   }
 
   @Test
