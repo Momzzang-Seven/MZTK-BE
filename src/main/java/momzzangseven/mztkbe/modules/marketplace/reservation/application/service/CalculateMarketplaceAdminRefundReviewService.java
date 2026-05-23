@@ -188,7 +188,7 @@ public class CalculateMarketplaceAdminRefundReviewService
     return new MarketplaceAdminReasonReviewOption(
         reasonCode,
         processable,
-        blocking,
+        confirmationOnly ? null : blocking,
         requiresConfirmation,
         confirmationType,
         requiredAuthority,

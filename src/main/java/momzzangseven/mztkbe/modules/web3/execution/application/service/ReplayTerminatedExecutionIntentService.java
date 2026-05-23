@@ -1,26 +1,34 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTerminationEvidenceView;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayTerminatedExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayTerminatedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionHookTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 
 @RequiredArgsConstructor
 public class ReplayTerminatedExecutionIntentService
     implements ReplayTerminatedExecutionIntentUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
+  private final LoadExecutionTransactionPort loadExecutionTransactionPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final RunExecutionHookTransactionPort transactionPort;
+  private final Clock appClock;
 
   @Override
   public boolean execute(ReplayTerminatedExecutionIntentCommand command) {
@@ -28,9 +36,9 @@ public class ReplayTerminatedExecutionIntentService
     ExecutionActionType expectedActionType = parseActionType(command.expectedActionType());
     ExecutionIntent intent =
         executionIntentPersistencePort
-            .findByPublicId(command.executionIntentId())
+            .findByPublicIdForUpdate(command.executionIntentId())
             .filter(candidate -> candidate.getActionType() == expectedActionType)
-            .filter(this::isReplayableTerminal)
+            .flatMap(this::replayableTerminalOrRepairableFailedOnchain)
             .orElse(null);
     if (intent == null) {
       return false;
@@ -49,8 +57,28 @@ public class ReplayTerminatedExecutionIntentService
     return true;
   }
 
-  private boolean isReplayableTerminal(ExecutionIntent intent) {
-    return intent.getStatus().isTerminal() && intent.getStatus() != ExecutionIntentStatus.CONFIRMED;
+  private Optional<ExecutionIntent> replayableTerminalOrRepairableFailedOnchain(
+      ExecutionIntent intent) {
+    if (intent.getStatus().isTerminal() && intent.getStatus() != ExecutionIntentStatus.CONFIRMED) {
+      return Optional.of(intent);
+    }
+    if (!intent.getStatus().isInFlight() || intent.getSubmittedTxId() == null) {
+      return Optional.empty();
+    }
+    return loadExecutionTransactionPort
+        .findById(intent.getSubmittedTxId())
+        .filter(transaction -> transaction.status() == ExecutionTransactionStatus.FAILED_ONCHAIN)
+        .map(transaction -> markFailedFromFailedOnchainTransaction(intent, transaction));
+  }
+
+  private ExecutionIntent markFailedFromFailedOnchainTransaction(
+      ExecutionIntent intent, ExecutionTransactionSummary transaction) {
+    ExecutionIntent failed =
+        intent.failOnchain(
+            ExecutionIntentStatus.FAILED_ONCHAIN.name(),
+            "transaction " + transaction.transactionId() + " failed onchain",
+            LocalDateTime.now(appClock));
+    return executionIntentPersistencePort.update(failed);
   }
 
   private ExecutionActionType parseActionType(String actionType) {

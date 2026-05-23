@@ -172,29 +172,19 @@ public class ReservationApplicationServiceConfig {
 
   @Bean
   @ConditionalOnMarketplaceAdminEnabled
-  ExecuteMarketplaceAdminRefundService executeMarketplaceAdminRefundService(
-      MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator) {
-    return new ExecuteMarketplaceAdminRefundService(marketplaceAdminExecutionOrchestrator);
-  }
-
-  @Bean
-  @ConditionalOnMarketplaceAdminEnabled
   ExecuteMarketplaceAdminRefundUseCase executeMarketplaceAdminRefundUseCase(
-      ExecuteMarketplaceAdminRefundService delegate) {
+      MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator) {
+    ExecuteMarketplaceAdminRefundUseCase delegate =
+        new ExecuteMarketplaceAdminRefundService(marketplaceAdminExecutionOrchestrator);
     return new AdminAuditedExecuteMarketplaceAdminRefundUseCase(delegate);
   }
 
   @Bean
   @ConditionalOnMarketplaceAdminEnabled
-  ExecuteMarketplaceAdminSettlementService executeMarketplaceAdminSettlementService(
-      MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator) {
-    return new ExecuteMarketplaceAdminSettlementService(marketplaceAdminExecutionOrchestrator);
-  }
-
-  @Bean
-  @ConditionalOnMarketplaceAdminEnabled
   ExecuteMarketplaceAdminSettlementUseCase executeMarketplaceAdminSettlementUseCase(
-      ExecuteMarketplaceAdminSettlementService delegate) {
+      MarketplaceAdminExecutionOrchestrator marketplaceAdminExecutionOrchestrator) {
+    ExecuteMarketplaceAdminSettlementUseCase delegate =
+        new ExecuteMarketplaceAdminSettlementService(marketplaceAdminExecutionOrchestrator);
     return new AdminAuditedExecuteMarketplaceAdminSettlementUseCase(delegate);
   }
 

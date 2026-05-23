@@ -76,6 +76,60 @@ class ReconcileMarketplaceAdminTerminalExecutionAttemptServiceTest {
   }
 
   @Test
+  void execute_replaysRepairableSucceededTransactionCandidate() {
+    var service = service();
+    given(loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(10))
+        .willReturn(List.of(actionState(4L, ReservationEscrowAction.ADMIN_SETTLE, "intent-4")));
+    given(loadReservationExecutionStatePort.loadState("intent-4"))
+        .willReturn(
+            new ReservationExecutionStateView(
+                "intent-4",
+                "PENDING_ONCHAIN",
+                "MARKETPLACE_ADMIN_SETTLE",
+                100L,
+                44L,
+                "SUCCEEDED",
+                "0x" + "a".repeat(64)));
+    given(
+            replayConfirmedReservationExecutionPort.replayConfirmed(
+                "intent-4", "MARKETPLACE_ADMIN_SETTLE"))
+        .willReturn(true);
+
+    var result = service.execute(new ReconcileMarketplaceAdminTerminalExecutionAttemptCommand(10));
+
+    assertThat(result.replayed()).isEqualTo(1);
+    verify(replayConfirmedReservationExecutionPort)
+        .replayConfirmed("intent-4", "MARKETPLACE_ADMIN_SETTLE");
+  }
+
+  @Test
+  void execute_replaysRepairableFailedOnchainTransactionCandidate() {
+    var service = service();
+    given(loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(10))
+        .willReturn(List.of(actionState(5L, ReservationEscrowAction.ADMIN_REFUND, "intent-5")));
+    given(loadReservationExecutionStatePort.loadState("intent-5"))
+        .willReturn(
+            new ReservationExecutionStateView(
+                "intent-5",
+                "SIGNED",
+                "MARKETPLACE_ADMIN_REFUND",
+                100L,
+                45L,
+                "FAILED_ONCHAIN",
+                "0x" + "b".repeat(64)));
+    given(
+            replayTerminatedReservationExecutionPort.replayTerminated(
+                "intent-5", "MARKETPLACE_ADMIN_REFUND"))
+        .willReturn(true);
+
+    var result = service.execute(new ReconcileMarketplaceAdminTerminalExecutionAttemptCommand(10));
+
+    assertThat(result.replayed()).isEqualTo(1);
+    verify(replayTerminatedReservationExecutionPort)
+        .replayTerminated("intent-5", "MARKETPLACE_ADMIN_REFUND");
+  }
+
+  @Test
   void execute_skipsNonTerminalExecutionState() {
     var service = service();
     given(loadReservationActionStatePort.findBoundAdminExecutionAttemptsForTerminalReplay(10))

@@ -370,11 +370,15 @@ public class ExecutionIntentServiceConfig {
   @Bean
   ReplayTerminatedExecutionIntentUseCase replayTerminatedExecutionIntentUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
-      RunExecutionHookTransactionPort runExecutionHookTransactionPort) {
+      RunExecutionHookTransactionPort runExecutionHookTransactionPort,
+      Clock appClock) {
     return new ReplayTerminatedExecutionIntentService(
         executionIntentPersistencePort,
+        loadExecutionTransactionPort,
         executionActionHandlerPorts,
-        runExecutionHookTransactionPort);
+        runExecutionHookTransactionPort,
+        appClock);
   }
 }

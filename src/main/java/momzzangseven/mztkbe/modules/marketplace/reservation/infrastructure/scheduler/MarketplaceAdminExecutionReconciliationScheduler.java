@@ -36,16 +36,29 @@ public class MarketplaceAdminExecutionReconciliationScheduler {
       zone = "${web3.marketplace.admin.reconciliation.zone:Asia/Seoul}")
   public void run() {
     try {
-      ReconcileMarketplaceAdminTerminalExecutionAttemptResult result =
-          reconcileUseCase.execute(
-              new ReconcileMarketplaceAdminTerminalExecutionAttemptCommand(batchSize));
-      if (!result.isEmpty()) {
+      int scannedTotal = 0;
+      int replayedTotal = 0;
+      int skippedTotal = 0;
+      int failedTotal = 0;
+      while (true) {
+        ReconcileMarketplaceAdminTerminalExecutionAttemptResult result =
+            reconcileUseCase.execute(
+                new ReconcileMarketplaceAdminTerminalExecutionAttemptCommand(batchSize));
+        scannedTotal += result.scanned();
+        replayedTotal += result.replayed();
+        skippedTotal += result.skipped();
+        failedTotal += result.failed();
+        if (result.scanned() < batchSize || result.failed() > 0) {
+          break;
+        }
+      }
+      if (scannedTotal > 0 || replayedTotal > 0 || skippedTotal > 0 || failedTotal > 0) {
         log.info(
             "marketplace admin execution hook reconciliation completed: scanned={}, replayed={}, skipped={}, failed={}",
-            result.scanned(),
-            result.replayed(),
-            result.skipped(),
-            result.failed());
+            scannedTotal,
+            replayedTotal,
+            skippedTotal,
+            failedTotal);
       }
     } catch (RuntimeException e) {
       log.error("marketplace admin execution reconciliation scheduler failed", e);

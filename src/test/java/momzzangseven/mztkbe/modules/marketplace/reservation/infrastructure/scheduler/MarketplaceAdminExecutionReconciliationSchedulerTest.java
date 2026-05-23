@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.sche
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,6 +58,23 @@ class MarketplaceAdminExecutionReconciliationSchedulerTest {
     scheduler.run();
 
     verify(useCase).execute(argThat(command -> command.batchSize() == 25));
+  }
+
+  @Test
+  @DisplayName("full batch가 계속 처리되면 reconciliation 후보가 drain될 때까지 반복한다")
+  void runRepeatsUntilBatchIsDrained() {
+    ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase useCase =
+        mock(ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class);
+    when(useCase.execute(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(25, 20, 5, 0),
+            new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(3, 3, 0, 0));
+    MarketplaceAdminExecutionReconciliationScheduler scheduler =
+        new MarketplaceAdminExecutionReconciliationScheduler(useCase, 25);
+
+    scheduler.run();
+
+    verify(useCase, times(2)).execute(argThat(command -> command.batchSize() == 25));
   }
 
   private ApplicationContextRunner contextRunner() {

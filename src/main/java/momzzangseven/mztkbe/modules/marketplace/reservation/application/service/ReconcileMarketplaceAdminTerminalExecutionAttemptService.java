@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationExecutionStateView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
@@ -40,8 +41,9 @@ public class ReconcileMarketplaceAdminTerminalExecutionAttemptService
         continue;
       }
       try {
-        String status = loadReservationExecutionStatePort.loadState(executionIntentId).status();
-        if (replay(executionIntentId, expectedActionType, status)) {
+        ReservationExecutionStateView state =
+            loadReservationExecutionStatePort.loadState(executionIntentId);
+        if (replay(executionIntentId, expectedActionType, state)) {
           replayed++;
         } else {
           skipped++;
@@ -77,6 +79,34 @@ public class ReconcileMarketplaceAdminTerminalExecutionAttemptService
           executionIntentId, expectedActionType);
     }
     return false;
+  }
+
+  private boolean replay(
+      String executionIntentId, String expectedActionType, ReservationExecutionStateView state) {
+    if (state == null) {
+      return false;
+    }
+    if (isRepairableConfirmed(state)) {
+      return replayConfirmedReservationExecutionPort.replayConfirmed(
+          executionIntentId, expectedActionType);
+    }
+    if (isRepairableFailedOnchain(state)) {
+      return replayTerminatedReservationExecutionPort.replayTerminated(
+          executionIntentId, expectedActionType);
+    }
+    return replay(executionIntentId, expectedActionType, state.status());
+  }
+
+  private boolean isRepairableConfirmed(ReservationExecutionStateView state) {
+    return isInFlight(state.status()) && "SUCCEEDED".equals(state.transactionStatus());
+  }
+
+  private boolean isRepairableFailedOnchain(ReservationExecutionStateView state) {
+    return isInFlight(state.status()) && "FAILED_ONCHAIN".equals(state.transactionStatus());
+  }
+
+  private boolean isInFlight(String status) {
+    return "SIGNED".equals(status) || "PENDING_ONCHAIN".equals(status);
   }
 
   private boolean isTerminated(String status) {

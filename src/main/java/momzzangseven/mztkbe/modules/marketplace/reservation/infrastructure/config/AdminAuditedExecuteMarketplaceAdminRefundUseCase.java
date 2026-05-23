@@ -5,15 +5,14 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ExecuteMarketplaceAdminRefundCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceAdminRefundUseCase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ExecuteMarketplaceAdminRefundService;
 
 public class AdminAuditedExecuteMarketplaceAdminRefundUseCase
     implements ExecuteMarketplaceAdminRefundUseCase {
 
-  private final ExecuteMarketplaceAdminRefundService delegate;
+  private final ExecuteMarketplaceAdminRefundUseCase delegate;
 
   public AdminAuditedExecuteMarketplaceAdminRefundUseCase(
-      ExecuteMarketplaceAdminRefundService delegate) {
+      ExecuteMarketplaceAdminRefundUseCase delegate) {
     this.delegate = delegate;
   }
 

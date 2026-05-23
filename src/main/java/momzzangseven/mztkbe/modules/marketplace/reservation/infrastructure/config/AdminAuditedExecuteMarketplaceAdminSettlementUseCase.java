@@ -5,15 +5,14 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ExecuteMarketplaceAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceAdminSettlementUseCase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ExecuteMarketplaceAdminSettlementService;
 
 public class AdminAuditedExecuteMarketplaceAdminSettlementUseCase
     implements ExecuteMarketplaceAdminSettlementUseCase {
 
-  private final ExecuteMarketplaceAdminSettlementService delegate;
+  private final ExecuteMarketplaceAdminSettlementUseCase delegate;
 
   public AdminAuditedExecuteMarketplaceAdminSettlementUseCase(
-      ExecuteMarketplaceAdminSettlementService delegate) {
+      ExecuteMarketplaceAdminSettlementUseCase delegate) {
     this.delegate = delegate;
   }
 

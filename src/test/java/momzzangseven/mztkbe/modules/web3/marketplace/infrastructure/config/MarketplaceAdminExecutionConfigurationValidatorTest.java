@@ -4,14 +4,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.InternalExecutionIssuerPolicyView;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetInternalExecutionIssuerPolicyUseCase;
-import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.external.web3.MarketplaceContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerFailureReason;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerSlotStatus;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProbeTreasuryWalletCapabilityUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminExecutionAuthorityStatus;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceInternalExecutionPolicyStatus;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.LoadMarketplaceAdminExecutionAuthorityUseCase;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceInternalExecutionPolicyPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,39 +20,28 @@ import org.springframework.test.util.ReflectionTestUtils;
 @DisplayName("MarketplaceAdminExecutionConfigurationValidator")
 class MarketplaceAdminExecutionConfigurationValidatorTest {
 
-  @Mock private GetInternalExecutionIssuerPolicyUseCase getInternalExecutionIssuerPolicyUseCase;
-  @Mock private ProbeTreasuryWalletCapabilityUseCase probeTreasuryWalletCapabilityUseCase;
-  @Mock private MarketplaceContractCallSupport marketplaceContractCallSupport;
+  @Mock
+  private LoadMarketplaceInternalExecutionPolicyPort loadMarketplaceInternalExecutionPolicyPort;
 
-  private MarketplaceEscrowProperties marketplaceEscrowProperties;
+  @Mock
+  private LoadMarketplaceAdminExecutionAuthorityUseCase
+      loadMarketplaceAdminExecutionAuthorityUseCase;
+
   private MarketplaceAdminExecutionConfigurationValidator validator;
 
   @BeforeEach
   void setUp() {
-    marketplaceEscrowProperties = new MarketplaceEscrowProperties();
-    marketplaceEscrowProperties.setMarketplaceContractAddress(
-        "0x1111111111111111111111111111111111111111");
     validator =
         new MarketplaceAdminExecutionConfigurationValidator(
-            getInternalExecutionIssuerPolicyUseCase,
-            probeTreasuryWalletCapabilityUseCase,
-            marketplaceContractCallSupport,
-            marketplaceEscrowProperties);
+            loadMarketplaceInternalExecutionPolicyPort,
+            loadMarketplaceAdminExecutionAuthorityUseCase);
   }
 
   @Test
   @DisplayName("internal issuer marketplace admin actions + relayer 등록 signer 이면 통과한다")
   void validateConfiguration_allowsRegisteredMarketplaceSigner() {
-    when(getInternalExecutionIssuerPolicyUseCase.getPolicy()).thenReturn(enabledPolicy());
-    when(probeTreasuryWalletCapabilityUseCase.probe(TreasuryRole.MARKETPLACE_SIGNER.toAlias()))
-        .thenReturn(
-            ExecutionSignerCapabilityView.ready(
-                TreasuryRole.MARKETPLACE_SIGNER.toAlias(),
-                "0x2222222222222222222222222222222222222222"));
-    when(marketplaceContractCallSupport.isRelayerRegistered(
-            "0x1111111111111111111111111111111111111111",
-            "0x2222222222222222222222222222222222222222"))
-        .thenReturn(true);
+    when(loadMarketplaceInternalExecutionPolicyPort.load()).thenReturn(enabledPolicy());
+    when(loadMarketplaceAdminExecutionAuthorityUseCase.execute()).thenReturn(registeredAuthority());
 
     assertThatCode(validator::validateConfiguration).doesNotThrowAnyException();
   }
@@ -64,8 +49,8 @@ class MarketplaceAdminExecutionConfigurationValidatorTest {
   @Test
   @DisplayName("marketplace admin action-policy 누락이면 startup validation 이 실패한다")
   void validateConfiguration_rejectsMissingMarketplaceAdminPolicy() {
-    when(getInternalExecutionIssuerPolicyUseCase.getPolicy())
-        .thenReturn(new InternalExecutionIssuerPolicyView(true, true, true, true, false));
+    when(loadMarketplaceInternalExecutionPolicyPort.load())
+        .thenReturn(new MarketplaceInternalExecutionPolicyStatus(true, true, false));
 
     assertThatThrownBy(validator::validateConfiguration)
         .isInstanceOf(IllegalStateException.class)
@@ -75,13 +60,9 @@ class MarketplaceAdminExecutionConfigurationValidatorTest {
   @Test
   @DisplayName("fail-fast=false 이면 signer unavailable 은 startup 을 막지 않는다")
   void validateConfiguration_allowsUnavailableSignerWhenFailFastOff() {
-    when(getInternalExecutionIssuerPolicyUseCase.getPolicy()).thenReturn(enabledPolicy());
-    when(probeTreasuryWalletCapabilityUseCase.probe(TreasuryRole.MARKETPLACE_SIGNER.toAlias()))
-        .thenReturn(
-            ExecutionSignerCapabilityView.unavailable(
-                TreasuryRole.MARKETPLACE_SIGNER.toAlias(),
-                ExecutionSignerSlotStatus.PROVISIONED,
-                ExecutionSignerFailureReason.KMS_KEY_DISABLED));
+    when(loadMarketplaceInternalExecutionPolicyPort.load()).thenReturn(enabledPolicy());
+    when(loadMarketplaceAdminExecutionAuthorityUseCase.execute())
+        .thenReturn(MarketplaceAdminExecutionAuthorityStatus.serverRelayerOnly());
 
     assertThatCode(validator::validateConfiguration).doesNotThrowAnyException();
   }
@@ -90,23 +71,33 @@ class MarketplaceAdminExecutionConfigurationValidatorTest {
   @DisplayName("fail-fast=true 이면 relayer 미등록 signer 를 startup 에서 차단한다")
   void validateConfiguration_rejectsUnregisteredRelayerWhenFailFastOn() {
     ReflectionTestUtils.setField(validator, "failFast", true);
-    when(getInternalExecutionIssuerPolicyUseCase.getPolicy()).thenReturn(enabledPolicy());
-    when(probeTreasuryWalletCapabilityUseCase.probe(TreasuryRole.MARKETPLACE_SIGNER.toAlias()))
+    when(loadMarketplaceInternalExecutionPolicyPort.load()).thenReturn(enabledPolicy());
+    when(loadMarketplaceAdminExecutionAuthorityUseCase.execute())
         .thenReturn(
-            ExecutionSignerCapabilityView.ready(
-                TreasuryRole.MARKETPLACE_SIGNER.toAlias(),
-                "0x2222222222222222222222222222222222222222"));
-    when(marketplaceContractCallSupport.isRelayerRegistered(
-            "0x1111111111111111111111111111111111111111",
-            "0x2222222222222222222222222222222222222222"))
-        .thenReturn(false);
+            new MarketplaceAdminExecutionAuthorityStatus(
+                false,
+                MarketplaceAdminExecutionAuthorityStatus.SERVER_RELAYER_ONLY,
+                true,
+                "0x2222222222222222222222222222222222222222",
+                false,
+                MarketplaceAdminExecutionAuthorityStatus.RELAYER_REGISTRATION_NOT_REGISTERED));
 
     assertThatThrownBy(validator::validateConfiguration)
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("not registered as relayer");
   }
 
-  private InternalExecutionIssuerPolicyView enabledPolicy() {
-    return new InternalExecutionIssuerPolicyView(true, true, true, true, true);
+  private MarketplaceInternalExecutionPolicyStatus enabledPolicy() {
+    return new MarketplaceInternalExecutionPolicyStatus(true, true, true);
+  }
+
+  private MarketplaceAdminExecutionAuthorityStatus registeredAuthority() {
+    return new MarketplaceAdminExecutionAuthorityStatus(
+        false,
+        MarketplaceAdminExecutionAuthorityStatus.SERVER_RELAYER_ONLY,
+        true,
+        "0x2222222222222222222222222222222222222222",
+        true,
+        MarketplaceAdminExecutionAuthorityStatus.RELAYER_REGISTRATION_REGISTERED);
   }
 }

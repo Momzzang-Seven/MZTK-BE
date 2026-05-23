@@ -80,8 +80,11 @@ class CalculateMarketplaceAdminRefundReviewServiceTest {
     assertThat(result.reasonOptions())
         .extracting("reasonCode")
         .containsExactly("TRAINER_TIMEOUT", "SESSION_START_WINDOW_TIMEOUT", "ADMIN_MANUAL_REFUND");
-    assertThat(result.reasonOptions().get(2).blockingCode())
-        .isEqualTo(MarketplaceAdminReviewValidationCode.MANUAL_REFUND_CONFIRMATION_REQUIRED);
+    assertThat(result.reasonOptions().get(2).processable()).isTrue();
+    assertThat(result.reasonOptions().get(2).blockingCode()).isNull();
+    assertThat(result.reasonOptions().get(2).validationItems())
+        .extracting("code")
+        .containsExactly(MarketplaceAdminReviewValidationCode.MANUAL_REFUND_CONFIRMATION_REQUIRED);
     assertThat(result.reasonOptions().get(2).requiresConfirmation()).isTrue();
     assertThat(result.reasonOptions().get(2).authoritySatisfied()).isTrue();
   }

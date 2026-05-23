@@ -77,8 +77,11 @@ class CalculateMarketplaceAdminSettlementReviewServiceTest {
     assertThat(result.authority().authorityModel())
         .isEqualTo(MarketplaceAdminExecutionAuthorityView.SERVER_RELAYER_ONLY);
     assertThat(result.authority().canEarlySettle()).isTrue();
-    assertThat(result.reasonOptions().get(1).blockingCode())
-        .isEqualTo(MarketplaceAdminReviewValidationCode.EARLY_SETTLE_CONFIRMATION_REQUIRED);
+    assertThat(result.reasonOptions().get(1).processable()).isTrue();
+    assertThat(result.reasonOptions().get(1).blockingCode()).isNull();
+    assertThat(result.reasonOptions().get(1).validationItems())
+        .extracting("code")
+        .containsExactly(MarketplaceAdminReviewValidationCode.EARLY_SETTLE_CONFIRMATION_REQUIRED);
   }
 
   private Reservation approvedEndedMoreThan24hAgo() {

@@ -107,13 +107,31 @@ public interface MarketplaceReservationActionStateJpaRepository
           """
           SELECT a.*
           FROM marketplace_reservation_action_states a
-          JOIN web3_execution_intents i ON i.public_id = a.execution_intent_public_id
           WHERE a.status = 'INTENT_BOUND'
             AND a.execution_intent_public_id IS NOT NULL
             AND a.action_type IN ('ADMIN_REFUND', 'ADMIN_SETTLE')
-            AND i.status IN ('CONFIRMED', 'FAILED_ONCHAIN', 'EXPIRED', 'CANCELED', 'NONCE_STALE')
+            AND EXISTS (
+              SELECT 1
+              FROM web3_execution_intents i
+              LEFT JOIN web3_transactions t ON t.id = i.submitted_tx_id
+              WHERE i.public_id = a.execution_intent_public_id
+                AND (
+                  i.status IN (
+                    'CONFIRMED',
+                    'FAILED_ONCHAIN',
+                    'EXPIRED',
+                    'CANCELED',
+                    'NONCE_STALE'
+                  )
+                  OR (
+                    i.status IN ('SIGNED', 'PENDING_ONCHAIN')
+                    AND t.status IN ('SUCCEEDED', 'FAILED_ONCHAIN')
+                  )
+                )
+              )
           ORDER BY a.updated_at ASC, a.id ASC
           LIMIT :batchSize
+          FOR UPDATE SKIP LOCKED
           """,
       nativeQuery = true)
   List<MarketplaceReservationActionStateEntity> findBoundAdminExecutionAttemptsForTerminalReplay(
