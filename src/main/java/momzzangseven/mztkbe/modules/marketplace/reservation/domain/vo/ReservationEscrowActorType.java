@@ -4,5 +4,6 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo;
 public enum ReservationEscrowActorType {
   BUYER,
   TRAINER,
+  ADMIN,
   SYSTEM
 }

@@ -1,0 +1,9 @@
+package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in;
+
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CalculateMarketplaceAdminRefundReviewQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminEscrowReviewResult;
+
+public interface CalculateMarketplaceAdminRefundReviewUseCase {
+
+  MarketplaceAdminEscrowReviewResult execute(CalculateMarketplaceAdminRefundReviewQuery query);
+}

@@ -1,15 +1,14 @@
-package momzzangseven.mztkbe.modules.web3.shared.infrastructure.config;
+package momzzangseven.mztkbe.global.config;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 
 @Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@ConditionalOnInternalExecutionEnabled
-@ConditionalOnProperty(prefix = "web3.marketplace.admin", name = "enabled", havingValue = "true")
+@Conditional(MarketplaceAdminEnabledCondition.class)
 public @interface ConditionalOnMarketplaceAdminEnabled {}

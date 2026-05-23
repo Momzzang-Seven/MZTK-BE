@@ -144,6 +144,12 @@ public class ReservationEntity {
   @Column(name = "escrow_failure_message", length = 500)
   private String escrowFailureMessage;
 
+  @Column(name = "resolved_by", length = 30)
+  private String resolvedBy;
+
+  @Column(name = "terminal_reason_code", length = 80)
+  private String terminalReasonCode;
+
   /** Snapshot of priceAmount at booking time. NULL for legacy records created before this field. */
   @Column(name = "booked_price_amount")
   private Integer bookedPriceAmount;

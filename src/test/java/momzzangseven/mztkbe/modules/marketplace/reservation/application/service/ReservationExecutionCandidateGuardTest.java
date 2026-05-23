@@ -212,6 +212,42 @@ class ReservationExecutionCandidateGuardTest {
         .isFalse();
   }
 
+  @Test
+  @DisplayName("admin refund action 후보도 동일 attempt evidence이면 blocking으로 판단한다")
+  void hasBlockingExecution_BlocksAdminRefundCandidate() {
+    Reservation reservation = reservation();
+    MarketplaceReservationActionState actionState =
+        actionState(ReservationEscrowAction.ADMIN_REFUND, "attempt-1", null);
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-admin-refund",
+                    "PENDING_ONCHAIN",
+                    "MARKETPLACE_ADMIN_REFUND",
+                    null,
+                    evidence(77L, 88L, 99L, "attempt-1", "0xorder", "MARKETPLACE_ADMIN_REFUND"))));
+
+    assertThat(guard.hasBlockingExecution(reservation, actionState)).isTrue();
+  }
+
+  @Test
+  @DisplayName("action-state 없는 후보 검사도 admin settle action을 marketplace action으로 취급한다")
+  void hasBlockingExecutionForAnyMarketplaceAction_BlocksAdminSettleCandidate() {
+    Reservation reservation = reservation();
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-admin-settle",
+                    "CONFIRMED",
+                    "MARKETPLACE_ADMIN_SETTLE",
+                    null,
+                    evidence(77L, 88L, null, null, "0xorder", "MARKETPLACE_ADMIN_SETTLE"))));
+
+    assertThat(guard.hasBlockingExecutionForAnyMarketplaceAction(reservation)).isTrue();
+  }
+
   private Reservation reservation() {
     return Reservation.builder().id(77L).orderKey("0xorder").build();
   }

@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowExecutionConfirmedCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowExecutionTerminatedCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowExecutionTerminatedCommand.ReservationEscrowExecutionTerminationEvidence;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApplyReservationEscrowExecutionHookUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
@@ -27,6 +28,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reserva
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 
 @RequiredArgsConstructor
@@ -38,7 +40,17 @@ public class ApplyReservationEscrowExecutionHookService
   private static final String CANCEL = "MARKETPLACE_CLASS_CANCEL";
   private static final String CONFIRM = "MARKETPLACE_CLASS_CONFIRM";
   private static final String EXPIRED_REFUND = "MARKETPLACE_CLASS_EXPIRED_REFUND";
+  private static final String ADMIN_REFUND = "MARKETPLACE_ADMIN_REFUND";
+  private static final String ADMIN_SETTLE = "MARKETPLACE_ADMIN_SETTLE";
   private static final String TRAINER = "TRAINER";
+  private static final String CHAIN_CREATED = "CREATED";
+  private static final String CHAIN_CONFIRMED = "CONFIRMED";
+  private static final String CHAIN_ADMIN_REFUNDED = "ADMIN_REFUNDED";
+  private static final String CHAIN_ADMIN_SETTLED = "ADMIN_SETTLED";
+  private static final String CHAIN_DEADLINE_REFUNDED = "DEADLINE_REFUNDED";
+  private static final String RECEIPT_REVERTED = "REVERTED";
+  private static final String EVIDENCE_UNAVAILABLE = "EVIDENCE_UNAVAILABLE";
+  private static final String CHAIN_MISMATCH_REQUIRES_SYNC = "CHAIN_MISMATCH_REQUIRES_SYNC";
 
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
@@ -78,7 +90,16 @@ public class ApplyReservationEscrowExecutionHookService
 
   @Override
   public void afterExecutionConfirmed(ReservationEscrowExecutionConfirmedCommand command) {
+    if (isAdminAction(command.actionType())) {
+      runInNewTransaction(() -> afterAdminExecutionConfirmed(command));
+      return;
+    }
     ChainOrderLookup chainOrderLookup = loadChainOrderBeforeReservationLock(command);
+    runInNewTransaction(() -> afterExecutionConfirmed(command, chainOrderLookup));
+  }
+
+  private void afterExecutionConfirmed(
+      ReservationEscrowExecutionConfirmedCommand command, ChainOrderLookup chainOrderLookup) {
     Reservation reservation = loadReservationForHook(command.executionIntentPublicId(), command);
     if (isAlreadyApplied(reservation, command.actionType(), command.actorType())) {
       Reservation repaired = repairTxHashIfNeeded(reservation, command.txHash());
@@ -118,6 +139,12 @@ public class ApplyReservationEscrowExecutionHookService
                   : reservation.cancelByUser(command.txHash());
           case CONFIRM -> reservation.complete(command.txHash());
           case EXPIRED_REFUND -> reservation.markDeadlineRefunded(command.txHash());
+          case ADMIN_REFUND ->
+              reservation.markAdminRefunded(
+                  command.txHash(), resolvedBy(command.actorType()), command.terminalReasonCode());
+          case ADMIN_SETTLE ->
+              reservation.markAdminSettled(
+                  command.txHash(), resolvedBy(command.actorType()), command.terminalReasonCode());
           default -> throw new IllegalStateException("unsupported marketplace action");
         };
     saveReservationPort.save(updated);
@@ -129,6 +156,15 @@ public class ApplyReservationEscrowExecutionHookService
 
   @Override
   public void afterExecutionTerminated(ReservationEscrowExecutionTerminatedCommand command) {
+    if (isAdminAction(command.actionType())) {
+      runInNewTransaction(() -> afterAdminExecutionTerminated(command));
+      return;
+    }
+    runInNewTransaction(() -> afterExecutionTerminatedInTransaction(command));
+  }
+
+  private void afterExecutionTerminatedInTransaction(
+      ReservationEscrowExecutionTerminatedCommand command) {
     Reservation reservation = loadReservationForHook(command.executionIntentPublicId(), command);
     if (!isCurrentOrRecoverableOrphan(
         command.executionIntentPublicId(), command.pendingAttemptToken(), reservation)) {
@@ -155,6 +191,179 @@ public class ApplyReservationEscrowExecutionHookService
     syncEscrowProjection(updated, null, command.terminalStatus(), command.failureReason());
     markActionStateTerminated(command, updated, false);
     markPurchaseCreateIdempotencyFailedAfterCommitIfNeeded(command, reservation);
+  }
+
+  private void afterAdminExecutionConfirmed(ReservationEscrowExecutionConfirmedCommand command) {
+    LockedAdminHookState locked =
+        lockAdminHookState(
+            command.executionIntentPublicId(),
+            command.actionStateId(),
+            command.pendingAttemptToken(),
+            command.reservationId(),
+            true);
+    if (locked == null) {
+      return;
+    }
+    Reservation reservation = locked.reservation();
+    if (isAlreadyApplied(reservation, command.actionType(), command.actorType())) {
+      Reservation repaired = repairTxHashIfNeeded(reservation, command.txHash());
+      syncEscrowProjection(repaired, command.txHash(), null, null);
+      markActionStateConfirmed(command, repaired, locked.actionState());
+      return;
+    }
+    if (!isCurrentOrRecoverableOrphan(
+        command.executionIntentPublicId(), command.pendingAttemptToken(), reservation)) {
+      log.warn(
+          "Skipping stale marketplace admin confirmation: intentId={}, reservationId={}",
+          command.executionIntentPublicId(),
+          reservation.getId());
+      return;
+    }
+    Reservation updated =
+        ADMIN_REFUND.equals(command.actionType())
+            ? reservation.markAdminRefunded(
+                command.txHash(), resolvedBy(command.actorType()), command.terminalReasonCode())
+            : reservation.markAdminSettled(
+                command.txHash(), resolvedBy(command.actorType()), command.terminalReasonCode());
+    saveReservationPort.save(updated);
+    syncEscrowProjection(updated, command.txHash(), null, null);
+    markActionStateConfirmed(command, updated, locked.actionState());
+  }
+
+  private void afterAdminExecutionTerminated(ReservationEscrowExecutionTerminatedCommand command) {
+    LockedAdminHookState locked =
+        lockAdminHookState(
+            command.executionIntentPublicId(),
+            command.actionStateId(),
+            command.pendingAttemptToken(),
+            command.reservationId(),
+            true);
+    if (locked == null) {
+      return;
+    }
+    Reservation reservation = locked.reservation();
+    if (!isCurrentOrRecoverableOrphan(
+        command.executionIntentPublicId(), command.pendingAttemptToken(), reservation)) {
+      return;
+    }
+    applyAdminTermination(command, reservation, locked.actionState());
+  }
+
+  private void applyAdminTermination(
+      ReservationEscrowExecutionTerminatedCommand command,
+      Reservation reservation,
+      MarketplaceReservationActionState actionState) {
+    ReservationEscrowExecutionTerminationEvidence evidence = evidence(command);
+    if (isConfirmedByChain(command.actionType(), evidence.chainOrderState())) {
+      Reservation updated =
+          ADMIN_REFUND.equals(command.actionType())
+              ? reservation.markAdminRefunded(
+                  evidence.txHash(), resolvedBy(command.actorType()), command.reasonCode())
+              : reservation.markAdminSettled(
+                  evidence.txHash(), resolvedBy(command.actorType()), command.reasonCode());
+      saveReservationPort.save(updated);
+      syncEscrowProjection(updated, evidence.txHash(), null, null);
+      markAdminActionStateConfirmed(command, updated, actionState);
+      return;
+    }
+    ChainTerminalOutcome chainTerminalOutcome = chainTerminalOutcome(evidence);
+    if (chainTerminalOutcome != null) {
+      Reservation updated =
+          reservation.syncChainOutcome(
+              chainTerminalOutcome.status(),
+              chainTerminalOutcome.escrowStatus(),
+              evidence.txHash(),
+              reservation.getContractDeadlineEpochSeconds(),
+              reservation.getContractDeadlineAt(),
+              ReservationTerminalResolvedBy.CHAIN_SYNC,
+              CHAIN_MISMATCH_REQUIRES_SYNC);
+      saveReservationPort.save(updated);
+      syncEscrowProjection(
+          updated, evidence.txHash(), CHAIN_MISMATCH_REQUIRES_SYNC, command.failureReason());
+      markActionStateStale(
+          command, updated, CHAIN_MISMATCH_REQUIRES_SYNC, command.failureReason(), actionState);
+      return;
+    }
+    if (isRollbackSafeAdminTermination(command, evidence)) {
+      Reservation updated = reservation.rollbackToPriorState();
+      saveReservationPort.save(updated);
+      syncEscrowProjection(
+          updated, evidence.txHash(), command.terminalStatus(), command.failureReason());
+      markActionStateTerminated(
+          command, updated, isRetryableTerminal(command.terminalStatus()), actionState);
+      return;
+    }
+    String errorCode = syncRequiredErrorCode(evidence);
+    Reservation updated =
+        reservation.syncChainOutcome(
+            ReservationStatus.MANUAL_SYNC_REQUIRED,
+            ReservationEscrowStatus.MANUAL_SYNC_REQUIRED,
+            evidence.txHash(),
+            reservation.getContractDeadlineEpochSeconds(),
+            reservation.getContractDeadlineAt(),
+            ReservationTerminalResolvedBy.CHAIN_SYNC,
+            errorCode);
+    saveReservationPort.save(updated);
+    syncEscrowProjection(updated, evidence.txHash(), errorCode, command.failureReason());
+    markActionStateStale(command, updated, errorCode, command.failureReason(), actionState);
+  }
+
+  private boolean isAdminAction(String actionType) {
+    return ADMIN_REFUND.equals(actionType) || ADMIN_SETTLE.equals(actionType);
+  }
+
+  private boolean isConfirmedByChain(String actionType, String chainOrderState) {
+    return (ADMIN_REFUND.equals(actionType) && CHAIN_ADMIN_REFUNDED.equals(chainOrderState))
+        || (ADMIN_SETTLE.equals(actionType) && CHAIN_ADMIN_SETTLED.equals(chainOrderState));
+  }
+
+  private ChainTerminalOutcome chainTerminalOutcome(
+      ReservationEscrowExecutionTerminationEvidence evidence) {
+    if (evidence.chainOrderState() == null) {
+      return null;
+    }
+    return switch (evidence.chainOrderState()) {
+      case CHAIN_CONFIRMED ->
+          new ChainTerminalOutcome(ReservationStatus.SETTLED, ReservationEscrowStatus.SETTLED);
+      case CHAIN_ADMIN_SETTLED ->
+          new ChainTerminalOutcome(ReservationStatus.AUTO_SETTLED, ReservationEscrowStatus.SETTLED);
+      case CHAIN_ADMIN_REFUNDED ->
+          new ChainTerminalOutcome(
+              ReservationStatus.TIMEOUT_CANCELLED, ReservationEscrowStatus.REFUNDED);
+      case CHAIN_DEADLINE_REFUNDED ->
+          new ChainTerminalOutcome(
+              ReservationStatus.DEADLINE_REFUNDED, ReservationEscrowStatus.DEADLINE_REFUNDED);
+      default -> null;
+    };
+  }
+
+  private boolean isRollbackSafeAdminTermination(
+      ReservationEscrowExecutionTerminatedCommand command,
+      ReservationEscrowExecutionTerminationEvidence evidence) {
+    return switch (command.terminalStatus()) {
+      case "EXPIRED", "CANCELED" ->
+          !evidence.hasTxHash() && CHAIN_CREATED.equals(evidence.chainOrderState());
+      case "NONCE_STALE" ->
+          !evidence.hasTxHash() && CHAIN_CREATED.equals(evidence.chainOrderState());
+      case "FAILED_ONCHAIN" ->
+          RECEIPT_REVERTED.equals(evidence.receiptStatus())
+              && CHAIN_CREATED.equals(evidence.chainOrderState());
+      default -> false;
+    };
+  }
+
+  private ReservationEscrowExecutionTerminationEvidence evidence(
+      ReservationEscrowExecutionTerminatedCommand command) {
+    return command.evidence() == null
+        ? ReservationEscrowExecutionTerminationEvidence.unknown(command.executionIntentPublicId())
+        : command.evidence();
+  }
+
+  private String syncRequiredErrorCode(ReservationEscrowExecutionTerminationEvidence evidence) {
+    if (evidence.evidenceErrorCode() != null && !evidence.evidenceErrorCode().isBlank()) {
+      return evidence.evidenceErrorCode();
+    }
+    return evidence.chainOrderState() == null ? EVIDENCE_UNAVAILABLE : CHAIN_MISMATCH_REQUIRES_SYNC;
   }
 
   private boolean isRetryablePurchaseTermination(
@@ -192,6 +401,88 @@ public class ApplyReservationEscrowExecutionHookService
                     "marketplace reservation not found for intentId=" + executionIntentPublicId));
   }
 
+  private LockedAdminHookState lockAdminHookState(
+      String executionIntentPublicId,
+      Long actionStateId,
+      String pendingAttemptToken,
+      Long fallbackReservationId,
+      boolean requireBoundIntent) {
+    Reservation reservation =
+        loadReservationPort
+            .findByCurrentExecutionIntentPublicIdWithLock(executionIntentPublicId)
+            .or(() -> loadReservationPort.findByIdWithLock(fallbackReservationId))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "marketplace reservation not found for intentId="
+                            + executionIntentPublicId));
+    lockEscrowProjectionForHook(reservation.getId());
+    java.util.Optional<MarketplaceReservationActionState> actionState =
+        lockActionStateForHook(
+            executionIntentPublicId, actionStateId, pendingAttemptToken, requireBoundIntent);
+    if (actionState.isEmpty()) {
+      if (loadReservationActionStatePort != null && saveReservationActionStatePort != null) {
+        log.warn(
+            "Skipping marketplace admin hook because action state was not found: intentId={}, actionStateId={}",
+            executionIntentPublicId,
+            actionStateId);
+        return null;
+      }
+      return new LockedAdminHookState(null, reservation);
+    }
+    MarketplaceReservationActionState lockedActionState = actionState.get();
+    if (!actionStateMatches(
+        lockedActionState,
+        reservation,
+        pendingAttemptToken,
+        executionIntentPublicId,
+        requireBoundIntent)) {
+      log.warn(
+          "Skipping marketplace admin hook because action state mismatched: intentId={}, actionStateId={}, reservationId={}",
+          executionIntentPublicId,
+          lockedActionState.getId(),
+          reservation.getId());
+      return null;
+    }
+    return new LockedAdminHookState(lockedActionState, reservation);
+  }
+
+  private void lockEscrowProjectionForHook(Long reservationId) {
+    if (loadReservationEscrowPort != null) {
+      loadReservationEscrowPort.findByReservationIdWithLock(reservationId);
+    }
+  }
+
+  private java.util.Optional<MarketplaceReservationActionState> lockActionStateForHook(
+      String executionIntentPublicId,
+      Long actionStateId,
+      String pendingAttemptToken,
+      boolean requireBoundIntent) {
+    if (loadReservationActionStatePort == null || saveReservationActionStatePort == null) {
+      return java.util.Optional.empty();
+    }
+    java.util.Optional<MarketplaceReservationActionState> byIntent =
+        loadReservationActionStatePort.findByExecutionIntentPublicIdWithLock(
+            executionIntentPublicId);
+    if (byIntent.isPresent()) {
+      return byIntent.filter(
+          actionState ->
+              actionStateTokenMatches(actionState, pendingAttemptToken)
+                  && actionStateBoundIntentMatches(
+                      actionState, executionIntentPublicId, requireBoundIntent));
+    }
+    if (actionStateId == null) {
+      return java.util.Optional.empty();
+    }
+    return loadReservationActionStatePort
+        .findByIdWithLock(actionStateId)
+        .filter(
+            actionState ->
+                actionStateTokenMatches(actionState, pendingAttemptToken)
+                    && actionStateBoundIntentMatches(
+                        actionState, executionIntentPublicId, requireBoundIntent));
+  }
+
   private boolean isCurrentOrRecoverableOrphan(
       String executionIntentPublicId, String pendingAttemptToken, Reservation reservation) {
     String currentIntentId = reservation.getCurrentExecutionIntentPublicId();
@@ -222,6 +513,8 @@ public class ApplyReservationEscrowExecutionHookService
               : reservation.getStatus() == ReservationStatus.USER_CANCELLED;
       case CONFIRM -> reservation.getStatus() == ReservationStatus.SETTLED;
       case EXPIRED_REFUND -> reservation.getStatus() == ReservationStatus.DEADLINE_REFUNDED;
+      case ADMIN_REFUND -> reservation.getStatus() == ReservationStatus.TIMEOUT_CANCELLED;
+      case ADMIN_SETTLE -> reservation.getStatus() == ReservationStatus.AUTO_SETTLED;
       default -> false;
     };
   }
@@ -358,7 +651,15 @@ public class ApplyReservationEscrowExecutionHookService
   }
 
   private <T> T runWithoutTransaction(java.util.function.Supplier<T> supplier) {
-    return transactionPort.notSupported(supplier);
+    return transactionPort == null ? supplier.get() : transactionPort.notSupported(supplier);
+  }
+
+  private void runInNewTransaction(Runnable action) {
+    if (transactionPort == null) {
+      action.run();
+      return;
+    }
+    transactionPort.requiresNew(action);
   }
 
   private void markPurchaseCreateIdempotencyFailedAfterCommitIfNeeded(
@@ -423,6 +724,24 @@ public class ApplyReservationEscrowExecutionHookService
 
   private void markActionStateConfirmed(
       ReservationEscrowExecutionConfirmedCommand command, Reservation reservation) {
+    markActionStateConfirmed(command, reservation, null);
+  }
+
+  private void markActionStateConfirmed(
+      ReservationEscrowExecutionConfirmedCommand command,
+      Reservation reservation,
+      MarketplaceReservationActionState lockedActionState) {
+    if (lockedActionState != null) {
+      saveReservationActionStatePort.save(
+          lockedActionState.toBuilder()
+              .executionIntentPublicId(command.executionIntentPublicId())
+              .status(ReservationActionStateStatus.CONFIRMED)
+              .retryable(false)
+              .errorCode(null)
+              .errorReason(null)
+              .build());
+      return;
+    }
     findActionStateForHook(
             command.executionIntentPublicId(),
             command.actionStateId(),
@@ -444,6 +763,25 @@ public class ApplyReservationEscrowExecutionHookService
       ReservationEscrowExecutionTerminatedCommand command,
       Reservation reservation,
       boolean retryable) {
+    markActionStateTerminated(command, reservation, retryable, null);
+  }
+
+  private void markActionStateTerminated(
+      ReservationEscrowExecutionTerminatedCommand command,
+      Reservation reservation,
+      boolean retryable,
+      MarketplaceReservationActionState lockedActionState) {
+    if (lockedActionState != null) {
+      saveReservationActionStatePort.save(
+          lockedActionState.toBuilder()
+              .executionIntentPublicId(command.executionIntentPublicId())
+              .status(ReservationActionStateStatus.TERMINATED)
+              .retryable(retryable)
+              .errorCode(command.terminalStatus())
+              .errorReason(command.failureReason())
+              .build());
+      return;
+    }
     findActionStateForHook(
             command.executionIntentPublicId(),
             command.actionStateId(),
@@ -458,6 +796,85 @@ public class ApplyReservationEscrowExecutionHookService
                         .retryable(retryable)
                         .errorCode(command.terminalStatus())
                         .errorReason(command.failureReason())
+                        .build()));
+  }
+
+  private void markAdminActionStateConfirmed(
+      ReservationEscrowExecutionTerminatedCommand command, Reservation reservation) {
+    markAdminActionStateConfirmed(command, reservation, null);
+  }
+
+  private void markAdminActionStateConfirmed(
+      ReservationEscrowExecutionTerminatedCommand command,
+      Reservation reservation,
+      MarketplaceReservationActionState lockedActionState) {
+    if (lockedActionState != null) {
+      saveReservationActionStatePort.save(
+          lockedActionState.toBuilder()
+              .executionIntentPublicId(command.executionIntentPublicId())
+              .status(ReservationActionStateStatus.CONFIRMED)
+              .retryable(false)
+              .errorCode(null)
+              .errorReason(null)
+              .build());
+      return;
+    }
+    findActionStateForHook(
+            command.executionIntentPublicId(),
+            command.actionStateId(),
+            command.pendingAttemptToken(),
+            reservation)
+        .ifPresent(
+            actionState ->
+                saveReservationActionStatePort.save(
+                    actionState.toBuilder()
+                        .executionIntentPublicId(command.executionIntentPublicId())
+                        .status(ReservationActionStateStatus.CONFIRMED)
+                        .retryable(false)
+                        .errorCode(null)
+                        .errorReason(null)
+                        .build()));
+  }
+
+  private void markActionStateStale(
+      ReservationEscrowExecutionTerminatedCommand command,
+      Reservation reservation,
+      String errorCode,
+      String errorReason) {
+    markActionStateStale(command, reservation, errorCode, errorReason, null);
+  }
+
+  private void markActionStateStale(
+      ReservationEscrowExecutionTerminatedCommand command,
+      Reservation reservation,
+      String errorCode,
+      String errorReason,
+      MarketplaceReservationActionState lockedActionState) {
+    if (lockedActionState != null) {
+      saveReservationActionStatePort.save(
+          lockedActionState.toBuilder()
+              .executionIntentPublicId(command.executionIntentPublicId())
+              .status(ReservationActionStateStatus.STALE)
+              .retryable(false)
+              .errorCode(errorCode)
+              .errorReason(errorReason)
+              .build());
+      return;
+    }
+    findActionStateForHook(
+            command.executionIntentPublicId(),
+            command.actionStateId(),
+            command.pendingAttemptToken(),
+            reservation)
+        .ifPresent(
+            actionState ->
+                saveReservationActionStatePort.save(
+                    actionState.toBuilder()
+                        .executionIntentPublicId(command.executionIntentPublicId())
+                        .status(ReservationActionStateStatus.STALE)
+                        .retryable(false)
+                        .errorCode(errorCode)
+                        .errorReason(errorReason)
                         .build()));
   }
 
@@ -489,12 +906,44 @@ public class ApplyReservationEscrowExecutionHookService
       Reservation reservation,
       String pendingAttemptToken) {
     return reservation.getId().equals(actionState.getReservationId())
-        && (pendingAttemptToken == null
-            || pendingAttemptToken.equals(actionState.getAttemptToken()));
+        && actionStateTokenMatches(actionState, pendingAttemptToken);
+  }
+
+  private boolean actionStateMatches(
+      MarketplaceReservationActionState actionState,
+      Reservation reservation,
+      String pendingAttemptToken,
+      String executionIntentPublicId,
+      boolean requireBoundIntent) {
+    return actionStateMatches(actionState, reservation, pendingAttemptToken)
+        && actionStateBoundIntentMatches(actionState, executionIntentPublicId, requireBoundIntent);
+  }
+
+  private boolean actionStateBoundIntentMatches(
+      MarketplaceReservationActionState actionState,
+      String executionIntentPublicId,
+      boolean requireBoundIntent) {
+    if (!requireBoundIntent) {
+      return true;
+    }
+    return actionState.getStatus() == ReservationActionStateStatus.INTENT_BOUND
+        && executionIntentPublicId != null
+        && executionIntentPublicId.equals(actionState.getExecutionIntentPublicId());
+  }
+
+  private boolean actionStateTokenMatches(
+      MarketplaceReservationActionState actionState, String pendingAttemptToken) {
+    return pendingAttemptToken == null || pendingAttemptToken.equals(actionState.getAttemptToken());
   }
 
   private boolean isRetryableTerminal(String terminalStatus) {
     return ReservationExecutionTerminalStatusPolicy.isRetryableTerminal(terminalStatus);
+  }
+
+  private static ReservationTerminalResolvedBy resolvedBy(String actorType) {
+    return "SYSTEM".equals(actorType)
+        ? ReservationTerminalResolvedBy.SCHEDULER
+        : ReservationTerminalResolvedBy.ADMIN;
   }
 
   private Reservation repairTxHashIfNeeded(Reservation reservation, String txHash) {
@@ -513,6 +962,9 @@ public class ApplyReservationEscrowExecutionHookService
     return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), clock.getZone());
   }
 
+  private record LockedAdminHookState(
+      MarketplaceReservationActionState actionState, Reservation reservation) {}
+
   private record ChainOrderLookup(ReservationEscrowOrderView order, RuntimeException failure) {
 
     private static ChainOrderLookup notLoaded() {
@@ -527,4 +979,7 @@ public class ApplyReservationEscrowExecutionHookService
       return new ChainOrderLookup(null, failure);
     }
   }
+
+  private record ChainTerminalOutcome(
+      ReservationStatus status, ReservationEscrowStatus escrowStatus) {}
 }

@@ -32,14 +32,18 @@ public class ReplayConfirmedExecutionIntentService
 
   @Override
   public boolean execute(ReplayConfirmedExecutionIntentCommand command) {
+    ExecutionIntent intent = resolveReplayTarget(command);
+    return intent != null && replayConfirmed(intent);
+  }
+
+  public ExecutionIntent resolveReplayTarget(ReplayConfirmedExecutionIntentCommand command) {
     command.validate();
     ExecutionActionType expectedActionType = parseActionType(command.expectedActionType());
     return executionIntentPersistencePort
         .findByPublicIdForUpdate(command.executionIntentId())
         .filter(intent -> intent.getActionType() == expectedActionType)
         .flatMap(this::confirmedOrRepairable)
-        .map(this::replayConfirmed)
-        .orElse(false);
+        .orElse(null);
   }
 
   private ExecutionActionType parseActionType(String actionType) {
@@ -75,7 +79,7 @@ public class ReplayConfirmedExecutionIntentService
     return executionIntentPersistencePort.update(confirmed);
   }
 
-  private boolean replayConfirmed(ExecutionIntent intent) {
+  public boolean replayConfirmed(ExecutionIntent intent) {
     runAfterCommitPort.runAfterCommit(() -> afterExecutionConfirmedSafely(intent));
     return true;
   }

@@ -66,7 +66,9 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
   @CsvSource({
     "MARKETPLACE_CLASS_PURCHASE,PURCHASE_PREPARING,PURCHASE",
     "MARKETPLACE_CLASS_CONFIRM,CONFIRM_PENDING,BUYER_CONFIRM",
-    "MARKETPLACE_CLASS_EXPIRED_REFUND,DEADLINE_REFUND_PENDING,DEADLINE_REFUND"
+    "MARKETPLACE_CLASS_EXPIRED_REFUND,DEADLINE_REFUND_PENDING,DEADLINE_REFUND",
+    "MARKETPLACE_ADMIN_REFUND,ADMIN_REFUND_PENDING,ADMIN_REFUND",
+    "MARKETPLACE_ADMIN_SETTLE,ADMIN_SETTLE_PENDING,ADMIN_SETTLE"
   })
   @DisplayName("action type별 unbound pending action/status 매핑으로 보호 여부를 조회한다")
   void findProtectedExecutionIntentPublicIds_mapsActionTypes(
@@ -177,6 +179,43 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
         .countUnboundPendingAction(anyLong(), anyCollection(), anyCollection());
   }
 
+  @Test
+  @DisplayName("marketplace admin v2 payload evidence is parsed instead of fail-closed protected")
+  void findProtectedExecutionIntentPublicIds_acceptsMarketplaceAdminPayloadVersion2Evidence() {
+    given(reservationJpaRepository.findCurrentExecutionIntentPublicIdsIn(anyCollection()))
+        .willReturn(List.of());
+    given(
+            actionStateJpaRepository.findExecutionIntentPublicIdsInByStatusIn(
+                anyCollection(), anyCollection()))
+        .willReturn(List.of());
+    given(
+            actionStateJpaRepository.countActiveByPayloadEvidence(
+                eq(200L), eq(30L), eq(100L), anyCollection(), eq("attempt-token"), anyCollection()))
+        .willReturn(0L);
+    given(
+            reservationJpaRepository.countUnboundPendingAction(
+                eq(30L), anyCollection(), anyCollection()))
+        .willReturn(0L);
+    ReservationExecutionCleanupProtectionPersistenceAdapter adapter =
+        new ReservationExecutionCleanupProtectionPersistenceAdapter(
+            reservationJpaRepository, actionStateJpaRepository);
+
+    List<String> result =
+        adapter.findProtectedExecutionIntentPublicIds(
+            List.of(
+                new ReservationExecutionCleanupProtectionQuery(
+                    "intent-admin-v2",
+                    "30",
+                    "MARKETPLACE_ADMIN_REFUND",
+                    payload("30", "MARKETPLACE_ADMIN_REFUND", 2))));
+
+    assertThat(result).isEmpty();
+    then(actionStateJpaRepository)
+        .should()
+        .countActiveByPayloadEvidence(
+            eq(200L), eq(30L), eq(100L), anyCollection(), eq("attempt-token"), anyCollection());
+  }
+
   private ReservationExecutionCleanupProtectionQuery intent(
       String publicId, String resourceId, String actionType) {
     return new ReservationExecutionCleanupProtectionQuery(
@@ -184,9 +223,13 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
   }
 
   private String payload(String resourceId, String actionType) {
+    return payload(resourceId, actionType, 1);
+  }
+
+  private String payload(String resourceId, String actionType, int payloadVersion) {
     return """
         {
-          "payloadVersion": 1,
+          "payloadVersion": %d,
           "reservationId": %s,
           "escrowId": 100,
           "actionStateId": 200,
@@ -194,6 +237,6 @@ class ReservationExecutionCleanupProtectionPersistenceAdapterTest {
           "actionType": "%s"
         }
         """
-        .formatted(resourceId.matches("\\d+") ? resourceId : "30", actionType);
+        .formatted(payloadVersion, resourceId.matches("\\d+") ? resourceId : "30", actionType);
   }
 }

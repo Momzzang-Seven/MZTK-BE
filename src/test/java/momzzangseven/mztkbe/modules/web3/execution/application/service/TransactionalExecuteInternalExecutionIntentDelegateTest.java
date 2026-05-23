@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
@@ -24,6 +25,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteIntern
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.InternalExecutionSignerGates;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
@@ -77,7 +79,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
 
   private final RunAfterCommitPort runAfterCommitPort = Runnable::run;
   private TransactionalExecuteInternalExecutionIntentDelegate delegate;
-  private SponsorWalletGate gate;
+  private InternalExecutionSignerGates gate;
 
   @BeforeEach
   void setUp() {
@@ -93,10 +95,12 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
             runAfterCommitPort,
             FIXED_CLOCK);
 
-    gate =
+    SponsorWalletGate sponsorGate =
         new SponsorWalletGate(
             new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS, true),
             new TreasurySigner(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS));
+    gate =
+        new InternalExecutionSignerGates(Map.of(ExecutionActionType.QNA_ADMIN_SETTLE, sponsorGate));
 
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.QNA_ADMIN_SETTLE))

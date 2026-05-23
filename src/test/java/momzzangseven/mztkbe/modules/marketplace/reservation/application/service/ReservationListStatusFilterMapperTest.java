@@ -30,6 +30,14 @@ class ReservationListStatusFilterMapperTest {
             ReservationListStatusFilterMapper.toStoredStatus(
                 ReservationListStatusFilter.DEADLINE_REFUND_AVAILABLE))
         .isEqualTo(ReservationStatus.DEADLINE_REFUND_AVAILABLE);
+    assertThat(
+            ReservationListStatusFilterMapper.toStoredStatus(
+                ReservationListStatusFilter.ADMIN_REFUND_PENDING))
+        .isEqualTo(ReservationStatus.ADMIN_REFUND_PENDING);
+    assertThat(
+            ReservationListStatusFilterMapper.toStoredStatus(
+                ReservationListStatusFilter.ADMIN_SETTLE_PENDING))
+        .isEqualTo(ReservationStatus.ADMIN_SETTLE_PENDING);
   }
 
   @Test

@@ -26,6 +26,8 @@ public class ReservationExecutionCleanupProtectionPersistenceAdapter
   private static final String CANCEL = "MARKETPLACE_CLASS_CANCEL";
   private static final String CONFIRM = "MARKETPLACE_CLASS_CONFIRM";
   private static final String EXPIRED_REFUND = "MARKETPLACE_CLASS_EXPIRED_REFUND";
+  private static final String ADMIN_REFUND = "MARKETPLACE_ADMIN_REFUND";
+  private static final String ADMIN_SETTLE = "MARKETPLACE_ADMIN_SETTLE";
   private static final List<String> ACTIVE_ACTION_STATE_STATUSES =
       EnumSet.of(ReservationActionStateStatus.PREPARING, ReservationActionStateStatus.INTENT_BOUND)
           .stream()
@@ -119,7 +121,7 @@ public class ReservationExecutionCleanupProtectionPersistenceAdapter
   }
 
   private EvidenceResult readEvidence(ReservationExecutionCleanupProtectionQuery intent) {
-    if (!isMarketplaceUserAction(intent.actionType())) {
+    if (!isMarketplaceAction(intent.actionType())) {
       return EvidenceResult.valid(null);
     }
     if (intent.payloadSnapshotJson() == null || intent.payloadSnapshotJson().isBlank()) {
@@ -128,7 +130,7 @@ public class ReservationExecutionCleanupProtectionPersistenceAdapter
     try {
       JsonNode root = objectMapper.readTree(intent.payloadSnapshotJson());
       int payloadVersion = root.path("payloadVersion").asInt(0);
-      if (payloadVersion != 1) {
+      if (payloadVersion != 1 && payloadVersion != 2) {
         return EvidenceResult.invalid();
       }
       String payloadActionType = text(root, "actionType");
@@ -155,11 +157,13 @@ public class ReservationExecutionCleanupProtectionPersistenceAdapter
     }
   }
 
-  private boolean isMarketplaceUserAction(String actionType) {
+  private boolean isMarketplaceAction(String actionType) {
     return PURCHASE.equals(actionType)
         || CANCEL.equals(actionType)
         || CONFIRM.equals(actionType)
-        || EXPIRED_REFUND.equals(actionType);
+        || EXPIRED_REFUND.equals(actionType)
+        || ADMIN_REFUND.equals(actionType)
+        || ADMIN_SETTLE.equals(actionType);
   }
 
   private String text(JsonNode root, String fieldName) {
@@ -183,6 +187,8 @@ public class ReservationExecutionCleanupProtectionPersistenceAdapter
           EnumSet.of(ReservationEscrowAction.BUYER_CANCEL, ReservationEscrowAction.TRAINER_REJECT);
       case CONFIRM -> EnumSet.of(ReservationEscrowAction.BUYER_CONFIRM);
       case EXPIRED_REFUND -> EnumSet.of(ReservationEscrowAction.DEADLINE_REFUND);
+      case ADMIN_REFUND -> EnumSet.of(ReservationEscrowAction.ADMIN_REFUND);
+      case ADMIN_SETTLE -> EnumSet.of(ReservationEscrowAction.ADMIN_SETTLE);
       default -> EnumSet.noneOf(ReservationEscrowAction.class);
     };
   }
@@ -197,6 +203,8 @@ public class ReservationExecutionCleanupProtectionPersistenceAdapter
       case CANCEL -> EnumSet.of(ReservationStatus.CANCEL_PENDING, ReservationStatus.REJECT_PENDING);
       case CONFIRM -> EnumSet.of(ReservationStatus.CONFIRM_PENDING);
       case EXPIRED_REFUND -> EnumSet.of(ReservationStatus.DEADLINE_REFUND_PENDING);
+      case ADMIN_REFUND -> EnumSet.of(ReservationStatus.ADMIN_REFUND_PENDING);
+      case ADMIN_SETTLE -> EnumSet.of(ReservationStatus.ADMIN_SETTLE_PENDING);
       default -> EnumSet.noneOf(ReservationStatus.class);
     };
   }

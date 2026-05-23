@@ -37,6 +37,8 @@ public final class ReservationDisplayStatusMapper {
               CANCEL_PENDING,
               REJECT_PENDING,
               CONFIRM_PENDING,
+              ADMIN_REFUND_PENDING,
+              ADMIN_SETTLE_PENDING,
               DEADLINE_REFUND_PENDING,
               DEADLINE_RECOVERY_REQUIRED,
               DEADLINE_SYNC_REQUIRED,
@@ -82,6 +84,8 @@ public final class ReservationDisplayStatusMapper {
         trainerNickname,
         userNickname,
         thumbnailFinalObjectKey,
+        reservation.getResolvedBy(),
+        reservation.getTerminalReasonCode(),
         viewerActions,
         web3Execution);
   }
@@ -118,6 +122,8 @@ public final class ReservationDisplayStatusMapper {
         trainerNickname,
         userNickname,
         thumbnailFinalObjectKey,
+        reservation.getResolvedBy(),
+        reservation.getTerminalReasonCode(),
         viewerActions,
         web3Execution);
   }

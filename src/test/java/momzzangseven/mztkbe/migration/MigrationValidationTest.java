@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.migration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.UUID;
 import momzzangseven.mztkbe.MztkBeApplication;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -161,11 +162,16 @@ class MigrationValidationTest {
     assertThat(columnExists("class_reservations", "current_execution_intent_public_id")).isTrue();
     assertThat(columnExists("class_reservations", "contract_deadline_epoch_seconds")).isTrue();
     assertThat(columnExists("class_reservations", "contract_deadline_at")).isTrue();
+    assertThat(columnExists("class_reservations", "resolved_by")).isTrue();
+    assertThat(columnExists("class_reservations", "terminal_reason_code")).isTrue();
     assertThat(columnExists("marketplace_reservation_escrows", "reservation_id")).isTrue();
     assertThat(columnExists("marketplace_reservation_escrows", "price_base_units")).isTrue();
     assertThat(columnExists("marketplace_reservation_action_states", "attempt_token")).isTrue();
     assertThat(columnExists("marketplace_reservation_action_states", "execution_intent_public_id"))
         .isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "request_source")).isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "reason_code")).isTrue();
+    assertThat(columnExists("marketplace_reservation_action_states", "memo")).isTrue();
     assertThat(columnExists("reservation_create_idempotency_keys", "escrow_id")).isTrue();
     assertThat(columnExists("reservation_create_idempotency_keys", "action_state_id")).isTrue();
     assertThat(
@@ -184,6 +190,8 @@ class MigrationValidationTest {
         .contains("HOLDING")
         .contains("PURCHASE_PREPARING")
         .contains("PURCHASE_PENDING")
+        .contains("ADMIN_REFUND_PENDING")
+        .contains("ADMIN_SETTLE_PENDING")
         .contains("DEADLINE_REFUND_AVAILABLE")
         .contains("DEADLINE_REFUNDED");
 
@@ -197,6 +205,8 @@ class MigrationValidationTest {
         .contains("CANCEL_PENDING")
         .contains("REJECT_PENDING")
         .contains("CONFIRM_PENDING")
+        .contains("ADMIN_REFUND_PENDING")
+        .contains("ADMIN_SETTLE_PENDING")
         .contains("DEADLINE_REFUND_AVAILABLE")
         .contains("DEADLINE_REFUND_PENDING")
         .contains("DEADLINE_REFUNDED");
@@ -210,6 +220,30 @@ class MigrationValidationTest {
         .contains("INTENT_BOUND")
         .contains("PREPARATION_FAILED")
         .contains("STALE");
+
+    String actionStateActionTypeConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_action_type");
+    assertThat(actionStateActionTypeConstraint).contains("ADMIN_REFUND").contains("ADMIN_SETTLE");
+
+    String actionStateRequestSourceConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_request_source");
+    assertThat(actionStateRequestSourceConstraint)
+        .contains("USER")
+        .contains("MANUAL_ADMIN")
+        .contains("SCHEDULER");
+
+    String actionStateReasonCodeConstraint =
+        checkClause(
+            "marketplace_reservation_action_states",
+            "chk_marketplace_reservation_action_states_reason_code_required");
+    assertThat(actionStateReasonCodeConstraint)
+        .contains("TRAINER_TIMEOUT")
+        .contains("BUYER_CONFIRMATION_TIMEOUT")
+        .contains("ADMIN_MANUAL_SETTLE");
 
     String actionStateBoundIntentConstraint =
         checkClause(
@@ -236,6 +270,60 @@ class MigrationValidationTest {
         .contains("contract_deadline_at");
   }
 
+  @Test
+  @DisplayName("marketplace admin action state constraints reject invalid provenance")
+  void marketplaceAdminActionStateConstraintsRejectInvalidRows() {
+    MarketplaceReservationGraph manualGraph = insertMarketplaceReservationGraph();
+    insertMarketplaceActionState(
+        manualGraph,
+        "ADMIN_REFUND",
+        "ADMIN",
+        9L,
+        "MANUAL_ADMIN",
+        "TRAINER_TIMEOUT",
+        "valid-manual-admin-" + System.nanoTime(),
+        1);
+
+    MarketplaceReservationGraph schedulerGraph = insertMarketplaceReservationGraph();
+    insertMarketplaceActionState(
+        schedulerGraph,
+        "ADMIN_SETTLE",
+        "SYSTEM",
+        null,
+        "SCHEDULER",
+        "BUYER_CONFIRMATION_TIMEOUT",
+        "valid-scheduler-" + System.nanoTime(),
+        1);
+
+    MarketplaceReservationGraph missingReasonGraph = insertMarketplaceReservationGraph();
+    assertThatThrownBy(
+            () ->
+                insertMarketplaceActionState(
+                    missingReasonGraph,
+                    "ADMIN_REFUND",
+                    "ADMIN",
+                    9L,
+                    "MANUAL_ADMIN",
+                    null,
+                    "invalid-missing-reason-" + System.nanoTime(),
+                    1))
+        .isInstanceOf(DataAccessException.class);
+
+    MarketplaceReservationGraph actorMismatchGraph = insertMarketplaceReservationGraph();
+    assertThatThrownBy(
+            () ->
+                insertMarketplaceActionState(
+                    actorMismatchGraph,
+                    "ADMIN_SETTLE",
+                    "ADMIN",
+                    9L,
+                    "SCHEDULER",
+                    "BUYER_CONFIRMATION_TIMEOUT",
+                    "invalid-scheduler-actor-" + System.nanoTime(),
+                    1))
+        .isInstanceOf(DataAccessException.class);
+  }
+
   private void insertWeb3Transaction(
       String idempotencyKey, String referenceType, String referenceId) {
     jdbcTemplate.update(
@@ -255,6 +343,137 @@ class MigrationValidationTest {
         referenceId,
         "0x" + "1".repeat(40),
         "0x" + "2".repeat(40));
+  }
+
+  private MarketplaceReservationGraph insertMarketplaceReservationGraph() {
+    String suffix = "migration-" + System.nanoTime();
+    Long classId =
+        jdbcTemplate.queryForObject(
+            """
+            INSERT INTO marketplace_classes (
+                trainer_id,
+                title,
+                category,
+                description,
+                price_amount,
+                duration_minutes
+            ) VALUES (2, ?, 'PT', 'migration constraint test', 100, 60)
+            RETURNING id
+            """,
+            Long.class,
+            "migration class " + suffix);
+    Long slotId =
+        jdbcTemplate.queryForObject(
+            """
+            INSERT INTO class_slots (class_id, start_time, capacity)
+            VALUES (?, TIME '10:00:00', 1)
+            RETURNING id
+            """,
+            Long.class,
+            classId);
+    Long reservationId =
+        jdbcTemplate.queryForObject(
+            """
+            INSERT INTO class_reservations (
+                user_id,
+                trainer_id,
+                class_slot_id,
+                reservation_date,
+                reservation_time,
+                duration_minutes,
+                status,
+                escrow_status,
+                escrow_flow,
+                order_key
+            ) VALUES (
+                1,
+                2,
+                ?,
+                DATE '2026-05-20',
+                TIME '10:00:00',
+                60,
+                'APPROVED',
+                'LOCKED',
+                'USER_EIP7702',
+                ?
+            )
+            RETURNING id
+            """,
+            Long.class,
+            slotId,
+            randomOrderKey());
+    Long escrowId =
+        jdbcTemplate.queryForObject(
+            """
+            INSERT INTO marketplace_reservation_escrows (
+                reservation_id,
+                escrow_flow,
+                escrow_status,
+                order_key,
+                buyer_wallet_address,
+                trainer_wallet_address,
+                token_address,
+                price_base_units
+            ) VALUES (
+                ?,
+                'USER_EIP7702',
+                'LOCKED',
+                ?,
+                ?,
+                ?,
+                ?,
+                100
+            )
+            RETURNING id
+            """,
+            Long.class,
+            reservationId,
+            randomOrderKey(),
+            "0x" + "1".repeat(40),
+            "0x" + "2".repeat(40),
+            "0x" + "3".repeat(40));
+    return new MarketplaceReservationGraph(reservationId, escrowId);
+  }
+
+  private void insertMarketplaceActionState(
+      MarketplaceReservationGraph graph,
+      String actionType,
+      String actorType,
+      Long actorUserId,
+      String requestSource,
+      String reasonCode,
+      String attemptToken,
+      int attemptNo) {
+    jdbcTemplate.update(
+        """
+        INSERT INTO marketplace_reservation_action_states (
+            reservation_id,
+            escrow_id,
+            action_type,
+            actor_type,
+            actor_user_id,
+            attempt_no,
+            attempt_token,
+            status,
+            request_source,
+            reason_code
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'STALE', ?, ?)
+        """,
+        graph.reservationId(),
+        graph.escrowId(),
+        actionType,
+        actorType,
+        actorUserId,
+        attemptNo,
+        attemptToken,
+        requestSource,
+        reasonCode);
+  }
+
+  private String randomOrderKey() {
+    return "0x"
+        + UUID.randomUUID().toString().replace("-", "")
+        + UUID.randomUUID().toString().replace("-", "");
   }
 
   private boolean indexExists(String indexName) {
@@ -305,4 +524,6 @@ class MigrationValidationTest {
         tableName,
         constraintName);
   }
+
+  private record MarketplaceReservationGraph(Long reservationId, Long escrowId) {}
 }

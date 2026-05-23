@@ -43,6 +43,8 @@ class ReservationStatusTest {
     assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.REJECTED)).isTrue();
     assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.TIMEOUT_CANCELLED))
         .isTrue();
+    assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.ADMIN_REFUND_PENDING))
+        .isTrue();
 
     assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.PENDING)).isFalse();
     assertThat(ReservationStatus.PENDING.canTransitionTo(ReservationStatus.SETTLED)).isFalse();
@@ -54,6 +56,8 @@ class ReservationStatusTest {
   void canTransitionTo_FromApproved() {
     assertThat(ReservationStatus.APPROVED.canTransitionTo(ReservationStatus.SETTLED)).isTrue();
     assertThat(ReservationStatus.APPROVED.canTransitionTo(ReservationStatus.AUTO_SETTLED)).isTrue();
+    assertThat(ReservationStatus.APPROVED.canTransitionTo(ReservationStatus.ADMIN_SETTLE_PENDING))
+        .isTrue();
 
     assertThat(ReservationStatus.APPROVED.canTransitionTo(ReservationStatus.PENDING)).isFalse();
     assertThat(ReservationStatus.APPROVED.canTransitionTo(ReservationStatus.APPROVED)).isFalse();
@@ -91,6 +95,8 @@ class ReservationStatusTest {
     assertThat(ReservationStatus.CANCEL_PENDING.isSchedulerInvisibleUserState()).isTrue();
     assertThat(ReservationStatus.REJECT_PENDING.isSchedulerInvisibleUserState()).isTrue();
     assertThat(ReservationStatus.CONFIRM_PENDING.isSchedulerInvisibleUserState()).isTrue();
+    assertThat(ReservationStatus.ADMIN_REFUND_PENDING.isSchedulerInvisibleUserState()).isTrue();
+    assertThat(ReservationStatus.ADMIN_SETTLE_PENDING.isSchedulerInvisibleUserState()).isTrue();
     assertThat(ReservationStatus.DEADLINE_RECOVERY_REQUIRED.isSchedulerInvisibleUserState())
         .isTrue();
     assertThat(ReservationStatus.DEADLINE_SYNC_REQUIRED.isSchedulerInvisibleUserState()).isTrue();
@@ -145,6 +151,30 @@ class ReservationStatusTest {
     assertThat(
             ReservationStatus.DEADLINE_REFUND_PENDING.canTransitionTo(
                 ReservationStatus.DEADLINE_REFUNDED))
+        .isTrue();
+  }
+
+  @Test
+  @DisplayName("canTransitionTo - admin pending transition matrix")
+  void canTransitionTo_AdminPendingTransitions() {
+    assertThat(
+            ReservationStatus.ADMIN_REFUND_PENDING.canTransitionTo(
+                ReservationStatus.TIMEOUT_CANCELLED))
+        .isTrue();
+    assertThat(ReservationStatus.ADMIN_REFUND_PENDING.canTransitionTo(ReservationStatus.PENDING))
+        .isTrue();
+    assertThat(
+            ReservationStatus.ADMIN_REFUND_PENDING.canTransitionTo(
+                ReservationStatus.MANUAL_SYNC_REQUIRED))
+        .isTrue();
+    assertThat(
+            ReservationStatus.ADMIN_SETTLE_PENDING.canTransitionTo(ReservationStatus.AUTO_SETTLED))
+        .isTrue();
+    assertThat(ReservationStatus.ADMIN_SETTLE_PENDING.canTransitionTo(ReservationStatus.APPROVED))
+        .isTrue();
+    assertThat(
+            ReservationStatus.ADMIN_SETTLE_PENDING.canTransitionTo(
+                ReservationStatus.DEADLINE_SYNC_REQUIRED))
         .isTrue();
   }
 }

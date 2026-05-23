@@ -55,8 +55,11 @@ public class MarketplaceReservationActionStateEntity {
   @Column(name = "actor_type", nullable = false, length = 20)
   private String actorType;
 
-  @Column(name = "actor_user_id", nullable = false)
+  @Column(name = "actor_user_id")
   private Long actorUserId;
+
+  @Column(name = "request_source", nullable = false, length = 30)
+  private String requestSource;
 
   @Column(name = "attempt_no", nullable = false)
   private Integer attemptNo;
@@ -102,6 +105,12 @@ public class MarketplaceReservationActionStateEntity {
 
   @Column(name = "action_reason", length = 500)
   private String actionReason;
+
+  @Column(name = "reason_code", length = 80)
+  private String reasonCode;
+
+  @Column(name = "memo", length = 500)
+  private String memo;
 
   @Column(name = "retryable")
   private Boolean retryable;

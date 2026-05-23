@@ -18,7 +18,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.UnexpectedRollbackException;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -96,7 +95,8 @@ class ExecutionIntentEventHandlersTest {
   }
 
   @Test
-  void terminatedHandler_keepsAfterCommitRequiresNewBoundary() throws Exception {
+  void terminatedHandler_keepsAfterCommitBoundaryWithoutWrappingEvidenceBuildInTransaction()
+      throws Exception {
     Method handleMethod =
         ExecutionIntentTerminatedEventHandler.class.getDeclaredMethod(
             "handle", ExecutionIntentTerminatedEvent.class);
@@ -107,7 +107,6 @@ class ExecutionIntentEventHandlersTest {
 
     assertThat(eventListener).isNotNull();
     assertThat(eventListener.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
-    assertThat(transactional).isNotNull();
-    assertThat(transactional.propagation()).isEqualTo(Propagation.REQUIRES_NEW);
+    assertThat(transactional).isNull();
   }
 }

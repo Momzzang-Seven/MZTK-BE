@@ -29,7 +29,9 @@ final class ReservationExecutionCandidateGuard {
           "MARKETPLACE_CLASS_PURCHASE",
           "MARKETPLACE_CLASS_CANCEL",
           "MARKETPLACE_CLASS_CONFIRM",
-          "MARKETPLACE_CLASS_EXPIRED_REFUND");
+          "MARKETPLACE_CLASS_EXPIRED_REFUND",
+          "MARKETPLACE_ADMIN_REFUND",
+          "MARKETPLACE_ADMIN_SETTLE");
 
   private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   private final LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort;
@@ -173,6 +175,8 @@ final class ReservationExecutionCandidateGuard {
       case BUYER_CANCEL, TRAINER_REJECT -> "MARKETPLACE_CLASS_CANCEL";
       case BUYER_CONFIRM -> "MARKETPLACE_CLASS_CONFIRM";
       case DEADLINE_REFUND -> "MARKETPLACE_CLASS_EXPIRED_REFUND";
+      case ADMIN_REFUND -> "MARKETPLACE_ADMIN_REFUND";
+      case ADMIN_SETTLE -> "MARKETPLACE_ADMIN_SETTLE";
     };
   }
 }

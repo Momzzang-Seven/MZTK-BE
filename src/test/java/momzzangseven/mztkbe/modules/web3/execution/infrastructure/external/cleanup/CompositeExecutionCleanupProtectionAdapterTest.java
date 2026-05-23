@@ -88,9 +88,9 @@ class CompositeExecutionCleanupProtectionAdapterTest {
   }
 
   @Test
-  @DisplayName("marketplace user action 전체를 marketplace 보호 필터로 라우팅한다")
-  void filterDeletableFinalizedIntentIds_routesAllMarketplaceUserActions() {
-    List<Long> candidateIds = List.of(1L, 2L, 3L, 4L);
+  @DisplayName("marketplace user/admin action 전체를 marketplace 보호 필터로 라우팅한다")
+  void filterDeletableFinalizedIntentIds_routesAllMarketplaceActions() {
+    List<Long> candidateIds = List.of(1L, 2L, 3L, 4L, 5L, 6L);
     given(executionIntentPersistencePort.findAllByIdsForUpdate(candidateIds))
         .willReturn(
             List.of(
@@ -113,17 +113,27 @@ class CompositeExecutionCleanupProtectionAdapterTest {
                     4L,
                     ExecutionResourceType.ORDER,
                     "4",
-                    ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND)));
+                    ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND),
+                view(
+                    5L,
+                    ExecutionResourceType.ORDER,
+                    "5",
+                    ExecutionActionType.MARKETPLACE_ADMIN_REFUND),
+                view(
+                    6L,
+                    ExecutionResourceType.ORDER,
+                    "6",
+                    ExecutionActionType.MARKETPLACE_ADMIN_SETTLE)));
     given(marketplaceProvider.getIfAvailable()).willReturn(marketplaceProtection);
     given(marketplaceProtection.filterDeletableFinalizedIntentIds(candidateIds))
-        .willReturn(List.of(2L, 4L));
+        .willReturn(List.of(2L, 4L, 6L));
     CompositeExecutionCleanupProtectionAdapter adapter =
         new CompositeExecutionCleanupProtectionAdapter(
             executionIntentPersistencePort, qnaProvider, marketplaceProvider, walletProvider);
 
     List<Long> result = adapter.filterDeletableFinalizedIntentIds(candidateIds);
 
-    assertThat(result).containsExactly(2L, 4L);
+    assertThat(result).containsExactly(2L, 4L, 6L);
   }
 
   @Test

@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.InternalExecutionSignerGates;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
@@ -71,7 +72,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
 
   @Override
   public ExecuteInternalExecutionIntentResult execute(
-      ExecuteInternalExecutionIntentCommand command, SponsorWalletGate gate) {
+      ExecuteInternalExecutionIntentCommand command, InternalExecutionSignerGates signerGates) {
     ExecutionIntent intent =
         executionIntentPersistencePort
             .claimNextInternalExecutableForUpdate(command.actionTypes())
@@ -140,8 +141,9 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           "internal executable intent requires unsigned tx snapshot");
     }
 
-    // Sponsor wallet was preflighted outside the TX boundary; signer + walletInfo are
-    // pre-validated.
+    // The signer wallet was preflighted outside the TX boundary; signer + walletInfo are
+    // pre-validated for the claimed action type.
+    SponsorWalletGate gate = signerGates.gateFor(intent.getActionType());
     TreasuryWalletInfo walletInfo = gate.walletInfo();
     String expectedSigner = walletInfo.walletAddress();
     TreasurySigner signer = gate.signer();
@@ -152,7 +154,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           actionHandler,
           actionPlan,
           INTERNAL_ISSUER_INVALID_INTENT,
-          "internal intent signer does not match sponsor signer");
+          "internal intent signer does not match expected action signer");
     }
 
     long reservedNonce = executionTransactionGatewayPort.reserveNextNonce(expectedSigner);
