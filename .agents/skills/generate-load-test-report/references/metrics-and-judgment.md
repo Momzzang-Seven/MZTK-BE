@@ -22,8 +22,8 @@
 | 테스트 유형 | k6 터미널 로그(`TEST_TYPE=...`) 또는 사용자 | breakpoint / load / endurance 중 무엇인지 질문 |
 | 테스트 성격 | k6 시나리오·로그(읽기 위주 / 쓰기·외부연동 포함) | 모호하면 질문 — §5 판독 초점이 갈린다 |
 | k6 터미널 로그 | 사용자가 붙여넣기 | 요청 — THRESHOLDS/CUSTOM/TOTAL 블록 전체 |
-| k6 result JSON | `docs.local/load_test/phaseN/results/<유형>_<날짜>.json` | 경로 질문 |
-| 결과 출력 디렉토리 | 보통 위 JSON 과 같은 `phaseN/results/` | 어느 phase 인지 질문 |
+| k6 result JSON | `docs.local/load_test/phaseN/results/{YYYY.MM.DD}/k6/<유형>_<날짜>.json` | 경로 질문 |
+| 결과 출력 디렉토리 | k6 JSON 의 날짜 폴더 `phaseN/results/{YYYY.MM.DD}/` (그 아래 `charts/`·`reports/`) | 어느 phase·날짜인지 질문 |
 | Prometheus URL | 기본 `http://localhost:9090` | 다르면 질문 |
 | 인프라 상수 (-Xmx, HikariCP pool max, EC2 인스턴스, executor 풀 크기) | `Dockerfile`(JVM heap), `application.yml`(`hikari.maximum-pool-size`, executor 설정), 기존 RESULT_*.md | 레포에서 못 찾으면 질문 |
 | 커밋 SHA | `git rev-parse --short HEAD` | — |
@@ -104,7 +104,7 @@ server 히스토그램을 1순위로 본다 — k6 client 측정엔 맥북↔EC2
 | `prometheus` | Prometheus 호스트. 기본 `http://localhost:9090` |
 | `start`/`end` | §2 측정 구간 (ISO8601) |
 | `step` | 60(초) 기본 |
-| `outdir` | `phaseN/results/charts` 절대경로 |
+| `outdir` | `phaseN/results/{YYYY.MM.DD}/charts` 절대경로 — 회차 날짜 폴더 아래 `charts/` |
 | `name` | 파일 접두사. 출력은 `<name>_<chart.file>.svg` (보통 테스트 유형) |
 | `clock0` | `[START 의 시, 분]`. 예 00:50:32 → `[0,50]` |
 | `stage_vu` | k6 stage 를 포인트 index 로. `[start_i, start_vu, end_i, end_vu]` 구간 나열. index = START 부터 분 |
