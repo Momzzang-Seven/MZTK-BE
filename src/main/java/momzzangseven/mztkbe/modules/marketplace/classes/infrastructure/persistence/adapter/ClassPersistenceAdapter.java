@@ -254,10 +254,10 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
         q.setParameter("trainerId", trainerId);
       }
       if (startTime != null && !startTime.isBlank()) {
-        q.setParameter("startTime", startTime);
+        q.setParameter("startTime", LocalTime.parse(startTime));
       }
       if (endTime != null && !endTime.isBlank()) {
-        q.setParameter("endTime", endTime);
+        q.setParameter("endTime", LocalTime.parse(endTime));
       }
     }
 
