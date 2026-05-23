@@ -24,6 +24,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.FinalizeWall
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalSubmittedUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalTerminatedUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RetryWalletRegistrationFinalizationUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AdvanceWalletRegistrationRecoveryCursorPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationPolicyPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
@@ -53,6 +54,7 @@ class ReconcileWalletRegistrationSessionServiceTest {
   @Mock private RetryWalletRegistrationFinalizationUseCase retryFinalizationUseCase;
   @Mock private ExpireWalletRegistrationSessionUseCase expireUseCase;
   @Mock private SyncWalletApprovalExecutionSuccessPort syncExecutionSuccessPort;
+  @Mock private AdvanceWalletRegistrationRecoveryCursorPort advanceRecoveryCursorPort;
 
   private ReconcileWalletRegistrationSessionService service;
 
@@ -68,6 +70,7 @@ class ReconcileWalletRegistrationSessionServiceTest {
             retryFinalizationUseCase,
             expireUseCase,
             syncExecutionSuccessPort,
+            advanceRecoveryCursorPort,
             new TestWalletRegistrationPolicy(),
             CLOCK);
   }
@@ -256,7 +259,7 @@ class ReconcileWalletRegistrationSessionServiceTest {
             .markApprovalFailed(
                 WalletRegistrationReceiptTimeout.ERROR_CODE,
                 WalletRegistrationReceiptTimeout.ERROR_REASON,
-                NOW.plusSeconds(4));
+                NOW.minusSeconds(4));
     when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
     when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
         .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", 10L, NOW.minusSeconds(1))));
@@ -264,8 +267,29 @@ class ReconcileWalletRegistrationSessionServiceTest {
     ReconcileWalletRegistrationSessionResult result = service.execute(command());
 
     assertThat(result.skipped()).isTrue();
+    verify(advanceRecoveryCursorPort)
+        .advanceReceiptTimeoutFailedRecoveryCursor(REGISTRATION_ID, NOW);
     verify(markTerminatedUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
     verify(markSubmittedUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void execute_whenReceiptTimeoutFailedWithoutExecutionState_advancesRecoveryCursor() {
+    WalletRegistrationSession session =
+        pendingOnchainSession()
+            .markApprovalFailed(
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON,
+                NOW.minusSeconds(4));
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(Optional.empty());
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.skipped()).isTrue();
+    verify(advanceRecoveryCursorPort)
+        .advanceReceiptTimeoutFailedRecoveryCursor(REGISTRATION_ID, NOW);
   }
 
   @Test

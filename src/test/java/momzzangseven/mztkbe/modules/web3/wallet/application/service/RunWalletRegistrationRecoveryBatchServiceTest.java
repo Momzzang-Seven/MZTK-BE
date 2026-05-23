@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
@@ -9,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ReconcileWalletR
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ReconcileWalletRegistrationSessionResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RunWalletRegistrationRecoveryBatchCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RunWalletRegistrationRecoveryBatchResult;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ReconcileWalletRegistrationSessionUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationRecoveryCandidatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -54,6 +56,35 @@ class RunWalletRegistrationRecoveryBatchServiceTest {
     assertThat(result.recovered()).isEqualTo(1);
     assertThat(result.skipped()).isEqualTo(1);
     assertThat(result.failed()).isEqualTo(1);
+  }
+
+  @Test
+  void execute_reconcilesReceiptTimeoutApprovalFailedCandidateAsLateSuccessFallback() {
+    String intentId = "intent-registration-late-success";
+    String transactionHash = "0x" + "b".repeat(64);
+    WalletRegistrationSession session =
+        session("registration-late-success")
+            .markApprovalSigned(intentId, 10L, transactionHash, "SIGNED", NOW.plusSeconds(2))
+            .markApprovalPendingOnchain(
+                intentId, 10L, transactionHash, "PENDING_ONCHAIN", NOW.plusSeconds(3))
+            .markApprovalFailed(
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON,
+                NOW.plusSeconds(4));
+    ReconcileWalletRegistrationSessionCommand command =
+        new ReconcileWalletRegistrationSessionCommand("registration-late-success");
+    when(loadCandidatePort.loadRecoveryCandidates(1)).thenReturn(List.of(session));
+    when(reconcileUseCase.execute(command))
+        .thenReturn(ReconcileWalletRegistrationSessionResult.recoveredResult());
+
+    RunWalletRegistrationRecoveryBatchResult result =
+        service.execute(new RunWalletRegistrationRecoveryBatchCommand(1));
+
+    assertThat(result.scanned()).isEqualTo(1);
+    assertThat(result.recovered()).isEqualTo(1);
+    assertThat(result.skipped()).isZero();
+    assertThat(result.failed()).isZero();
+    verify(reconcileUseCase).execute(command);
   }
 
   private static WalletRegistrationSession session(String registrationId) {

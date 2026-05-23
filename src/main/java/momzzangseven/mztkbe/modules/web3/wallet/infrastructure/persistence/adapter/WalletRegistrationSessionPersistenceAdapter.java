@@ -1,10 +1,12 @@
 package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.adapter;
 
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.DuplicateWalletRegistrationSessionException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AdvanceWalletRegistrationRecoveryCursorPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.CreateWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationRecoveryCandidatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class WalletRegistrationSessionPersistenceAdapter
     implements CreateWalletRegistrationSessionPort,
         SaveWalletRegistrationSessionPort,
+        AdvanceWalletRegistrationRecoveryCursorPort,
         LoadWalletRegistrationSessionPort,
         LockWalletRegistrationSessionPort,
         LoadWalletRegistrationRecoveryCandidatePort {
@@ -37,6 +40,7 @@ public class WalletRegistrationSessionPersistenceAdapter
           WalletRegistrationStatus.APPROVAL_RETRYABLE,
           WalletRegistrationStatus.FINALIZATION_FAILED,
           WalletRegistrationStatus.LOCAL_CONFLICT);
+  private static final String RECEIPT_TIMEOUT_ERROR_CODE = "RECEIPT_TIMEOUT";
   private static final EnumSet<WalletRegistrationStatus> RECOVERY_CANDIDATE_STATUSES =
       EnumSet.of(
           WalletRegistrationStatus.APPROVAL_REQUIRED,
@@ -140,11 +144,25 @@ public class WalletRegistrationSessionPersistenceAdapter
   @Override
   public List<WalletRegistrationSession> loadRecoveryCandidates(int limit) {
     return repository
-        .findByStatusInOrderByUpdatedAtAscIdAsc(
-            RECOVERY_CANDIDATE_STATUSES, PageRequest.of(0, limit))
+        .findRecoveryCandidates(
+            RECOVERY_CANDIDATE_STATUSES,
+            WalletRegistrationStatus.APPROVAL_FAILED,
+            RECEIPT_TIMEOUT_ERROR_CODE,
+            PageRequest.of(0, limit))
         .stream()
         .map(this::mapToDomain)
         .toList();
+  }
+
+  @Override
+  @Transactional
+  public void advanceReceiptTimeoutFailedRecoveryCursor(
+      String registrationId, LocalDateTime checkedAt) {
+    repository.advanceRecoveryCursor(
+        registrationId,
+        WalletRegistrationStatus.APPROVAL_FAILED,
+        RECEIPT_TIMEOUT_ERROR_CODE,
+        checkedAt);
   }
 
   private WalletRegistrationSession mapToDomain(WalletRegistrationSessionEntity entity) {

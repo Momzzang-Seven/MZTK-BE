@@ -153,8 +153,8 @@ class WalletRegistrationSessionPersistenceAdapterTest {
   }
 
   @Test
-  void loadRecoveryCandidates_usesRecoveryCandidateStatusesExcludingApprovalFailed() {
-    when(repository.findByStatusInOrderByUpdatedAtAscIdAsc(any(), any(Pageable.class)))
+  void loadRecoveryCandidates_usesRecoveryStatusesAndReceiptTimeoutFailedTarget() {
+    when(repository.findRecoveryCandidates(any(), any(), any(), any(Pageable.class)))
         .thenReturn(List.of(entity()));
 
     List<WalletRegistrationSession> loaded = adapter.loadRecoveryCandidates(50);
@@ -162,8 +162,15 @@ class WalletRegistrationSessionPersistenceAdapterTest {
     assertThat(loaded).hasSize(1);
     ArgumentCaptor<Collection<WalletRegistrationStatus>> statusesCaptor =
         ArgumentCaptor.forClass(Collection.class);
+    ArgumentCaptor<WalletRegistrationStatus> receiptTimeoutStatusCaptor =
+        ArgumentCaptor.forClass(WalletRegistrationStatus.class);
+    ArgumentCaptor<String> receiptTimeoutErrorCodeCaptor = ArgumentCaptor.forClass(String.class);
     verify(repository)
-        .findByStatusInOrderByUpdatedAtAscIdAsc(statusesCaptor.capture(), any(Pageable.class));
+        .findRecoveryCandidates(
+            statusesCaptor.capture(),
+            receiptTimeoutStatusCaptor.capture(),
+            receiptTimeoutErrorCodeCaptor.capture(),
+            any(Pageable.class));
     assertThat(statusesCaptor.getValue())
         .containsExactlyInAnyOrder(
             WalletRegistrationStatus.APPROVAL_REQUIRED,
@@ -173,6 +180,18 @@ class WalletRegistrationSessionPersistenceAdapterTest {
             WalletRegistrationStatus.FINALIZATION_FAILED,
             WalletRegistrationStatus.LOCAL_CONFLICT);
     assertThat(statusesCaptor.getValue()).doesNotContain(WalletRegistrationStatus.APPROVAL_FAILED);
+    assertThat(receiptTimeoutStatusCaptor.getValue())
+        .isEqualTo(WalletRegistrationStatus.APPROVAL_FAILED);
+    assertThat(receiptTimeoutErrorCodeCaptor.getValue()).isEqualTo("RECEIPT_TIMEOUT");
+  }
+
+  @Test
+  void advanceReceiptTimeoutFailedRecoveryCursor_delegatesConditionedCursorUpdate() {
+    adapter.advanceReceiptTimeoutFailedRecoveryCursor(PUBLIC_ID, NOW);
+
+    verify(repository)
+        .advanceRecoveryCursor(
+            PUBLIC_ID, WalletRegistrationStatus.APPROVAL_FAILED, "RECEIPT_TIMEOUT", NOW);
   }
 
   private static WalletRegistrationSession newSession() {

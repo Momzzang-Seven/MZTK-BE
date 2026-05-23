@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRe
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalTerminatedUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ReconcileWalletRegistrationSessionUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RetryWalletRegistrationFinalizationUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AdvanceWalletRegistrationRecoveryCursorPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationPolicyPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
@@ -40,6 +41,7 @@ public class ReconcileWalletRegistrationSessionService
   private final RetryWalletRegistrationFinalizationUseCase retryFinalizationUseCase;
   private final ExpireWalletRegistrationSessionUseCase expireUseCase;
   private final SyncWalletApprovalExecutionSuccessPort syncExecutionSuccessPort;
+  private final AdvanceWalletRegistrationRecoveryCursorPort advanceRecoveryCursorPort;
   private final LoadWalletRegistrationPolicyPort registrationPolicyPort;
   private final Clock appClock;
 
@@ -74,7 +76,7 @@ public class ReconcileWalletRegistrationSessionService
           : ReconcileWalletRegistrationSessionResult.skippedResult();
     }
     if (maybeExecutionState.isEmpty()) {
-      return ReconcileWalletRegistrationSessionResult.skippedResult();
+      return skipReceiptTimeoutApprovalFailed(session);
     }
 
     return recoverFromExecutionState(session, maybeExecutionState.get());
@@ -93,7 +95,7 @@ public class ReconcileWalletRegistrationSessionService
       return ReconcileWalletRegistrationSessionResult.recoveredResult();
     }
     if (isReceiptTimeoutApprovalFailed(session)) {
-      return ReconcileWalletRegistrationSessionResult.skippedResult();
+      return advanceRecoveryCursorAndSkip(session);
     }
     if (WalletRegistrationReceiptTimeout.isCurrent(executionState)) {
       markTerminatedUseCase.execute(
@@ -154,6 +156,20 @@ public class ReconcileWalletRegistrationSessionService
 
   private boolean isReceiptTimeoutApprovalFailed(WalletRegistrationSession session) {
     return session.isTerminal() && WalletRegistrationReceiptTimeout.isRecordedOn(session);
+  }
+
+  private ReconcileWalletRegistrationSessionResult skipReceiptTimeoutApprovalFailed(
+      WalletRegistrationSession session) {
+    return isReceiptTimeoutApprovalFailed(session)
+        ? advanceRecoveryCursorAndSkip(session)
+        : ReconcileWalletRegistrationSessionResult.skippedResult();
+  }
+
+  private ReconcileWalletRegistrationSessionResult advanceRecoveryCursorAndSkip(
+      WalletRegistrationSession session) {
+    advanceRecoveryCursorPort.advanceReceiptTimeoutFailedRecoveryCursor(
+        session.getPublicId(), LocalDateTime.now(appClock));
+    return ReconcileWalletRegistrationSessionResult.skippedResult();
   }
 
   private boolean isSucceededTransactionBeforeExecutionConfirmed(
