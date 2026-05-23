@@ -5,7 +5,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
-import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.web3.EscrowTransactionAdapter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,8 +33,6 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 class MarketplaceAdminEscrowControllerDisabledTest {
 
   @Autowired private MockMvc mockMvc;
-
-  @MockitoBean private EscrowTransactionAdapter escrowTransactionAdapter;
 
   @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in

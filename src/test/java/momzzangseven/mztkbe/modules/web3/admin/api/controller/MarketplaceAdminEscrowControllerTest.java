@@ -12,7 +12,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.web3.EscrowTransactionAdapter;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminRefundResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminSettlementCommand;
@@ -70,8 +69,6 @@ class MarketplaceAdminEscrowControllerTest {
   @MockitoBean
   private MarketplaceAdminExecutionConfigurationValidator
       marketplaceAdminExecutionConfigurationValidator;
-
-  @MockitoBean private EscrowTransactionAdapter escrowTransactionAdapter;
 
   @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
