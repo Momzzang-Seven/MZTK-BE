@@ -153,7 +153,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
   }
 
   @Test
-  void loadRecoveryCandidates_usesRecoveryCandidateStatusesIncludingApprovalFailed() {
+  void loadRecoveryCandidates_usesRecoveryCandidateStatusesExcludingApprovalFailed() {
     when(repository.findByStatusInOrderByUpdatedAtAscIdAsc(any(), any(Pageable.class)))
         .thenReturn(List.of(entity()));
 
@@ -170,9 +170,9 @@ class WalletRegistrationSessionPersistenceAdapterTest {
             WalletRegistrationStatus.APPROVAL_SIGNED,
             WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
             WalletRegistrationStatus.APPROVAL_RETRYABLE,
-            WalletRegistrationStatus.APPROVAL_FAILED,
             WalletRegistrationStatus.FINALIZATION_FAILED,
             WalletRegistrationStatus.LOCAL_CONFLICT);
+    assertThat(statusesCaptor.getValue()).doesNotContain(WalletRegistrationStatus.APPROVAL_FAILED);
   }
 
   private static WalletRegistrationSession newSession() {

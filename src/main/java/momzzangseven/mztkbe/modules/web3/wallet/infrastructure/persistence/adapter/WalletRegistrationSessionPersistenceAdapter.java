@@ -43,7 +43,6 @@ public class WalletRegistrationSessionPersistenceAdapter
           WalletRegistrationStatus.APPROVAL_SIGNED,
           WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
           WalletRegistrationStatus.APPROVAL_RETRYABLE,
-          WalletRegistrationStatus.APPROVAL_FAILED,
           WalletRegistrationStatus.FINALIZATION_FAILED,
           WalletRegistrationStatus.LOCAL_CONFLICT);
   private static final EnumSet<WalletRegistrationStatus> AUTHORITATIVE_NEWER_STATUSES =

@@ -92,6 +92,9 @@ public class ReconcileWalletRegistrationSessionService
               session.getPublicId(), executionState.executionIntentId()));
       return ReconcileWalletRegistrationSessionResult.recoveredResult();
     }
+    if (isReceiptTimeoutApprovalFailed(session)) {
+      return ReconcileWalletRegistrationSessionResult.skippedResult();
+    }
     if (WalletRegistrationReceiptTimeout.isCurrent(executionState)) {
       markTerminatedUseCase.execute(
           new MarkWalletRegistrationApprovalTerminatedCommand(

@@ -250,6 +250,25 @@ class ReconcileWalletRegistrationSessionServiceTest {
   }
 
   @Test
+  void execute_whenReceiptTimeoutFailedButTransactionStillUnconfirmed_skipsTerminalSession() {
+    WalletRegistrationSession session =
+        pendingOnchainSession()
+            .markApprovalFailed(
+                WalletRegistrationReceiptTimeout.ERROR_CODE,
+                WalletRegistrationReceiptTimeout.ERROR_REASON,
+                NOW.plusSeconds(4));
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", 10L, NOW.minusSeconds(1))));
+
+    ReconcileWalletRegistrationSessionResult result = service.execute(command());
+
+    assertThat(result.skipped()).isTrue();
+    verify(markTerminatedUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+    verify(markSubmittedUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void execute_whenNonReceiptTimeoutFailed_skipsTerminalSession() {
     WalletRegistrationSession session =
         approvalRequiredSession()
