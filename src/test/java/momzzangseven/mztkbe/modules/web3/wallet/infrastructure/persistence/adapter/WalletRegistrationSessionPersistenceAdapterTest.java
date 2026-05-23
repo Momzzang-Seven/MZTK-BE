@@ -85,6 +85,19 @@ class WalletRegistrationSessionPersistenceAdapterTest {
 
     assertThat(loaded).isPresent();
     assertThat(loaded.get().getUserId()).isEqualTo(1L);
+    ArgumentCaptor<Collection<WalletRegistrationStatus>> statusesCaptor =
+        ArgumentCaptor.forClass(Collection.class);
+    verify(repository)
+        .findLatestByUserIdAndStatusIn(eq(1L), statusesCaptor.capture(), any(Pageable.class));
+    assertThat(statusesCaptor.getValue())
+        .containsExactlyInAnyOrder(
+            WalletRegistrationStatus.APPROVAL_REQUIRED,
+            WalletRegistrationStatus.APPROVAL_SIGNED,
+            WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
+            WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.FINALIZATION_FAILED,
+            WalletRegistrationStatus.LOCAL_CONFLICT);
+    assertThat(statusesCaptor.getValue()).doesNotContain(WalletRegistrationStatus.APPROVAL_FAILED);
   }
 
   @Test
@@ -140,7 +153,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
   }
 
   @Test
-  void loadRecoveryCandidates_usesRecoveryCandidateStatusesIncludingLocalConflict() {
+  void loadRecoveryCandidates_usesRecoveryCandidateStatusesIncludingApprovalFailed() {
     when(repository.findByStatusInOrderByUpdatedAtAscIdAsc(any(), any(Pageable.class)))
         .thenReturn(List.of(entity()));
 
