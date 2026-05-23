@@ -41,9 +41,7 @@ class ClassPersistenceAdapterTimeFilterTest {
   private static final Long TRAINER_ID = 1L;
   private static final PageRequest PAGE = PageRequest.of(0, 20);
 
-  /**
-   * Persists a marketplace_classes row and returns its generated ID.
-   */
+  /** Persists a marketplace_classes row and returns its generated ID. */
   private Long saveClass(String title, boolean active) {
     MarketplaceClassEntity entity =
         MarketplaceClassEntity.builder()
@@ -61,9 +59,7 @@ class ClassPersistenceAdapterTimeFilterTest {
     return entity.getId();
   }
 
-  /**
-   * Persists a class_slots row linked to the given classId with the specified startTime.
-   */
+  /** Persists a class_slots row linked to the given classId with the specified startTime. */
   private void saveSlot(Long classId, LocalTime startTime) {
     ClassSlotEntity slot =
         ClassSlotEntity.builder()
