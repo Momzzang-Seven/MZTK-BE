@@ -361,6 +361,16 @@ web3:
   transfer:
     legacy-question-reward-handler-enabled: false
 
+marketplace:
+  reservation:
+    zone: ${MARKETPLACE_RESERVATION_ZONE}
+    auto-cancel:
+      enabled: ${MARKETPLACE_RESERVATION_AUTO_CANCEL_ENABLED}
+      cron: "${MARKETPLACE_RESERVATION_AUTO_CANCEL_CRON}"
+    auto-settle:
+      enabled: ${MARKETPLACE_RESERVATION_AUTO_SETTLE_ENABLED}
+      cron: "${MARKETPLACE_RESERVATION_AUTO_SETTLE_CRON}"
+
 location:
   verification:
     radius-meters: 5.0 # Location verification radius; 5m
