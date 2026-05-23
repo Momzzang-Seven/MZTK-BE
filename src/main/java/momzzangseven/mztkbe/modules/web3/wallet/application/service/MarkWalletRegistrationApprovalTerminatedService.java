@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.MarkWalletRegistrationApprovalTerminatedCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.MarkWalletRegistrationApprovalTerminatedUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
@@ -42,6 +43,7 @@ public class MarkWalletRegistrationApprovalTerminatedService
     WalletRegistrationSession updated =
         switch (command.terminalExecutionStatus()) {
           case "FAILED_ONCHAIN" -> failOrRetry(session, command.failureReason(), now);
+          case WalletRegistrationReceiptTimeout.ERROR_CODE -> receiptTimeout(session, now);
           case "EXPIRED" -> expireOrRetry(session, command.failureReason(), now);
           case "CANCELED", "NONCE_STALE" ->
               session.markApprovalRetryable(
@@ -71,6 +73,20 @@ public class MarkWalletRegistrationApprovalTerminatedService
       return session;
     }
     return session.markApprovalRetryable("EXPIRED", failureReason(failureReason), now);
+  }
+
+  private WalletRegistrationSession receiptTimeout(
+      WalletRegistrationSession session, LocalDateTime now) {
+    if (WalletRegistrationReceiptTimeout.approvalTtlRemains(session, now)) {
+      return session.markApprovalRetryable(
+          WalletRegistrationReceiptTimeout.ERROR_CODE,
+          WalletRegistrationReceiptTimeout.ERROR_REASON,
+          now);
+    }
+    return session.markApprovalFailed(
+        WalletRegistrationReceiptTimeout.ERROR_CODE,
+        WalletRegistrationReceiptTimeout.ERROR_REASON,
+        now);
   }
 
   private boolean isLatestIntent(WalletRegistrationSession session, String executionIntentId) {

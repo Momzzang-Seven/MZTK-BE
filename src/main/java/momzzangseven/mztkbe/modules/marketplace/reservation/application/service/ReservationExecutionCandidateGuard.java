@@ -23,6 +23,7 @@ final class ReservationExecutionCandidateGuard {
   private static final String STATUS_PENDING_ONCHAIN = "PENDING_ONCHAIN";
   private static final String STATUS_CONFIRMED = "CONFIRMED";
   private static final String TRANSACTION_SUCCEEDED = "SUCCEEDED";
+  private static final String TRANSACTION_UNCONFIRMED = "UNCONFIRMED";
   private static final Set<String> MARKETPLACE_ACTION_CODES =
       Set.of(
           "MARKETPLACE_CLASS_PURCHASE",
@@ -142,7 +143,8 @@ final class ReservationExecutionCandidateGuard {
         || isAwaitingSignature(candidate.status())
         || STATUS_SIGNED.equals(candidate.status())
         || STATUS_PENDING_ONCHAIN.equals(candidate.status())
-        || TRANSACTION_SUCCEEDED.equals(candidate.transactionStatus());
+        || TRANSACTION_SUCCEEDED.equals(candidate.transactionStatus())
+        || TRANSACTION_UNCONFIRMED.equals(candidate.transactionStatus());
   }
 
   private boolean isBlockingExecutionState(ReservationExecutionStateView state) {
@@ -151,7 +153,8 @@ final class ReservationExecutionCandidateGuard {
             || isAwaitingSignature(state)
             || STATUS_SIGNED.equals(state.status())
             || STATUS_PENDING_ONCHAIN.equals(state.status())
-            || TRANSACTION_SUCCEEDED.equals(state.transactionStatus()));
+            || TRANSACTION_SUCCEEDED.equals(state.transactionStatus())
+            || TRANSACTION_UNCONFIRMED.equals(state.transactionStatus()));
   }
 
   private boolean isAwaitingSignature(ReservationExecutionStateView state) {

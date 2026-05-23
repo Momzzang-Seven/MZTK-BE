@@ -69,6 +69,9 @@ public class AnswerExecutionResumeAdapter implements LoadAnswerExecutionResumePo
             : new AnswerExecutionResumeView.Transaction(
                 result.transaction().id(),
                 result.transaction().status(),
-                result.transaction().txHash()));
+                result.transaction().txHash()),
+        result.recoveryStatus(),
+        result.recoveryReason(),
+        result.retryAllowed());
   }
 }

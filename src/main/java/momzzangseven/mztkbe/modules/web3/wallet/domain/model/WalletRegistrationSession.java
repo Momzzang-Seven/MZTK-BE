@@ -16,6 +16,8 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class WalletRegistrationSession {
 
+  private static final String RECEIPT_TIMEOUT = "RECEIPT_TIMEOUT";
+
   private final Long id;
   private final String publicId;
   private final Long userId;
@@ -23,6 +25,7 @@ public class WalletRegistrationSession {
   private final String challengeNonce;
   private final WalletRegistrationStatus status;
   private final String latestExecutionIntentId;
+  private final String receiptTimeoutExecutionIntentIds;
   private final Long latestTransactionId;
   private final String latestTransactionHash;
   private final String lastExecutionStatus;
@@ -181,7 +184,8 @@ public class WalletRegistrationSession {
     if (status != WalletRegistrationStatus.APPROVAL_REQUIRED
         && status != WalletRegistrationStatus.APPROVAL_SIGNED
         && status != WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
-        && !status.isConfirmedButNotFinalized()) {
+        && !status.isConfirmedButNotFinalized()
+        && !isReceiptTimeoutLateSuccessStatus()) {
       throw new IllegalStateException("session cannot be confirmed from " + status);
     }
 
@@ -197,6 +201,30 @@ public class WalletRegistrationSession {
             transactionHash == null || transactionHash.isBlank()
                 ? latestTransactionHash
                 : transactionHash)
+        .lastExecutionStatus(executionStatus)
+        .submittedAt(submittedAt == null ? now : submittedAt)
+        .confirmedAt(confirmedAt == null ? now : confirmedAt)
+        .updatedAt(now)
+        .build();
+  }
+
+  /**
+   * Recovers a same-registration approval confirmation that arrived after a receipt-timeout retry
+   * replaced the latest intent.
+   */
+  public WalletRegistrationSession markRecoveredApprovalConfirmed(
+      String executionIntentId, String executionStatus, LocalDateTime now) {
+    requireExecutionIntentId(executionIntentId);
+    requireNow(now);
+    if (!canRecoverReplacedApprovalIntent(executionIntentId)) {
+      throw new IllegalStateException("session cannot recover replaced approval from " + status);
+    }
+
+    return toBuilder()
+        .status(WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN)
+        .latestExecutionIntentId(executionIntentId)
+        .latestTransactionId(null)
+        .latestTransactionHash(null)
         .lastExecutionStatus(executionStatus)
         .submittedAt(submittedAt == null ? now : submittedAt)
         .confirmedAt(confirmedAt == null ? now : confirmedAt)
@@ -240,6 +268,7 @@ public class WalletRegistrationSession {
         .status(WalletRegistrationStatus.APPROVAL_RETRYABLE)
         .lastErrorCode(errorCode)
         .lastErrorReason(errorReason)
+        .receiptTimeoutExecutionIntentIds(rememberReceiptTimeoutIntent(errorCode))
         .updatedAt(now)
         .build();
   }
@@ -256,6 +285,7 @@ public class WalletRegistrationSession {
         .status(WalletRegistrationStatus.APPROVAL_FAILED)
         .lastErrorCode(errorCode)
         .lastErrorReason(errorReason)
+        .receiptTimeoutExecutionIntentIds(rememberReceiptTimeoutIntent(errorCode))
         .updatedAt(now)
         .build();
   }
@@ -331,6 +361,45 @@ public class WalletRegistrationSession {
     return !status.isNonTerminal();
   }
 
+  /** Returns whether an older intent is recorded as receipt-timeout recovery evidence. */
+  public boolean hasReceiptTimeoutExecutionIntent(String executionIntentId) {
+    if (executionIntentId == null || executionIntentId.isBlank()) {
+      return false;
+    }
+    if (receiptTimeoutExecutionIntentIds == null || receiptTimeoutExecutionIntentIds.isBlank()) {
+      return false;
+    }
+    for (String recorded : receiptTimeoutExecutionIntentIds.split(",")) {
+      if (executionIntentId.equals(recorded)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Returns whether legacy receipt-timeout evidence is missing for the current latest intent. */
+  public boolean needsReceiptTimeoutExecutionIntentBackfill() {
+    return RECEIPT_TIMEOUT.equals(lastErrorCode)
+        && latestExecutionIntentId != null
+        && !latestExecutionIntentId.isBlank()
+        && !hasReceiptTimeoutExecutionIntent(latestExecutionIntentId);
+  }
+
+  /**
+   * Backfills receipt-timeout evidence for sessions created before the durable history column
+   * existed.
+   */
+  public WalletRegistrationSession backfillReceiptTimeoutExecutionIntent(LocalDateTime now) {
+    requireNow(now);
+    if (!needsReceiptTimeoutExecutionIntentBackfill()) {
+      return this;
+    }
+    return toBuilder()
+        .receiptTimeoutExecutionIntentIds(rememberReceiptTimeoutIntent(RECEIPT_TIMEOUT))
+        .updatedAt(now)
+        .build();
+  }
+
   private void requireExecutableStatus() {
     if (!canCreateApprovalIntent()) {
       throw new IllegalStateException("approval intent cannot be created from " + status);
@@ -352,9 +421,26 @@ public class WalletRegistrationSession {
 
   private void requireFinalizationFailureStatus() {
     if (status != WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
-        && !status.isConfirmedButNotFinalized()) {
+        && !status.isConfirmedButNotFinalized()
+        && !isReceiptTimeoutLateSuccessStatus()) {
       throw new IllegalStateException("session cannot record finalization failure from " + status);
     }
+  }
+
+  private boolean isReceiptTimeoutLateSuccessStatus() {
+    return (status == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || status == WalletRegistrationStatus.APPROVAL_FAILED)
+        && RECEIPT_TIMEOUT.equals(lastErrorCode);
+  }
+
+  private boolean canRecoverReplacedApprovalIntent(String executionIntentId) {
+    return hasReceiptTimeoutExecutionIntent(executionIntentId)
+        && (status == WalletRegistrationStatus.APPROVAL_REQUIRED
+            || status == WalletRegistrationStatus.APPROVAL_SIGNED
+            || status == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+            || status == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || status == WalletRegistrationStatus.APPROVAL_FAILED
+            || status.isConfirmedButNotFinalized());
   }
 
   private static void requireExecutionIntentId(String executionIntentId) {
@@ -371,6 +457,19 @@ public class WalletRegistrationSession {
 
   private int safeRetryCount() {
     return retryCount == null ? 0 : retryCount;
+  }
+
+  private String rememberReceiptTimeoutIntent(String errorCode) {
+    if (!RECEIPT_TIMEOUT.equals(errorCode)
+        || latestExecutionIntentId == null
+        || latestExecutionIntentId.isBlank()
+        || hasReceiptTimeoutExecutionIntent(latestExecutionIntentId)) {
+      return receiptTimeoutExecutionIntentIds;
+    }
+    if (receiptTimeoutExecutionIntentIds == null || receiptTimeoutExecutionIntentIds.isBlank()) {
+      return latestExecutionIntentId;
+    }
+    return receiptTimeoutExecutionIntentIds + "," + latestExecutionIntentId;
   }
 
   private static void validateIdentity(

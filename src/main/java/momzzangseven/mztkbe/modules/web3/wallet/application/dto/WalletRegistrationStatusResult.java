@@ -29,7 +29,7 @@ public record WalletRegistrationStatusResult(
       WalletRegistrationSession session,
       WalletApprovalExecutionStateView executionState,
       LocalDateTime now) {
-    WalletRegistrationStatus effectiveStatus = effectiveStatus(session, now);
+    WalletRegistrationStatus effectiveStatus = effectiveStatus(session, executionState, now);
     WalletApprovalExecutionWriteView web3 = recoverableWeb3(effectiveStatus, executionState);
     return from(session, effectiveStatus, executionState, web3);
   }
@@ -55,8 +55,8 @@ public record WalletRegistrationStatusResult(
         latestExecutionStatus,
         session.getApprovalExpiresAt(),
         transaction,
-        session.getLastErrorCode(),
-        session.getLastErrorReason(),
+        lastErrorCode(session, executionState),
+        lastErrorReason(session, executionState),
         signRequestUnavailableReason(executionState, web3),
         nextAction(effectiveStatus, executionState, web3),
         web3);
@@ -75,7 +75,16 @@ public record WalletRegistrationStatusResult(
   }
 
   private static WalletRegistrationStatus effectiveStatus(
-      WalletRegistrationSession session, LocalDateTime now) {
+      WalletRegistrationSession session,
+      WalletApprovalExecutionStateView executionState,
+      LocalDateTime now) {
+    if (now != null
+        && session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        && WalletRegistrationReceiptTimeout.isCurrent(executionState)) {
+      return WalletRegistrationReceiptTimeout.approvalTtlRemains(session, now)
+          ? WalletRegistrationStatus.APPROVAL_RETRYABLE
+          : WalletRegistrationStatus.APPROVAL_FAILED;
+    }
     if (now != null
         && session.getStatus().isPreSubmissionExpirable()
         && session.getApprovalExpiresAt() != null
@@ -83,6 +92,24 @@ public record WalletRegistrationStatusResult(
       return WalletRegistrationStatus.EXPIRED;
     }
     return session.getStatus();
+  }
+
+  private static String lastErrorCode(
+      WalletRegistrationSession session, WalletApprovalExecutionStateView executionState) {
+    if (session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        && WalletRegistrationReceiptTimeout.isCurrent(executionState)) {
+      return WalletRegistrationReceiptTimeout.ERROR_CODE;
+    }
+    return session.getLastErrorCode();
+  }
+
+  private static String lastErrorReason(
+      WalletRegistrationSession session, WalletApprovalExecutionStateView executionState) {
+    if (session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        && WalletRegistrationReceiptTimeout.isCurrent(executionState)) {
+      return WalletRegistrationReceiptTimeout.ERROR_REASON;
+    }
+    return session.getLastErrorReason();
   }
 
   private static String signRequestUnavailableReason(

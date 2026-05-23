@@ -15,7 +15,27 @@ public record QnaExecutionResumeViewResult(
     String actionType,
     ExecutionIntent executionIntent,
     Execution execution,
-    Transaction transaction) {
+    Transaction transaction,
+    String recoveryStatus,
+    String recoveryReason,
+    Boolean retryAllowed) {
+
+  public QnaExecutionResumeViewResult(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      Transaction transaction) {
+    this(
+        resource,
+        actionType,
+        executionIntent,
+        execution,
+        transaction,
+        recoveryStatus(transaction),
+        recoveryReason(transaction),
+        retryAllowed(transaction));
+  }
 
   public QnaExecutionResumeViewResult {
     if (resource == null) {
@@ -89,5 +109,21 @@ public record QnaExecutionResumeViewResult(
         throw new Web3InvalidInputException("transaction id/status must be provided together");
       }
     }
+  }
+
+  private static String recoveryStatus(Transaction transaction) {
+    return isUnconfirmed(transaction) ? "ONCHAIN_UNCERTAIN" : null;
+  }
+
+  private static String recoveryReason(Transaction transaction) {
+    return isUnconfirmed(transaction) ? "RECEIPT_TIMEOUT" : null;
+  }
+
+  private static Boolean retryAllowed(Transaction transaction) {
+    return isUnconfirmed(transaction) ? Boolean.FALSE : null;
+  }
+
+  private static boolean isUnconfirmed(Transaction transaction) {
+    return transaction != null && "UNCONFIRMED".equals(transaction.status());
   }
 }

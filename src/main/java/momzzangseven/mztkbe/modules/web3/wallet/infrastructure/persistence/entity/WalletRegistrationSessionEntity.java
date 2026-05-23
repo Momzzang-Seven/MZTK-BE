@@ -42,7 +42,22 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationS
           columnList = "wallet_address,status,created_at"),
       @Index(
           name = "idx_web3_wallet_registration_sessions_latest_tx",
-          columnList = "latest_transaction_id")
+          columnList = "latest_transaction_id"),
+      @Index(
+          name = "idx_web3_wallet_registration_sessions_user_created_id",
+          columnList = "user_id,created_at,id"),
+      @Index(
+          name = "idx_web3_wallet_registration_sessions_wallet_created_id",
+          columnList = "wallet_address,created_at,id"),
+      @Index(
+          name = "idx_web3_wallet_registration_sessions_user_id_desc",
+          columnList = "user_id,id"),
+      @Index(
+          name = "idx_web3_wallet_registration_sessions_wallet_id_desc",
+          columnList = "wallet_address,id"),
+      @Index(
+          name = "idx_web3_wallet_registration_sessions_status_updated_id",
+          columnList = "status,updated_at,id")
     })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -72,6 +87,9 @@ public class WalletRegistrationSessionEntity {
 
   @Column(name = "latest_execution_intent_id", length = 100)
   private String latestExecutionIntentId;
+
+  @Column(name = "receipt_timeout_execution_intent_ids", columnDefinition = "TEXT")
+  private String receiptTimeoutExecutionIntentIds;
 
   @Column(name = "latest_transaction_id")
   private Long latestTransactionId;

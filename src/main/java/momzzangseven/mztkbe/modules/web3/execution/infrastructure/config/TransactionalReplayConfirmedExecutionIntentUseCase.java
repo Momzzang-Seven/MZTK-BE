@@ -8,7 +8,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-final class TransactionalReplayConfirmedExecutionIntentUseCase
+class TransactionalReplayConfirmedExecutionIntentUseCase
     implements ReplayConfirmedExecutionIntentUseCase {
 
   private final ReplayConfirmedExecutionIntentService delegate;

@@ -75,7 +75,7 @@ public class WalletApprovalExecutionDraftBuilderAdapter
         WalletApprovalExecutionActionType.WALLET_ESCROW_APPROVE,
         request.requesterUserId(),
         null,
-        WalletApprovalRootIdempotencyKeyFactory.createForRegistration(request.registrationId()),
+        rootIdempotencyKey(request),
         payloadSerializer.hashHex(payload),
         payloadSerializer.serialize(payload),
         List.of(qnaCall, marketplaceCall),
@@ -87,6 +87,15 @@ public class WalletApprovalExecutionDraftBuilderAdapter
         null,
         null,
         expiresAt);
+  }
+
+  private String rootIdempotencyKey(WalletApprovalExecutionRequest request) {
+    if (request.retryAttemptNo() == null) {
+      return WalletApprovalRootIdempotencyKeyFactory.createForRegistration(
+          request.registrationId());
+    }
+    return WalletApprovalRootIdempotencyKeyFactory.createForRegistrationRetry(
+        request.registrationId(), request.retryAttemptNo());
   }
 
   private WalletApprovalExecutionDraftCall approveCall(String tokenAddress, String spenderAddress) {

@@ -5,6 +5,9 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -22,6 +25,8 @@ class WalletRegistrationFinalizationFailureRecorder {
   static final String FINALIZATION_FAILED = "FINALIZATION_FAILED";
 
   private final LockWalletRegistrationSessionPort lockSessionPort;
+  private final LoadWalletRegistrationSessionPort loadSessionPort;
+  private final AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   private final SaveWalletRegistrationSessionPort saveSessionPort;
   private final Clock appClock;
 
@@ -43,6 +48,12 @@ class WalletRegistrationFinalizationFailureRecorder {
       String errorReason,
       boolean localConflict) {
     try {
+      WalletRegistrationSession authoritySnapshot =
+          loadSessionPort.loadByPublicId(command.registrationId()).orElse(null);
+      if (authoritySnapshot == null) {
+        return;
+      }
+      authorityLockPort.lock(authoritySnapshot.getUserId(), authoritySnapshot.getWalletAddress());
       lockSessionPort
           .lockByPublicIdForUpdate(command.registrationId())
           .ifPresent(
@@ -62,20 +73,31 @@ class WalletRegistrationFinalizationFailureRecorder {
       String errorCode,
       String errorReason,
       boolean localConflict) {
-    if (session.getLatestExecutionIntentId() == null
-        || !session.getLatestExecutionIntentId().equals(command.executionIntentId())) {
+    boolean staleIntent = isStaleIntent(session, command.executionIntentId());
+    boolean recoveredStaleIntent =
+        staleIntent && canRecordRecoveredStaleIntent(session, command.executionIntentId());
+    if (staleIntent && !recoveredStaleIntent) {
       return;
     }
-    if (session.getStatus() == WalletRegistrationStatus.REGISTERED || session.isTerminal()) {
+    if (session.getStatus() == WalletRegistrationStatus.REGISTERED) {
       return;
     }
-    if (!isFinalizationFailureStatus(session)) {
+    if (session.isTerminal() && !isReceiptTimeoutLateSuccess(session) && !recoveredStaleIntent) {
+      return;
+    }
+    if (hasNewerAuthoritativeSession(session)) {
+      return;
+    }
+    if (!recoveredStaleIntent && !isFinalizationFailureStatus(session)) {
       return;
     }
 
     LocalDateTime now = LocalDateTime.now(appClock);
     WalletRegistrationSession confirmed =
-        session.markApprovalConfirmed(command.executionIntentId(), null, null, "CONFIRMED", now);
+        recoveredStaleIntent
+            ? session.markRecoveredApprovalConfirmed(command.executionIntentId(), "CONFIRMED", now)
+            : session.markApprovalConfirmed(
+                command.executionIntentId(), null, null, "CONFIRMED", now);
     WalletRegistrationSession failed =
         localConflict
             ? confirmed.markLocalConflict(errorCode, errorReason, now)
@@ -83,10 +105,39 @@ class WalletRegistrationFinalizationFailureRecorder {
     saveSessionPort.save(failed);
   }
 
+  private boolean isStaleIntent(WalletRegistrationSession session, String executionIntentId) {
+    return session.getLatestExecutionIntentId() == null
+        || !session.getLatestExecutionIntentId().equals(executionIntentId);
+  }
+
+  private boolean canRecordRecoveredStaleIntent(
+      WalletRegistrationSession session, String executionIntentId) {
+    return session.hasReceiptTimeoutExecutionIntent(executionIntentId)
+        && (session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED
+            || session.getStatus().isConfirmedButNotFinalized());
+  }
+
   private boolean isFinalizationFailureStatus(WalletRegistrationSession session) {
     return session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        || isReceiptTimeoutLateSuccess(session)
         || session.getStatus().isConfirmedButNotFinalized();
+  }
+
+  private boolean isReceiptTimeoutLateSuccess(WalletRegistrationSession session) {
+    return (session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED)
+        && WalletRegistrationReceiptTimeout.isRecordedOn(session);
+  }
+
+  private boolean hasNewerAuthoritativeSession(WalletRegistrationSession session) {
+    return session.getId() != null
+        && loadSessionPort.existsNewerByUserIdOrWalletAddress(
+            session.getUserId(), session.getWalletAddress(), session.getId());
   }
 }

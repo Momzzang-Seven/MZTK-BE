@@ -13,7 +13,19 @@ public record AnswerExecutionResumeView(
     String actionType,
     ExecutionIntent executionIntent,
     Execution execution,
-    Transaction transaction) {
+    Transaction transaction,
+    String recoveryStatus,
+    String recoveryReason,
+    Boolean retryAllowed) {
+
+  public AnswerExecutionResumeView(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      Transaction transaction) {
+    this(resource, actionType, executionIntent, execution, transaction, null, null, null);
+  }
 
   public record Resource(String type, String id, String status) {}
 

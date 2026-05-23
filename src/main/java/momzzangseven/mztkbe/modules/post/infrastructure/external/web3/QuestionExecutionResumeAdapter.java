@@ -51,6 +51,9 @@ public class QuestionExecutionResumeAdapter implements LoadQuestionExecutionResu
             : new QuestionExecutionResumeView.Transaction(
                 result.transaction().id(),
                 result.transaction().status(),
-                result.transaction().txHash()));
+                result.transaction().txHash()),
+        result.recoveryStatus(),
+        result.recoveryReason(),
+        result.retryAllowed());
   }
 }

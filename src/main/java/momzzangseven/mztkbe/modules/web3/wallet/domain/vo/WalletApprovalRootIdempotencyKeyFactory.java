@@ -12,4 +12,11 @@ public final class WalletApprovalRootIdempotencyKeyFactory {
     }
     return "wallet-registration-approval:" + registrationId.trim();
   }
+
+  public static String createForRegistrationRetry(String registrationId, int retryAttemptNo) {
+    if (retryAttemptNo <= 0) {
+      throw new Web3InvalidInputException("retryAttemptNo must be positive");
+    }
+    return createForRegistration(registrationId) + ":retry:" + retryAttemptNo;
+  }
 }
