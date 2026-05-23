@@ -31,4 +31,7 @@ public interface LoadReservationActionStatePort {
 
   List<MarketplaceReservationActionState> findExpiredAdminPreparingAttemptsWithLock(
       LocalDateTime now, int batchSize);
+
+  List<MarketplaceReservationActionState> findBoundAdminExecutionAttemptsForTerminalReplay(
+      int batchSize);
 }

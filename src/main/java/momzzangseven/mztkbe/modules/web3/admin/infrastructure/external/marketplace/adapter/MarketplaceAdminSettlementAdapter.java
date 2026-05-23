@@ -27,8 +27,10 @@ public class MarketplaceAdminSettlementAdapter
   public GetMarketplaceAdminSettlementReviewResult getSettlementReview(
       Long reservationId, boolean canEarlySettle) {
     return new GetMarketplaceAdminSettlementReviewResult(
-        calculateReviewUseCase.execute(
-            new CalculateMarketplaceAdminSettlementReviewQuery(reservationId, canEarlySettle)));
+        MarketplaceAdminReservationResultMapper.toReview(
+            calculateReviewUseCase.execute(
+                new CalculateMarketplaceAdminSettlementReviewQuery(
+                    reservationId, canEarlySettle))));
   }
 
   @Override
@@ -40,13 +42,14 @@ public class MarketplaceAdminSettlementAdapter
       boolean confirmEarlySettle,
       boolean canEarlySettle) {
     return new ForceMarketplaceAdminSettlementResult(
-        executeSettlementUseCase.execute(
-            new ExecuteMarketplaceAdminSettlementCommand(
-                operatorId,
-                reservationId,
-                MarketplaceAdminSettleReasonCode.valueOf(reasonCode.name()),
-                memo,
-                confirmEarlySettle,
-                canEarlySettle)));
+        MarketplaceAdminReservationResultMapper.toExecution(
+            executeSettlementUseCase.execute(
+                new ExecuteMarketplaceAdminSettlementCommand(
+                    operatorId,
+                    reservationId,
+                    MarketplaceAdminSettleReasonCode.valueOf(reasonCode.name()),
+                    memo,
+                    confirmEarlySettle,
+                    canEarlySettle))));
   }
 }

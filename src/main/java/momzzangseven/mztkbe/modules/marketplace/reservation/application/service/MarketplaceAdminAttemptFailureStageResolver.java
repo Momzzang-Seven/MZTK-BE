@@ -58,7 +58,9 @@ public final class MarketplaceAdminAttemptFailureStageResolver {
       return null;
     }
     MarketplaceAdminReviewValidationCode code = parse(errorCode);
-    if (status == ReservationActionStateStatus.TERMINATED && code != null) {
+    if (status == ReservationActionStateStatus.TERMINATED
+        && errorCode != null
+        && !errorCode.isBlank()) {
       return MarketplaceAdminAttemptFailureStage.EXECUTION_TERMINATED;
     }
     if (status == ReservationActionStateStatus.PREPARATION_FAILED) {

@@ -15,6 +15,7 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationEscrowOrderUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationCreateIdempotencyPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
@@ -68,6 +69,7 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private RecordTrainerStrikePort recordTrainerStrikePort;
   @Mock private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
+  @Mock private GetReservationEscrowOrderUseCase getReservationEscrowOrderUseCase;
   @Mock private LoadExecutionTransactionPort loadExecutionTransactionPort;
   @Mock private LoadReservationCreateIdempotencyPort loadReservationCreateIdempotencyPort;
   @Mock private SaveReservationCreateIdempotencyPort saveReservationCreateIdempotencyPort;
@@ -89,7 +91,7 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     hookService.setTransactionPort(ReservationTestTransactionPort.direct());
     sut = new MarketplaceEscrowExecutionActionHandlerAdapter(objectMapper, hookService);
     sut.setLoadExecutionTransactionPort(loadExecutionTransactionPort);
-    sut.setLoadReservationEscrowOrderPort(loadReservationEscrowOrderPort);
+    sut.setGetReservationEscrowOrderUseCase(getReservationEscrowOrderUseCase);
   }
 
   @Test
@@ -590,7 +592,7 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
             Optional.of(
                 new ExecutionTransactionSummary(
                     60L, ExecutionTransactionStatus.FAILED_ONCHAIN, txHash)));
-    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+    given(getReservationEscrowOrderUseCase.getOrder(ORDER_KEY))
         .willReturn(order(ReservationEscrowOrderView.STATE_CREATED, 1_900_000_000L));
 
     var evidence =
@@ -618,7 +620,7 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
       int chainState, String expectedEvidenceState) throws Exception {
     ExecutionIntent intent =
         intent("intent-admin-refund", ExecutionActionType.MARKETPLACE_ADMIN_REFUND, adminPayload());
-    given(loadReservationEscrowOrderPort.getOrder(ORDER_KEY))
+    given(getReservationEscrowOrderUseCase.getOrder(ORDER_KEY))
         .willReturn(order(chainState, 1_900_000_000L));
 
     var evidence =
@@ -635,7 +637,7 @@ class MarketplaceEscrowExecutionActionHandlerAdapterTest {
     ExecutionIntent intent =
         intent("intent-admin-refund", ExecutionActionType.MARKETPLACE_ADMIN_REFUND, adminPayload());
     willThrow(new IllegalStateException("rpc unavailable"))
-        .given(loadReservationEscrowOrderPort)
+        .given(getReservationEscrowOrderUseCase)
         .getOrder(ORDER_KEY);
 
     var evidence =

@@ -11,7 +11,9 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverExpiredMarketplaceAdminExecutionAttemptResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverExpiredMarketplaceAdminExecutionAttemptUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -58,14 +60,20 @@ class MarketplaceAdminExecutionAttemptMaintenanceSchedulerTest {
   void runDelegatesToRecoveryUseCaseWithConfiguredBatchSize() {
     RecoverExpiredMarketplaceAdminExecutionAttemptUseCase useCase =
         mock(RecoverExpiredMarketplaceAdminExecutionAttemptUseCase.class);
+    ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase reconcileUseCase =
+        mock(ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class);
     when(useCase.execute(any()))
         .thenReturn(new RecoverExpiredMarketplaceAdminExecutionAttemptResult(10, 7, 3, 0));
+    when(reconcileUseCase.execute(any()))
+        .thenReturn(new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(0, 0, 0, 0));
     MarketplaceAdminExecutionAttemptMaintenanceScheduler scheduler =
-        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(useCase, clock, 25);
+        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(
+            useCase, reconcileUseCase, clock, 25);
 
     scheduler.run();
 
     verify(useCase).execute(argThat(command -> command.batchSize() == 25));
+    verify(reconcileUseCase).execute(argThat(command -> command.batchSize() == 25));
   }
 
   @Test
@@ -73,12 +81,17 @@ class MarketplaceAdminExecutionAttemptMaintenanceSchedulerTest {
   void runRepeatsUntilBatchIsDrained() {
     RecoverExpiredMarketplaceAdminExecutionAttemptUseCase useCase =
         mock(RecoverExpiredMarketplaceAdminExecutionAttemptUseCase.class);
+    ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase reconcileUseCase =
+        mock(ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class);
     when(useCase.execute(any()))
         .thenReturn(
             new RecoverExpiredMarketplaceAdminExecutionAttemptResult(25, 20, 5, 0),
             new RecoverExpiredMarketplaceAdminExecutionAttemptResult(2, 2, 0, 0));
+    when(reconcileUseCase.execute(any()))
+        .thenReturn(new ReconcileMarketplaceAdminTerminalExecutionAttemptResult(0, 0, 0, 0));
     MarketplaceAdminExecutionAttemptMaintenanceScheduler scheduler =
-        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(useCase, clock, 25);
+        new MarketplaceAdminExecutionAttemptMaintenanceScheduler(
+            useCase, reconcileUseCase, clock, 25);
 
     scheduler.run();
 
@@ -91,6 +104,9 @@ class MarketplaceAdminExecutionAttemptMaintenanceSchedulerTest {
         .withBean(
             RecoverExpiredMarketplaceAdminExecutionAttemptUseCase.class,
             () -> mock(RecoverExpiredMarketplaceAdminExecutionAttemptUseCase.class))
+        .withBean(
+            ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class,
+            () -> mock(ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase.class))
         .withBean(Clock.class, () -> clock)
         .withPropertyValues("web3.marketplace.admin.recovery.batch-size=25");
   }

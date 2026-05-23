@@ -16,8 +16,10 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceSchedulerAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ExecuteMarketplaceSchedulerAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationEscrowOrderUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverExpiredMarketplaceAdminExecutionAttemptUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverReservationEscrowUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
@@ -46,6 +48,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayTerminatedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationPostCommitPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RunReservationTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationActionStatePort;
@@ -70,9 +73,11 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ExecuteMarketplaceSchedulerAdminRefundService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ExecuteMarketplaceSchedulerAdminSettlementService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.GetReservationDetailService;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.GetReservationEscrowOrderService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.GetTrainerReservationsService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.GetUserReservationsService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.MarketplaceAdminExecutionOrchestrator;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.ReconcileMarketplaceAdminTerminalExecutionAttemptService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.RecoverExpiredMarketplaceAdminExecutionAttemptService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.RecoverReservationEscrowService;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.service.RejectReservationService;
@@ -83,6 +88,12 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ReservationApplicationServiceConfig {
+
+  @Bean
+  GetReservationEscrowOrderUseCase getReservationEscrowOrderUseCase(
+      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort) {
+    return new GetReservationEscrowOrderService(loadReservationEscrowOrderPort);
+  }
 
   @Bean
   CalculateMarketplaceAdminRefundReviewUseCase calculateMarketplaceAdminRefundReviewUseCase(
@@ -222,6 +233,16 @@ public class ReservationApplicationServiceConfig {
         loadReservationEscrowPort,
         saveReservationEscrowPort,
         transactionPort);
+  }
+
+  @Bean
+  @ConditionalOnMarketplaceAdminEnabled
+  ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase
+      reconcileMarketplaceAdminTerminalExecutionAttemptUseCase(
+          LoadReservationActionStatePort loadReservationActionStatePort,
+          ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort) {
+    return new ReconcileMarketplaceAdminTerminalExecutionAttemptService(
+        loadReservationActionStatePort, replayTerminatedReservationExecutionPort);
   }
 
   @Bean

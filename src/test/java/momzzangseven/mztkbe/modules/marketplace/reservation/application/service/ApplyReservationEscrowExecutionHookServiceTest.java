@@ -292,12 +292,12 @@ class ApplyReservationEscrowExecutionHookServiceTest {
     InOrder lockOrder =
         inOrder(loadReservationActionStatePort, loadReservationPort, loadReservationEscrowPort);
     lockOrder
-        .verify(loadReservationActionStatePort)
-        .findByExecutionIntentPublicIdWithLock("intent-action");
-    lockOrder
         .verify(loadReservationPort)
         .findByCurrentExecutionIntentPublicIdWithLock("intent-action");
     lockOrder.verify(loadReservationEscrowPort).findByReservationIdWithLock(reservation.getId());
+    lockOrder
+        .verify(loadReservationActionStatePort)
+        .findByExecutionIntentPublicIdWithLock("intent-action");
   }
 
   @Test
@@ -933,6 +933,8 @@ class ApplyReservationEscrowExecutionHookServiceTest {
         .willReturn(Optional.empty());
     given(loadReservationActionStatePort.findByIdWithLock(20L))
         .willReturn(Optional.of(mismatchedActionState));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(adminRefundPendingReservation()));
 
     service.afterExecutionTerminated(
         new ReservationEscrowExecutionTerminatedCommand(
@@ -947,7 +949,6 @@ class ApplyReservationEscrowExecutionHookServiceTest {
             "TRAINER_TIMEOUT",
             evidence("0xdead", true, "FAILED_ONCHAIN", "REVERTED", "CREATED", null)));
 
-    then(loadReservationPort).shouldHaveNoInteractions();
     then(saveReservationPort).shouldHaveNoInteractions();
     then(saveReservationActionStatePort).shouldHaveNoInteractions();
   }
@@ -965,12 +966,13 @@ class ApplyReservationEscrowExecutionHookServiceTest {
         .willReturn(Optional.empty());
     given(loadReservationActionStatePort.findByIdWithLock(20L))
         .willReturn(Optional.of(mismatchedActionState));
+    given(loadReservationPort.findByCurrentExecutionIntentPublicIdWithLock("intent-action"))
+        .willReturn(Optional.of(reservation));
 
     service.afterExecutionConfirmed(
         confirmedCommand(
             "intent-action", "MARKETPLACE_ADMIN_REFUND", "ADMIN", reservation, "attempt-1", 20L));
 
-    then(loadReservationPort).shouldHaveNoInteractions();
     then(saveReservationPort).shouldHaveNoInteractions();
     then(saveReservationActionStatePort).shouldHaveNoInteractions();
   }

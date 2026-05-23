@@ -12,14 +12,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminEscrowReviewResult;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionAuthorityView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionPhase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionResult;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminParticipantView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminTokenView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.web3.EscrowTransactionAdapter;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceMarketplaceAdminRefundResult;
@@ -29,6 +21,8 @@ import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdm
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminRefundReviewResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminSettlementReviewQuery;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetMarketplaceAdminSettlementReviewResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminEscrowReviewView;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminExecutionView;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminRefundReason;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminSettlementReason;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceMarketplaceAdminRefundUseCase;
@@ -291,48 +285,50 @@ class MarketplaceAdminEscrowControllerTest {
         .SecurityMockMvcRequestPostProcessors.securityContext(context);
   }
 
-  private MarketplaceAdminEscrowReviewResult sampleReview() {
-    return new MarketplaceAdminEscrowReviewResult(
+  private MarketplaceAdminEscrowReviewView sampleReview() {
+    return new MarketplaceAdminEscrowReviewView(
         77L,
         true,
         null,
         null,
-        ReservationStatus.APPROVED,
-        ReservationEscrowStatus.LOCKED,
-        new MarketplaceAdminParticipantView(10L, "0x1111111111111111111111111111111111111111"),
-        new MarketplaceAdminParticipantView(20L, "0x2222222222222222222222222222222222222222"),
-        new MarketplaceAdminTokenView(
+        "APPROVED",
+        "LOCKED",
+        new MarketplaceAdminEscrowReviewView.Participant(
+            10L, "0x1111111111111111111111111111111111111111"),
+        new MarketplaceAdminEscrowReviewView.Participant(
+            20L, "0x2222222222222222222222222222222222222222"),
+        new MarketplaceAdminEscrowReviewView.Token(
             "0x3333333333333333333333333333333333333333", java.math.BigInteger.TEN, "MZT"),
         LocalDateTime.of(2026, 1, 2, 3, 4, 5),
         LocalDateTime.of(2026, 1, 2, 3, 4, 6),
         12L,
-        MarketplaceAdminExecutionPhase.IDLE,
+        "IDLE",
         2_000L,
         "/admin/web3/marketplace/reservations/77/refund-review",
         null,
-        MarketplaceAdminExecutionAuthorityView.serverRelayerOnly(),
+        new MarketplaceAdminEscrowReviewView.Authority(
+            false, "SERVER_RELAYER_ONLY", false, null, false, "UNCHECKED", false, false),
         null,
         null,
         List.of(),
         List.of());
   }
 
-  private MarketplaceAdminExecutionResult sampleExecution(String actionType) {
-    return new MarketplaceAdminExecutionResult(
+  private MarketplaceAdminExecutionView sampleExecution(String actionType) {
+    return new MarketplaceAdminExecutionView(
         77L,
         actionType,
         "0xorder",
         actionType.equals("MARKETPLACE_ADMIN_REFUND")
-            ? ReservationStatus.ADMIN_REFUND_PENDING
-            : ReservationStatus.ADMIN_SETTLE_PENDING,
+            ? "ADMIN_REFUND_PENDING"
+            : "ADMIN_SETTLE_PENDING",
         actionType.equals("MARKETPLACE_ADMIN_REFUND")
-            ? ReservationEscrowStatus.ADMIN_REFUND_PENDING
-            : ReservationEscrowStatus.ADMIN_SETTLE_PENDING,
-        new MarketplaceAdminExecutionResult.ExecutionIntent(
+            ? "ADMIN_REFUND_PENDING"
+            : "ADMIN_SETTLE_PENDING",
+        new MarketplaceAdminExecutionView.ExecutionIntent(
             "intent-1", "AWAITING_SIGNATURE", LocalDateTime.of(2026, 1, 2, 3, 4, 5)),
-        new MarketplaceAdminExecutionResult.Execution(
-            "EIP1559", false, MarketplaceAdminExecutionAuthorityView.SERVER_RELAYER_ONLY),
-        MarketplaceAdminExecutionPhase.QUEUED_FOR_SERVER_RELAYER,
+        new MarketplaceAdminExecutionView.Execution("EIP1559", false, "SERVER_RELAYER_ONLY"),
+        "QUEUED_FOR_SERVER_RELAYER",
         2_000L,
         "/admin/web3/marketplace/reservations/77/refund-review",
         false);

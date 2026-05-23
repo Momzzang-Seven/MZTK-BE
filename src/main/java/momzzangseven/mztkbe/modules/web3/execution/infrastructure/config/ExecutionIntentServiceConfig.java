@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayTerminatedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
@@ -44,6 +45,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ReplayConfirmedExecutionIntentService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.ReplayTerminatedExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecutionTerminationHookService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
@@ -363,5 +365,16 @@ public class ExecutionIntentServiceConfig {
             executionActionHandlerPorts,
             appClock);
     return new TransactionalReplayConfirmedExecutionIntentUseCase(delegate, transactionManager);
+  }
+
+  @Bean
+  ReplayTerminatedExecutionIntentUseCase replayTerminatedExecutionIntentUseCase(
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunExecutionHookTransactionPort runExecutionHookTransactionPort) {
+    return new ReplayTerminatedExecutionIntentService(
+        executionIntentPersistencePort,
+        executionActionHandlerPorts,
+        runExecutionHookTransactionPort);
   }
 }

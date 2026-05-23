@@ -27,8 +27,9 @@ public class MarketplaceAdminRefundAdapter
   public GetMarketplaceAdminRefundReviewResult getRefundReview(
       Long reservationId, boolean canManualRefund) {
     return new GetMarketplaceAdminRefundReviewResult(
-        calculateReviewUseCase.execute(
-            new CalculateMarketplaceAdminRefundReviewQuery(reservationId, canManualRefund)));
+        MarketplaceAdminReservationResultMapper.toReview(
+            calculateReviewUseCase.execute(
+                new CalculateMarketplaceAdminRefundReviewQuery(reservationId, canManualRefund))));
   }
 
   @Override
@@ -40,13 +41,14 @@ public class MarketplaceAdminRefundAdapter
       boolean confirmManualRefund,
       boolean canManualRefund) {
     return new ForceMarketplaceAdminRefundResult(
-        executeRefundUseCase.execute(
-            new ExecuteMarketplaceAdminRefundCommand(
-                operatorId,
-                reservationId,
-                MarketplaceAdminRefundReasonCode.valueOf(reasonCode.name()),
-                memo,
-                confirmManualRefund,
-                canManualRefund)));
+        MarketplaceAdminReservationResultMapper.toExecution(
+            executeRefundUseCase.execute(
+                new ExecuteMarketplaceAdminRefundCommand(
+                    operatorId,
+                    reservationId,
+                    MarketplaceAdminRefundReasonCode.valueOf(reasonCode.name()),
+                    memo,
+                    confirmManualRefund,
+                    canManualRefund))));
   }
 }

@@ -103,6 +103,17 @@ public interface MarketplaceReservationActionStateJpaRepository
       @Param("now") LocalDateTime now, Pageable pageable);
 
   @Query(
+      """
+      SELECT a FROM MarketplaceReservationActionStateEntity a
+      WHERE a.status = 'INTENT_BOUND'
+        AND a.executionIntentPublicId IS NOT NULL
+        AND a.actionType IN ('ADMIN_REFUND', 'ADMIN_SETTLE')
+      ORDER BY a.updatedAt ASC, a.id ASC
+      """)
+  List<MarketplaceReservationActionStateEntity> findBoundAdminExecutionAttemptsForTerminalReplay(
+      Pageable pageable);
+
+  @Query(
       "SELECT a.executionIntentPublicId FROM MarketplaceReservationActionStateEntity a "
           + "WHERE a.executionIntentPublicId IN :publicIds "
           + "AND a.status IN :statuses")

@@ -403,6 +403,8 @@ public record MarketplaceEscrowExecutionPayload(
           callTarget,
           callData,
           tokenMovement,
+          pendingAttemptToken,
+          actionStateId,
           rootIdempotencyKey);
     }
     return new MarketplaceEscrowExecutionPayload(
@@ -485,5 +487,7 @@ public record MarketplaceEscrowExecutionPayload(
       String callTarget,
       String callData,
       MarketplaceTokenMovement tokenMovement,
+      String pendingAttemptToken,
+      Long actionStateId,
       String rootIdempotencyKey) {}
 }

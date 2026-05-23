@@ -13,7 +13,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Rese
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowExecutionTerminatedCommand.ReservationEscrowExecutionTerminationEvidence;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationEscrowOrderView;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApplyReservationEscrowExecutionHookUseCase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationEscrowOrderPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationEscrowOrderUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTerminationEvidenceView;
@@ -50,7 +50,7 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
   private final ApplyReservationEscrowExecutionHookUseCase
       applyReservationEscrowExecutionHookUseCase;
   @Nullable private LoadExecutionTransactionPort loadExecutionTransactionPort;
-  @Nullable private LoadReservationEscrowOrderPort loadReservationEscrowOrderPort;
+  @Nullable private GetReservationEscrowOrderUseCase getReservationEscrowOrderUseCase;
 
   @Autowired(required = false)
   void setLoadExecutionTransactionPort(LoadExecutionTransactionPort loadExecutionTransactionPort) {
@@ -58,9 +58,9 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
   }
 
   @Autowired(required = false)
-  void setLoadReservationEscrowOrderPort(
-      LoadReservationEscrowOrderPort loadReservationEscrowOrderPort) {
-    this.loadReservationEscrowOrderPort = loadReservationEscrowOrderPort;
+  void setGetReservationEscrowOrderUseCase(
+      GetReservationEscrowOrderUseCase getReservationEscrowOrderUseCase) {
+    this.getReservationEscrowOrderUseCase = getReservationEscrowOrderUseCase;
   }
 
   @Override
@@ -200,12 +200,12 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
     if (!isAdminAction(payload.actionType())) {
       return new ChainEvidence(null, null);
     }
-    if (loadReservationEscrowOrderPort == null) {
+    if (getReservationEscrowOrderUseCase == null) {
       return new ChainEvidence("UNKNOWN", "CHAIN_ORDER_EVIDENCE_UNAVAILABLE");
     }
     try {
       ReservationEscrowOrderView order =
-          loadReservationEscrowOrderPort.getOrder(payload.orderKey());
+          getReservationEscrowOrderUseCase.getOrder(payload.orderKey());
       if (order == null || order.isAbsent()) {
         return new ChainEvidence("ABSENT", null);
       }

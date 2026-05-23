@@ -70,15 +70,29 @@ class MarketplaceEscrowExecutionPayloadTest {
   }
 
   @Test
-  @DisplayName("admin payload는 memo를 trim해 저장하고 idempotency view에서는 provenance/attempt 필드를 제외한다")
-  void adminPayload_idempotencyViewExcludesProvenanceAndAttemptFields() {
+  @DisplayName("admin payload는 memo를 trim해 저장하고 idempotency view에서는 provenance 필드를 제외한다")
+  void adminPayload_idempotencyViewExcludesProvenanceFields() {
     MarketplaceEscrowExecutionPayload first =
         adminPayload(901L, "attempt-1", 77L, "scheduler-1", "  evidence memo  ");
     MarketplaceEscrowExecutionPayload second =
-        adminPayload(902L, "attempt-2", 88L, "scheduler-2", "changed memo");
+        adminPayload(901L, "attempt-1", 88L, "scheduler-2", "changed memo");
 
     assertThat(first.memo()).isEqualTo("evidence memo");
     assertThat(first.idempotencyView()).isEqualTo(second.idempotencyView());
+  }
+
+  @Test
+  @DisplayName("admin payload idempotency view는 hook 매칭용 attempt/actionState 차이를 포함한다")
+  void adminPayload_idempotencyViewIncludesHookMatchingAttemptFields() {
+    MarketplaceEscrowExecutionPayload first =
+        adminPayload(901L, "attempt-1", 77L, "scheduler-1", "memo");
+    MarketplaceEscrowExecutionPayload differentAttempt =
+        adminPayload(901L, "attempt-2", 77L, "scheduler-1", "memo");
+    MarketplaceEscrowExecutionPayload differentActionState =
+        adminPayload(902L, "attempt-1", 77L, "scheduler-1", "memo");
+
+    assertThat(first.idempotencyView()).isNotEqualTo(differentAttempt.idempotencyView());
+    assertThat(first.idempotencyView()).isNotEqualTo(differentActionState.idempotencyView());
   }
 
   @Test

@@ -303,7 +303,8 @@ public class ApplyReservationEscrowExecutionHookService
     return switch (command.terminalStatus()) {
       case "EXPIRED", "CANCELED" ->
           !evidence.hasTxHash() && CHAIN_CREATED.equals(evidence.chainOrderState());
-      case "NONCE_STALE" -> CHAIN_CREATED.equals(evidence.chainOrderState());
+      case "NONCE_STALE" ->
+          !evidence.hasTxHash() && CHAIN_CREATED.equals(evidence.chainOrderState());
       case "FAILED_ONCHAIN" ->
           RECEIPT_REVERTED.equals(evidence.receiptStatus())
               && CHAIN_CREATED.equals(evidence.chainOrderState());
@@ -366,6 +367,16 @@ public class ApplyReservationEscrowExecutionHookService
       String pendingAttemptToken,
       Long fallbackReservationId,
       boolean requireBoundIntent) {
+    Reservation reservation =
+        loadReservationPort
+            .findByCurrentExecutionIntentPublicIdWithLock(executionIntentPublicId)
+            .or(() -> loadReservationPort.findByIdWithLock(fallbackReservationId))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "marketplace reservation not found for intentId="
+                            + executionIntentPublicId));
+    lockEscrowProjectionForHook(reservation.getId());
     java.util.Optional<MarketplaceReservationActionState> actionState =
         lockActionStateForHook(
             executionIntentPublicId, actionStateId, pendingAttemptToken, requireBoundIntent);
@@ -377,28 +388,9 @@ public class ApplyReservationEscrowExecutionHookService
             actionStateId);
         return null;
       }
-      Reservation reservation =
-          loadReservationPort
-              .findByCurrentExecutionIntentPublicIdWithLock(executionIntentPublicId)
-              .or(() -> loadReservationPort.findByIdWithLock(fallbackReservationId))
-              .orElseThrow(
-                  () ->
-                      new IllegalStateException(
-                          "marketplace reservation not found for intentId="
-                              + executionIntentPublicId));
       return new LockedAdminHookState(null, reservation);
     }
     MarketplaceReservationActionState lockedActionState = actionState.get();
-    Reservation reservation =
-        loadReservationPort
-            .findByCurrentExecutionIntentPublicIdWithLock(executionIntentPublicId)
-            .or(() -> loadReservationPort.findByIdWithLock(lockedActionState.getReservationId()))
-            .or(() -> loadReservationPort.findByIdWithLock(fallbackReservationId))
-            .orElseThrow(
-                () ->
-                    new IllegalStateException(
-                        "marketplace reservation not found for intentId="
-                            + executionIntentPublicId));
     if (!actionStateMatches(
         lockedActionState,
         reservation,
@@ -413,6 +405,12 @@ public class ApplyReservationEscrowExecutionHookService
       return null;
     }
     return new LockedAdminHookState(lockedActionState, reservation);
+  }
+
+  private void lockEscrowProjectionForHook(Long reservationId) {
+    if (loadReservationEscrowPort != null) {
+      loadReservationEscrowPort.findByReservationIdWithLock(reservationId);
+    }
   }
 
   private java.util.Optional<MarketplaceReservationActionState> lockActionStateForHook(

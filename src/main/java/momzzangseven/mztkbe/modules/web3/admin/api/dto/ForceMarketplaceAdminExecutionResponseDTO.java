@@ -1,26 +1,23 @@
 package momzzangseven.mztkbe.modules.web3.admin.api.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionPhase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionResult;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminExecutionView;
 
 public record ForceMarketplaceAdminExecutionResponseDTO(
     Long reservationId,
     String actionType,
     String orderKey,
-    ReservationStatus reservationStatus,
-    ReservationEscrowStatus escrowStatus,
-    MarketplaceAdminExecutionResult.ExecutionIntent executionIntent,
-    MarketplaceAdminExecutionResult.Execution execution,
-    MarketplaceAdminExecutionPhase adminExecutionPhase,
+    String reservationStatus,
+    String escrowStatus,
+    MarketplaceAdminExecutionView.ExecutionIntent executionIntent,
+    MarketplaceAdminExecutionView.Execution execution,
+    String adminExecutionPhase,
     Long nextPollAfterMs,
     String pollingEndpoint,
     boolean existing) {
 
   public static ForceMarketplaceAdminExecutionResponseDTO from(
-      MarketplaceAdminExecutionResult result) {
+      MarketplaceAdminExecutionView result) {
     if (result == null) {
       throw new Web3InvalidInputException("result is required");
     }

@@ -3,43 +3,33 @@ package momzzangseven.mztkbe.modules.web3.admin.api.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminEscrowReviewResult;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionAttemptView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionAuthorityView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminExecutionPhase;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminParticipantView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReasonReviewOption;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationCode;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminReviewValidationItem;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.MarketplaceAdminTokenView;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarketplaceAdminEscrowReviewView;
 
 public record MarketplaceAdminEscrowReviewResponseDTO(
     Long reservationId,
     boolean processable,
-    MarketplaceAdminReviewValidationCode baseBlockingCode,
+    String baseBlockingCode,
     String blockingReason,
-    ReservationStatus reservationStatus,
-    ReservationEscrowStatus escrowStatus,
-    MarketplaceAdminParticipantView buyer,
-    MarketplaceAdminParticipantView trainer,
-    MarketplaceAdminTokenView token,
+    String reservationStatus,
+    String escrowStatus,
+    MarketplaceAdminEscrowReviewView.Participant buyer,
+    MarketplaceAdminEscrowReviewView.Participant trainer,
+    MarketplaceAdminEscrowReviewView.Token token,
     LocalDateTime reviewedAt,
     LocalDateTime chainCheckedAt,
     Long reservationVersion,
-    MarketplaceAdminExecutionPhase adminExecutionPhase,
+    String adminExecutionPhase,
     Long nextPollAfterMs,
     String pollingEndpoint,
     String txHash,
-    MarketplaceAdminExecutionAuthorityView authority,
-    MarketplaceAdminExecutionAttemptView activeExecution,
-    MarketplaceAdminExecutionAttemptView lastAttempt,
-    List<MarketplaceAdminReviewValidationItem> baseValidationItems,
-    List<MarketplaceAdminReasonReviewOption> reasonOptions) {
+    MarketplaceAdminEscrowReviewView.Authority authority,
+    MarketplaceAdminEscrowReviewView.Attempt activeExecution,
+    MarketplaceAdminEscrowReviewView.Attempt lastAttempt,
+    List<MarketplaceAdminEscrowReviewView.ValidationItem> baseValidationItems,
+    List<MarketplaceAdminEscrowReviewView.ReasonOption> reasonOptions) {
 
   public static MarketplaceAdminEscrowReviewResponseDTO from(
-      MarketplaceAdminEscrowReviewResult result) {
+      MarketplaceAdminEscrowReviewView result) {
     if (result == null) {
       throw new Web3InvalidInputException("result is required");
     }
@@ -47,7 +37,7 @@ public record MarketplaceAdminEscrowReviewResponseDTO(
         result.reservationId(),
         result.processable(),
         result.baseBlockingCode(),
-        result.baseBlockingReason(),
+        result.blockingReason(),
         result.reservationStatus(),
         result.escrowStatus(),
         result.buyer(),

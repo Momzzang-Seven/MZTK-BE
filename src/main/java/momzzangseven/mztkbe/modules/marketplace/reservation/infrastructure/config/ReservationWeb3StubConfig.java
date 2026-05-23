@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrecheckReservationPurchasePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.PrepareReservationEscrowExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayTerminatedReservationExecutionPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -98,6 +99,13 @@ public class ReservationWeb3StubConfig {
 
   @Bean
   ReplayConfirmedReservationExecutionPort disabledReplayConfirmedReservationExecutionPort() {
+    return (executionIntentId, expectedActionType) -> {
+      throw new MarketplaceWeb3DisabledException();
+    };
+  }
+
+  @Bean
+  ReplayTerminatedReservationExecutionPort disabledReplayTerminatedReservationExecutionPort() {
     return (executionIntentId, expectedActionType) -> {
       throw new MarketplaceWeb3DisabledException();
     };

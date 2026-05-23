@@ -221,10 +221,6 @@ public class MarketplaceAdminExecutionOrchestrator {
       String reasonCode,
       String memo,
       Long reservationId) {
-    MarketplaceReservationActionState latest =
-        loadReservationActionStatePort
-            .findLatestByReservationIdWithLock(reservationId)
-            .orElse(null);
     Reservation reservation =
         loadReservationPort
             .findByIdWithLock(reservationId)
@@ -237,6 +233,10 @@ public class MarketplaceAdminExecutionOrchestrator {
                     new MarketplaceReservationStateException(
                         ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
                         "marketplace reservation escrow projection is required"));
+    MarketplaceReservationActionState latest =
+        loadReservationActionStatePort
+            .findLatestByReservationIdWithLock(reservationId)
+            .orElse(null);
     validateBaseExecutable(action, reservation, latest);
     validateReasonWindow(action, reasonCode, reservation);
 
@@ -303,14 +303,6 @@ public class MarketplaceAdminExecutionOrchestrator {
 
   private MarketplaceAdminExecutionResult bindPhaseC(
       AdminPhaseA phaseA, ReservationAdminExecutionDraft draft, String pollingSuffix) {
-    MarketplaceReservationActionState actionState =
-        loadReservationActionStatePort
-            .findByIdWithLock(phaseA.actionState().getId())
-            .orElseThrow(
-                () ->
-                    new MarketplaceReservationStateException(
-                        ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
-                        "admin action state disappeared before bind"));
     Reservation reservation =
         loadReservationPort
             .findByIdWithLock(phaseA.reservation().getId())
@@ -323,6 +315,14 @@ public class MarketplaceAdminExecutionOrchestrator {
                     new MarketplaceReservationStateException(
                         ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
                         "marketplace reservation escrow projection is required"));
+    MarketplaceReservationActionState actionState =
+        loadReservationActionStatePort
+            .findByIdWithLock(phaseA.actionState().getId())
+            .orElseThrow(
+                () ->
+                    new MarketplaceReservationStateException(
+                        ErrorCode.MARKETPLACE_ACTIVE_EXECUTION_CONFLICT,
+                        "admin action state disappeared before bind"));
     validatePreparedSnapshot(phaseA, actionState, reservation, escrow);
 
     SubmitMarketplaceAdminEscrowResult submitted = submitExecutionPort.submit(draft);
@@ -369,6 +369,12 @@ public class MarketplaceAdminExecutionOrchestrator {
       AdminPhaseA phaseA, ReservationActionStateStatus terminalStatus, RuntimeException cause) {
     transactionPort.requiresNew(
         () -> {
+          Reservation reservation =
+              loadReservationPort.findByIdWithLock(phaseA.reservation().getId()).orElse(null);
+          MarketplaceReservationEscrow escrow =
+              loadReservationEscrowPort
+                  .findByReservationIdWithLock(phaseA.reservation().getId())
+                  .orElse(null);
           MarketplaceReservationActionState actionState =
               loadReservationActionStatePort
                   .findByIdWithLock(phaseA.actionState().getId())
@@ -379,9 +385,9 @@ public class MarketplaceAdminExecutionOrchestrator {
             return null;
           }
           if (cause instanceof AdminPhaseBChainMismatchException mismatch) {
-            syncAuthoritativePhaseBOutcome(actionState, mismatch.inspection());
+            syncAuthoritativePhaseBOutcome(actionState, mismatch.inspection(), reservation, escrow);
           } else {
-            rollbackUnboundPreparation(phaseA, actionState);
+            rollbackUnboundPreparation(actionState, reservation, escrow);
           }
           saveReservationActionStatePort.save(
               actionState.toBuilder()
@@ -397,38 +403,38 @@ public class MarketplaceAdminExecutionOrchestrator {
   }
 
   private void rollbackUnboundPreparation(
-      AdminPhaseA phaseA, MarketplaceReservationActionState actionState) {
-    loadReservationPort
-        .findByIdWithLock(phaseA.reservation().getId())
-        .ifPresent(reservation -> saveReservationPort.save(reservation.rollbackToPriorState()));
-    loadReservationEscrowPort
-        .findByReservationIdWithLock(phaseA.reservation().getId())
-        .ifPresent(
-            escrow ->
-                saveReservationEscrowPort.save(
-                    escrow.toBuilder().escrowStatus(actionState.getPriorEscrowStatus()).build()));
+      MarketplaceReservationActionState actionState,
+      Reservation reservation,
+      MarketplaceReservationEscrow escrow) {
+    if (reservation != null) {
+      saveReservationPort.save(reservation.rollbackToPriorState());
+    }
+    if (escrow != null) {
+      saveReservationEscrowPort.save(
+          escrow.toBuilder().escrowStatus(actionState.getPriorEscrowStatus()).build());
+    }
   }
 
   private void syncAuthoritativePhaseBOutcome(
-      MarketplaceReservationActionState actionState, PhaseBChainInspection inspection) {
-    Reservation reservation =
-        loadReservationPort
-            .findByIdWithLock(actionState.getReservationId())
-            .orElseThrow(() -> new ReservationNotFoundException(actionState.getReservationId()));
+      MarketplaceReservationActionState actionState,
+      PhaseBChainInspection inspection,
+      Reservation reservation,
+      MarketplaceReservationEscrow escrow) {
+    if (reservation == null) {
+      throw new ReservationNotFoundException(actionState.getReservationId());
+    }
     Reservation updated = inspection.applyTo(reservation);
     Reservation saved = saveReservationPort.save(updated);
-    loadReservationEscrowPort
-        .findByReservationIdWithLock(actionState.getReservationId())
-        .ifPresent(
-            escrow ->
-                saveReservationEscrowPort.save(
-                    escrow.toBuilder()
-                        .escrowStatus(saved.getEffectiveEscrowStatus())
-                        .contractDeadlineEpochSeconds(saved.getContractDeadlineEpochSeconds())
-                        .contractDeadlineAt(saved.getContractDeadlineAt())
-                        .lastFailureCode(inspection.code().name())
-                        .lastFailureMessage(inspection.message())
-                        .build()));
+    if (escrow != null) {
+      saveReservationEscrowPort.save(
+          escrow.toBuilder()
+              .escrowStatus(saved.getEffectiveEscrowStatus())
+              .contractDeadlineEpochSeconds(saved.getContractDeadlineEpochSeconds())
+              .contractDeadlineAt(saved.getContractDeadlineAt())
+              .lastFailureCode(inspection.code().name())
+              .lastFailureMessage(inspection.message())
+              .build());
+    }
   }
 
   private PhaseBChainInspection inspectPhaseBChain(AdminPhaseA phaseA) {
@@ -471,6 +477,12 @@ public class MarketplaceAdminExecutionOrchestrator {
               order,
               ReservationStatus.DEADLINE_REFUNDED,
               ReservationEscrowStatus.DEADLINE_REFUNDED,
+              deadlineAt);
+      case ReservationEscrowOrderView.STATE_CANCELLED ->
+          PhaseBChainInspection.manualSync(
+              MarketplaceAdminReviewValidationCode.CHAIN_MISMATCH_REQUIRES_SYNC,
+              "marketplace chain order was already cancelled before admin execution",
+              order,
               deadlineAt);
       default ->
           PhaseBChainInspection.manualSync(
