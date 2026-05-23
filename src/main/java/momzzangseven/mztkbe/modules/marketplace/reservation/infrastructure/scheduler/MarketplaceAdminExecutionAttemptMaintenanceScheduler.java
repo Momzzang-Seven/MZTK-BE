@@ -4,11 +4,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.config.ConditionalOnMarketplaceAdminEnabled;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptCommand;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverExpiredMarketplaceAdminExecutionAttemptCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RecoverExpiredMarketplaceAdminExecutionAttemptResult;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RecoverExpiredMarketplaceAdminExecutionAttemptUseCase;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,17 +23,14 @@ import org.springframework.stereotype.Component;
 public class MarketplaceAdminExecutionAttemptMaintenanceScheduler {
 
   private final RecoverExpiredMarketplaceAdminExecutionAttemptUseCase recoverUseCase;
-  private final ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase reconcileUseCase;
   private final Clock clock;
   private final int batchSize;
 
   public MarketplaceAdminExecutionAttemptMaintenanceScheduler(
       RecoverExpiredMarketplaceAdminExecutionAttemptUseCase recoverUseCase,
-      ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase reconcileUseCase,
       Clock clock,
       @Value("${web3.marketplace.admin.recovery.batch-size:100}") int batchSize) {
     this.recoverUseCase = recoverUseCase;
-    this.reconcileUseCase = reconcileUseCase;
     this.clock = clock;
     this.batchSize = batchSize;
   }
@@ -67,17 +61,6 @@ public class MarketplaceAdminExecutionAttemptMaintenanceScheduler {
             recoveredTotal,
             skippedTotal,
             failedTotal);
-      }
-      ReconcileMarketplaceAdminTerminalExecutionAttemptResult reconcileResult =
-          reconcileUseCase.execute(
-              new ReconcileMarketplaceAdminTerminalExecutionAttemptCommand(batchSize));
-      if (!reconcileResult.isEmpty()) {
-        log.info(
-            "marketplace admin terminal hook reconciliation completed: scanned={}, replayed={}, skipped={}, failed={}",
-            reconcileResult.scanned(),
-            reconcileResult.replayed(),
-            reconcileResult.skipped(),
-            reconcileResult.failed());
       }
     } catch (RuntimeException e) {
       log.error("marketplace admin recovery scheduler failed", e);

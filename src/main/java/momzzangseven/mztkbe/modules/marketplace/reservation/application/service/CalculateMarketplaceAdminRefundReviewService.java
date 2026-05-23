@@ -183,9 +183,11 @@ public class CalculateMarketplaceAdminRefundReviewService
       boolean authoritySatisfied) {
     MarketplaceAdminReviewValidationCode blocking =
         baseBlocking == null ? reasonBlocking : baseBlocking;
+    boolean confirmationOnly = isConfirmationRequired(blocking);
+    boolean processable = blocking == null || (baseBlocking == null && confirmationOnly);
     return new MarketplaceAdminReasonReviewOption(
         reasonCode,
-        blocking == null,
+        processable,
         blocking,
         requiresConfirmation,
         confirmationType,
@@ -197,8 +199,17 @@ public class CalculateMarketplaceAdminRefundReviewService
             ReservationEscrowStatus.REFUNDED,
             ReservationTerminalResolvedBy.ADMIN,
             reasonCode),
-        blocking == null
-            ? List.of()
-            : List.of(MarketplaceAdminReviewValidationItem.blocking(blocking, blocking.name())));
+        blocking == null ? List.of() : List.of(validationItem(blocking, confirmationOnly)));
+  }
+
+  private static MarketplaceAdminReviewValidationItem validationItem(
+      MarketplaceAdminReviewValidationCode code, boolean confirmationOnly) {
+    return confirmationOnly
+        ? MarketplaceAdminReviewValidationItem.info(code, code.name())
+        : MarketplaceAdminReviewValidationItem.blocking(code, code.name());
+  }
+
+  private static boolean isConfirmationRequired(MarketplaceAdminReviewValidationCode code) {
+    return code == MarketplaceAdminReviewValidationCode.MANUAL_REFUND_CONFIRMATION_REQUIRED;
   }
 }

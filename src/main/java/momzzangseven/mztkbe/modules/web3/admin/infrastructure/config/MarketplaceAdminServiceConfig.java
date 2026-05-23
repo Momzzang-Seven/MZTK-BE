@@ -14,7 +14,6 @@ import momzzangseven.mztkbe.modules.web3.admin.application.service.ForceMarketpl
 import momzzangseven.mztkbe.modules.web3.admin.application.service.ForceMarketplaceAdminSettlementService;
 import momzzangseven.mztkbe.modules.web3.admin.application.service.GetMarketplaceAdminRefundReviewService;
 import momzzangseven.mztkbe.modules.web3.admin.application.service.GetMarketplaceAdminSettlementReviewService;
-import momzzangseven.mztkbe.modules.web3.admin.application.service.MarketplaceAdminAuthorityPolicy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -47,10 +46,5 @@ public class MarketplaceAdminServiceConfig {
       ForceMarketplaceAdminSettlementPort port,
       ResolveMarketplaceAdminAuthorityPort authorityPort) {
     return new ForceMarketplaceAdminSettlementService(port, authorityPort);
-  }
-
-  @Bean
-  MarketplaceAdminAuthorityPolicy marketplaceAdminAuthorityPolicy() {
-    return new MarketplaceAdminAuthorityPolicy();
   }
 }

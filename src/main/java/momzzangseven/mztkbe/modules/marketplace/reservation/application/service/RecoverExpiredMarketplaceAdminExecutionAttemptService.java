@@ -76,16 +76,22 @@ public class RecoverExpiredMarketplaceAdminExecutionAttemptService
   }
 
   private boolean recoverOneLocked(Long actionStateId) {
+    MarketplaceReservationActionState snapshot =
+        loadReservationActionStatePort.findById(actionStateId).orElse(null);
+    if (snapshot == null) {
+      return false;
+    }
+    Reservation reservation =
+        loadReservationPort.findByIdWithLock(snapshot.getReservationId()).orElse(null);
+    var escrow = loadReservationEscrowPort.findByReservationIdWithLock(snapshot.getReservationId());
     MarketplaceReservationActionState actionState =
         loadReservationActionStatePort.findByIdWithLock(actionStateId).orElse(null);
-    if (actionState == null) {
+    if (actionState == null || !sameReservation(snapshot, actionState)) {
       return false;
     }
     if (!isExpiredUnboundAdminPreparing(actionState)) {
       return false;
     }
-    Reservation reservation =
-        loadReservationPort.findByIdWithLock(actionState.getReservationId()).orElse(null);
     if (reservation == null || !matchesPendingReservation(actionState, reservation)) {
       markStale(actionState, "expired admin attempt no longer matches reservation state");
       return false;
@@ -95,16 +101,14 @@ public class RecoverExpiredMarketplaceAdminExecutionAttemptService
         actionState.getPriorEscrowStatus() == null
             ? restored.getEffectiveEscrowStatus()
             : actionState.getPriorEscrowStatus();
-    loadReservationEscrowPort
-        .findByReservationIdWithLock(restored.getId())
-        .ifPresent(
-            escrow ->
-                saveReservationEscrowPort.save(
-                    escrow.toBuilder()
-                        .escrowStatus(restoredEscrowStatus)
-                        .lastFailureCode(ERROR_CODE)
-                        .lastFailureMessage("expired unbound marketplace admin preparation")
-                        .build()));
+    escrow.ifPresent(
+        lockedEscrow ->
+            saveReservationEscrowPort.save(
+                lockedEscrow.toBuilder()
+                    .escrowStatus(restoredEscrowStatus)
+                    .lastFailureCode(ERROR_CODE)
+                    .lastFailureMessage("expired unbound marketplace admin preparation")
+                    .build()));
     saveReservationActionStatePort.save(
         actionState.toBuilder()
             .status(ReservationActionStateStatus.PREPARATION_FAILED)
@@ -113,6 +117,12 @@ public class RecoverExpiredMarketplaceAdminExecutionAttemptService
             .errorReason("expired unbound marketplace admin preparation")
             .build());
     return true;
+  }
+
+  private static boolean sameReservation(
+      MarketplaceReservationActionState snapshot, MarketplaceReservationActionState locked) {
+    return snapshot.getReservationId() != null
+        && snapshot.getReservationId().equals(locked.getReservationId());
   }
 
   private static boolean isExpiredUnboundAdminPreparing(

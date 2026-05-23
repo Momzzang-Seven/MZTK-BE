@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.web3.admin.infrastructure.security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
-import momzzangseven.mztkbe.modules.web3.admin.application.service.MarketplaceAdminAuthorityPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,7 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 class SecurityContextMarketplaceAdminAuthorityAdapterTest {
 
   private final SecurityContextMarketplaceAdminAuthorityAdapter adapter =
-      new SecurityContextMarketplaceAdminAuthorityAdapter(new MarketplaceAdminAuthorityPolicy());
+      new SecurityContextMarketplaceAdminAuthorityAdapter();
 
   @AfterEach
   void tearDown() {

@@ -69,6 +69,7 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
     Reservation reservation = adminRefundPendingReservation();
     given(loadReservationActionStatePort.findExpiredAdminPreparingAttemptsWithLock(NOW, 10))
         .willReturn(List.of(actionState));
+    given(loadReservationActionStatePort.findById(20L)).willReturn(Optional.of(actionState));
     given(loadReservationActionStatePort.findByIdWithLock(20L))
         .willReturn(Optional.of(actionState));
     given(loadReservationPort.findByIdWithLock(1L)).willReturn(Optional.of(reservation));
@@ -111,6 +112,7 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
     MarketplaceReservationActionState actionState = expiredAdminActionState();
     given(loadReservationActionStatePort.findExpiredAdminPreparingAttemptsWithLock(NOW, 10))
         .willReturn(List.of(actionState));
+    given(loadReservationActionStatePort.findById(20L)).willReturn(Optional.of(actionState));
     given(loadReservationActionStatePort.findByIdWithLock(20L))
         .willReturn(Optional.of(actionState));
     given(loadReservationPort.findByIdWithLock(1L)).willReturn(Optional.of(pendingReservation()));
@@ -148,6 +150,9 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
             .build();
     given(loadReservationActionStatePort.findExpiredAdminPreparingAttemptsWithLock(NOW, 10))
         .willReturn(List.of(failedActionState, recoveredActionState));
+    given(loadReservationActionStatePort.findById(20L)).willReturn(Optional.of(failedActionState));
+    given(loadReservationActionStatePort.findById(21L))
+        .willReturn(Optional.of(recoveredActionState));
     given(loadReservationActionStatePort.findByIdWithLock(20L))
         .willReturn(Optional.of(failedActionState));
     given(loadReservationActionStatePort.findByIdWithLock(21L))
@@ -159,6 +164,7 @@ class RecoverExpiredMarketplaceAdminExecutionAttemptServiceTest {
     given(saveReservationPort.save(org.mockito.ArgumentMatchers.any()))
         .willThrow(new IllegalStateException("first candidate failed after reservation save"))
         .willAnswer(invocation -> invocation.getArgument(0));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L)).willReturn(Optional.empty());
     given(loadReservationEscrowPort.findByReservationIdWithLock(2L))
         .willReturn(Optional.of(adminRefundPendingEscrow(2L)));
 

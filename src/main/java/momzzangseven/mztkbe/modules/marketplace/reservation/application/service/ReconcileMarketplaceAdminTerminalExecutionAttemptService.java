@@ -6,6 +6,8 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Reco
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReconcileMarketplaceAdminTerminalExecutionAttemptResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationActionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationExecutionStatePort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayConfirmedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.ReplayTerminatedReservationExecutionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
@@ -16,6 +18,8 @@ public class ReconcileMarketplaceAdminTerminalExecutionAttemptService
     implements ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase {
 
   private final LoadReservationActionStatePort loadReservationActionStatePort;
+  private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
+  private final ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort;
   private final ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort;
 
   @Override
@@ -36,8 +40,8 @@ public class ReconcileMarketplaceAdminTerminalExecutionAttemptService
         continue;
       }
       try {
-        if (replayTerminatedReservationExecutionPort.replayTerminated(
-            executionIntentId, expectedActionType)) {
+        String status = loadReservationExecutionStatePort.loadState(executionIntentId).status();
+        if (replay(executionIntentId, expectedActionType, status)) {
           replayed++;
         } else {
           skipped++;
@@ -61,5 +65,24 @@ public class ReconcileMarketplaceAdminTerminalExecutionAttemptService
       case ADMIN_SETTLE -> "MARKETPLACE_ADMIN_SETTLE";
       default -> null;
     };
+  }
+
+  private boolean replay(String executionIntentId, String expectedActionType, String status) {
+    if ("CONFIRMED".equals(status)) {
+      return replayConfirmedReservationExecutionPort.replayConfirmed(
+          executionIntentId, expectedActionType);
+    }
+    if (isTerminated(status)) {
+      return replayTerminatedReservationExecutionPort.replayTerminated(
+          executionIntentId, expectedActionType);
+    }
+    return false;
+  }
+
+  private boolean isTerminated(String status) {
+    return "FAILED_ONCHAIN".equals(status)
+        || "EXPIRED".equals(status)
+        || "CANCELED".equals(status)
+        || "NONCE_STALE".equals(status);
   }
 }

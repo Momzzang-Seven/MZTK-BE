@@ -109,9 +109,7 @@ public class MarketplaceReservationActionStatePersistenceAdapter
   @Override
   public List<MarketplaceReservationActionState> findBoundAdminExecutionAttemptsForTerminalReplay(
       int batchSize) {
-    return repository
-        .findBoundAdminExecutionAttemptsForTerminalReplay(PageRequest.of(0, batchSize))
-        .stream()
+    return repository.findBoundAdminExecutionAttemptsForTerminalReplay(batchSize).stream()
         .map(this::toDomain)
         .toList();
   }

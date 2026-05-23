@@ -227,7 +227,8 @@ public class MarketplaceEscrowExecutionActionHandlerAdapter implements Execution
           payload.reservationId(),
           payload.orderKey(),
           ex);
-      return new ChainEvidence("UNKNOWN", "CHAIN_ORDER_LOOKUP_FAILED");
+      throw new IllegalStateException(
+          "marketplace admin termination chain evidence lookup failed", ex);
     }
   }
 

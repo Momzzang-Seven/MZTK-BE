@@ -212,6 +212,8 @@ final class MarketplaceAdminReviewSupport {
           MarketplaceAdminReviewValidationCode.CHAIN_ORDER_ALREADY_SETTLED;
       case ReservationEscrowOrderView.STATE_DEADLINE_REFUNDED ->
           MarketplaceAdminReviewValidationCode.CHAIN_MISMATCH_REQUIRES_SYNC;
+      case ReservationEscrowOrderView.STATE_CANCELLED ->
+          MarketplaceAdminReviewValidationCode.CHAIN_MISMATCH_REQUIRES_SYNC;
       default -> MarketplaceAdminReviewValidationCode.CHAIN_ORDER_NOT_CREATED;
     };
   }

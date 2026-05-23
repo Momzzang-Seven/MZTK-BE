@@ -240,9 +240,14 @@ public class ReservationApplicationServiceConfig {
   ReconcileMarketplaceAdminTerminalExecutionAttemptUseCase
       reconcileMarketplaceAdminTerminalExecutionAttemptUseCase(
           LoadReservationActionStatePort loadReservationActionStatePort,
+          LoadReservationExecutionStatePort loadReservationExecutionStatePort,
+          ReplayConfirmedReservationExecutionPort replayConfirmedReservationExecutionPort,
           ReplayTerminatedReservationExecutionPort replayTerminatedReservationExecutionPort) {
     return new ReconcileMarketplaceAdminTerminalExecutionAttemptService(
-        loadReservationActionStatePort, replayTerminatedReservationExecutionPort);
+        loadReservationActionStatePort,
+        loadReservationExecutionStatePort,
+        replayConfirmedReservationExecutionPort,
+        replayTerminatedReservationExecutionPort);
   }
 
   @Bean
