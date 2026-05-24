@@ -91,6 +91,19 @@ class TransactionWorkPersistenceAdapterTest {
   }
 
   @Test
+  void claimByStatus_whenCreated_filtersToLegacyLevelRewardIssuerScope() {
+    Query claimQuery = mockQuery();
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    when(entityManager.createNativeQuery(sqlCaptor.capture())).thenReturn(claimQuery);
+    when(claimQuery.getResultList()).thenReturn(List.of());
+
+    adapter.claimByStatus(Web3TxStatus.CREATED, 10, "worker-1", Duration.ofMinutes(1));
+
+    assertThat(sqlCaptor.getValue()).contains("t.tx_type = 'EIP1559'");
+    assertThat(sqlCaptor.getValue()).contains("t.reference_type = 'LEVEL_UP_REWARD'");
+  }
+
+  @Test
   void claimByStatus_updatesLockAndReturnsWorkItems_withDefaultTtlWhenNull() {
     Query claimQuery = mockQuery();
     Query updateQuery = mockQuery();

@@ -56,6 +56,20 @@ class GetSponsorNonceSlotsServiceTest {
             null,
             null,
             null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            0,
+            LocalDateTime.parse("2026-05-25T12:00:00"),
             LocalDateTime.parse("2026-05-25T12:00:00"));
     when(loadSponsorNonceSlotReviewPort.loadSlots(84532L, SPONSOR)).thenReturn(List.of(view));
 

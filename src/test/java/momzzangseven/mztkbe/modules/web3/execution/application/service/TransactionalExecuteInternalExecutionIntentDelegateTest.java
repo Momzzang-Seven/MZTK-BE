@@ -354,6 +354,8 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionTransactionGatewayPort)
+        .scheduleRetry(77L, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name(), null);
+    verify(executionTransactionGatewayPort)
         .transitionSponsorNonceSlot(
             org.mockito.ArgumentMatchers.argThat(
                 command ->
@@ -417,6 +419,8 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionTransactionGatewayPort)
+        .scheduleRetry(77L, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name(), null);
+    verify(executionTransactionGatewayPort)
         .transitionSponsorNonceSlot(
             org.mockito.ArgumentMatchers.argThat(
                 command ->
@@ -441,6 +445,8 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
 
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort)
+        .scheduleRetry(77L, ExecutionFailureReason.SIGNATURE_INVALID.name(), null);
     ArgumentCaptor<
             momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent>
         captor =
@@ -471,6 +477,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort).scheduleRetry(77L, "PREVALIDATE_INVALID_COMMAND", null);
     verify(publishExecutionIntentTerminatedPort)
         .publish(
             org.mockito.ArgumentMatchers.argThat(

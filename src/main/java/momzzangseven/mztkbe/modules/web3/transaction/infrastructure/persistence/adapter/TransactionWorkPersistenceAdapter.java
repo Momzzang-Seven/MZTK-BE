@@ -333,6 +333,11 @@ public class TransactionWorkPersistenceAdapter
 
   private String nonceSlotPredicate(Web3TxStatus status) {
     return switch (status) {
+      case CREATED ->
+          """
+          AND t.tx_type = 'EIP1559'
+          AND t.reference_type = 'LEVEL_UP_REWARD'
+          """;
       case SIGNED ->
           """
           AND (

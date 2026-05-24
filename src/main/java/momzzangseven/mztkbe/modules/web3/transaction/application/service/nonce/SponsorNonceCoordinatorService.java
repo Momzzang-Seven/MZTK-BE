@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.service.nonce;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceEvidenceCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.ReserveSponsorNonceSlotCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
@@ -18,6 +19,8 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDe
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionRequest;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionService;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceEvidenceSource;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceEvidenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlot;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import org.springframework.stereotype.Service;
@@ -43,27 +46,51 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
           loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(
               command.chainId(), command.fromAddress());
       decision = decisionService.decide(toDecisionRequest(command, slots));
-      if (decision.type() == SponsorNonceDecisionType.REPLACE_LOWEST_NONCE) {
-        markReplacementUnsupported(command, decision, slots);
-        decision =
-            SponsorNonceDecision.of(
-                SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
-                decision.nonce(),
-                "REPLACEMENT_REQUIRES_OPERATOR_IMPLEMENTATION");
-        decisionFinalized = true;
-        break;
-      }
-      if (decision.type() == SponsorNonceDecisionType.DROP_UNBROADCASTABLE_RESERVATION) {
-        if (dropUnbroadcastableReservation(command, decision)) {
-          continue;
+      switch (decision.type()) {
+        case REPLACE_LOWEST_NONCE -> {
+          markReplacementUnsupported(command, decision, slots);
+          decision =
+              SponsorNonceDecision.of(
+                  SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
+                  decision.nonce(),
+                  "REPLACEMENT_REQUIRES_OPERATOR_IMPLEMENTATION");
+          decisionFinalized = true;
         }
-        decision =
-            SponsorNonceDecision.of(
-                SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
-                decision.nonce(),
-                "DROP_UNBROADCASTABLE_REQUIRES_OPERATOR_REVIEW");
+        case DROP_UNBROADCASTABLE_RESERVATION -> {
+          if (dropUnbroadcastableReservation(command, decision)) {
+            continue;
+          }
+          decision =
+              SponsorNonceDecision.of(
+                  SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
+                  decision.nonce(),
+                  "DROP_UNBROADCASTABLE_REQUIRES_OPERATOR_REVIEW");
+          decisionFinalized = true;
+        }
+        case CONSUME_KNOWN_NONCE -> {
+          if (consumeKnownNonce(command, decision)) {
+            continue;
+          }
+          decision =
+              SponsorNonceDecision.of(
+                  SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
+                  decision.nonce(),
+                  "KNOWN_CONSUME_REQUIRES_OPERATOR_REVIEW");
+          decisionFinalized = true;
+        }
+        case CONSUME_UNKNOWN_NONCE -> {
+          if (consumeUnknownNonce(command, decision)) {
+            continue;
+          }
+          decision =
+              SponsorNonceDecision.of(
+                  SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
+                  decision.nonce(),
+                  "UNKNOWN_CONSUME_REQUIRES_OPERATOR_REVIEW");
+          decisionFinalized = true;
+        }
+        default -> decisionFinalized = true;
       }
-      decisionFinalized = true;
       break;
     }
     if (!decisionFinalized || decision == null) {
@@ -74,7 +101,7 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
               "SPONSOR_NONCE_COORDINATION_REPAIR_LIMIT_REACHED");
     }
     SponsorNonceSlotReservation reservation =
-        decision.issuesNonce() && command.shouldReserveIssuedNonce()
+        reservesNonce(decision) && command.shouldReserveIssuedNonce()
             ? reserveIssuedNonce(command, decision)
             : null;
     return new SponsorNonceCoordinationResult(decision, reservation);
@@ -108,6 +135,9 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
             .findFirst()
             .orElse(null);
     if (slot == null || slot.status() == SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED) {
+      return;
+    }
+    if (!slot.status().canTransitionTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)) {
       return;
     }
     nonceSlotLifecycleUseCase.transition(
@@ -160,6 +190,80 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
     return true;
   }
 
+  private boolean consumeKnownNonce(
+      SponsorNonceCoordinationCommand command, SponsorNonceDecision decision) {
+    SponsorNonceSlotView slot = loadSlotView(command, decision.nonce());
+    if (slot == null || !slot.status().canTransitionTo(SponsorNonceSlotStatus.CONSUMED)) {
+      markOperatorReviewIfPossible(command, slot, "KNOWN_CONSUME_UNSUPPORTED_SLOT_STATUS");
+      return false;
+    }
+    if ((slot.consumedTxId() == null && slot.activeTxId() == null)
+        || (slot.consumedAttemptId() == null && slot.activeAttemptId() == null)) {
+      markOperatorReviewIfPossible(command, slot, "KNOWN_CONSUME_MISSING_AUTHORITATIVE_IDS");
+      return false;
+    }
+    nonceSlotLifecycleUseCase.transition(
+        RecordSponsorNonceSlotTransitionCommand.builder()
+            .chainId(command.chainId())
+            .fromAddress(command.fromAddress())
+            .nonce(decision.nonce())
+            .fromStatus(slot.status())
+            .toStatus(SponsorNonceSlotStatus.CONSUMED)
+            .activeAttemptId(slot.activeAttemptId())
+            .activeTxId(slot.activeTxId())
+            .consumedAttemptId(
+                slot.consumedAttemptId() == null
+                    ? slot.activeAttemptId()
+                    : slot.consumedAttemptId())
+            .consumedTxId(slot.consumedTxId() == null ? slot.activeTxId() : slot.consumedTxId())
+            .stateChangedAt(now(command))
+            .consumedReason(decision.reason())
+            .hasReceiptEvidence(true)
+            .build());
+    return true;
+  }
+
+  private boolean consumeUnknownNonce(
+      SponsorNonceCoordinationCommand command, SponsorNonceDecision decision) {
+    SponsorNonceSlotView slot = loadSlotView(command, decision.nonce());
+    if (slot == null || !slot.status().canTransitionTo(SponsorNonceSlotStatus.CONSUMED_UNKNOWN)) {
+      markOperatorReviewIfPossible(command, slot, "UNKNOWN_CONSUME_UNSUPPORTED_SLOT_STATUS");
+      return false;
+    }
+    Long evidenceId = slot.consumedExternalEvidenceId();
+    if (evidenceId == null || evidenceId <= 0) {
+      var evidence =
+          nonceSlotLifecycleUseCase.recordEvidence(
+              new RecordSponsorNonceEvidenceCommand(
+                  command.chainId(),
+                  command.fromAddress(),
+                  decision.nonce(),
+                  SponsorNonceEvidenceType.UNKNOWN_CONSUMED_CLOSURE,
+                  SponsorNonceEvidenceSource.SYSTEM,
+                  null,
+                  unknownConsumedPayload(command, decision),
+                  null,
+                  null,
+                  now(command)));
+      evidenceId = evidence.id();
+    }
+    nonceSlotLifecycleUseCase.transition(
+        RecordSponsorNonceSlotTransitionCommand.builder()
+            .chainId(command.chainId())
+            .fromAddress(command.fromAddress())
+            .nonce(decision.nonce())
+            .fromStatus(slot.status())
+            .toStatus(SponsorNonceSlotStatus.CONSUMED_UNKNOWN)
+            .activeAttemptId(slot.activeAttemptId())
+            .activeTxId(slot.activeTxId())
+            .consumedExternalEvidenceId(evidenceId)
+            .stateChangedAt(now(command))
+            .consumedReason(decision.reason())
+            .terminalReason("SPONSOR_NONCE_CONSUMED_UNKNOWN")
+            .build());
+    return true;
+  }
+
   private SponsorNonceSlotView loadSlotView(SponsorNonceCoordinationCommand command, Long nonce) {
     if (nonce == null) {
       return null;
@@ -167,13 +271,17 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
     return nonceSlotLifecycleUseCase
         .loadSlotsForReview(command.chainId(), command.fromAddress())
         .stream()
-        .filter(slot -> slot.nonce() == nonce)
+        .filter(slot -> Long.valueOf(slot.nonce()).equals(nonce))
         .findFirst()
         .orElse(null);
   }
 
   private void markOperatorReview(
       SponsorNonceCoordinationCommand command, SponsorNonceSlotView slot, String reason) {
+    if (slot.status() == SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED
+        || !slot.status().canTransitionTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)) {
+      return;
+    }
     nonceSlotLifecycleUseCase.transition(
         RecordSponsorNonceSlotTransitionCommand.builder()
             .chainId(command.chainId())
@@ -186,6 +294,14 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
             .stateChangedAt(command.now() == null ? LocalDateTime.now() : command.now())
             .terminalReason(reason)
             .build());
+  }
+
+  private void markOperatorReviewIfPossible(
+      SponsorNonceCoordinationCommand command, SponsorNonceSlotView slot, String reason) {
+    if (slot == null) {
+      return;
+    }
+    markOperatorReview(command, slot, reason);
   }
 
   private SponsorNonceSlotReservation reserveIssuedNonce(
@@ -207,5 +323,27 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
   private String defaultAttemptIdempotencyKey(
       SponsorNonceCoordinationCommand command, SponsorNonceDecision decision) {
     return "tx:" + command.transactionId() + ":sponsor:" + decision.nonce() + ":attempt:1";
+  }
+
+  private boolean reservesNonce(SponsorNonceDecision decision) {
+    return decision.issuesNonce()
+        || decision.type() == SponsorNonceDecisionType.REPAIR_DB_SLOT_GAP
+        || decision.type() == SponsorNonceDecisionType.REPAIR_CHAIN_PENDING_GAP;
+  }
+
+  private LocalDateTime now(SponsorNonceCoordinationCommand command) {
+    return command.now() == null ? LocalDateTime.now() : command.now();
+  }
+
+  private String unknownConsumedPayload(
+      SponsorNonceCoordinationCommand command, SponsorNonceDecision decision) {
+    return """
+        {"chainPendingNonce":%d,"chainLatestNonce":%d,"closureReason":"%s"}
+        """
+        .formatted(
+            command.chainPendingNonce(),
+            command.chainLatestNonce(),
+            decision.reason() == null ? decision.type().name() : decision.reason())
+        .trim();
   }
 }

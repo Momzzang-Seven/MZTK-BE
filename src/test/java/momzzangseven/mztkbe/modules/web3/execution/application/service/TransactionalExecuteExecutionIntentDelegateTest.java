@@ -585,6 +585,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                             .equals(ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name())));
     verify(executionTransactionGatewayPort).createAndFlush(any());
     verify(executionTransactionGatewayPort)
+        .scheduleRetry(501L, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name(), null);
+    verify(executionTransactionGatewayPort)
         .transitionSponsorNonceSlot(
             argThat(
                 command ->
@@ -612,6 +614,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                     sponsorGate()))
         .isInstanceOf(ExecutionIntentTerminalException.class);
 
+    verify(executionTransactionGatewayPort)
+        .scheduleRetry(501L, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name(), null);
     verify(executionTransactionGatewayPort)
         .transitionSponsorNonceSlot(
             argThat(
@@ -671,6 +675,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.getCode());
 
+    verify(executionTransactionGatewayPort)
+        .scheduleRetry(501L, ExecutionFailureReason.SIGNATURE_INVALID.name(), null);
     verify(executionTransactionGatewayPort)
         .transitionSponsorNonceSlot(
             argThat(

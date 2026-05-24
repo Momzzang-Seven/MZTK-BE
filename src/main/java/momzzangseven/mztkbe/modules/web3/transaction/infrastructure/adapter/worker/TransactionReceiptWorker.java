@@ -93,11 +93,10 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
   private void processItem(LoadTransactionWorkPort.TransactionWorkItem item) {
     String txHash = item.txHash();
     if (txHash == null || txHash.isBlank()) {
+      String timeoutReason = Web3TxFailureReason.RECEIPT_TIMEOUT.code() + "_MISSING_TX_HASH";
+      markSlotStuck(item, timeoutReason);
       updateTransactionPort.updateStatus(
-          item.transactionId(),
-          Web3TxStatus.UNCONFIRMED,
-          txHash,
-          Web3TxFailureReason.RECEIPT_TIMEOUT.code());
+          item.transactionId(), Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
       auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
       return;
     }
@@ -187,9 +186,9 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
   private void timeout(
       LoadTransactionWorkPort.TransactionWorkItem item, String txHash, int timeoutSeconds) {
     String timeoutReason = Web3TxFailureReason.RECEIPT_TIMEOUT.code() + "_" + timeoutSeconds + "S";
+    markSlotStuck(item, timeoutReason);
     updateTransactionPort.updateStatus(
         item.transactionId(), Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
-    markSlotStuck(item, timeoutReason);
     auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
   }
 

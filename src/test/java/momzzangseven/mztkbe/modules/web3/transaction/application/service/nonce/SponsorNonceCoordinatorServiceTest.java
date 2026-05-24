@@ -190,6 +190,110 @@ class SponsorNonceCoordinatorServiceTest {
   }
 
   @Test
+  void execute_whenKnownReceiptEvidenceExists_consumesSlotThenReservesNextNonce() {
+    when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
+        .thenReturn(
+            List.of(
+                SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.BROADCASTED)
+                    .receiptEvidence()
+                    .build()))
+        .thenReturn(List.of());
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
+        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.reserve(any()))
+        .thenReturn(
+            new SponsorNonceSlotReservation(
+                CHAIN_ID, SPONSOR, 52L, 1, 101L, 11L, SponsorNonceSlotStatus.RESERVED));
+
+    var result = service.execute(command(52L, 51L, 11L, "intent:sponsor:52:attempt:1"));
+
+    assertThat(result.decision().type()).isEqualTo(SponsorNonceDecisionType.ISSUE_NONCE);
+    assertThat(result.reservation().nonce()).isEqualTo(52L);
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
+    assertThat(transitionCaptor.getValue().getFromStatus())
+        .isEqualTo(SponsorNonceSlotStatus.BROADCASTED);
+    assertThat(transitionCaptor.getValue().getToStatus())
+        .isEqualTo(SponsorNonceSlotStatus.CONSUMED);
+    assertThat(transitionCaptor.getValue().hasReceiptEvidence()).isTrue();
+    assertThat(transitionCaptor.getValue().getConsumedAttemptId()).isEqualTo(100L);
+    assertThat(transitionCaptor.getValue().getConsumedTxId()).isEqualTo(10L);
+  }
+
+  @Test
+  void execute_whenLatestPassedWithRetainedEvidence_consumesUnknownThenReservesNextNonce() {
+    when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
+        .thenReturn(
+            List.of(
+                SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.BROADCASTED)
+                    .retainedExternalEvidence()
+                    .build()))
+        .thenReturn(List.of());
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
+        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L, 200L)));
+    when(nonceSlotLifecycleUseCase.reserve(any()))
+        .thenReturn(
+            new SponsorNonceSlotReservation(
+                CHAIN_ID, SPONSOR, 52L, 1, 101L, 11L, SponsorNonceSlotStatus.RESERVED));
+
+    var result = service.execute(command(52L, 52L, 11L, "intent:sponsor:52:attempt:1"));
+
+    assertThat(result.decision().type()).isEqualTo(SponsorNonceDecisionType.ISSUE_NONCE);
+    assertThat(result.reservation().nonce()).isEqualTo(52L);
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
+    assertThat(transitionCaptor.getValue().getToStatus())
+        .isEqualTo(SponsorNonceSlotStatus.CONSUMED_UNKNOWN);
+    assertThat(transitionCaptor.getValue().getConsumedExternalEvidenceId()).isEqualTo(200L);
+    assertThat(transitionCaptor.getValue().getTerminalReason())
+        .isEqualTo("SPONSOR_NONCE_CONSUMED_UNKNOWN");
+  }
+
+  @Test
+  void execute_whenDbSlotGapHasNoChainReachableEvidence_reservesGapNonce() {
+    when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
+        .thenReturn(
+            List.of(
+                slot(51L, SponsorNonceSlotStatus.RESERVED),
+                slot(53L, SponsorNonceSlotStatus.RESERVED)));
+    when(nonceSlotLifecycleUseCase.reserve(any()))
+        .thenReturn(
+            new SponsorNonceSlotReservation(
+                CHAIN_ID, SPONSOR, 52L, 1, 100L, 10L, SponsorNonceSlotStatus.RESERVED));
+
+    var result = service.execute(command(51L, 50L, 10L, "intent:sponsor:52:attempt:1"));
+
+    assertThat(result.decision().type()).isEqualTo(SponsorNonceDecisionType.REPAIR_DB_SLOT_GAP);
+    assertThat(result.reservation().nonce()).isEqualTo(52L);
+    ArgumentCaptor<ReserveSponsorNonceSlotCommand> reserveCaptor =
+        ArgumentCaptor.forClass(ReserveSponsorNonceSlotCommand.class);
+    verify(nonceSlotLifecycleUseCase).reserve(reserveCaptor.capture());
+    assertThat(reserveCaptor.getValue().nonce()).isEqualTo(52L);
+  }
+
+  @Test
+  void execute_whenDbLowestOpenIsAboveChainPending_reservesChainPendingNonce() {
+    when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
+        .thenReturn(List.of(slot(110L, SponsorNonceSlotStatus.RESERVED)));
+    when(nonceSlotLifecycleUseCase.reserve(any()))
+        .thenReturn(
+            new SponsorNonceSlotReservation(
+                CHAIN_ID, SPONSOR, 51L, 1, 100L, 10L, SponsorNonceSlotStatus.RESERVED));
+
+    var result = service.execute(command(51L, 50L, 10L, "intent:sponsor:51:attempt:1"));
+
+    assertThat(result.decision().type())
+        .isEqualTo(SponsorNonceDecisionType.REPAIR_CHAIN_PENDING_GAP);
+    assertThat(result.reservation().nonce()).isEqualTo(51L);
+    ArgumentCaptor<ReserveSponsorNonceSlotCommand> reserveCaptor =
+        ArgumentCaptor.forClass(ReserveSponsorNonceSlotCommand.class);
+    verify(nonceSlotLifecycleUseCase).reserve(reserveCaptor.capture());
+    assertThat(reserveCaptor.getValue().nonce()).isEqualTo(51L);
+  }
+
+  @Test
   void execute_canReturnDecisionOnlyWithoutMutatingSlot() {
     when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
         .thenReturn(List.of());
@@ -225,8 +329,43 @@ class SponsorNonceCoordinatorServiceTest {
 
   private SponsorNonceSlotView slotView(
       long nonce, SponsorNonceSlotStatus status, Long attemptId, Long txId) {
+    return slotView(nonce, status, attemptId, txId, null);
+  }
+
+  private SponsorNonceSlotView slotView(
+      long nonce,
+      SponsorNonceSlotStatus status,
+      Long attemptId,
+      Long txId,
+      Long consumedExternalEvidenceId) {
     return new SponsorNonceSlotView(
-        CHAIN_ID, SPONSOR, nonce, status, 1, attemptId, txId, null, null, null, null, null, null,
+        CHAIN_ID,
+        SPONSOR,
+        nonce,
+        status,
+        1,
+        attemptId,
+        txId,
+        null,
+        null,
+        null,
+        consumedExternalEvidenceId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        0,
+        NOW,
         NOW);
   }
 }

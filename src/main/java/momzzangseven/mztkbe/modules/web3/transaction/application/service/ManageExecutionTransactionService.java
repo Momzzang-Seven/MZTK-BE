@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
@@ -121,6 +122,7 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   }
 
   @Override
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
   public SponsorChainNonceSnapshotResult loadSponsorNonceSnapshot(
       long chainId, String fromAddress) {
     LoadSponsorChainNoncePort.SponsorChainNonceSnapshot snapshot =
@@ -151,6 +153,7 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   }
 
   @Override
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
   public ExecutionTransactionBroadcastResult broadcast(String rawTx) {
     Web3ContractPort.BroadcastResult result =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(rawTx));

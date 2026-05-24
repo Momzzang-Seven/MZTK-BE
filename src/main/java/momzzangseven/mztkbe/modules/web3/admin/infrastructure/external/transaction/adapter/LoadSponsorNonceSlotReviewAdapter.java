@@ -34,8 +34,22 @@ public class LoadSponsorNonceSlotReviewAdapter implements LoadSponsorNonceSlotRe
         view.consumedAttemptId(),
         view.consumedTxId(),
         view.consumedExternalEvidenceId(),
+        view.consumedAt(),
+        view.consumedReason(),
         view.releasedAttemptId(),
         view.releasedTxId(),
+        view.releasedAt(),
+        view.releaseReason(),
+        view.stuckReason(),
+        view.replacementClaimOwner(),
+        view.replacementClaimExpiresAt(),
+        view.replacementPrepareAttemptCount(),
+        view.broadcastStartedAt(),
+        view.lastBroadcastedAt(),
+        view.broadcastRecoveryClaimOwner(),
+        view.broadcastRecoveryClaimExpiresAt(),
+        view.broadcastRecoveryAttemptCount(),
+        view.createdAt(),
         view.updatedAt());
   }
 }

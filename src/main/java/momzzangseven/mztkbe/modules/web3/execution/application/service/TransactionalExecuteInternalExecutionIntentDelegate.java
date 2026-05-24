@@ -202,6 +202,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           intent.getPublicId(),
           e.getMessage());
       if (KmsClientErrorClassifier.isTerminal(e)) {
+        markCreatedTransactionTerminal(
+            created.transactionId(), ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
         dropSponsorReservedSlot(
             sponsorNonce, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
         return quarantineInvalidIntent(
@@ -223,6 +225,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           "internal sponsor signature recovery failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
+      markCreatedTransactionTerminal(
+          created.transactionId(), ExecutionFailureReason.SIGNATURE_INVALID.name());
       dropSponsorReservedSlot(sponsorNonce, ExecutionFailureReason.SIGNATURE_INVALID.name());
       return quarantineInvalidIntent(
           intent,
@@ -232,6 +236,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           SPONSOR_SIGNATURE_INVALID,
           ExecutionFailureReason.SIGNATURE_INVALID);
     } catch (Web3InvalidInputException e) {
+      markCreatedTransactionTerminal(created.transactionId(), "PREVALIDATE_INVALID_COMMAND");
       dropSponsorReservedSlot(sponsorNonce, INTERNAL_ISSUER_INVALID_INTENT);
       return quarantineInvalidIntent(
           intent, actionHandler, actionPlan, INTERNAL_ISSUER_INVALID_INTENT, e.getMessage());
@@ -437,6 +442,10 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         false);
   }
 
+  private void markCreatedTransactionTerminal(Long transactionId, String failureReason) {
+    executionTransactionGatewayPort.scheduleRetry(transactionId, failureReason, null);
+  }
+
   private void transitionSponsorSlot(
       SponsorNonceContext context,
       String fromStatus,
@@ -545,7 +554,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       publishTerminated(canceled, ExecutionIntentStatus.CANCELED, publishedReason);
     }
     log.error(
-        "internal execution issuer quarantined invalid intent: executionIntentId={}, actionType={}, errorCode={}, reason={}",
+        "internal execution issuer quarantined invalid intent: "
+            + "executionIntentId={}, actionType={}, errorCode={}, reason={}",
         canceled.getPublicId(),
         canceled.getActionType(),
         errorCode,

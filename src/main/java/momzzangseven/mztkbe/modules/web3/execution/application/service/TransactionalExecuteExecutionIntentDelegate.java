@@ -274,6 +274,8 @@ public class TransactionalExecuteExecutionIntentDelegate
           intent.getPublicId(),
           e.getMessage());
       if (KmsClientErrorClassifier.isTerminal(e)) {
+        markCreatedTransactionTerminal(
+            created.transactionId(), ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
         dropSponsorReservedSlot(
             sponsorNonce, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
         cancelEip7702IntentAndCascade(
@@ -292,6 +294,8 @@ public class TransactionalExecuteExecutionIntentDelegate
           "eip7702 sponsor signature recovery failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
+      markCreatedTransactionTerminal(
+          created.transactionId(), ExecutionFailureReason.SIGNATURE_INVALID.name());
       dropSponsorReservedSlot(sponsorNonce, ExecutionFailureReason.SIGNATURE_INVALID.name());
       cancelEip7702IntentAndCascade(
           intent,
@@ -592,6 +596,10 @@ public class TransactionalExecuteExecutionIntentDelegate
         false,
         false,
         false);
+  }
+
+  private void markCreatedTransactionTerminal(Long transactionId, String failureReason) {
+    executionTransactionGatewayPort.scheduleRetry(transactionId, failureReason, null);
   }
 
   private void transitionSponsorSlot(

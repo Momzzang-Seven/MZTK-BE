@@ -581,8 +581,22 @@ public class NonceSlotPersistenceAdapter
         entity.getConsumedAttemptId(),
         entity.getConsumedTxId(),
         entity.getConsumedExternalEvidenceId(),
+        entity.getConsumedAt(),
+        entity.getConsumedReason(),
         entity.getReleasedAttemptId(),
         entity.getReleasedTxId(),
+        entity.getReleasedAt(),
+        entity.getReleaseReason(),
+        entity.getStuckReason(),
+        entity.getReplacementClaimOwner(),
+        entity.getReplacementClaimExpiresAt(),
+        entity.getReplacementPrepareAttemptCount(),
+        entity.getBroadcastStartedAt(),
+        entity.getLastBroadcastedAt(),
+        entity.getBroadcastRecoveryClaimOwner(),
+        entity.getBroadcastRecoveryClaimExpiresAt(),
+        entity.getBroadcastRecoveryAttemptCount(),
+        entity.getCreatedAt(),
         entity.getUpdatedAt());
   }
 

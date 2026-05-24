@@ -105,9 +105,9 @@ class TransactionReceiptWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort)
-        .updateStatus(
-            1L, Web3TxStatus.UNCONFIRMED, " ", Web3TxFailureReason.RECEIPT_TIMEOUT.code());
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher, nonceSlotLifecycleUseCase);
+        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, " ", "RECEIPT_TIMEOUT_MISSING_TX_HASH");
+    verifyMissingTxHashStuckTransition();
+    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -119,9 +119,9 @@ class TransactionReceiptWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort)
-        .updateStatus(
-            1L, Web3TxStatus.UNCONFIRMED, null, Web3TxFailureReason.RECEIPT_TIMEOUT.code());
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher, nonceSlotLifecycleUseCase);
+        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, null, "RECEIPT_TIMEOUT_MISSING_TX_HASH");
+    verifyMissingTxHashStuckTransition();
+    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -312,6 +312,19 @@ class TransactionReceiptWorkerTest {
                         && command.getActiveTxId().equals(1L)
                         && command.getStuckReason().equals(stuckReason)
                         && command.hasTxHash()
+                        && command.hasBroadcastEvidence()));
+  }
+
+  private void verifyMissingTxHashStuckTransition() {
+    verify(nonceSlotLifecycleUseCase)
+        .transition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.getFromStatus() == SponsorNonceSlotStatus.BROADCASTED
+                        && command.getToStatus() == SponsorNonceSlotStatus.STUCK
+                        && command.getActiveTxId().equals(1L)
+                        && command.getStuckReason().equals("RECEIPT_TIMEOUT_MISSING_TX_HASH")
+                        && !command.hasTxHash()
                         && command.hasBroadcastEvidence()));
   }
 }

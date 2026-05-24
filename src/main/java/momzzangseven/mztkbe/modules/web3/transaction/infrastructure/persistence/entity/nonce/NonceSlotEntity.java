@@ -165,6 +165,8 @@ public class NonceSlotEntity {
 
   @PreUpdate
   void onUpdate() {
-    updatedAt = LocalDateTime.now();
+    if (updatedAt == null) {
+      updatedAt = LocalDateTime.now();
+    }
   }
 }

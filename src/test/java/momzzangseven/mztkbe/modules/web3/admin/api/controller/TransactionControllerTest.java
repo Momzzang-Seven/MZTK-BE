@@ -246,6 +246,20 @@ class TransactionControllerTest {
                         null,
                         null,
                         null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "RECEIPT_TIMEOUT_900S",
+                        null,
+                        null,
+                        0,
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        LocalDateTime.parse("2026-05-25T12:00:00"),
                         LocalDateTime.parse("2026-05-25T12:00:00")))));
 
     mockMvc
@@ -259,7 +273,8 @@ class TransactionControllerTest {
         .andExpect(jsonPath("$.data.chainId").value(84532))
         .andExpect(jsonPath("$.data.fromAddress").value(sponsor))
         .andExpect(jsonPath("$.data.slots[0].nonce").value(51))
-        .andExpect(jsonPath("$.data.slots[0].status").value("OPERATOR_REVIEW_REQUIRED"));
+        .andExpect(jsonPath("$.data.slots[0].status").value("OPERATOR_REVIEW_REQUIRED"))
+        .andExpect(jsonPath("$.data.slots[0].stuckReason").value("RECEIPT_TIMEOUT_900S"));
 
     verify(getSponsorNonceSlotsUseCase).execute(any(GetSponsorNonceSlotsQuery.class));
   }

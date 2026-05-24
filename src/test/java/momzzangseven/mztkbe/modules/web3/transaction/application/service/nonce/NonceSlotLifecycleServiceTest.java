@@ -192,6 +192,7 @@ class NonceSlotLifecycleServiceTest {
 
   private SponsorNonceSlotView slotView(SponsorNonceSlotStatus status) {
     return new SponsorNonceSlotView(
-        CHAIN_ID, SPONSOR, 51L, status, 1, 1L, 10L, null, null, null, null, null, null, NOW);
+        CHAIN_ID, SPONSOR, 51L, status, 1, 1L, 10L, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, 0, null, null, null, null, 0, NOW, NOW);
   }
 }
