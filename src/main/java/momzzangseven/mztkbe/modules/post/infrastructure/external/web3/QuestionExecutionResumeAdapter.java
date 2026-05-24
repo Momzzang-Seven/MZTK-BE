@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Active only when the shared resume use case is wired; otherwise the post module falls back to
  * {@link
- * momzzangseven.mztkbe.modules.post.infrastructure.config.QuestionExecutionResumeStubConfig}.
+ * momzzangseven.mztkbe.modules.post.infrastructure.config.QuestionExecutionResumeDisabledConfig}.
  */
 @Component
 @RequiredArgsConstructor

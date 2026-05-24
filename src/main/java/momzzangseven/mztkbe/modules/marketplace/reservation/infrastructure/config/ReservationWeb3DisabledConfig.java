@@ -18,9 +18,9 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** Explicit disabled stubs for marketplace user Web3 mutation paths. */
+/** Explicit disabled fallbacks for marketplace user Web3 mutation paths. */
 @Configuration
-public class ReservationWeb3StubConfig {
+public class ReservationWeb3DisabledConfig {
 
   @Bean
   LoadReservationWalletPort disabledLoadReservationWalletPort() {

@@ -4,11 +4,17 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class QuestionRewardOnAcceptStubConfig {
+@ConditionalOnProperty(
+    prefix = "web3.eip7702",
+    name = "enabled",
+    havingValue = "false",
+    matchIfMissing = true)
+public class QuestionLifecycleExecutionDisabledConfig {
 
   @Bean
   @ConditionalOnMissingBean(QuestionLifecycleExecutionPort.class)

@@ -5,13 +5,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("QuestionRewardOnAcceptStubConfig unit test")
-class QuestionRewardOnAcceptStubConfigTest {
+@DisplayName("QuestionLifecycleExecutionDisabledConfig unit test")
+class QuestionLifecycleExecutionDisabledConfigTest {
 
   @Test
-  @DisplayName("stub returns empty optional for all prepare operations")
-  void stubReturnsEmptyOptional() {
-    var port = new QuestionRewardOnAcceptStubConfig().questionLifecycleExecutionPort();
+  @DisplayName("disabled fallback returns empty optional for all prepare operations")
+  void disabledFallbackReturnsEmptyOptional() {
+    var port = new QuestionLifecycleExecutionDisabledConfig().questionLifecycleExecutionPort();
 
     assertThat(port.prepareQuestionCreate(1L, 2L, "q", 10L)).isEmpty();
     assertThat(port.prepareQuestionUpdate(1L, 2L, "q", 10L, 1L, "token")).isEmpty();

@@ -294,14 +294,14 @@ public class ReservationApplicationServiceConfig {
       LoadReservationPort loadReservationPort,
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
-      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      ObjectProvider<LoadReservationExecutionResumePort> loadReservationExecutionResumePortProvider,
       RepairReservationChainReadUseCase repairReservationChainReadUseCase,
       Clock clock) {
     return new GetUserReservationsService(
         loadReservationPort,
         loadClassSummaryPort,
         loadUserSummaryPort,
-        loadReservationExecutionResumePort,
+        loadReservationExecutionResumePortProvider.getIfAvailable(),
         repairReservationChainReadUseCase,
         clock);
   }
@@ -311,14 +311,14 @@ public class ReservationApplicationServiceConfig {
       LoadReservationPort loadReservationPort,
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
-      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      ObjectProvider<LoadReservationExecutionResumePort> loadReservationExecutionResumePortProvider,
       RepairReservationChainReadUseCase repairReservationChainReadUseCase,
       Clock clock) {
     return new GetTrainerReservationsService(
         loadReservationPort,
         loadClassSummaryPort,
         loadUserSummaryPort,
-        loadReservationExecutionResumePort,
+        loadReservationExecutionResumePortProvider.getIfAvailable(),
         repairReservationChainReadUseCase,
         clock);
   }
@@ -328,7 +328,7 @@ public class ReservationApplicationServiceConfig {
       LoadReservationPort loadReservationPort,
       LoadClassSummaryPort loadClassSummaryPort,
       LoadUserSummaryPort loadUserSummaryPort,
-      LoadReservationExecutionResumePort loadReservationExecutionResumePort,
+      ObjectProvider<LoadReservationExecutionResumePort> loadReservationExecutionResumePortProvider,
       RepairReservationChainReadUseCase repairReservationChainReadUseCase,
       LoadReservationEscrowPort loadReservationEscrowPort,
       Clock clock) {
@@ -336,7 +336,7 @@ public class ReservationApplicationServiceConfig {
         loadReservationPort,
         loadClassSummaryPort,
         loadUserSummaryPort,
-        loadReservationExecutionResumePort,
+        loadReservationExecutionResumePortProvider.getIfAvailable(),
         repairReservationChainReadUseCase,
         loadReservationEscrowPort,
         clock);
