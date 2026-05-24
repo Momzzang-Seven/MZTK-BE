@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.MarkWalletRegistrationApprovalTerminatedCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -73,6 +74,43 @@ class MarkWalletRegistrationApprovalTerminatedServiceTest {
     verify(saveSessionPort).save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.APPROVAL_FAILED);
     assertThat(captor.getValue().getLastErrorReason()).isEqualTo("reverted");
+  }
+
+  @Test
+  void execute_whenReceiptTimeoutAndSessionTtlRemains_marksRetryable() {
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(signedSession()));
+
+    service.execute(
+        command(WalletRegistrationReceiptTimeout.ERROR_CODE, "receipt timeout from transaction"));
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus())
+        .isEqualTo(WalletRegistrationStatus.APPROVAL_RETRYABLE);
+    assertThat(captor.getValue().getLastErrorCode())
+        .isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
+    assertThat(captor.getValue().getLastErrorReason())
+        .isEqualTo(WalletRegistrationReceiptTimeout.ERROR_REASON);
+  }
+
+  @Test
+  void execute_whenReceiptTimeoutAndSessionTtlElapsed_marksApprovalFailed() {
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(expiredTtlSignedSession()));
+
+    service.execute(
+        command(WalletRegistrationReceiptTimeout.ERROR_CODE, "receipt timeout from transaction"));
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.APPROVAL_FAILED);
+    assertThat(captor.getValue().getLastErrorCode())
+        .isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
+    assertThat(captor.getValue().getLastErrorReason())
+        .isEqualTo(WalletRegistrationReceiptTimeout.ERROR_REASON);
   }
 
   @Test

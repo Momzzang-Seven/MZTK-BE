@@ -9,9 +9,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.WalletRegistrationLocalConflictException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletAndFlushPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RecordWalletEventPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletAndFlushPort;
@@ -22,6 +25,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationS
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Transactional processor for confirmed approval local wallet finalization. */
@@ -33,6 +37,8 @@ class WalletRegistrationFinalizationProcessor {
   static final String LOCAL_CONFLICT = "LOCAL_CONFLICT";
 
   private final LockWalletRegistrationSessionPort lockSessionPort;
+  private final LoadWalletRegistrationSessionPort loadSessionPort;
+  private final AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   private final SaveWalletRegistrationSessionPort saveSessionPort;
   private final LoadWalletPort loadWalletPort;
   private final SaveWalletAndFlushPort saveWalletAndFlushPort;
@@ -40,8 +46,18 @@ class WalletRegistrationFinalizationProcessor {
   private final RecordWalletEventPort recordWalletEventPort;
   private final Clock appClock;
 
-  @Transactional
-  public void finalizeConfirmed(FinalizeWalletRegistrationCommand command) {
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public WalletRegistrationFinalizationResult finalizeConfirmed(
+      FinalizeWalletRegistrationCommand command) {
+    WalletRegistrationSession authoritySnapshot =
+        loadSessionPort
+            .loadByPublicId(command.registrationId())
+            .orElseThrow(
+                () ->
+                    new Web3InvalidInputException(
+                        "registrationId not found: " + command.registrationId()));
+    authorityLockPort.lock(authoritySnapshot.getUserId(), authoritySnapshot.getWalletAddress());
+
     WalletRegistrationSession session =
         lockSessionPort
             .lockByPublicIdForUpdate(command.registrationId())
@@ -50,33 +66,50 @@ class WalletRegistrationFinalizationProcessor {
                     new Web3InvalidInputException(
                         "registrationId not found: " + command.registrationId()));
 
-    if (isStaleIntent(session, command.executionIntentId())) {
+    boolean staleIntent = isStaleIntent(session, command.executionIntentId());
+    boolean recoveredStaleIntent =
+        staleIntent && canFinalizeRecoveredStaleIntent(session, command.executionIntentId());
+    if (staleIntent && !recoveredStaleIntent) {
       log.info(
           "Skipping stale wallet finalization event: registrationId={}, sessionIntent={}, eventIntent={}",
           session.getPublicId(),
           session.getLatestExecutionIntentId(),
           command.executionIntentId());
-      return;
+      return WalletRegistrationFinalizationResult.noop();
     }
     if (session.getStatus() == WalletRegistrationStatus.REGISTERED) {
-      return;
+      return WalletRegistrationFinalizationResult.noop();
     }
-    if (!isFinalizable(session)) {
+    if (!recoveredStaleIntent && !isFinalizable(session)) {
       log.info(
           "Skipping wallet finalization from non-finalizable status: registrationId={}, status={}",
           session.getPublicId(),
           session.getStatus());
-      return;
+      return WalletRegistrationFinalizationResult.noop();
+    }
+    if (hasNewerAuthoritativeSession(session)) {
+      log.info(
+          "Skipping superseded wallet finalization event: registrationId={}, userId={}, walletAddress={}",
+          session.getPublicId(),
+          session.getUserId(),
+          session.getWalletAddress());
+      return WalletRegistrationFinalizationResult.noop();
     }
 
     LocalDateTime now = LocalDateTime.now(appClock);
+    String supersededExecutionIntentId =
+        recoveredStaleIntent ? session.getLatestExecutionIntentId() : null;
     WalletRegistrationSession confirmed =
-        session.markApprovalConfirmed(command.executionIntentId(), null, null, "CONFIRMED", now);
+        staleIntent
+            ? session.markRecoveredApprovalConfirmed(command.executionIntentId(), "CONFIRMED", now)
+            : session.markApprovalConfirmed(
+                command.executionIntentId(), null, null, "CONFIRMED", now);
 
     UserWallet wallet = finalizeWallet(confirmed, command.executionIntentId());
     WalletRegistrationSession registered =
         confirmed.markRegistered(wallet.getId(), LocalDateTime.now(appClock));
     saveSessionPort.save(registered);
+    return WalletRegistrationFinalizationResult.finalized(supersededExecutionIntentId);
   }
 
   private boolean isStaleIntent(WalletRegistrationSession session, String executionIntentId) {
@@ -84,11 +117,35 @@ class WalletRegistrationFinalizationProcessor {
         || !session.getLatestExecutionIntentId().equals(executionIntentId);
   }
 
+  private boolean canFinalizeRecoveredStaleIntent(
+      WalletRegistrationSession session, String executionIntentId) {
+    return session.hasReceiptTimeoutExecutionIntent(executionIntentId)
+        && (session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED
+            || session.getStatus().isConfirmedButNotFinalized());
+  }
+
   private boolean isFinalizable(WalletRegistrationSession session) {
     return session.getStatus() == WalletRegistrationStatus.APPROVAL_REQUIRED
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
         || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+        || isReceiptTimeoutLateSuccess(session)
         || session.getStatus().isConfirmedButNotFinalized();
+  }
+
+  private boolean hasNewerAuthoritativeSession(WalletRegistrationSession session) {
+    return session.getId() != null
+        && loadSessionPort.existsNewerByUserIdOrWalletAddress(
+            session.getUserId(), session.getWalletAddress(), session.getId());
+  }
+
+  private boolean isReceiptTimeoutLateSuccess(WalletRegistrationSession session) {
+    return (session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED)
+        && WalletRegistrationReceiptTimeout.isRecordedOn(session);
   }
 
   private UserWallet finalizeWallet(WalletRegistrationSession session, String executionIntentId) {

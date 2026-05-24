@@ -14,9 +14,11 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionI
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentStateResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayConfirmedExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayTerminatedExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentStateUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayTerminatedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -41,6 +43,7 @@ class ReservationExecutionWriteAdapterTest {
   @Mock private GetExecutionIntentUseCase getExecutionIntentUseCase;
   @Mock private GetExecutionIntentStateUseCase getExecutionIntentStateUseCase;
   @Mock private ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase;
+  @Mock private ReplayTerminatedExecutionIntentUseCase replayTerminatedExecutionIntentUseCase;
 
   private ObjectMapper objectMapper;
   private ReservationExecutionWriteAdapter adapter;
@@ -53,6 +56,7 @@ class ReservationExecutionWriteAdapterTest {
             getExecutionIntentUseCase,
             getExecutionIntentStateUseCase,
             replayConfirmedExecutionIntentUseCase,
+            replayTerminatedExecutionIntentUseCase,
             objectMapper);
   }
 
@@ -110,6 +114,22 @@ class ReservationExecutionWriteAdapterTest {
         .execute(
             new ReplayConfirmedExecutionIntentCommand(
                 "intent-public-1", "MARKETPLACE_CLASS_CANCEL"));
+  }
+
+  @Test
+  void replayTerminated_delegatesExpectedActionTypeAndResult() {
+    when(replayTerminatedExecutionIntentUseCase.execute(
+            new ReplayTerminatedExecutionIntentCommand(
+                "intent-public-1", "MARKETPLACE_ADMIN_REFUND")))
+        .thenReturn(true);
+
+    boolean replayed = adapter.replayTerminated("intent-public-1", "MARKETPLACE_ADMIN_REFUND");
+
+    assertThat(replayed).isTrue();
+    verify(replayTerminatedExecutionIntentUseCase)
+        .execute(
+            new ReplayTerminatedExecutionIntentCommand(
+                "intent-public-1", "MARKETPLACE_ADMIN_REFUND"));
   }
 
   private GetExecutionIntentResult result(String payloadSnapshotJson) {

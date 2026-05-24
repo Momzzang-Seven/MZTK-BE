@@ -11,7 +11,10 @@ public record ReservationWeb3ExecutionResponseDTO(
     Transaction transaction,
     String viewerAction,
     boolean viewerCanExecute,
-    boolean viewerCanRecover) {
+    boolean viewerCanRecover,
+    String recoveryStatus,
+    String recoveryReason,
+    Boolean retryAllowed) {
 
   public static ReservationWeb3ExecutionResponseDTO from(ReservationExecutionResumeView view) {
     if (view == null) {
@@ -32,7 +35,10 @@ public record ReservationWeb3ExecutionResponseDTO(
                 view.transaction().id(), view.transaction().status(), view.transaction().txHash()),
         view.viewerAction(),
         view.viewerCanExecute(),
-        view.viewerCanRecover());
+        view.viewerCanRecover(),
+        view.recoveryStatus(),
+        view.recoveryReason(),
+        view.retryAllowed());
   }
 
   public record Resource(String type, String id, String status) {}

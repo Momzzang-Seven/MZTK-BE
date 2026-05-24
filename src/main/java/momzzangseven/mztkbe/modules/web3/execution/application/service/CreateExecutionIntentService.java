@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentIdempotencyMismatchPolicy;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
@@ -150,6 +151,10 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
 
     if (!existing.hasSamePayload(command.draft().payloadHash())) {
       if (existing.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE) {
+        if (command.mismatchPolicy()
+            == ExecutionIntentIdempotencyMismatchPolicy.REJECT_ON_MISMATCH) {
+          throw new Web3TransferException(ErrorCode.IDEMPOTENCY_CONFLICT, false);
+        }
         ExecutionIntent canceled =
             executionIntentPersistencePort.update(
                 existing.cancel(

@@ -14,6 +14,8 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.FilterMarketplaceExecutionCleanupCandidatesUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.FilterQnaExecutionCleanupCandidatesUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationExecutionCleanupCandidate;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.FilterWalletRegistrationExecutionCleanupCandidatesUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,15 +30,19 @@ class CompositeExecutionCleanupProtectionAdapterTest {
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private FilterQnaExecutionCleanupCandidatesUseCase qnaProtection;
   @Mock private FilterMarketplaceExecutionCleanupCandidatesUseCase marketplaceProtection;
+  @Mock private FilterWalletRegistrationExecutionCleanupCandidatesUseCase walletProtection;
   @Mock private ObjectProvider<FilterQnaExecutionCleanupCandidatesUseCase> qnaProvider;
 
   @Mock
   private ObjectProvider<FilterMarketplaceExecutionCleanupCandidatesUseCase> marketplaceProvider;
 
+  @Mock
+  private ObjectProvider<FilterWalletRegistrationExecutionCleanupCandidatesUseCase> walletProvider;
+
   @Test
   @DisplayName("QnA와 marketplace 후보를 각각 보호 필터로 라우팅하고 나머지 intent는 삭제 가능하게 둔다")
   void filterDeletableFinalizedIntentIds_routesFeatureSpecificCandidates() {
-    List<Long> candidateIds = List.of(1L, 2L, 3L);
+    List<Long> candidateIds = List.of(1L, 2L, 3L, 4L);
     given(executionIntentPersistencePort.findAllByIdsForUpdate(candidateIds))
         .willReturn(
             List.of(
@@ -50,16 +56,31 @@ class CompositeExecutionCleanupProtectionAdapterTest {
                     ExecutionResourceType.ORDER,
                     "202",
                     ExecutionActionType.MARKETPLACE_CLASS_PURCHASE),
+                view(3L, ExecutionResourceType.TRANSFER, "303", ExecutionActionType.TRANSFER_SEND),
                 view(
-                    3L, ExecutionResourceType.TRANSFER, "303", ExecutionActionType.TRANSFER_SEND)));
+                    4L,
+                    ExecutionResourceType.WALLET_REGISTRATION,
+                    "registration-1",
+                    ExecutionActionType.WALLET_ESCROW_APPROVE)));
     given(qnaProvider.getIfAvailable()).willReturn(qnaProtection);
     given(marketplaceProvider.getIfAvailable()).willReturn(marketplaceProtection);
+    given(walletProvider.getIfAvailable()).willReturn(walletProtection);
     given(qnaProtection.filterDeletableFinalizedIntentIds(List.of(1L))).willReturn(List.of(1L));
     given(marketplaceProtection.filterDeletableFinalizedIntentIds(List.of(2L)))
         .willReturn(List.of());
+    given(
+            walletProtection.filterDeletableFinalizedIntentIds(
+                List.of(
+                    new WalletRegistrationExecutionCleanupCandidate(
+                        4L,
+                        "intent-4",
+                        "registration-1",
+                        "WALLET_REGISTRATION",
+                        "WALLET_ESCROW_APPROVE"))))
+        .willReturn(List.of());
     CompositeExecutionCleanupProtectionAdapter adapter =
         new CompositeExecutionCleanupProtectionAdapter(
-            executionIntentPersistencePort, qnaProvider, marketplaceProvider);
+            executionIntentPersistencePort, qnaProvider, marketplaceProvider, walletProvider);
 
     List<Long> result = adapter.filterDeletableFinalizedIntentIds(candidateIds);
 
@@ -67,9 +88,9 @@ class CompositeExecutionCleanupProtectionAdapterTest {
   }
 
   @Test
-  @DisplayName("marketplace user action 전체를 marketplace 보호 필터로 라우팅한다")
-  void filterDeletableFinalizedIntentIds_routesAllMarketplaceUserActions() {
-    List<Long> candidateIds = List.of(1L, 2L, 3L, 4L);
+  @DisplayName("marketplace user/admin action 전체를 marketplace 보호 필터로 라우팅한다")
+  void filterDeletableFinalizedIntentIds_routesAllMarketplaceActions() {
+    List<Long> candidateIds = List.of(1L, 2L, 3L, 4L, 5L, 6L);
     given(executionIntentPersistencePort.findAllByIdsForUpdate(candidateIds))
         .willReturn(
             List.of(
@@ -92,17 +113,27 @@ class CompositeExecutionCleanupProtectionAdapterTest {
                     4L,
                     ExecutionResourceType.ORDER,
                     "4",
-                    ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND)));
+                    ExecutionActionType.MARKETPLACE_CLASS_EXPIRED_REFUND),
+                view(
+                    5L,
+                    ExecutionResourceType.ORDER,
+                    "5",
+                    ExecutionActionType.MARKETPLACE_ADMIN_REFUND),
+                view(
+                    6L,
+                    ExecutionResourceType.ORDER,
+                    "6",
+                    ExecutionActionType.MARKETPLACE_ADMIN_SETTLE)));
     given(marketplaceProvider.getIfAvailable()).willReturn(marketplaceProtection);
     given(marketplaceProtection.filterDeletableFinalizedIntentIds(candidateIds))
-        .willReturn(List.of(2L, 4L));
+        .willReturn(List.of(2L, 4L, 6L));
     CompositeExecutionCleanupProtectionAdapter adapter =
         new CompositeExecutionCleanupProtectionAdapter(
-            executionIntentPersistencePort, qnaProvider, marketplaceProvider);
+            executionIntentPersistencePort, qnaProvider, marketplaceProvider, walletProvider);
 
     List<Long> result = adapter.filterDeletableFinalizedIntentIds(candidateIds);
 
-    assertThat(result).containsExactly(2L, 4L);
+    assertThat(result).containsExactly(2L, 4L, 6L);
   }
 
   @Test
@@ -126,11 +157,45 @@ class CompositeExecutionCleanupProtectionAdapterTest {
                     3L, ExecutionResourceType.TRANSFER, "303", ExecutionActionType.TRANSFER_SEND)));
     CompositeExecutionCleanupProtectionAdapter adapter =
         new CompositeExecutionCleanupProtectionAdapter(
-            executionIntentPersistencePort, qnaProvider, marketplaceProvider);
+            executionIntentPersistencePort, qnaProvider, marketplaceProvider, walletProvider);
 
     List<Long> result = adapter.filterDeletableFinalizedIntentIds(candidateIds);
 
     assertThat(result).containsExactly(3L);
+  }
+
+  @Test
+  @DisplayName("wallet registration approval intent를 wallet 보호 필터로 라우팅한다")
+  void filterDeletableFinalizedIntentIds_routesWalletRegistrationApproval() {
+    List<Long> candidateIds = List.of(1L, 2L);
+    given(executionIntentPersistencePort.findAllByIdsForUpdate(candidateIds))
+        .willReturn(
+            List.of(
+                view(
+                    1L,
+                    ExecutionResourceType.WALLET_REGISTRATION,
+                    "registration-1",
+                    ExecutionActionType.WALLET_ESCROW_APPROVE),
+                view(
+                    2L, ExecutionResourceType.TRANSFER, "303", ExecutionActionType.TRANSFER_SEND)));
+    given(walletProvider.getIfAvailable()).willReturn(walletProtection);
+    given(
+            walletProtection.filterDeletableFinalizedIntentIds(
+                List.of(
+                    new WalletRegistrationExecutionCleanupCandidate(
+                        1L,
+                        "intent-1",
+                        "registration-1",
+                        "WALLET_REGISTRATION",
+                        "WALLET_ESCROW_APPROVE"))))
+        .willReturn(List.of(1L));
+    CompositeExecutionCleanupProtectionAdapter adapter =
+        new CompositeExecutionCleanupProtectionAdapter(
+            executionIntentPersistencePort, qnaProvider, marketplaceProvider, walletProvider);
+
+    List<Long> result = adapter.filterDeletableFinalizedIntentIds(candidateIds);
+
+    assertThat(result).containsExactly(1L, 2L);
   }
 
   private ExecutionIntent view(

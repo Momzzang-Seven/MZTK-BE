@@ -6,7 +6,10 @@ import java.math.BigInteger;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.CheckMarketplaceAdminRelayerRegistrationPort;
+import momzzangseven.mztkbe.modules.web3.marketplace.infrastructure.config.MarketplaceEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
@@ -22,18 +25,26 @@ import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.Response;
 import org.web3j.protocol.core.methods.request.Transaction;
 import org.web3j.protocol.core.methods.response.EthCall;
+import org.web3j.protocol.core.methods.response.EthEstimateGas;
 import org.web3j.protocol.http.HttpService;
 
 @Component
 @ConditionalOnAnyExecutionEnabled
 @Slf4j
-public class MarketplaceContractCallSupport {
+public class MarketplaceContractCallSupport
+    implements CheckMarketplaceAdminRelayerRegistrationPort {
 
   @Value("${web3.rpc.main}")
   private String mainRpcUrl;
 
   @Value("${web3.rpc.sub}")
   private String subRpcUrl;
+
+  @Autowired(required = false)
+  private MarketplaceGasFeeCalculator marketplaceGasFeeCalculator;
+
+  @Autowired(required = false)
+  private MarketplaceEscrowProperties marketplaceEscrowProperties;
 
   private Web3j mainWeb3j;
   private Web3j subWeb3j;
@@ -85,6 +96,90 @@ public class MarketplaceContractCallSupport {
                 List.of(TypeReference.create(Uint256.class))));
     EthCall response = ethCall(ownerAddress, tokenAddress, data, "balanceOf");
     return decodeUint256(response.getValue());
+  }
+
+  public boolean isRelayerRegistered(String escrowAddress, String callerAddress) {
+    String normalizedCaller = requireAddressText(callerAddress, "callerAddress");
+    String data =
+        FunctionEncoder.encode(
+            new Function(
+                "isRelayer",
+                List.of(new Address(normalizedCaller)),
+                List.of(TypeReference.create(Bool.class))));
+    EthCall response = ethCall(normalizedCaller, escrowAddress, data, "isRelayer");
+    return Boolean.TRUE.equals(decodeBool(response.getValue()));
+  }
+
+  @Override
+  public boolean isRegistered(String signerAddress) {
+    if (marketplaceEscrowProperties == null) {
+      throw new Web3InvalidInputException("marketplace escrow properties are unavailable");
+    }
+    return isRelayerRegistered(
+        marketplaceEscrowProperties.getMarketplaceContractAddress(), signerAddress);
+  }
+
+  public MarketplaceCallPrevalidationResult prevalidateContractCall(
+      String fromAddress, String contractAddress, String callData) {
+    if (marketplaceGasFeeCalculator == null) {
+      throw new Web3InvalidInputException("gas fee calculator is unavailable");
+    }
+    String normalizedFrom = requireAddressText(fromAddress, "fromAddress");
+    String normalizedContract = requireAddressText(contractAddress, "contractAddress");
+    if (callData == null || callData.isBlank()) {
+      throw new Web3InvalidInputException("callData is required");
+    }
+
+    EthCall staticCall = ethCall(normalizedFrom, normalizedContract, callData, "eth_call");
+    if (staticCall.isReverted()) {
+      throw new Web3InvalidInputException(
+          "contract call reverted: " + staticCall.getRevertReason());
+    }
+
+    Transaction estimateRequest =
+        Transaction.createFunctionCallTransaction(
+            normalizedFrom, null, null, null, normalizedContract, BigInteger.ZERO, callData);
+    EthEstimateGas estimateGas =
+        requireSuccess(
+            callWithFallback(web3j -> web3j.ethEstimateGas(estimateRequest).send()),
+            "eth_estimateGas");
+    if (estimateGas.hasError()) {
+      throw new Web3InvalidInputException(
+          "eth_estimateGas failed: " + estimateGas.getError().getMessage());
+    }
+
+    MarketplaceGasFeeCalculator.FeePlan feePlan = loadFeePlan(estimateGas.getAmountUsed());
+    return new MarketplaceCallPrevalidationResult(
+        feePlan.gasLimit(), feePlan.maxPriorityFeePerGas(), feePlan.maxFeePerGas());
+  }
+
+  private MarketplaceGasFeeCalculator.FeePlan loadFeePlan(BigInteger estimatedGas) {
+    BigInteger maxPriorityFeePerGas = null;
+    RpcOutcome<org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas> priorityOutcome =
+        callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send());
+    if (priorityOutcome.success()) {
+      maxPriorityFeePerGas = positiveOrNull(priorityOutcome.response().getMaxPriorityFeePerGas());
+    }
+
+    BigInteger baseFee = null;
+    RpcOutcome<org.web3j.protocol.core.methods.response.EthBaseFee> baseFeeOutcome =
+        callWithFallback(web3j -> web3j.ethBaseFee().send());
+    if (baseFeeOutcome.success()) {
+      baseFee = positiveOrNull(baseFeeOutcome.response().getBaseFee());
+    }
+
+    BigInteger gasPrice = null;
+    if (baseFee == null) {
+      RpcOutcome<org.web3j.protocol.core.methods.response.EthGasPrice> gasPriceOutcome =
+          callWithFallback(web3j -> web3j.ethGasPrice().send());
+      if (gasPriceOutcome.success()) {
+        gasPrice = positiveOrNull(gasPriceOutcome.response().getGasPrice());
+      }
+    }
+
+    return marketplaceGasFeeCalculator.calculate(
+        new MarketplaceGasFeeCalculator.FeeInputs(
+            estimatedGas, maxPriorityFeePerGas, baseFee, gasPrice));
   }
 
   private EthCall ethCall(String fromAddress, String toAddress, String data, String operation) {
@@ -182,6 +277,17 @@ public class MarketplaceContractCallSupport {
     return text == null ? "" : text;
   }
 
+  private String requireAddressText(String value, String fieldName) {
+    if (value == null || value.isBlank()) {
+      throw new Web3InvalidInputException(fieldName + " is required");
+    }
+    return value.trim();
+  }
+
+  private BigInteger positiveOrNull(BigInteger value) {
+    return value == null || value.signum() <= 0 ? null : value;
+  }
+
   @FunctionalInterface
   private interface RpcRequest<T extends Response<?>> {
     T invoke(Web3j web3j) throws Exception;
@@ -213,4 +319,7 @@ public class MarketplaceContractCallSupport {
       return attempt == null ? null : attempt.response();
     }
   }
+
+  public record MarketplaceCallPrevalidationResult(
+      BigInteger gasLimit, BigInteger maxPriorityFeePerGas, BigInteger maxFeePerGas) {}
 }

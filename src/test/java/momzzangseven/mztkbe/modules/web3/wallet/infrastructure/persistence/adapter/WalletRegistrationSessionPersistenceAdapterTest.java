@@ -85,6 +85,19 @@ class WalletRegistrationSessionPersistenceAdapterTest {
 
     assertThat(loaded).isPresent();
     assertThat(loaded.get().getUserId()).isEqualTo(1L);
+    ArgumentCaptor<Collection<WalletRegistrationStatus>> statusesCaptor =
+        ArgumentCaptor.forClass(Collection.class);
+    verify(repository)
+        .findLatestByUserIdAndStatusIn(eq(1L), statusesCaptor.capture(), any(Pageable.class));
+    assertThat(statusesCaptor.getValue())
+        .containsExactlyInAnyOrder(
+            WalletRegistrationStatus.APPROVAL_REQUIRED,
+            WalletRegistrationStatus.APPROVAL_SIGNED,
+            WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
+            WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.FINALIZATION_FAILED,
+            WalletRegistrationStatus.LOCAL_CONFLICT);
+    assertThat(statusesCaptor.getValue()).doesNotContain(WalletRegistrationStatus.APPROVAL_FAILED);
   }
 
   @Test
@@ -95,6 +108,38 @@ class WalletRegistrationSessionPersistenceAdapterTest {
 
     assertThat(loaded).isPresent();
     assertThat(loaded.get().getWalletAddress()).isEqualTo(WALLET_ADDRESS);
+    assertThat(loaded.get().hasReceiptTimeoutExecutionIntent("intent-timeout")).isTrue();
+  }
+
+  @Test
+  void existsNewerByUserIdOrWalletAddress_delegatesToRepositoryQueryWithAuthoritativeStatuses() {
+    when(repository.existsNewerByUserIdOrWalletAddress(eq(1L), eq(WALLET_ADDRESS), any(), eq(10L)))
+        .thenReturn(true);
+
+    boolean exists = adapter.existsNewerByUserIdOrWalletAddress(1L, WALLET_ADDRESS, 10L);
+
+    assertThat(exists).isTrue();
+    ArgumentCaptor<Collection<WalletRegistrationStatus>> statusesCaptor =
+        ArgumentCaptor.forClass(Collection.class);
+    verify(repository)
+        .existsNewerByUserIdOrWalletAddress(
+            eq(1L), eq(WALLET_ADDRESS), statusesCaptor.capture(), eq(10L));
+    assertThat(statusesCaptor.getValue())
+        .containsExactlyInAnyOrder(
+            WalletRegistrationStatus.APPROVAL_REQUIRED,
+            WalletRegistrationStatus.APPROVAL_SIGNED,
+            WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
+            WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.FINALIZATION_FAILED,
+            WalletRegistrationStatus.LOCAL_CONFLICT,
+            WalletRegistrationStatus.REGISTERED);
+  }
+
+  @Test
+  void existsNewerByUserIdOrWalletAddress_whenRequiredInputMissing_returnsFalse() {
+    boolean exists = adapter.existsNewerByUserIdOrWalletAddress(null, WALLET_ADDRESS, 10L);
+
+    assertThat(exists).isFalse();
   }
 
   @Test
@@ -108,8 +153,8 @@ class WalletRegistrationSessionPersistenceAdapterTest {
   }
 
   @Test
-  void loadRecoveryCandidates_usesRecoveryCandidateStatusesIncludingLocalConflict() {
-    when(repository.findByStatusInOrderByUpdatedAtAscIdAsc(any(), any(Pageable.class)))
+  void loadRecoveryCandidates_usesRecoveryStatusesAndReceiptTimeoutFailedTarget() {
+    when(repository.findRecoveryCandidates(any(), any(), any(), any(Pageable.class)))
         .thenReturn(List.of(entity()));
 
     List<WalletRegistrationSession> loaded = adapter.loadRecoveryCandidates(50);
@@ -117,8 +162,15 @@ class WalletRegistrationSessionPersistenceAdapterTest {
     assertThat(loaded).hasSize(1);
     ArgumentCaptor<Collection<WalletRegistrationStatus>> statusesCaptor =
         ArgumentCaptor.forClass(Collection.class);
+    ArgumentCaptor<WalletRegistrationStatus> receiptTimeoutStatusCaptor =
+        ArgumentCaptor.forClass(WalletRegistrationStatus.class);
+    ArgumentCaptor<String> receiptTimeoutErrorCodeCaptor = ArgumentCaptor.forClass(String.class);
     verify(repository)
-        .findByStatusInOrderByUpdatedAtAscIdAsc(statusesCaptor.capture(), any(Pageable.class));
+        .findRecoveryCandidates(
+            statusesCaptor.capture(),
+            receiptTimeoutStatusCaptor.capture(),
+            receiptTimeoutErrorCodeCaptor.capture(),
+            any(Pageable.class));
     assertThat(statusesCaptor.getValue())
         .containsExactlyInAnyOrder(
             WalletRegistrationStatus.APPROVAL_REQUIRED,
@@ -127,6 +179,19 @@ class WalletRegistrationSessionPersistenceAdapterTest {
             WalletRegistrationStatus.APPROVAL_RETRYABLE,
             WalletRegistrationStatus.FINALIZATION_FAILED,
             WalletRegistrationStatus.LOCAL_CONFLICT);
+    assertThat(statusesCaptor.getValue()).doesNotContain(WalletRegistrationStatus.APPROVAL_FAILED);
+    assertThat(receiptTimeoutStatusCaptor.getValue())
+        .isEqualTo(WalletRegistrationStatus.APPROVAL_FAILED);
+    assertThat(receiptTimeoutErrorCodeCaptor.getValue()).isEqualTo("RECEIPT_TIMEOUT");
+  }
+
+  @Test
+  void advanceReceiptTimeoutFailedRecoveryCursor_delegatesConditionedCursorUpdate() {
+    adapter.advanceReceiptTimeoutFailedRecoveryCursor(PUBLIC_ID, NOW);
+
+    verify(repository)
+        .advanceRecoveryCursor(
+            PUBLIC_ID, WalletRegistrationStatus.APPROVAL_FAILED, "RECEIPT_TIMEOUT", NOW);
   }
 
   private static WalletRegistrationSession newSession() {
@@ -142,6 +207,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
         .walletAddress(WALLET_ADDRESS)
         .challengeNonce("challenge-nonce")
         .status(WalletRegistrationStatus.APPROVAL_REQUIRED)
+        .receiptTimeoutExecutionIntentIds("intent-timeout")
         .retryCount(0)
         .approvalExpiresAt(NOW.plusMinutes(30))
         .createdAt(NOW)

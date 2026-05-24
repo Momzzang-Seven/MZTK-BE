@@ -57,4 +57,14 @@ class MarketplaceEscrowIdempotencyKeyFactoryTest {
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("reservationId");
   }
+
+  @Test
+  void create_rejectsAdminActionTypes() {
+    assertThatThrownBy(
+            () ->
+                MarketplaceEscrowIdempotencyKeyFactory.create(
+                    MarketplaceExecutionActionType.MARKETPLACE_ADMIN_REFUND, 7L, 123L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("user marketplace actionType");
+  }
 }

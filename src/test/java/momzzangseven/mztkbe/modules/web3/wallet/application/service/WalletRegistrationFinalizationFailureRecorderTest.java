@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.FinalizeWalletRegistrationCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.AcquireWalletRegistrationAuthorityLockPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -34,6 +36,8 @@ class WalletRegistrationFinalizationFailureRecorderTest {
   private static final String INTENT_ID = "intent-1";
 
   @Mock private LockWalletRegistrationSessionPort lockSessionPort;
+  @Mock private LoadWalletRegistrationSessionPort loadSessionPort;
+  @Mock private AcquireWalletRegistrationAuthorityLockPort authorityLockPort;
   @Mock private SaveWalletRegistrationSessionPort saveSessionPort;
 
   private WalletRegistrationFinalizationFailureRecorder recorder;
@@ -41,13 +45,14 @@ class WalletRegistrationFinalizationFailureRecorderTest {
   @BeforeEach
   void setUp() {
     recorder =
-        new WalletRegistrationFinalizationFailureRecorder(lockSessionPort, saveSessionPort, CLOCK);
+        new WalletRegistrationFinalizationFailureRecorder(
+            lockSessionPort, loadSessionPort, authorityLockPort, saveSessionPort, CLOCK);
   }
 
   @Test
   void recordLocalConflict_locksSessionAndPersistsLocalConflict() {
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
-        .thenReturn(Optional.of(approvalRequiredSession()));
+    WalletRegistrationSession session = approvalRequiredSession();
+    givenRecordableSession(session);
 
     recorder.recordLocalConflict(command(), "LOCAL_CONFLICT", "active wallet");
 
@@ -56,6 +61,7 @@ class WalletRegistrationFinalizationFailureRecorderTest {
     verify(saveSessionPort).save(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.LOCAL_CONFLICT);
     assertThat(captor.getValue().getLastErrorReason()).isEqualTo("active wallet");
+    verify(authorityLockPort).lock(session.getUserId(), session.getWalletAddress());
   }
 
   @Test
@@ -64,15 +70,52 @@ class WalletRegistrationFinalizationFailureRecorderTest {
         WalletRegistrationSession.create(
                 REGISTRATION_ID, 1L, "0x" + "a".repeat(40), "nonce-1", NOW.plusMinutes(30), NOW)
             .attachApprovalIntent("new-intent", NOW.plusMinutes(30), NOW.plusSeconds(1));
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    givenRecordableSession(session);
 
     recorder.recordUnexpectedFailure(command(), "FINALIZATION_FAILED", "db failed");
 
     verify(saveSessionPort, never()).save(any());
   }
 
+  @Test
+  void recordLocalConflict_whenOldReceiptTimeoutIntentWasRetried_recordsRecoveredFailure() {
+    WalletRegistrationSession retriedFailed =
+        approvalRequiredSession()
+            .markApprovalRetryable("RECEIPT_TIMEOUT", "timeout", NOW.plusSeconds(2))
+            .attachApprovalIntentPreservingDeadline("intent-2", NOW.plusSeconds(3))
+            .markApprovalFailed("FAILED_ONCHAIN", "second attempt failed", NOW.plusSeconds(4));
+    givenRecordableSession(retriedFailed);
+
+    recorder.recordLocalConflict(command(), "LOCAL_CONFLICT", "active wallet");
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.LOCAL_CONFLICT);
+    assertThat(captor.getValue().getLatestExecutionIntentId()).isEqualTo(INTENT_ID);
+    assertThat(captor.getValue().getLastErrorReason()).isEqualTo("active wallet");
+  }
+
+  @Test
+  void recordLocalConflict_whenNewerAuthoritativeSessionExists_doesNotPersistFailure() {
+    WalletRegistrationSession session = approvalRequiredSession().toBuilder().id(10L).build();
+    givenRecordableSession(session);
+    when(loadSessionPort.existsNewerByUserIdOrWalletAddress(
+            session.getUserId(), session.getWalletAddress(), session.getId()))
+        .thenReturn(true);
+
+    recorder.recordLocalConflict(command(), "LOCAL_CONFLICT", "active wallet");
+
+    verify(saveSessionPort, never()).save(any());
+  }
+
   private static FinalizeWalletRegistrationCommand command() {
     return new FinalizeWalletRegistrationCommand(REGISTRATION_ID, INTENT_ID);
+  }
+
+  private void givenRecordableSession(WalletRegistrationSession session) {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID)).thenReturn(Optional.of(session));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
   }
 
   private static WalletRegistrationSession approvalRequiredSession() {

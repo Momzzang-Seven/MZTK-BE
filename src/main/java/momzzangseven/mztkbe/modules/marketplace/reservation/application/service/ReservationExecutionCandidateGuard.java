@@ -23,12 +23,15 @@ final class ReservationExecutionCandidateGuard {
   private static final String STATUS_PENDING_ONCHAIN = "PENDING_ONCHAIN";
   private static final String STATUS_CONFIRMED = "CONFIRMED";
   private static final String TRANSACTION_SUCCEEDED = "SUCCEEDED";
+  private static final String TRANSACTION_UNCONFIRMED = "UNCONFIRMED";
   private static final Set<String> MARKETPLACE_ACTION_CODES =
       Set.of(
           "MARKETPLACE_CLASS_PURCHASE",
           "MARKETPLACE_CLASS_CANCEL",
           "MARKETPLACE_CLASS_CONFIRM",
-          "MARKETPLACE_CLASS_EXPIRED_REFUND");
+          "MARKETPLACE_CLASS_EXPIRED_REFUND",
+          "MARKETPLACE_ADMIN_REFUND",
+          "MARKETPLACE_ADMIN_SETTLE");
 
   private final LoadReservationExecutionStatePort loadReservationExecutionStatePort;
   private final LoadReservationExecutionCandidatePort loadReservationExecutionCandidatePort;
@@ -140,7 +143,8 @@ final class ReservationExecutionCandidateGuard {
         || isAwaitingSignature(candidate.status())
         || STATUS_SIGNED.equals(candidate.status())
         || STATUS_PENDING_ONCHAIN.equals(candidate.status())
-        || TRANSACTION_SUCCEEDED.equals(candidate.transactionStatus());
+        || TRANSACTION_SUCCEEDED.equals(candidate.transactionStatus())
+        || TRANSACTION_UNCONFIRMED.equals(candidate.transactionStatus());
   }
 
   private boolean isBlockingExecutionState(ReservationExecutionStateView state) {
@@ -149,7 +153,8 @@ final class ReservationExecutionCandidateGuard {
             || isAwaitingSignature(state)
             || STATUS_SIGNED.equals(state.status())
             || STATUS_PENDING_ONCHAIN.equals(state.status())
-            || TRANSACTION_SUCCEEDED.equals(state.transactionStatus()));
+            || TRANSACTION_SUCCEEDED.equals(state.transactionStatus())
+            || TRANSACTION_UNCONFIRMED.equals(state.transactionStatus()));
   }
 
   private boolean isAwaitingSignature(ReservationExecutionStateView state) {
@@ -170,6 +175,8 @@ final class ReservationExecutionCandidateGuard {
       case BUYER_CANCEL, TRAINER_REJECT -> "MARKETPLACE_CLASS_CANCEL";
       case BUYER_CONFIRM -> "MARKETPLACE_CLASS_CONFIRM";
       case DEADLINE_REFUND -> "MARKETPLACE_CLASS_EXPIRED_REFUND";
+      case ADMIN_REFUND -> "MARKETPLACE_ADMIN_REFUND";
+      case ADMIN_SETTLE -> "MARKETPLACE_ADMIN_SETTLE";
     };
   }
 }

@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
@@ -21,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayConfirm
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -40,6 +43,13 @@ class ReplayConfirmedExecutionIntentServiceTest {
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
   private static final Clock FIXED_CLOCK =
       Clock.fixed(java.time.Instant.parse("2026-04-12T01:03:00Z"), ZoneId.of("Asia/Seoul"));
+
+  @Test
+  void service_hasNoSpringTransactionalAnnotationBecauseBoundaryIsInfrastructureOwned() {
+    assertThat(ReplayConfirmedExecutionIntentService.class.getAnnotations())
+        .extracting(annotation -> annotation.annotationType().getName())
+        .doesNotContain("org.springframework.transaction.annotation.Transactional");
+  }
 
   @Test
   void execute_replaysConfirmedIntentWhenActionTypeMatches() {
@@ -121,12 +131,132 @@ class ReplayConfirmedExecutionIntentServiceTest {
         .afterExecutionConfirmed(any(ExecutionIntent.class), same(actionPlan));
   }
 
+  @Test
+  void execute_whenRepairingPendingIntent_schedulesHookAfterConfirmedUpdate() {
+    ExecutionIntent intent = pendingIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
+    ExecutionActionPlan actionPlan = actionPlan();
+    RecordingRunAfterCommitPort runAfterCommitPort = new RecordingRunAfterCommitPort();
+    ReplayConfirmedExecutionIntentService service = service(runAfterCommitPort);
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(loadExecutionTransactionPort.findById(99L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    99L, ExecutionTransactionStatus.SUCCEEDED, "0xhash")));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0, ExecutionIntent.class));
+    when(executionActionHandlerPort.supports(ExecutionActionType.QNA_QUESTION_UPDATE))
+        .thenReturn(true);
+    when(executionActionHandlerPort.supports(any(ExecutionIntent.class))).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(any(ExecutionIntent.class)))
+        .thenReturn(actionPlan);
+
+    boolean result =
+        service.execute(
+            new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE"));
+
+    assertThat(result).isTrue();
+    verify(executionIntentPersistencePort).update(any(ExecutionIntent.class));
+    verify(executionActionHandlerPort, never()).afterExecutionConfirmed(any(), any());
+
+    runAfterCommitPort.runRecordedActions();
+
+    verify(executionActionHandlerPort)
+        .afterExecutionConfirmed(any(ExecutionIntent.class), same(actionPlan));
+  }
+
+  @Test
+  void execute_repairsSignedIntentThroughPendingOnchainThenConfirmed() {
+    ExecutionIntent intent = signedIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
+    ExecutionActionPlan actionPlan = actionPlan();
+    RecordingRunAfterCommitPort runAfterCommitPort = new RecordingRunAfterCommitPort();
+    ReplayConfirmedExecutionIntentService service = service(runAfterCommitPort);
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(loadExecutionTransactionPort.findById(99L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionSummary(
+                    99L, ExecutionTransactionStatus.SUCCEEDED, "0xhash")));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0, ExecutionIntent.class));
+    when(executionActionHandlerPort.supports(ExecutionActionType.QNA_QUESTION_UPDATE))
+        .thenReturn(true);
+    when(executionActionHandlerPort.supports(any(ExecutionIntent.class))).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(any(ExecutionIntent.class)))
+        .thenReturn(actionPlan);
+
+    boolean result =
+        service.execute(
+            new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE"));
+
+    assertThat(result).isTrue();
+    verify(executionIntentPersistencePort)
+        .update(
+            org.mockito.ArgumentMatchers.argThat(
+                updated ->
+                    updated.getStatus().name().equals("CONFIRMED")
+                        && updated.getSubmittedTxId().equals(99L)));
+    verify(executionActionHandlerPort, never()).afterExecutionConfirmed(any(), any());
+
+    runAfterCommitPort.runRecordedActions();
+
+    verify(executionActionHandlerPort)
+        .afterExecutionConfirmed(any(ExecutionIntent.class), same(actionPlan));
+  }
+
+  @Test
+  void execute_swallowsAfterCommitHandlerFailureAfterReplayIsScheduled() {
+    ExecutionIntent intent = confirmedIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
+    ExecutionActionPlan actionPlan = actionPlan();
+    ReplayConfirmedExecutionIntentService service = service();
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(executionActionHandlerPort.supports(ExecutionActionType.QNA_QUESTION_UPDATE))
+        .thenReturn(true);
+    when(executionActionHandlerPort.supports(intent)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(intent)).thenReturn(actionPlan);
+    doThrow(new IllegalStateException("post replay failure"))
+        .when(executionActionHandlerPort)
+        .afterExecutionConfirmed(intent, actionPlan);
+
+    boolean result =
+        service.execute(
+            new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE"));
+
+    assertThat(result).isTrue();
+    verify(executionActionHandlerPort).afterExecutionConfirmed(same(intent), same(actionPlan));
+  }
+
   private ReplayConfirmedExecutionIntentService service() {
+    return service(RunAfterCommitPortTestAdapter.IMMEDIATE);
+  }
+
+  private ReplayConfirmedExecutionIntentService service(RunAfterCommitPort runAfterCommitPort) {
     return new ReplayConfirmedExecutionIntentService(
         executionIntentPersistencePort,
         loadExecutionTransactionPort,
         List.of(executionActionHandlerPort),
+        runAfterCommitPort,
         FIXED_CLOCK);
+  }
+
+  private static final class RunAfterCommitPortTestAdapter {
+    private static final RunAfterCommitPort IMMEDIATE = Runnable::run;
+  }
+
+  private static final class RecordingRunAfterCommitPort implements RunAfterCommitPort {
+    private final List<Runnable> actions = new ArrayList<>();
+
+    @Override
+    public void runAfterCommit(Runnable action) {
+      actions.add(action);
+    }
+
+    void runRecordedActions() {
+      actions.forEach(Runnable::run);
+    }
   }
 
   private ExecutionActionPlan actionPlan() {
@@ -140,7 +270,15 @@ class ReplayConfirmedExecutionIntentServiceTest {
     return pendingIntent(actionType).confirm(LocalDateTime.of(2026, 4, 12, 10, 2));
   }
 
+  private ExecutionIntent signedIntent(ExecutionActionType actionType) {
+    return baseIntent(actionType).markSigned(99L, LocalDateTime.of(2026, 4, 12, 10, 1));
+  }
+
   private ExecutionIntent pendingIntent(ExecutionActionType actionType) {
+    return baseIntent(actionType).markPendingOnchain(99L, LocalDateTime.of(2026, 4, 12, 10, 1));
+  }
+
+  private ExecutionIntent baseIntent(ExecutionActionType actionType) {
     return ExecutionIntent.create(
             "intent-1",
             "root-1",
@@ -166,7 +304,6 @@ class ReplayConfirmedExecutionIntentServiceTest {
             LocalDateTime.of(2026, 4, 12, 10, 0))
         .toBuilder()
         .submittedTxId(99L)
-        .build()
-        .markPendingOnchain(99L, LocalDateTime.of(2026, 4, 12, 10, 1));
+        .build();
   }
 }

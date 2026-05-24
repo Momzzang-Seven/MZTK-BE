@@ -79,7 +79,7 @@
 -
 
 ### 첨부
-- k6 stdout 로그 : `phaseN/results/<유형>_<날짜>.log`
-- k6 JSON 결과   : `phaseN/results/<유형>_<날짜>.json`
-- 시계열 차트     : `phaseN/results/charts/<유형>_NN_*.svg`
+- k6 stdout 로그 : `phaseN/results/{YYYY.MM.DD}/k6/<유형>_<날짜>.log`
+- k6 JSON 결과   : `phaseN/results/{YYYY.MM.DD}/k6/<유형>_<날짜>.json`
+- 시계열 차트     : `phaseN/results/{YYYY.MM.DD}/charts/<유형>_NN_*.svg`
 ```

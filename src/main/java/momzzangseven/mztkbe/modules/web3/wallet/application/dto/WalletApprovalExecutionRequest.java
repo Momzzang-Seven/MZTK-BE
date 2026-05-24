@@ -4,11 +4,20 @@ import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 
 public record WalletApprovalExecutionRequest(
-    String registrationId, Long requesterUserId, String walletAddress, LocalDateTime expiresAt) {
+    String registrationId,
+    Long requesterUserId,
+    String walletAddress,
+    LocalDateTime expiresAt,
+    Integer retryAttemptNo) {
 
   public WalletApprovalExecutionRequest(
       String registrationId, Long requesterUserId, String walletAddress) {
-    this(registrationId, requesterUserId, walletAddress, null);
+    this(registrationId, requesterUserId, walletAddress, null, null);
+  }
+
+  public WalletApprovalExecutionRequest(
+      String registrationId, Long requesterUserId, String walletAddress, LocalDateTime expiresAt) {
+    this(registrationId, requesterUserId, walletAddress, expiresAt, null);
   }
 
   public WalletApprovalExecutionRequest {
@@ -20,6 +29,9 @@ public record WalletApprovalExecutionRequest(
     }
     if (walletAddress == null || walletAddress.isBlank()) {
       throw new Web3InvalidInputException("walletAddress is required");
+    }
+    if (retryAttemptNo != null && retryAttemptNo <= 0) {
+      throw new Web3InvalidInputException("retryAttemptNo must be positive");
     }
   }
 }

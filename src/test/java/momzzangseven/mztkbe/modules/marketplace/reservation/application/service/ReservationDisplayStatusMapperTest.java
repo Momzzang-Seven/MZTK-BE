@@ -50,4 +50,26 @@ class ReservationDisplayStatusMapperTest {
     assertThat(ReservationDisplayStatusMapper.businessStatus(reservation))
         .isEqualTo(ReservationStatus.APPROVED);
   }
+
+  @Test
+  @DisplayName("admin pending statuses are public display states with hidden business status")
+  void adminPendingMapsToDisplayAndHidesBusinessStatus() {
+    Reservation refund =
+        Reservation.builder()
+            .status(ReservationStatus.ADMIN_REFUND_PENDING)
+            .escrowStatus(ReservationEscrowStatus.ADMIN_REFUND_PENDING)
+            .build();
+    Reservation settle =
+        Reservation.builder()
+            .status(ReservationStatus.ADMIN_SETTLE_PENDING)
+            .escrowStatus(ReservationEscrowStatus.ADMIN_SETTLE_PENDING)
+            .build();
+
+    assertThat(ReservationDisplayStatusMapper.displayStatus(refund))
+        .isEqualTo(ReservationDisplayStatus.ADMIN_REFUND_PENDING);
+    assertThat(ReservationDisplayStatusMapper.businessStatus(refund)).isNull();
+    assertThat(ReservationDisplayStatusMapper.displayStatus(settle))
+        .isEqualTo(ReservationDisplayStatus.ADMIN_SETTLE_PENDING);
+    assertThat(ReservationDisplayStatusMapper.businessStatus(settle)).isNull();
+  }
 }

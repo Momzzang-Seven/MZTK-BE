@@ -212,6 +212,12 @@ web3:
   marketplace:
     admin:
       enabled: false
+      fail-fast: false
+      recovery:
+        enabled: false
+        batch-size: 100
+        cron: "0 */5 * * * *"
+        zone: "Asia/Seoul"
   escrow:
     marketplace-contract-address: "0x0000000000000000000000000000000000000002"
     qna-contract-address: "0x0000000000000000000000000000000000000003"

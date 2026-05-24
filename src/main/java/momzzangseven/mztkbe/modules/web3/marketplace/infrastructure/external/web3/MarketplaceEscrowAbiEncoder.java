@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.Collections;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceAdminEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.BuildMarketplaceEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionActionType;
@@ -17,7 +18,8 @@ import org.web3j.abi.datatypes.generated.Bytes32;
 import org.web3j.abi.datatypes.generated.Uint256;
 
 @Component
-public class MarketplaceEscrowAbiEncoder implements BuildMarketplaceEscrowCallDataPort {
+public class MarketplaceEscrowAbiEncoder
+    implements BuildMarketplaceEscrowCallDataPort, BuildMarketplaceAdminEscrowCallDataPort {
 
   @Override
   public String encode(
@@ -31,34 +33,61 @@ public class MarketplaceEscrowAbiEncoder implements BuildMarketplaceEscrowCallDa
     if (actionType == null) {
       throw new Web3InvalidInputException("actionType is required");
     }
-    Function function =
-        switch (actionType) {
-          case MARKETPLACE_CLASS_PURCHASE ->
-              new Function(
-                  "purchaseClass",
-                  List.of(
-                      bytes32(orderKey),
-                      new Address(tokenAddress),
-                      new Address(trainerAddress),
-                      uint256(priceBaseUnits),
-                      uint256(signedAt),
-                      signature(signatureBytes)),
-                  Collections.emptyList());
-          case MARKETPLACE_CLASS_CANCEL ->
-              new Function(
-                  "cancelClass",
-                  List.of(bytes32(orderKey), uint256(signedAt), signature(signatureBytes)),
-                  Collections.emptyList());
-          case MARKETPLACE_CLASS_CONFIRM ->
-              new Function(
-                  "confirmClass",
-                  List.of(bytes32(orderKey), uint256(signedAt), signature(signatureBytes)),
-                  Collections.emptyList());
-          case MARKETPLACE_CLASS_EXPIRED_REFUND ->
-              new Function(
-                  "claimExpiredRefund", List.of(bytes32(orderKey)), Collections.emptyList());
-        };
+    if (!actionType.isUserAction()) {
+      throw new Web3InvalidInputException("admin marketplace action is not supported here");
+    }
+    Function function;
+    switch (actionType) {
+      case MARKETPLACE_CLASS_PURCHASE:
+        function =
+            new Function(
+                "purchaseClass",
+                List.of(
+                    bytes32(orderKey),
+                    new Address(tokenAddress),
+                    new Address(trainerAddress),
+                    uint256(priceBaseUnits),
+                    uint256(signedAt),
+                    signature(signatureBytes)),
+                Collections.emptyList());
+        break;
+      case MARKETPLACE_CLASS_CANCEL:
+        function =
+            new Function(
+                "cancelClass",
+                List.of(bytes32(orderKey), uint256(signedAt), signature(signatureBytes)),
+                Collections.emptyList());
+        break;
+      case MARKETPLACE_CLASS_CONFIRM:
+        function =
+            new Function(
+                "confirmClass",
+                List.of(bytes32(orderKey), uint256(signedAt), signature(signatureBytes)),
+                Collections.emptyList());
+        break;
+      case MARKETPLACE_CLASS_EXPIRED_REFUND:
+        function =
+            new Function("claimExpiredRefund", List.of(bytes32(orderKey)), Collections.emptyList());
+        break;
+      case MARKETPLACE_ADMIN_REFUND:
+      case MARKETPLACE_ADMIN_SETTLE:
+        throw new Web3InvalidInputException("admin marketplace action is not supported here");
+      default:
+        throw new Web3InvalidInputException("unsupported marketplace actionType");
+    }
     return FunctionEncoder.encode(function);
+  }
+
+  @Override
+  public String encodeAdminRefund(String orderKey) {
+    return FunctionEncoder.encode(
+        new Function("adminRefund", List.of(bytes32(orderKey)), Collections.emptyList()));
+  }
+
+  @Override
+  public String encodeAdminSettle(String orderKey) {
+    return FunctionEncoder.encode(
+        new Function("adminSettle", List.of(bytes32(orderKey)), Collections.emptyList()));
   }
 
   private Type<?> bytes32(String orderKey) {

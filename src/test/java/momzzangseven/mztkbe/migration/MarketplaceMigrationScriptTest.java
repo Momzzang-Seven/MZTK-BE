@@ -61,6 +61,31 @@ class MarketplaceMigrationScriptTest {
         .contains("CREATE INDEX IF NOT EXISTS idx_reservation_create_idempotency_reservation_id");
   }
 
+  @Test
+  @DisplayName("V080 adds marketplace admin pending and provenance constraints")
+  void marketplaceAdminExecutionSurfaceMigration() throws IOException {
+    String v080 = migration("V080__add_marketplace_admin_execution_surface.sql");
+
+    assertThat(v080)
+        .contains("ADD COLUMN IF NOT EXISTS resolved_by")
+        .contains("ADD COLUMN IF NOT EXISTS terminal_reason_code")
+        .contains("'ADMIN_REFUND_PENDING', 'ADMIN_SETTLE_PENDING'")
+        .contains("'ADMIN_REFUND', 'ADMIN_SETTLE'")
+        .contains("ADD COLUMN IF NOT EXISTS request_source")
+        .contains("SET request_source = 'USER'")
+        .contains("ALTER COLUMN actor_user_id DROP NOT NULL")
+        .contains("reason_code IS NULL OR reason_code IN")
+        .contains("AND reason_code IS NOT NULL")
+        .contains("request_source IN ('USER', 'MANUAL_ADMIN', 'SCHEDULER')")
+        .contains("request_source = 'SCHEDULER'")
+        .contains("actor_type = 'SYSTEM'")
+        .contains("actor_user_id IS NULL")
+        .contains(
+            "CREATE INDEX IF NOT EXISTS idx_marketplace_action_states_admin_preparing_expired")
+        .contains("WHERE status = 'PREPARING'")
+        .contains("action_type IN ('ADMIN_REFUND', 'ADMIN_SETTLE')");
+  }
+
   private String migration(String filename) throws IOException {
     return Files.readString(MIGRATION_DIR.resolve(filename));
   }

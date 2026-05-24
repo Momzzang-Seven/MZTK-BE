@@ -60,7 +60,9 @@ public class ExecutionModeSelector {
         && command.draft().delegateTarget() == null
         && command.draft().authorizationPayloadHash() == null
         && (command.draft().actionType() == ExecutionActionTypeCode.QNA_ADMIN_SETTLE
-            || command.draft().actionType() == ExecutionActionTypeCode.QNA_ADMIN_REFUND);
+            || command.draft().actionType() == ExecutionActionTypeCode.QNA_ADMIN_REFUND
+            || command.draft().actionType() == ExecutionActionTypeCode.MARKETPLACE_ADMIN_SETTLE
+            || command.draft().actionType() == ExecutionActionTypeCode.MARKETPLACE_ADMIN_REFUND);
   }
 
   private boolean isSponsorEligible(

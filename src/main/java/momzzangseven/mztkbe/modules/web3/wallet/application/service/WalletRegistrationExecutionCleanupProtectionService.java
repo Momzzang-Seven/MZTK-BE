@@ -1,0 +1,69 @@
+package momzzangseven.mztkbe.modules.web3.wallet.application.service;
+
+import java.util.List;
+import java.util.Optional;
+import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationExecutionCleanupCandidate;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.FilterWalletRegistrationExecutionCleanupCandidatesUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
+
+@RequiredArgsConstructor
+public class WalletRegistrationExecutionCleanupProtectionService
+    implements FilterWalletRegistrationExecutionCleanupCandidatesUseCase {
+
+  private static final String RESOURCE_WALLET_REGISTRATION = "WALLET_REGISTRATION";
+  private static final String ACTION_WALLET_APPROVE = "WALLET_ESCROW_APPROVE";
+
+  private final LoadWalletRegistrationSessionPort loadSessionPort;
+
+  @Override
+  public List<Long> filterDeletableFinalizedIntentIds(
+      List<WalletRegistrationExecutionCleanupCandidate> candidates) {
+    if (candidates == null || candidates.isEmpty()) {
+      return List.of();
+    }
+    return candidates.stream()
+        .filter(candidate -> !isProtected(candidate))
+        .map(WalletRegistrationExecutionCleanupCandidate::id)
+        .toList();
+  }
+
+  private boolean isProtected(WalletRegistrationExecutionCleanupCandidate candidate) {
+    if (!isWalletApproval(candidate)) {
+      return false;
+    }
+    return loadSession(candidate)
+        .map(session -> requiresRecoveryReference(session, candidate.executionIntentId()))
+        .orElse(false);
+  }
+
+  private Optional<WalletRegistrationSession> loadSession(
+      WalletRegistrationExecutionCleanupCandidate candidate) {
+    if (candidate.resourceId() != null && !candidate.resourceId().isBlank()) {
+      Optional<WalletRegistrationSession> byRegistrationId =
+          loadSessionPort.loadByPublicId(candidate.resourceId());
+      if (byRegistrationId.isPresent()) {
+        return byRegistrationId;
+      }
+    }
+    return loadSessionPort.loadByLatestExecutionIntentId(candidate.executionIntentId());
+  }
+
+  private boolean isWalletApproval(WalletRegistrationExecutionCleanupCandidate candidate) {
+    return RESOURCE_WALLET_REGISTRATION.equals(candidate.resourceType())
+        && ACTION_WALLET_APPROVE.equals(candidate.actionType());
+  }
+
+  private boolean requiresRecoveryReference(
+      WalletRegistrationSession session, String executionIntentId) {
+    if (session.getStatus() == WalletRegistrationStatus.REGISTERED) {
+      return false;
+    }
+    return session.getStatus().isNonTerminal()
+        || WalletRegistrationReceiptTimeout.isRecordedOn(session)
+        || session.hasReceiptTimeoutExecutionIntent(executionIntentId);
+  }
+}

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.MarketplaceReservationActionState;
@@ -27,4 +28,7 @@ public interface LoadReservationActionStatePort {
 
   Optional<MarketplaceReservationActionState> findLatestByReservationIdAndActionTypeWithLock(
       Long reservationId, ReservationEscrowAction actionType);
+
+  List<MarketplaceReservationActionState> findExpiredAdminPreparingAttemptsWithLock(
+      LocalDateTime now, int batchSize);
 }

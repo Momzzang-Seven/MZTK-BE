@@ -54,9 +54,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  * E2E integration tests for the Marketplace Reservation lifecycle.
  *
  * <p>Covers the full happy-path flow (PENDING → APPROVED → SETTLED / REJECTED) and critical failure
- * cases. Web3 escrow calls are transparently handled by the {@link
- * momzzangseven.mztkbe.modules.marketplace.infrastructure.external.web3.EscrowTransactionAdapter}
- * stub, which returns a deterministic fake {@code txHash} — sufficient for verifying DB state
+ * cases. Web3 mutation paths are disabled in this suite so that it verifies reservation DB state
  * transitions without a live blockchain connection.
  *
  * <p>Run with: {@code ./gradlew e2eTest}

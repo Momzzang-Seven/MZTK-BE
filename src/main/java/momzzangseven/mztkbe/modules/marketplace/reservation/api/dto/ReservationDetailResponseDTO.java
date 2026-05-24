@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetR
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationDisplayStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 
 /**
  * HTTP response DTO for the reservation detail endpoints.
@@ -42,6 +43,8 @@ public record ReservationDetailResponseDTO(
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey,
+    ReservationTerminalResolvedBy resolvedBy,
+    String terminalReasonCode,
     String viewerAction,
     boolean viewerCanCancel,
     boolean viewerCanReject,
@@ -76,6 +79,8 @@ public record ReservationDetailResponseDTO(
         result.trainerNickname(),
         result.userNickname(),
         result.thumbnailFinalObjectKey(),
+        result.resolvedBy(),
+        result.terminalReasonCode(),
         result.viewerActions().viewerAction(),
         result.viewerActions().viewerCanCancel(),
         result.viewerActions().viewerCanReject(),

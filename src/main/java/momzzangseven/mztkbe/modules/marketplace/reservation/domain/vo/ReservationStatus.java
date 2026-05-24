@@ -51,6 +51,12 @@ public enum ReservationStatus {
   /** Buyer deadline refund is awaiting signature/on-chain result. Scheduler-invisible. */
   DEADLINE_REFUND_PENDING,
 
+  /** Manual admin or scheduler refund is being prepared/executed. Scheduler-invisible. */
+  ADMIN_REFUND_PENDING,
+
+  /** Manual admin or scheduler settlement is being prepared/executed. Scheduler-invisible. */
+  ADMIN_SETTLE_PENDING,
+
   /** Purchase confirmed but the actual contract deadline cannot safely support completion. */
   DEADLINE_RECOVERY_REQUIRED,
 
@@ -114,6 +120,8 @@ public enum ReservationStatus {
               REJECT_PENDING,
               CONFIRM_PENDING,
               DEADLINE_REFUND_PENDING,
+              ADMIN_REFUND_PENDING,
+              ADMIN_SETTLE_PENDING,
               DEADLINE_RECOVERY_REQUIRED,
               DEADLINE_SYNC_REQUIRED,
               DEADLINE_REFUND_AVAILABLE,
@@ -154,11 +162,13 @@ public enum ReservationStatus {
               || next == PURCHASE_PREPARING
               || next == CANCEL_PENDING
               || next == REJECT_PENDING
+              || next == ADMIN_REFUND_PENDING
               || next == DEADLINE_REFUND_AVAILABLE;
       case APPROVED ->
           next == SETTLED
               || next == AUTO_SETTLED
               || next == CONFIRM_PENDING
+              || next == ADMIN_SETTLE_PENDING
               || next == DEADLINE_REFUND_AVAILABLE;
       case PURCHASE_PREPARING ->
           next == PURCHASE_PENDING
@@ -182,6 +192,16 @@ public enum ReservationStatus {
       case DEADLINE_REFUND_AVAILABLE -> next == DEADLINE_REFUND_PENDING;
       case DEADLINE_REFUND_PENDING ->
           next == DEADLINE_REFUNDED || next == DEADLINE_REFUND_AVAILABLE;
+      case ADMIN_REFUND_PENDING ->
+          next == TIMEOUT_CANCELLED
+              || next == PENDING
+              || next == DEADLINE_SYNC_REQUIRED
+              || next == MANUAL_SYNC_REQUIRED;
+      case ADMIN_SETTLE_PENDING ->
+          next == AUTO_SETTLED
+              || next == APPROVED
+              || next == DEADLINE_SYNC_REQUIRED
+              || next == MANUAL_SYNC_REQUIRED;
       case DEADLINE_RECOVERY_REQUIRED, DEADLINE_SYNC_REQUIRED -> next == DEADLINE_REFUND_AVAILABLE;
       case MANUAL_SYNC_REQUIRED ->
           next == USER_CANCELLED

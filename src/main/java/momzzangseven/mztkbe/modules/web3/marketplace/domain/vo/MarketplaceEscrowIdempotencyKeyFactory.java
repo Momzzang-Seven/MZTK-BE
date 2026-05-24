@@ -20,6 +20,9 @@ public final class MarketplaceEscrowIdempotencyKeyFactory {
     if (actionType == null) {
       throw new Web3InvalidInputException("actionType is required");
     }
+    if (!actionType.isUserAction()) {
+      throw new Web3InvalidInputException("user marketplace actionType is required");
+    }
     if (actorType == null) {
       throw new Web3InvalidInputException("actorType is required");
     }

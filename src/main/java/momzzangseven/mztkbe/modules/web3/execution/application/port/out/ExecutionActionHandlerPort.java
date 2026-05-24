@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.port.out;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTerminationEvidenceView;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -35,6 +36,23 @@ public interface ExecutionActionHandlerPort {
       ExecutionActionPlan actionPlan,
       ExecutionIntentStatus terminalStatus,
       String failureReason) {}
+
+  default ExecutionTerminationEvidenceView buildTerminationEvidence(
+      ExecutionIntent intent,
+      ExecutionActionPlan actionPlan,
+      ExecutionIntentStatus terminalStatus,
+      String failureReason) {
+    return ExecutionTerminationEvidenceView.unknown(intent.getPublicId());
+  }
+
+  default void afterExecutionTerminated(
+      ExecutionIntent intent,
+      ExecutionActionPlan actionPlan,
+      ExecutionIntentStatus terminalStatus,
+      String failureReason,
+      ExecutionTerminationEvidenceView evidence) {
+    afterExecutionTerminated(intent, actionPlan, terminalStatus, failureReason);
+  }
 
   static Optional<ExecutionActionHandlerPort> findMatching(
       List<ExecutionActionHandlerPort> handlers, ExecutionIntent intent) {

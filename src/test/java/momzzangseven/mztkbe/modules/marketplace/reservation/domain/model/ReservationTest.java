@@ -7,9 +7,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationTerminalResolvedBy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -55,6 +57,24 @@ class ReservationTest {
 
     assertThat(approved.getStatus()).isEqualTo(ReservationStatus.APPROVED);
     assertThat(approved.getTxHash()).isEqualTo("tx-123"); // txHash is preserved
+  }
+
+  @Test
+  @DisplayName("syncChainOutcome - null txHash preserves previous tx hash")
+  void syncChainOutcome_PreservesExistingTxHashWhenEvidenceTxHashMissing() {
+    Reservation reservation = createDefaultPendingReservation();
+
+    Reservation synced =
+        reservation.syncChainOutcome(
+            ReservationStatus.MANUAL_SYNC_REQUIRED,
+            ReservationEscrowStatus.MANUAL_SYNC_REQUIRED,
+            null,
+            null,
+            null,
+            ReservationTerminalResolvedBy.CHAIN_SYNC,
+            "CHAIN_ORDER_LOOKUP_FAILED");
+
+    assertThat(synced.getTxHash()).isEqualTo("tx-123");
   }
 
   @Test
@@ -220,6 +240,63 @@ class ReservationTest {
     assertThat(refunded.getPendingAction()).isNull();
     assertThat(refunded.getPendingAttemptToken()).isNull();
     assertThat(refunded.getStatus().isTerminal()).isTrue();
+  }
+
+  @Test
+  @DisplayName("admin refund pending transitions preserve prior snapshot and terminal provenance")
+  void adminRefundPendingTransitions() {
+    Reservation locked =
+        createDefaultPendingReservation().toBuilder()
+            .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+            .escrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+
+    Reservation pending =
+        locked.beginAdminRefundPending("admin-refund-token", LocalDateTime.of(2026, 5, 16, 10, 0));
+    Reservation refunded =
+        pending.markAdminRefunded(
+            "refund-tx", ReservationTerminalResolvedBy.ADMIN, "TRAINER_TIMEOUT");
+
+    assertThat(pending.getStatus()).isEqualTo(ReservationStatus.ADMIN_REFUND_PENDING);
+    assertThat(pending.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.ADMIN_REFUND_PENDING);
+    assertThat(pending.getPendingAction()).isEqualTo(ReservationEscrowAction.ADMIN_REFUND);
+    assertThat(pending.getPendingAttemptToken()).isEqualTo("admin-refund-token");
+    assertThat(pending.getPendingActionExpiresAt()).isEqualTo(LocalDateTime.of(2026, 5, 16, 10, 0));
+    assertThat(pending.getPriorStatus()).isEqualTo(ReservationStatus.PENDING);
+    assertThat(pending.getPriorEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(refunded.getStatus()).isEqualTo(ReservationStatus.TIMEOUT_CANCELLED);
+    assertThat(refunded.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.REFUNDED);
+    assertThat(refunded.getResolvedBy()).isEqualTo(ReservationTerminalResolvedBy.ADMIN);
+    assertThat(refunded.getTerminalReasonCode()).isEqualTo("TRAINER_TIMEOUT");
+    assertThat(refunded.getPendingActionExpiresAt()).isNull();
+  }
+
+  @Test
+  @DisplayName("admin settle pending transitions preserve prior snapshot and terminal provenance")
+  void adminSettlePendingTransitions() {
+    Reservation approvedLocked =
+        createDefaultPendingReservation().approve().toBuilder()
+            .escrowFlow(ReservationEscrowFlow.USER_EIP7702)
+            .escrowStatus(ReservationEscrowStatus.LOCKED)
+            .build();
+
+    Reservation pending =
+        approvedLocked.beginAdminSettlePending(
+            "admin-settle-token", LocalDateTime.of(2026, 5, 16, 10, 0));
+    Reservation settled =
+        pending.markAdminSettled(
+            "settle-tx", ReservationTerminalResolvedBy.ADMIN, "BUYER_CONFIRMATION_TIMEOUT");
+
+    assertThat(pending.getStatus()).isEqualTo(ReservationStatus.ADMIN_SETTLE_PENDING);
+    assertThat(pending.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.ADMIN_SETTLE_PENDING);
+    assertThat(pending.getPendingAction()).isEqualTo(ReservationEscrowAction.ADMIN_SETTLE);
+    assertThat(pending.getPriorStatus()).isEqualTo(ReservationStatus.APPROVED);
+    assertThat(pending.getPriorEscrowStatus()).isEqualTo(ReservationEscrowStatus.LOCKED);
+    assertThat(settled.getStatus()).isEqualTo(ReservationStatus.AUTO_SETTLED);
+    assertThat(settled.getEscrowStatus()).isEqualTo(ReservationEscrowStatus.SETTLED);
+    assertThat(settled.getResolvedBy()).isEqualTo(ReservationTerminalResolvedBy.ADMIN);
+    assertThat(settled.getTerminalReasonCode()).isEqualTo("BUYER_CONFIRMATION_TIMEOUT");
+    assertThat(settled.getPendingAttemptToken()).isNull();
   }
 
   @Test

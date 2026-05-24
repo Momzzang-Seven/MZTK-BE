@@ -114,7 +114,7 @@ QPS 와 함께 추적한다.
 ## 본 sub-module 이 절대 건드리지 않는 영역
 
 - `modules/marketplace/**`, `modules/web3/marketplace/**` (별 담당자, 별 티켓).
-- `EscrowTransactionAdapter`, `EscrowDispatchEvent*`, `SubmitEscrowTransactionPort`.
+- `LegacyEscrowTransactionDisabledAdapter`, `EscrowDispatchEvent*`, `SubmitEscrowTransactionPort`.
 
 ## 관련 문서
 

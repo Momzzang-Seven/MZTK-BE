@@ -68,6 +68,46 @@ class ReservationExecutionCandidateGuardTest {
   }
 
   @Test
+  @DisplayName("receipt timeout으로 UNCONFIRMED transaction이면 결제성 marketplace action을 blocking한다")
+  void hasBlockingExecution_BlocksUnconfirmedTransactionWithMatchingEvidence() {
+    Reservation reservation = reservation();
+    MarketplaceReservationActionState actionState =
+        actionState(ReservationEscrowAction.PURCHASE, "attempt-1", null);
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-1",
+                    "FAILED_ONCHAIN",
+                    "MARKETPLACE_CLASS_PURCHASE",
+                    "UNCONFIRMED",
+                    evidence(
+                        77L, 88L, 99L, "attempt-1", "0xorder", "MARKETPLACE_CLASS_PURCHASE"))));
+
+    assertThat(guard.hasBlockingExecution(reservation, actionState)).isTrue();
+  }
+
+  @Test
+  @DisplayName("current intent transaction이 UNCONFIRMED이면 status와 무관하게 blocking한다")
+  void hasBlockingExecution_BlocksCurrentUnconfirmedTransaction() {
+    Reservation reservation = reservation();
+    MarketplaceReservationActionState actionState =
+        actionState(ReservationEscrowAction.PURCHASE, "attempt-1", "intent-1");
+    when(loadReservationExecutionStatePort.loadState("intent-1"))
+        .thenReturn(
+            new ReservationExecutionStateView(
+                "intent-1",
+                "FAILED_ONCHAIN",
+                "MARKETPLACE_CLASS_PURCHASE",
+                1L,
+                10L,
+                "UNCONFIRMED",
+                "0x" + "a".repeat(64)));
+
+    assertThat(guard.hasBlockingExecution(reservation, actionState)).isTrue();
+  }
+
+  @Test
   @DisplayName("payload evidence가 다른 action-state를 가리키면 blocking 후보에서 제외한다")
   void hasBlockingExecution_IgnoresCandidateForDifferentAttempt() {
     Reservation reservation = reservation();
@@ -170,6 +210,42 @@ class ReservationExecutionCandidateGuardTest {
     assertThat(
             guard.hasBlockingExecutionForAction(reservation, ReservationEscrowAction.BUYER_CONFIRM))
         .isFalse();
+  }
+
+  @Test
+  @DisplayName("admin refund action 후보도 동일 attempt evidence이면 blocking으로 판단한다")
+  void hasBlockingExecution_BlocksAdminRefundCandidate() {
+    Reservation reservation = reservation();
+    MarketplaceReservationActionState actionState =
+        actionState(ReservationEscrowAction.ADMIN_REFUND, "attempt-1", null);
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-admin-refund",
+                    "PENDING_ONCHAIN",
+                    "MARKETPLACE_ADMIN_REFUND",
+                    null,
+                    evidence(77L, 88L, 99L, "attempt-1", "0xorder", "MARKETPLACE_ADMIN_REFUND"))));
+
+    assertThat(guard.hasBlockingExecution(reservation, actionState)).isTrue();
+  }
+
+  @Test
+  @DisplayName("action-state 없는 후보 검사도 admin settle action을 marketplace action으로 취급한다")
+  void hasBlockingExecutionForAnyMarketplaceAction_BlocksAdminSettleCandidate() {
+    Reservation reservation = reservation();
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-admin-settle",
+                    "CONFIRMED",
+                    "MARKETPLACE_ADMIN_SETTLE",
+                    null,
+                    evidence(77L, 88L, null, null, "0xorder", "MARKETPLACE_ADMIN_SETTLE"))));
+
+    assertThat(guard.hasBlockingExecutionForAnyMarketplaceAction(reservation)).isTrue();
   }
 
   private Reservation reservation() {

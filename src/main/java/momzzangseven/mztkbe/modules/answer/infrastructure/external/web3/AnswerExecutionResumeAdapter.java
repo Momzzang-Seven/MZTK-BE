@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Active only when the shared resume use case is wired; otherwise the answer module falls back
  * to {@link
- * momzzangseven.mztkbe.modules.answer.infrastructure.config.AnswerExecutionResumeStubConfig}.
+ * momzzangseven.mztkbe.modules.answer.infrastructure.config.AnswerExecutionResumeDisabledConfig}.
  */
 @Component
 @RequiredArgsConstructor
@@ -69,6 +69,9 @@ public class AnswerExecutionResumeAdapter implements LoadAnswerExecutionResumePo
             : new AnswerExecutionResumeView.Transaction(
                 result.transaction().id(),
                 result.transaction().status(),
-                result.transaction().txHash()));
+                result.transaction().txHash()),
+        result.recoveryStatus(),
+        result.recoveryReason(),
+        result.retryAllowed());
   }
 }
