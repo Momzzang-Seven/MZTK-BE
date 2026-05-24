@@ -2,12 +2,12 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.wor
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -23,17 +23,24 @@ import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWalletInfo;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotReservation;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.service.ReservedNonceCompensator;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorChainNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecision;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
@@ -56,8 +63,9 @@ class TransactionIssuerWorkerTest {
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort;
   @Mock private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
-  @Mock private ReserveNoncePort reserveNoncePort;
-  @Mock private ReservedNonceCompensator reservedNonceCompensator;
+  @Mock private LoadSponsorChainNoncePort loadSponsorChainNoncePort;
+  @Mock private CoordinateSponsorNonceUseCase coordinateSponsorNonceUseCase;
+  @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private RetryStrategy retryStrategy;
 
@@ -81,8 +89,9 @@ class TransactionIssuerWorkerTest {
             recordTransactionAuditPort,
             loadRewardTreasuryWalletPort,
             verifyTreasuryWalletForSignPort,
-            reserveNoncePort,
-            reservedNonceCompensator,
+            loadSponsorChainNoncePort,
+            coordinateSponsorNonceUseCase,
+            nonceSlotLifecycleUseCase,
             web3ContractPort,
             rewardProperties,
             retryStrategy,
@@ -97,7 +106,12 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    verifyNoInteractions(updateTransactionPort, web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        updateTransactionPort,
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -113,7 +127,11 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
-    verifyNoInteractions(web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -130,7 +148,11 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.TREASURY_WALLET_INACTIVE.code(), null);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.TREASURY_WALLET_INACTIVE.code(), null);
-    verifyNoInteractions(web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -146,7 +168,12 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
-    verifyNoInteractions(verifyTreasuryWalletForSignPort, web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        verifyTreasuryWalletForSignPort,
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -164,7 +191,12 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
-    verifyNoInteractions(verifyTreasuryWalletForSignPort, web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        verifyTreasuryWalletForSignPort,
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -181,7 +213,12 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
-    verifyNoInteractions(verifyTreasuryWalletForSignPort, web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        verifyTreasuryWalletForSignPort,
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -207,7 +244,11 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
-    verifyNoInteractions(web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -232,7 +273,11 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
-    verifyNoInteractions(web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -262,7 +307,11 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(), null);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(), null);
-    verifyNoInteractions(web3ContractPort, reserveNoncePort);
+    verifyNoInteractions(
+        web3ContractPort,
+        loadSponsorChainNoncePort,
+        coordinateSponsorNonceUseCase,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -325,15 +374,14 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
-  void
-      processBatch_signTransferThrowsKmsTerminal_delegatesToCompensator_whenNonceReservedThisTurn() {
+  void processBatch_signTransferThrowsKmsTerminal_dropsReservedSlot_whenNonceReservedThisTurn() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, null)));
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
-    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(99L);
+    stubSponsorNonceReservation(99L, 1L, 1001L);
 
     software.amazon.awssdk.services.kms.model.KmsException kmsDenied =
         (software.amazon.awssdk.services.kms.model.KmsException)
@@ -348,16 +396,19 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    verify(reservedNonceCompensator)
-        .compensate(1L, TREASURY_ADDRESS, 99L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
-    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
-    verify(updateTransactionPort, never())
-        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code()), any());
+    RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
+    assertThat(transition.getNonce()).isEqualTo(99L);
+    assertThat(transition.getActiveAttemptId()).isEqualTo(1001L);
+    assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
+    assertThat(transition.getReleaseReason())
+        .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code());
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
     verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
   }
 
   @Test
-  void processBatch_signTransferThrowsKmsTerminal_invokesCompensator_whenItemAlreadyHasNonce() {
+  void processBatch_signTransferThrowsKmsTerminal_dropsReservedSlot_whenItemAlreadyHasNonce() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 12L)));
@@ -378,11 +429,13 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    verify(reservedNonceCompensator)
-        .compensate(1L, TREASURY_ADDRESS, 12L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
-    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
-    verify(updateTransactionPort, never())
-        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code()), any());
+    RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
+    assertThat(transition.getNonce()).isEqualTo(12L);
+    assertThat(transition.getActiveAttemptId()).isNull();
+    assertThat(transition.getActiveTxId()).isEqualTo(1L);
+    assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
     verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
   }
 
@@ -395,7 +448,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
-    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(99L);
+    stubSponsorNonceReservation(99L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenThrow(
             new KmsSignFailedException(
@@ -409,7 +462,8 @@ class TransactionIssuerWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED.code(), retryAt);
-    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
+    verify(nonceSlotLifecycleUseCase, never())
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
   }
 
   @Test
@@ -470,7 +524,8 @@ class TransactionIssuerWorkerTest {
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.FROM_ADDRESS_MISMATCH.code(), null);
     verifyNoInteractions(web3ContractPort);
-    verify(reserveNoncePort, never()).reserveNextNonce(anyString());
+    verifyNoInteractions(
+        loadSponsorChainNoncePort, coordinateSponsorNonceUseCase, nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -513,7 +568,7 @@ class TransactionIssuerWorkerTest {
 
   @Test
   void
-      processBatch_signTransferThrowsSignatureRecovery_invokesCompensator_whenItemAlreadyHasNonce() {
+      processBatch_signTransferThrowsSignatureRecovery_dropsReservedSlot_whenItemAlreadyHasNonce() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L)));
@@ -525,34 +580,35 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    verify(reservedNonceCompensator)
-        .compensate(1L, TREASURY_ADDRESS, 5L, Web3TxFailureReason.SIGNATURE_INVALID);
+    RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
+    assertThat(transition.getNonce()).isEqualTo(5L);
+    assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
     verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
-    verify(updateTransactionPort, never())
-        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.SIGNATURE_INVALID.code()), any());
-    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
   }
 
   @Test
   void
-      processBatch_signTransferThrowsSignatureRecovery_delegatesToCompensator_whenNonceReservedThisTurn() {
+      processBatch_signTransferThrowsSignatureRecovery_dropsReservedSlot_whenNonceReservedThisTurn() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, null)));
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
-    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(42L);
+    stubSponsorNonceReservation(42L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenThrow(new SignatureRecoveryException("recover mismatch"));
 
     worker.processBatch(1);
 
-    verify(reservedNonceCompensator)
-        .compensate(1L, TREASURY_ADDRESS, 42L, Web3TxFailureReason.SIGNATURE_INVALID);
-    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
-    verify(updateTransactionPort, never())
-        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.SIGNATURE_INVALID.code()), any());
+    RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
+    assertThat(transition.getNonce()).isEqualTo(42L);
+    assertThat(transition.getActiveAttemptId()).isEqualTo(1001L);
+    assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
   }
 
   @Test
@@ -575,6 +631,7 @@ class TransactionIssuerWorkerTest {
     verify(updateTransactionPort).markSigned(1L, 7L, "0xdeadbeef", "0x" + "d".repeat(64));
     verify(updateTransactionPort).markPending(1L, "0x" + "d".repeat(64));
     verify(updateTransactionPort, never()).assignNonce(any(), any(Long.class));
+    assertThat(captureSlotTransitions()).hasSize(3);
     verify(recordTransactionAuditPort, atLeastOnce())
         .record(any(RecordTransactionAuditPort.AuditCommand.class));
   }
@@ -589,15 +646,13 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
-    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(33L);
+    stubSponsorNonceReservation(33L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
         .thenReturn(new Web3ContractPort.BroadcastResult(true, "0x" + "e".repeat(64), null, "sub"));
 
     worker.processBatch(1);
-
-    verify(updateTransactionPort).assignNonce(1L, 33L);
 
     ArgumentCaptor<Web3ContractPort.SignTransferCommand> commandCaptor =
         ArgumentCaptor.forClass(Web3ContractPort.SignTransferCommand.class);
@@ -607,6 +662,14 @@ class TransactionIssuerWorkerTest {
         .isEqualTo(TREASURY_ADDRESS);
     assertThat(commandCaptor.getValue().treasurySigner().kmsKeyId()).isEqualTo(KMS_KEY_ID);
     verify(updateTransactionPort).markPending(1L, "0x" + "e".repeat(64));
+    List<RecordSponsorNonceSlotTransitionCommand> transitions = captureSlotTransitions();
+    assertThat(transitions)
+        .extracting(RecordSponsorNonceSlotTransitionCommand::getToStatus)
+        .containsExactly(
+            SponsorNonceSlotStatus.SIGNED,
+            SponsorNonceSlotStatus.BROADCASTING,
+            SponsorNonceSlotStatus.BROADCASTED);
+    assertThat(transitions).allMatch(transition -> transition.getActiveAttemptId().equals(1001L));
   }
 
   @Test
@@ -630,6 +693,40 @@ class TransactionIssuerWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.BROADCAST_FAILED.code(), retryAt);
+  }
+
+  private void stubSponsorNonceReservation(long nonce, Long transactionId, Long attemptId) {
+    long chainId = web3CoreProperties.getChainId();
+    when(loadSponsorChainNoncePort.loadSnapshot(chainId, TREASURY_ADDRESS))
+        .thenReturn(
+            new LoadSponsorChainNoncePort.SponsorChainNonceSnapshot(
+                nonce, nonce, nonce, nonce, nonce, nonce));
+    when(coordinateSponsorNonceUseCase.execute(any(SponsorNonceCoordinationCommand.class)))
+        .thenReturn(
+            new SponsorNonceCoordinationResult(
+                SponsorNonceDecision.issue(nonce),
+                new SponsorNonceSlotReservation(
+                    chainId,
+                    TREASURY_ADDRESS,
+                    nonce,
+                    1,
+                    attemptId,
+                    transactionId,
+                    SponsorNonceSlotStatus.RESERVED)));
+  }
+
+  private RecordSponsorNonceSlotTransitionCommand captureOnlySlotTransition() {
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
+    return transitionCaptor.getValue();
+  }
+
+  private List<RecordSponsorNonceSlotTransitionCommand> captureSlotTransitions() {
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase, times(3)).transition(transitionCaptor.capture());
+    return transitionCaptor.getAllValues();
   }
 
   private Web3ContractPort.PrevalidateResult prevalidateOk() {

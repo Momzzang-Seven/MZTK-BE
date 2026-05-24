@@ -111,23 +111,14 @@ public class RetryWalletRegistrationApprovalService
     }
 
     WalletRegistrationSession updated =
-        WalletRegistrationReceiptTimeout.approvalTtlRemains(session, now)
-            ? session.markApprovalRetryable(
-                WalletRegistrationReceiptTimeout.ERROR_CODE,
-                WalletRegistrationReceiptTimeout.ERROR_REASON,
-                now)
-            : session.markApprovalFailed(
-                WalletRegistrationReceiptTimeout.ERROR_CODE,
-                WalletRegistrationReceiptTimeout.ERROR_REASON,
-                now);
+        session.markSponsorNonceBlocked(
+            WalletRegistrationReceiptTimeout.ERROR_CODE,
+            WalletRegistrationReceiptTimeout.ERROR_REASON,
+            now);
     WalletRegistrationSession saved = saveSessionPort.save(updated);
-    if (saved.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED) {
-      return Optional.of(
-          RetryApprovalPreparation.reusable(
-              WalletRegistrationStatusResult.from(saved, currentState.orElse(null), now)));
-    }
-    validateApprovalAvailable();
-    return Optional.of(RetryApprovalPreparation.forCreation(saved));
+    return Optional.of(
+        RetryApprovalPreparation.reusable(
+            WalletRegistrationStatusResult.from(saved, currentState.orElse(null), now)));
   }
 
   private WalletRegistrationSession backfillReceiptTimeoutExecutionIntentIfNeeded(

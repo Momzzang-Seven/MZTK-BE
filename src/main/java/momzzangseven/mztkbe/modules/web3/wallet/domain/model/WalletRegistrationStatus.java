@@ -6,6 +6,7 @@ public enum WalletRegistrationStatus {
   APPROVAL_SIGNED,
   APPROVAL_PENDING_ONCHAIN,
   APPROVAL_RETRYABLE,
+  SPONSOR_NONCE_BLOCKED,
   REGISTERED,
   APPROVAL_FAILED,
   EXPIRED,
@@ -20,6 +21,7 @@ public enum WalletRegistrationStatus {
               APPROVAL_SIGNED,
               APPROVAL_PENDING_ONCHAIN,
               APPROVAL_RETRYABLE,
+              SPONSOR_NONCE_BLOCKED,
               FINALIZATION_FAILED,
               LOCAL_CONFLICT ->
           true;

@@ -45,7 +45,8 @@ public record RegisterWalletResult(
           WalletRegistrationNextAction.WAIT_FOR_APPROVAL_TRANSACTION;
       case APPROVAL_RETRYABLE -> WalletRegistrationNextAction.RETRY_APPROVAL;
       case REGISTERED -> WalletRegistrationNextAction.DONE;
-      case FINALIZATION_FAILED, LOCAL_CONFLICT -> WalletRegistrationNextAction.CONTACT_SUPPORT;
+      case SPONSOR_NONCE_BLOCKED, FINALIZATION_FAILED, LOCAL_CONFLICT ->
+          WalletRegistrationNextAction.CONTACT_SUPPORT;
       case APPROVAL_FAILED, EXPIRED, CANCELED -> WalletRegistrationNextAction.NONE;
     };
   }

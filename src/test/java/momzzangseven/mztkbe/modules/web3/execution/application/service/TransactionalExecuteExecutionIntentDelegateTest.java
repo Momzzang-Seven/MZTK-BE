@@ -496,8 +496,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
 
   /**
    * Stub every port call up to {@code executionEip7702GatewayPort.signAndEncode(...)} so each KMS
-   * test only needs to override the sign stub. {@code reserveNextNonce} returns the supplied
-   * sponsor nonce so verification of {@code releaseReservedNonce} can match exactly.
+   * test only needs to override the sign stub. Sponsor nonce reservation now creates the
+   * transaction first, then reserves a slot through the coordinator.
    */
   private void stubEip7702HappyUntilSign(ExecutionIntent intent, long sponsorNonce) {
     when(executionIntentPersistencePort.findByPublicIdForUpdate(intent.getPublicId()))
@@ -527,8 +527,23 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .thenReturn(
             new ExecutionEip7702GatewayPort.FeePlan(
                 BigInteger.valueOf(2_000_000_000L), BigInteger.valueOf(50_000_000_000L)));
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(sponsorNonce);
+    when(executionTransactionGatewayPort.createAndFlush(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.TransactionRecord(
+                501L, ExecutionTransactionStatus.CREATED, null));
+    when(executionTransactionGatewayPort.loadSponsorNonceSnapshot(11155111L, SPONSOR_ADDRESS))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(
+                sponsorNonce,
+                sponsorNonce,
+                sponsorNonce,
+                sponsorNonce,
+                sponsorNonce,
+                sponsorNonce));
+    when(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "ISSUE_NONCE", sponsorNonce, "ISSUE_NONCE", true, 9001L, 501L));
   }
 
   private static KmsException terminalAwsKmsCause() {
@@ -568,12 +583,19 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                         && event
                             .failureReason()
                             .equals(ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name())));
-    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
+    verify(executionTransactionGatewayPort).createAndFlush(any());
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            argThat(
+                command ->
+                    command.nonce() == sponsorNonce
+                        && command.activeAttemptId().equals(9001L)
+                        && command.toStatus().equals("DROPPED")));
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
 
   @Test
-  void executeEip7702_kmsTerminalError_releasesReservedNonce() {
+  void executeEip7702_kmsTerminalError_dropsReservedNonceSlot() {
     ExecutionIntent intent = existingEip7702Intent();
     long sponsorNonce = 42L;
     stubEip7702HappyUntilSign(intent, sponsorNonce);
@@ -590,7 +612,15 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                     sponsorGate()))
         .isInstanceOf(ExecutionIntentTerminalException.class);
 
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            argThat(
+                command ->
+                    command.nonce() == sponsorNonce
+                        && command.toStatus().equals("DROPPED")
+                        && command
+                            .releaseReason()
+                            .equals(ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name())));
   }
 
   @Test
@@ -641,7 +671,15 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.getCode());
 
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            argThat(
+                command ->
+                    command.nonce() == sponsorNonce
+                        && command.toStatus().equals("DROPPED")
+                        && command
+                            .releaseReason()
+                            .equals(ExecutionFailureReason.SIGNATURE_INVALID.name())));
     verify(publishExecutionIntentTerminatedPort)
         .publish(
             org.mockito.ArgumentMatchers.argThat(
@@ -711,7 +749,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   @Test
-  void executeEip7702_kmsTransientError_callsReleaseReservedNonce() {
+  void executeEip7702_kmsTransientError_doesNotDropOrReleaseReservedNonce() {
     ExecutionIntent intent = existingEip7702Intent();
     long sponsorNonce = 42L;
     stubEip7702HappyUntilSign(intent, sponsorNonce);
@@ -726,7 +764,9 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                     sponsorGate()))
         .isInstanceOf(KmsSignFailedException.class);
 
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
+    verify(executionTransactionGatewayPort, never())
+        .transitionSponsorNonceSlot(
+            any(ExecutionTransactionGatewayPort.SponsorNonceSlotTransitionCommand.class));
   }
 
   @Test
@@ -761,8 +801,6 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
     assertThat(result.txHash()).isEqualTo("0xexpectedhash");
     verify(executionTransactionGatewayPort).markPending(501L, "0xchainhash");
-    // Happy path must NOT release the nonce — it is consumed.
-    verify(executionTransactionGatewayPort, never()).releaseReservedNonce(any(), anyLong());
     // Sponsor exposure: reservedCost moves from reserved → consumed via release().consume() chain.
     verify(usage).release(reservedCost);
     verify(usage).consume(reservedCost);

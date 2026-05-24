@@ -21,17 +21,11 @@ public interface ExecutionTransactionGatewayPort {
 
   void scheduleRetry(Long transactionId, String failureReason, LocalDateTime processingUntil);
 
-  long reserveNextNonce(String fromAddress);
+  SponsorNonceSnapshot loadSponsorNonceSnapshot(long chainId, String fromAddress);
 
-  /**
-   * Atomic CAS release of a previously reserved nonce. Returns {@code true} when the cursor was
-   * rolled back; {@code false} when another reservation already advanced past it. The caller logs
-   * {@code NONCE_GAP_DETECTED} on {@code false} so the PR #150 F-1 follow-up (incident table) has a
-   * single grep target.
-   */
-  boolean releaseReservedNonce(String fromAddress, long reservedNonce);
+  SponsorNonceCoordinationRecord coordinateSponsorNonce(CoordinateSponsorNonceCommand command);
 
-  long loadPendingNonce(String fromAddress);
+  void transitionSponsorNonceSlot(SponsorNonceSlotTransitionCommand command);
 
   void recordAudit(AuditCommand command);
 
@@ -46,6 +40,59 @@ public interface ExecutionTransactionGatewayPort {
   record BroadcastResult(boolean success, String txHash, String failureReason, String rpcAlias) {}
 
   record TransactionRecord(Long transactionId, ExecutionTransactionStatus status, String txHash) {}
+
+  record SponsorNonceSnapshot(
+      long chainPendingNonce,
+      long chainLatestNonce,
+      Long mainPendingNonce,
+      Long subPendingNonce,
+      Long mainLatestNonce,
+      Long subLatestNonce) {}
+
+  record CoordinateSponsorNonceCommand(
+      long chainId,
+      String fromAddress,
+      long chainPendingNonce,
+      long chainLatestNonce,
+      Long mainPendingNonce,
+      Long subPendingNonce,
+      Long mainLatestNonce,
+      Long subLatestNonce,
+      int openWindowSize,
+      Long transactionId,
+      String attemptIdempotencyKey,
+      LocalDateTime now) {}
+
+  record SponsorNonceCoordinationRecord(
+      String decisionType,
+      Long nonce,
+      String reason,
+      boolean reserved,
+      Long attemptId,
+      Long transactionId) {}
+
+  record SponsorNonceSlotTransitionCommand(
+      long chainId,
+      String fromAddress,
+      long nonce,
+      String fromStatus,
+      String toStatus,
+      Long activeAttemptId,
+      Long activeTxId,
+      Long releasedAttemptId,
+      Long releasedTxId,
+      LocalDateTime stateChangedAt,
+      String releaseReason,
+      String terminalReason,
+      String broadcastRecoveryClaimOwner,
+      String broadcastRecoveryClaimToken,
+      LocalDateTime broadcastRecoveryClaimExpiresAt,
+      int broadcastRecoveryAttemptCount,
+      boolean hasRawTx,
+      boolean hasTxHash,
+      boolean hasSigningEvidence,
+      boolean hasBroadcastEvidence,
+      boolean hasReceiptEvidence) {}
 
   record CreateTransactionCommand(
       String idempotencyKey,

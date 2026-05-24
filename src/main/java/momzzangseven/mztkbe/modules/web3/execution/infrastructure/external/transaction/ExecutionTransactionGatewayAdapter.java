@@ -9,7 +9,13 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTr
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionBroadcastResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorChainNonceSnapshotResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.ManageExecutionTransactionUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
@@ -22,6 +28,7 @@ import org.springframework.stereotype.Component;
 public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionGatewayPort {
 
   private final ManageExecutionTransactionUseCase manageExecutionTransactionUseCase;
+  private final ManageNonceSlotLifecycleUseCase manageNonceSlotLifecycleUseCase;
 
   @Override
   public Optional<TransactionRecord> findById(Long transactionId) {
@@ -67,18 +74,71 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
   }
 
   @Override
-  public long reserveNextNonce(String fromAddress) {
-    return manageExecutionTransactionUseCase.reserveNextNonce(fromAddress);
+  public SponsorNonceSnapshot loadSponsorNonceSnapshot(long chainId, String fromAddress) {
+    SponsorChainNonceSnapshotResult snapshot =
+        manageExecutionTransactionUseCase.loadSponsorNonceSnapshot(chainId, fromAddress);
+    return new SponsorNonceSnapshot(
+        snapshot.chainPendingNonce(),
+        snapshot.chainLatestNonce(),
+        snapshot.mainPendingNonce(),
+        snapshot.subPendingNonce(),
+        snapshot.mainLatestNonce(),
+        snapshot.subLatestNonce());
   }
 
   @Override
-  public boolean releaseReservedNonce(String fromAddress, long reservedNonce) {
-    return manageExecutionTransactionUseCase.releaseReservedNonce(fromAddress, reservedNonce);
+  public SponsorNonceCoordinationRecord coordinateSponsorNonce(
+      CoordinateSponsorNonceCommand command) {
+    SponsorNonceCoordinationResult result =
+        manageExecutionTransactionUseCase.coordinateSponsorNonce(
+            new SponsorNonceCoordinationCommand(
+                command.chainId(),
+                command.fromAddress(),
+                command.chainPendingNonce(),
+                command.chainLatestNonce(),
+                command.mainPendingNonce(),
+                command.subPendingNonce(),
+                command.mainLatestNonce(),
+                command.subLatestNonce(),
+                command.openWindowSize(),
+                command.transactionId(),
+                command.attemptIdempotencyKey(),
+                command.now()));
+    return new SponsorNonceCoordinationRecord(
+        result.decision().type().name(),
+        result.decision().nonce(),
+        result.decision().reason(),
+        result.reserved(),
+        result.reservation() == null ? null : result.reservation().attemptId(),
+        result.reservation() == null ? null : result.reservation().transactionId());
   }
 
   @Override
-  public long loadPendingNonce(String fromAddress) {
-    return manageExecutionTransactionUseCase.loadPendingNonce(fromAddress);
+  public void transitionSponsorNonceSlot(SponsorNonceSlotTransitionCommand command) {
+    manageNonceSlotLifecycleUseCase.transition(
+        RecordSponsorNonceSlotTransitionCommand.builder()
+            .chainId(command.chainId())
+            .fromAddress(command.fromAddress())
+            .nonce(command.nonce())
+            .fromStatus(SponsorNonceSlotStatus.valueOf(command.fromStatus()))
+            .toStatus(SponsorNonceSlotStatus.valueOf(command.toStatus()))
+            .activeAttemptId(command.activeAttemptId())
+            .activeTxId(command.activeTxId())
+            .releasedAttemptId(command.releasedAttemptId())
+            .releasedTxId(command.releasedTxId())
+            .stateChangedAt(command.stateChangedAt())
+            .releaseReason(command.releaseReason())
+            .terminalReason(command.terminalReason())
+            .broadcastRecoveryClaimOwner(command.broadcastRecoveryClaimOwner())
+            .broadcastRecoveryClaimToken(command.broadcastRecoveryClaimToken())
+            .broadcastRecoveryClaimExpiresAt(command.broadcastRecoveryClaimExpiresAt())
+            .broadcastRecoveryAttemptCount(command.broadcastRecoveryAttemptCount())
+            .hasRawTx(command.hasRawTx())
+            .hasTxHash(command.hasTxHash())
+            .hasSigningEvidence(command.hasSigningEvidence())
+            .hasBroadcastEvidence(command.hasBroadcastEvidence())
+            .hasReceiptEvidence(command.hasReceiptEvidence())
+            .build());
   }
 
   @Override

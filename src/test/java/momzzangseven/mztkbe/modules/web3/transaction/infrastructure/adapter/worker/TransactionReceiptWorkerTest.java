@@ -16,6 +16,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -24,8 +26,10 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.service.Transac
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,9 +51,11 @@ class TransactionReceiptWorkerTest {
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private TransactionOutcomePublisher transactionOutcomePublisher;
+  @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
   @Mock private RetryStrategy retryStrategy;
 
   private TransactionRewardTokenProperties properties;
+  private Web3CoreProperties web3CoreProperties;
   private TransactionReceiptWorker worker;
 
   @BeforeEach
@@ -59,6 +65,8 @@ class TransactionReceiptWorkerTest {
     properties.getWorker().setReceiptTimeoutSeconds(60);
     properties.getWorker().setReceiptPollMinSeconds(2);
     properties.getWorker().setReceiptPollMaxSeconds(5);
+    web3CoreProperties = new Web3CoreProperties();
+    web3CoreProperties.setChainId(11155111L);
     worker =
         new TransactionReceiptWorker(
             loadTransactionWorkPort,
@@ -66,8 +74,10 @@ class TransactionReceiptWorkerTest {
             recordTransactionAuditPort,
             web3ContractPort,
             transactionOutcomePublisher,
+            nonceSlotLifecycleUseCase,
             properties,
             retryStrategy,
+            web3CoreProperties,
             FIXED_CLOCK);
   }
 
@@ -79,7 +89,11 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
+    verifyNoInteractions(
+        updateTransactionPort,
+        web3ContractPort,
+        transactionOutcomePublisher,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -93,7 +107,7 @@ class TransactionReceiptWorkerTest {
     verify(updateTransactionPort)
         .updateStatus(
             1L, Web3TxStatus.UNCONFIRMED, " ", Web3TxFailureReason.RECEIPT_TIMEOUT.code());
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher, nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -107,7 +121,7 @@ class TransactionReceiptWorkerTest {
     verify(updateTransactionPort)
         .updateStatus(
             1L, Web3TxStatus.UNCONFIRMED, null, Web3TxFailureReason.RECEIPT_TIMEOUT.code());
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher, nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -122,6 +136,7 @@ class TransactionReceiptWorkerTest {
 
     verify(updateTransactionPort)
         .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_0S");
+    verifyStuckTransition("RECEIPT_TIMEOUT_0S");
     verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
   }
 
@@ -137,6 +152,7 @@ class TransactionReceiptWorkerTest {
 
     verify(updateTransactionPort)
         .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_5S");
+    verifyStuckTransition("RECEIPT_TIMEOUT_5S");
     verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
   }
 
@@ -151,6 +167,7 @@ class TransactionReceiptWorkerTest {
 
     verify(updateTransactionPort)
         .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_60S");
+    verifyStuckTransition("RECEIPT_TIMEOUT_60S");
     verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
   }
 
@@ -168,6 +185,12 @@ class TransactionReceiptWorkerTest {
     verify(transactionOutcomePublisher)
         .markSucceededAndPublish(
             1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", 1L, 2L, txHash);
+    verify(nonceSlotLifecycleUseCase)
+        .transition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.getToStatus() == SponsorNonceSlotStatus.CONSUMED
+                        && command.getConsumedTxId().equals(1L)));
     verify(updateTransactionPort, never()).scheduleRetry(eq(1L), anyString(), any());
   }
 
@@ -192,6 +215,8 @@ class TransactionReceiptWorkerTest {
             2L,
             txHash,
             "RECEIPT_STATUS_0");
+    verify(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
   }
 
   @Test
@@ -275,5 +300,18 @@ class TransactionReceiptWorkerTest {
         "0xdeadbeef",
         null,
         broadcastedAt);
+  }
+
+  private void verifyStuckTransition(String stuckReason) {
+    verify(nonceSlotLifecycleUseCase)
+        .transition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.getFromStatus() == SponsorNonceSlotStatus.BROADCASTED
+                        && command.getToStatus() == SponsorNonceSlotStatus.STUCK
+                        && command.getActiveTxId().equals(1L)
+                        && command.getStuckReason().equals(stuckReason)
+                        && command.hasTxHash()
+                        && command.hasBroadcastEvidence()));
   }
 }

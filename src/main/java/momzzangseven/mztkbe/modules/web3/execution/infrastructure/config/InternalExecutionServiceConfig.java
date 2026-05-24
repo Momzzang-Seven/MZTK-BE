@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.config;
 
 import java.time.Clock;
 import java.util.List;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionSponsorWalletAddressUseCase;
@@ -22,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTr
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.InternalExecutionTransientRetryException;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunInternalExecutionBatchService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteInternalExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.InternalExecutionSignerPreflight;
@@ -89,8 +91,14 @@ public class InternalExecutionServiceConfig {
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
     transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     ExecuteTransactionalInternalExecutionIntentDelegatePort txWrappedDelegate =
-        (command, signerGates) ->
-            transactionTemplate.execute(status -> delegate.execute(command, signerGates));
+        (command, signerGates) -> {
+          try {
+            return transactionTemplate.execute(status -> delegate.execute(command, signerGates));
+          } catch (InternalExecutionTransientRetryException e) {
+            return ExecuteInternalExecutionIntentResult.transientRetry(
+                e.executionIntentId(), e.executionIntentStatus());
+          }
+        };
     return new ExecuteInternalExecutionIntentService(
         txWrappedDelegate, internalExecutionSignerPreflight, executionIntentPersistencePort);
   }

@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -18,10 +20,12 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.service.Transac
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.ReceiptPollAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -38,6 +42,8 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
   private final TransactionOutcomePublisher transactionOutcomePublisher;
+  private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  private final Web3CoreProperties web3CoreProperties;
   private final Clock appClock;
 
   private final String workerId = "receipt-" + UUID.randomUUID().toString().substring(0, 8);
@@ -48,8 +54,10 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       RecordTransactionAuditPort recordTransactionAuditPort,
       Web3ContractPort web3ContractPort,
       TransactionOutcomePublisher transactionOutcomePublisher,
+      ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
+      Web3CoreProperties web3CoreProperties,
       Clock appClock) {
     super(
         loadTransactionWorkPort,
@@ -59,6 +67,8 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
         retryStrategy);
     this.web3ContractPort = web3ContractPort;
     this.transactionOutcomePublisher = transactionOutcomePublisher;
+    this.nonceSlotLifecycleUseCase = nonceSlotLifecycleUseCase;
+    this.web3CoreProperties = web3CoreProperties;
     this.appClock = appClock;
   }
 
@@ -95,7 +105,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     int timeoutSeconds = rewardTokenProperties.getWorker().getReceiptTimeoutSeconds();
     long elapsedSeconds = elapsedSeconds(item);
     if (timeoutSeconds <= 0 || elapsedSeconds >= timeoutSeconds) {
-      timeout(item.transactionId(), txHash, timeoutSeconds);
+      timeout(item, txHash, timeoutSeconds);
       return;
     }
 
@@ -112,6 +122,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
             item.fromUserId(),
             item.toUserId(),
             txHash);
+        markSlotConsumed(item, "RECEIPT_STATUS_1");
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
       } else {
         transactionOutcomePublisher.markFailedOnchainAndPublish(
@@ -123,6 +134,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
             item.toUserId(),
             txHash,
             "RECEIPT_STATUS_0");
+        markSlotConsumed(item, "RECEIPT_STATUS_0");
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.FAILED_ONCHAIN);
       }
       return;
@@ -149,6 +161,44 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
         transactionId, null, LocalDateTime.now(appClock).plusSeconds(nextPollSeconds));
   }
 
+  private void markSlotConsumed(
+      LoadTransactionWorkPort.TransactionWorkItem item, String consumedReason) {
+    if (item.nonce() == null) {
+      log.warn(
+          "Skipping nonce slot consumed transition for txId={} without nonce",
+          item.transactionId());
+      return;
+    }
+    try {
+      nonceSlotLifecycleUseCase.transition(
+          RecordSponsorNonceSlotTransitionCommand.builder()
+              .chainId(web3CoreProperties.getChainId())
+              .fromAddress(item.fromAddress())
+              .nonce(item.nonce())
+              .fromStatus(SponsorNonceSlotStatus.BROADCASTED)
+              .toStatus(SponsorNonceSlotStatus.CONSUMED)
+              .activeTxId(item.transactionId())
+              .consumedTxId(item.transactionId())
+              .stateChangedAt(LocalDateTime.now(appClock))
+              .consumedReason(consumedReason)
+              .hasRawTx(item.signedRawTx() != null && !item.signedRawTx().isBlank())
+              .hasTxHash(item.txHash() != null && !item.txHash().isBlank())
+              .hasSigningEvidence(true)
+              .hasBroadcastEvidence(true)
+              .hasReceiptEvidence(true)
+              .build());
+    } catch (Web3TransactionStateInvalidException e) {
+      String message = e.getMessage();
+      if (message == null || !message.contains("nonce slot not found")) {
+        throw e;
+      }
+      log.warn(
+          "Skipping nonce slot consumed transition for non-slot txId={}: {}",
+          item.transactionId(),
+          message);
+    }
+  }
+
   private long elapsedSeconds(LoadTransactionWorkPort.TransactionWorkItem item) {
     LocalDateTime baseline = item.broadcastedAt();
     if (baseline == null) {
@@ -157,11 +207,47 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     return Math.max(0, Duration.between(baseline, LocalDateTime.now(appClock)).getSeconds());
   }
 
-  private void timeout(Long transactionId, String txHash, int timeoutSeconds) {
+  private void timeout(
+      LoadTransactionWorkPort.TransactionWorkItem item, String txHash, int timeoutSeconds) {
     String timeoutReason = Web3TxFailureReason.RECEIPT_TIMEOUT.code() + "_" + timeoutSeconds + "S";
     updateTransactionPort.updateStatus(
-        transactionId, Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
-    auditStateChange(transactionId, Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
+        item.transactionId(), Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
+    markSlotStuck(item, timeoutReason);
+    auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
+  }
+
+  private void markSlotStuck(LoadTransactionWorkPort.TransactionWorkItem item, String stuckReason) {
+    if (item.nonce() == null) {
+      log.warn(
+          "Skipping nonce slot stuck transition for txId={} without nonce", item.transactionId());
+      return;
+    }
+    try {
+      nonceSlotLifecycleUseCase.transition(
+          RecordSponsorNonceSlotTransitionCommand.builder()
+              .chainId(web3CoreProperties.getChainId())
+              .fromAddress(item.fromAddress())
+              .nonce(item.nonce())
+              .fromStatus(SponsorNonceSlotStatus.BROADCASTED)
+              .toStatus(SponsorNonceSlotStatus.STUCK)
+              .activeTxId(item.transactionId())
+              .stateChangedAt(LocalDateTime.now(appClock))
+              .stuckReason(stuckReason)
+              .hasRawTx(item.signedRawTx() != null && !item.signedRawTx().isBlank())
+              .hasTxHash(item.txHash() != null && !item.txHash().isBlank())
+              .hasSigningEvidence(item.signedRawTx() != null && !item.signedRawTx().isBlank())
+              .hasBroadcastEvidence(true)
+              .build());
+    } catch (Web3TransactionStateInvalidException e) {
+      String message = e.getMessage();
+      if (message == null || !message.contains("nonce slot not found")) {
+        throw e;
+      }
+      log.warn(
+          "Skipping nonce slot stuck transition for non-slot txId={}: {}",
+          item.transactionId(),
+          message);
+    }
   }
 
   private void auditReceiptPoll(

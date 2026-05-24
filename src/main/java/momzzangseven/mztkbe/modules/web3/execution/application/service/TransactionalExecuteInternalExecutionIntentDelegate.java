@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -56,6 +57,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
   private static final String INTERNAL_ISSUER_INVALID_INTENT = "INTERNAL_ISSUER_INVALID_INTENT";
+  private static final int SPONSOR_NONCE_OPEN_WINDOW_SIZE = 3;
   private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
       "sponsor kms sign failed (terminal)";
   private static final String SPONSOR_SIGNATURE_INVALID = "sponsor signature invalid";
@@ -157,8 +159,28 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           "internal intent signer does not match expected action signer");
     }
 
-    long reservedNonce = executionTransactionGatewayPort.reserveNextNonce(expectedSigner);
-    ExecutionIntent signableIntent = rebindReservedNonce(intent, reservedNonce);
+    ExecutionTransactionGatewayPort.TransactionRecord created =
+        executionTransactionGatewayPort.createAndFlush(
+            new ExecutionTransactionGatewayPort.CreateTransactionCommand(
+                intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo(),
+                actionPlan.referenceType(),
+                intent.getResourceId(),
+                intent.getRequesterUserId(),
+                intent.getCounterpartyUserId(),
+                expectedSigner,
+                intent.getUnsignedTxSnapshot().toAddress(),
+                actionPlan.amountWei(),
+                null,
+                ExecutionTransactionStatus.CREATED,
+                ExecutionTransactionType.EIP1559,
+                null,
+                null,
+                null,
+                null));
+    SponsorNonceContext sponsorNonce =
+        reserveSponsorNonce(
+            created.transactionId(), expectedSigner, intent.getUnsignedTxSnapshot().chainId());
+    ExecutionIntent signableIntent = rebindReservedNonce(intent, sponsorNonce.nonce());
 
     ExecutionEip1559SigningPort.SignedTransaction signedTransaction;
     try {
@@ -179,8 +201,9 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           "internal sponsor KMS sign failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
-      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
       if (KmsClientErrorClassifier.isTerminal(e)) {
+        dropSponsorReservedSlot(
+            sponsorNonce, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
         return quarantineInvalidIntent(
             intent,
             actionHandler,
@@ -193,14 +216,14 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       // claimNextInternalExecutableForUpdate. Do NOT cancel and do NOT publish the terminated
       // event — the QnA escrow refund cascade (afterExecutionTerminated → escrow refund) must not
       // fire on a recoverable AWS hiccup.
-      return ExecuteInternalExecutionIntentResult.transientRetry(
-          intent.getPublicId(), intent.getStatus());
+      throw new InternalExecutionTransientRetryException(
+          intent.getPublicId(), intent.getStatus(), e);
     } catch (SignatureRecoveryException e) {
       log.warn(
           "internal sponsor signature recovery failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
-      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
+      dropSponsorReservedSlot(sponsorNonce, ExecutionFailureReason.SIGNATURE_INVALID.name());
       return quarantineInvalidIntent(
           intent,
           actionHandler,
@@ -209,35 +232,17 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           SPONSOR_SIGNATURE_INVALID,
           ExecutionFailureReason.SIGNATURE_INVALID);
     } catch (Web3InvalidInputException e) {
-      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
+      dropSponsorReservedSlot(sponsorNonce, INTERNAL_ISSUER_INVALID_INTENT);
       return quarantineInvalidIntent(
           intent, actionHandler, actionPlan, INTERNAL_ISSUER_INVALID_INTENT, e.getMessage());
     }
-
-    ExecutionTransactionGatewayPort.TransactionRecord created =
-        executionTransactionGatewayPort.createAndFlush(
-            new ExecutionTransactionGatewayPort.CreateTransactionCommand(
-                intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo(),
-                actionPlan.referenceType(),
-                intent.getResourceId(),
-                intent.getRequesterUserId(),
-                intent.getCounterpartyUserId(),
-                expectedSigner,
-                signableIntent.getUnsignedTxSnapshot().toAddress(),
-                actionPlan.amountWei(),
-                signableIntent.getUnsignedTxSnapshot().expectedNonce(),
-                ExecutionTransactionStatus.CREATED,
-                ExecutionTransactionType.EIP1559,
-                null,
-                null,
-                null,
-                null));
 
     executionTransactionGatewayPort.markSigned(
         created.transactionId(),
         signableIntent.getUnsignedTxSnapshot().expectedNonce(),
         signedTransaction.rawTransaction(),
         signedTransaction.txHash());
+    markSponsorSlotSigned(sponsorNonce, signedTransaction.txHash());
     audit(
         created.transactionId(),
         ExecutionAuditEventType.SIGN,
@@ -252,7 +257,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         signedTransaction.rawTransaction(),
         signedTransaction.txHash(),
         actionHandler,
-        actionPlan);
+        actionPlan,
+        sponsorNonce);
     return new ExecuteInternalExecutionIntentResult(
         true,
         false,
@@ -269,9 +275,11 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       String rawTx,
       String fallbackTxHash,
       ExecutionActionHandlerPort actionHandler,
-      ExecutionActionPlan actionPlan) {
+      ExecutionActionPlan actionPlan,
+      SponsorNonceContext sponsorNonceContext) {
     runAfterCommitPort.runAfterCommitWithoutTransaction(
         () -> {
+          markSponsorSlotBroadcasting(sponsorNonceContext, fallbackTxHash);
           ExecutionTransactionGatewayPort.BroadcastResult broadcast =
               executionTransactionGatewayPort.broadcast(rawTx);
           runAfterCommitPort.runAfterCommit(
@@ -282,7 +290,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                       fallbackTxHash,
                       broadcast,
                       actionHandler,
-                      actionPlan));
+                      actionPlan,
+                      sponsorNonceContext));
         });
   }
 
@@ -292,7 +301,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       String fallbackTxHash,
       ExecutionTransactionGatewayPort.BroadcastResult broadcast,
       ExecutionActionHandlerPort actionHandler,
-      ExecutionActionPlan actionPlan) {
+      ExecutionActionPlan actionPlan,
+      SponsorNonceContext sponsorNonceContext) {
     audit(
         transactionId,
         ExecutionAuditEventType.BROADCAST,
@@ -317,6 +327,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
               ? fallbackTxHash
               : broadcast.txHash();
       executionTransactionGatewayPort.markPending(transactionId, txHash);
+      markSponsorSlotBroadcasted(sponsorNonceContext);
       ExecutionIntent pendingIntent =
           executionIntentPersistencePort.update(
               current.markPendingOnchain(transactionId, LocalDateTime.now(appClock)));
@@ -340,6 +351,128 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     ExecutionActionHookRunner.afterTransactionSubmitted(
         runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
+  }
+
+  private SponsorNonceContext reserveSponsorNonce(
+      Long transactionId, String sponsorAddress, long chainId) {
+    ExecutionTransactionGatewayPort.SponsorNonceSnapshot snapshot =
+        executionTransactionGatewayPort.loadSponsorNonceSnapshot(chainId, sponsorAddress);
+    ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination =
+        executionTransactionGatewayPort.coordinateSponsorNonce(
+            new ExecutionTransactionGatewayPort.CoordinateSponsorNonceCommand(
+                chainId,
+                sponsorAddress,
+                snapshot.chainPendingNonce(),
+                snapshot.chainLatestNonce(),
+                snapshot.mainPendingNonce(),
+                snapshot.subPendingNonce(),
+                snapshot.mainLatestNonce(),
+                snapshot.subLatestNonce(),
+                SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                transactionId,
+                null,
+                LocalDateTime.now(appClock)));
+    if (!coordination.reserved() || coordination.nonce() == null) {
+      throw new IllegalStateException(
+          "internal sponsor nonce unavailable: decision="
+              + coordination.decisionType()
+              + ", reason="
+              + coordination.reason());
+    }
+    return new SponsorNonceContext(
+        chainId, sponsorAddress, coordination.nonce(), coordination.attemptId(), transactionId);
+  }
+
+  private void markSponsorSlotSigned(SponsorNonceContext context, String txHash) {
+    transitionSponsorSlot(
+        context,
+        "RESERVED",
+        "SIGNED",
+        null,
+        null,
+        null,
+        null,
+        0,
+        true,
+        txHash != null && !txHash.isBlank(),
+        true,
+        false);
+  }
+
+  private void markSponsorSlotBroadcasting(SponsorNonceContext context, String txHash) {
+    transitionSponsorSlot(
+        context,
+        "SIGNED",
+        "BROADCASTING",
+        null,
+        "internal-broadcast-" + context.transactionId(),
+        UUID.randomUUID().toString(),
+        LocalDateTime.now(appClock)
+            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()),
+        1,
+        true,
+        txHash != null && !txHash.isBlank(),
+        true,
+        false);
+  }
+
+  private void markSponsorSlotBroadcasted(SponsorNonceContext context) {
+    transitionSponsorSlot(
+        context, "BROADCASTING", "BROADCASTED", null, null, null, null, 0, true, true, true, true);
+  }
+
+  private void dropSponsorReservedSlot(SponsorNonceContext context, String releaseReason) {
+    transitionSponsorSlot(
+        context,
+        "RESERVED",
+        "DROPPED",
+        releaseReason,
+        null,
+        null,
+        null,
+        0,
+        false,
+        false,
+        false,
+        false);
+  }
+
+  private void transitionSponsorSlot(
+      SponsorNonceContext context,
+      String fromStatus,
+      String toStatus,
+      String releaseReason,
+      String broadcastClaimOwner,
+      String broadcastClaimToken,
+      LocalDateTime broadcastClaimExpiresAt,
+      int broadcastAttemptCount,
+      boolean hasRawTx,
+      boolean hasTxHash,
+      boolean hasSigningEvidence,
+      boolean hasBroadcastEvidence) {
+    executionTransactionGatewayPort.transitionSponsorNonceSlot(
+        new ExecutionTransactionGatewayPort.SponsorNonceSlotTransitionCommand(
+            context.chainId(),
+            context.fromAddress(),
+            context.nonce(),
+            fromStatus,
+            toStatus,
+            context.attemptId(),
+            context.transactionId(),
+            "DROPPED".equals(toStatus) ? context.attemptId() : null,
+            "DROPPED".equals(toStatus) ? context.transactionId() : null,
+            LocalDateTime.now(appClock),
+            releaseReason,
+            null,
+            broadcastClaimOwner,
+            broadcastClaimToken,
+            broadcastClaimExpiresAt,
+            broadcastAttemptCount,
+            hasRawTx,
+            hasTxHash,
+            hasSigningEvidence,
+            hasBroadcastEvidence,
+            false));
   }
 
   private ExecutionIntent rebindReservedNonce(ExecutionIntent intent, long reservedNonce) {
@@ -437,22 +570,6 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 
-  /**
-   * Releases the reserved nonce on {@code web3_nonce_state} and logs {@code NONCE_GAP_DETECTED}
-   * with a fixed prefix when the CAS misses (another reservation advanced the cursor between
-   * reserve and release). The single log shape concentrates the PR #150 follow-up F-1 surface (a
-   * future {@code web3_nonce_gap_incidents} recorder) at one address.
-   */
-  private void releaseAndLogIfGap(String fromAddress, long reservedNonce, String intentPublicId) {
-    boolean released =
-        executionTransactionGatewayPort.releaseReservedNonce(fromAddress, reservedNonce);
-    if (!released) {
-      log.error(
-          "NONCE_GAP_DETECTED: intentId={}, fromAddress={}, abandonedNonce={} "
-              + "— another reservation advanced the cursor before release",
-          intentPublicId,
-          fromAddress,
-          reservedNonce);
-    }
-  }
+  private record SponsorNonceContext(
+      long chainId, String fromAddress, long nonce, Long attemptId, Long transactionId) {}
 }

@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -55,6 +56,7 @@ public class TransactionalExecuteExecutionIntentDelegate
     implements ExecuteTransactionalExecutionIntentDelegatePort {
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
+  private static final int SPONSOR_NONCE_OPEN_WINDOW_SIZE = 3;
   private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
       "sponsor kms sign failed (terminal)";
   private static final String SPONSOR_SIGNATURE_INVALID = "sponsor signature invalid";
@@ -226,67 +228,6 @@ public class TransactionalExecuteExecutionIntentDelegate
             java.util.List.of(authTuple));
     ExecutionEip7702GatewayPort.FeePlan feePlan = executionEip7702GatewayPort.loadSponsorFeePlan();
 
-    // Reserve next nonce(persistence + JSON-RPC)
-    long sponsorNonce = executionTransactionGatewayPort.reserveNextNonce(sponsorAddress);
-
-    // Make the signature. KMS sign errors are split into transient (rollback for user retry)
-    // vs terminal (cancel + cascade event for QnA escrow refund), mirroring the EIP-1559
-    // internal-issuer delegate. SignatureRecoveryException is treated as terminal — a recovered
-    // address mismatch indicates corrupted DER / digest / key-pairing, all non-recoverable.
-    ExecutionEip7702GatewayPort.SignedPayload signedPayload;
-    try {
-      signedPayload =
-          executionEip7702GatewayPort.signAndEncode(
-              new ExecutionEip7702GatewayPort.SignCommand(
-                  loadExecutionChainIdPort.loadChainId(),
-                  BigInteger.valueOf(sponsorNonce),
-                  feePlan.maxPriorityFeePerGas(),
-                  feePlan.maxFeePerGas(),
-                  estimatedGas,
-                  intent.getAuthorityAddress(),
-                  BigInteger.ZERO,
-                  executeCallData,
-                  java.util.List.of(authTuple),
-                  sponsorSigner));
-    } catch (KmsSignFailedException e) {
-      log.warn(
-          "eip7702 sponsor KMS sign failed for intent={}: {}",
-          intent.getPublicId(),
-          e.getMessage());
-      // Always release explicitly — mirrors the internal delegate's catch shape.
-      // Terminal: cleanup commits via noRollbackFor(ExecutionIntentTerminalException), so an
-      // explicit release is required to roll the cursor back.
-      // Transient: @Transactional default rollback also reverts both the reserveNextNonce and
-      // this release UPDATE (net zero on web3_nonce_state). Calling it unconditionally keeps
-      // the NONCE_GAP_DETECTED log entry symmetric across delegates.
-      releaseAndLogIfGap(sponsorAddress, sponsorNonce, intent.getPublicId());
-      if (KmsClientErrorClassifier.isTerminal(e)) {
-        cancelEip7702IntentAndCascade(
-            intent,
-            ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL,
-            ErrorCode.WEB3_KMS_SIGN_FAILED,
-            SPONSOR_KMS_SIGN_FAILED_TERMINAL);
-        // unreachable; cancelEip7702IntentAndCascade always throws
-      }
-      // Transient: rethrow original; @Transactional default rollback keeps the intent in
-      // AWAITING_SIGNATURE for the next user retry. No cascade event published — QnA escrow
-      // refund must not fire on a recoverable AWS hiccup.
-      throw e;
-    } catch (SignatureRecoveryException e) {
-      log.warn(
-          "eip7702 sponsor signature recovery failed for intent={}: {}",
-          intent.getPublicId(),
-          e.getMessage());
-      releaseAndLogIfGap(sponsorAddress, sponsorNonce, intent.getPublicId());
-      cancelEip7702IntentAndCascade(
-          intent,
-          ExecutionFailureReason.SIGNATURE_INVALID,
-          ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED,
-          SPONSOR_SIGNATURE_INVALID);
-      // unreachable; cancelEip7702IntentAndCascade always throws
-      throw e;
-    }
-
     ExecutionTransactionGatewayPort.TransactionRecord created =
         executionTransactionGatewayPort.createAndFlush(
             new ExecutionTransactionGatewayPort.CreateTransactionCommand(
@@ -306,8 +247,67 @@ public class TransactionalExecuteExecutionIntentDelegate
                 intent.getDelegateTarget(),
                 intent.getExpiresAt()));
 
+    SponsorNonceContext sponsorNonce = reserveSponsorNonce(created.transactionId(), sponsorAddress);
+
+    // Make the signature. KMS sign errors are split into transient (rollback for user retry)
+    // vs terminal (cancel + cascade event for QnA escrow refund), mirroring the EIP-1559
+    // internal-issuer delegate. SignatureRecoveryException is treated as terminal — a recovered
+    // address mismatch indicates corrupted DER / digest / key-pairing, all non-recoverable.
+    ExecutionEip7702GatewayPort.SignedPayload signedPayload;
+    try {
+      signedPayload =
+          executionEip7702GatewayPort.signAndEncode(
+              new ExecutionEip7702GatewayPort.SignCommand(
+                  loadExecutionChainIdPort.loadChainId(),
+                  BigInteger.valueOf(sponsorNonce.nonce()),
+                  feePlan.maxPriorityFeePerGas(),
+                  feePlan.maxFeePerGas(),
+                  estimatedGas,
+                  intent.getAuthorityAddress(),
+                  BigInteger.ZERO,
+                  executeCallData,
+                  java.util.List.of(authTuple),
+                  sponsorSigner));
+    } catch (KmsSignFailedException e) {
+      log.warn(
+          "eip7702 sponsor KMS sign failed for intent={}: {}",
+          intent.getPublicId(),
+          e.getMessage());
+      if (KmsClientErrorClassifier.isTerminal(e)) {
+        dropSponsorReservedSlot(
+            sponsorNonce, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
+        cancelEip7702IntentAndCascade(
+            intent,
+            ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL,
+            ErrorCode.WEB3_KMS_SIGN_FAILED,
+            SPONSOR_KMS_SIGN_FAILED_TERMINAL);
+        // unreachable; cancelEip7702IntentAndCascade always throws
+      }
+      // Transient: rethrow original; @Transactional default rollback keeps the intent in
+      // AWAITING_SIGNATURE for the next user retry. No cascade event published — QnA escrow
+      // refund must not fire on a recoverable AWS hiccup.
+      throw e;
+    } catch (SignatureRecoveryException e) {
+      log.warn(
+          "eip7702 sponsor signature recovery failed for intent={}: {}",
+          intent.getPublicId(),
+          e.getMessage());
+      dropSponsorReservedSlot(sponsorNonce, ExecutionFailureReason.SIGNATURE_INVALID.name());
+      cancelEip7702IntentAndCascade(
+          intent,
+          ExecutionFailureReason.SIGNATURE_INVALID,
+          ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED,
+          SPONSOR_SIGNATURE_INVALID);
+      // unreachable; cancelEip7702IntentAndCascade always throws
+      throw e;
+    }
+
     executionTransactionGatewayPort.markSigned(
-        created.transactionId(), sponsorNonce, signedPayload.rawTx(), signedPayload.txHash());
+        created.transactionId(),
+        sponsorNonce.nonce(),
+        signedPayload.rawTx(),
+        signedPayload.txHash());
+    markSponsorSlotSigned(sponsorNonce, signedPayload.txHash());
     audit(
         created.transactionId(),
         ExecutionAuditEventType.AUTHORIZATION,
@@ -323,7 +323,8 @@ public class TransactionalExecuteExecutionIntentDelegate
         signedPayload.txHash(),
         actionHandler,
         actionPlan,
-        true);
+        true,
+        sponsorNonce);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
@@ -402,7 +403,8 @@ public class TransactionalExecuteExecutionIntentDelegate
         decoded.txHash(),
         actionHandler,
         actionPlan,
-        false);
+        false,
+        null);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
@@ -418,9 +420,13 @@ public class TransactionalExecuteExecutionIntentDelegate
       String fallbackTxHash,
       ExecutionActionHandlerPort actionHandler,
       ExecutionActionPlan actionPlan,
-      boolean consumeSponsorExposureOnSuccess) {
+      boolean consumeSponsorExposureOnSuccess,
+      SponsorNonceContext sponsorNonceContext) {
     runAfterCommitPort.runAfterCommitWithoutTransaction(
         () -> {
+          if (sponsorNonceContext != null) {
+            markSponsorSlotBroadcasting(sponsorNonceContext, fallbackTxHash);
+          }
           ExecutionTransactionGatewayPort.BroadcastResult broadcast =
               executionTransactionGatewayPort.broadcast(rawTx);
           runAfterCommitPort.runAfterCommit(
@@ -432,7 +438,8 @@ public class TransactionalExecuteExecutionIntentDelegate
                       broadcast,
                       actionHandler,
                       actionPlan,
-                      consumeSponsorExposureOnSuccess));
+                      consumeSponsorExposureOnSuccess,
+                      sponsorNonceContext));
         });
   }
 
@@ -443,7 +450,8 @@ public class TransactionalExecuteExecutionIntentDelegate
       ExecutionTransactionGatewayPort.BroadcastResult broadcast,
       ExecutionActionHandlerPort actionHandler,
       ExecutionActionPlan actionPlan,
-      boolean consumeSponsorExposureOnSuccess) {
+      boolean consumeSponsorExposureOnSuccess,
+      SponsorNonceContext sponsorNonceContext) {
     audit(
         transactionId,
         ExecutionAuditEventType.BROADCAST,
@@ -468,6 +476,9 @@ public class TransactionalExecuteExecutionIntentDelegate
               ? fallbackTxHash
               : broadcast.txHash();
       executionTransactionGatewayPort.markPending(transactionId, txHash);
+      if (sponsorNonceContext != null) {
+        markSponsorSlotBroadcasted(sponsorNonceContext);
+      }
       ExecutionIntent pendingIntent =
           executionIntentPersistencePort.update(
               current.markPendingOnchain(transactionId, LocalDateTime.now(appClock)));
@@ -497,6 +508,128 @@ public class TransactionalExecuteExecutionIntentDelegate
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     ExecutionActionHookRunner.afterTransactionSubmitted(
         runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
+  }
+
+  private SponsorNonceContext reserveSponsorNonce(Long transactionId, String sponsorAddress) {
+    long chainId = loadExecutionChainIdPort.loadChainId();
+    ExecutionTransactionGatewayPort.SponsorNonceSnapshot snapshot =
+        executionTransactionGatewayPort.loadSponsorNonceSnapshot(chainId, sponsorAddress);
+    ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination =
+        executionTransactionGatewayPort.coordinateSponsorNonce(
+            new ExecutionTransactionGatewayPort.CoordinateSponsorNonceCommand(
+                chainId,
+                sponsorAddress,
+                snapshot.chainPendingNonce(),
+                snapshot.chainLatestNonce(),
+                snapshot.mainPendingNonce(),
+                snapshot.subPendingNonce(),
+                snapshot.mainLatestNonce(),
+                snapshot.subLatestNonce(),
+                SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                transactionId,
+                null,
+                LocalDateTime.now(appClock)));
+    if (!coordination.reserved() || coordination.nonce() == null) {
+      throw new IllegalStateException(
+          "sponsor nonce unavailable: decision="
+              + coordination.decisionType()
+              + ", reason="
+              + coordination.reason());
+    }
+    return new SponsorNonceContext(
+        chainId, sponsorAddress, coordination.nonce(), coordination.attemptId(), transactionId);
+  }
+
+  private void markSponsorSlotSigned(SponsorNonceContext context, String txHash) {
+    transitionSponsorSlot(
+        context,
+        "RESERVED",
+        "SIGNED",
+        null,
+        null,
+        null,
+        null,
+        0,
+        true,
+        txHash != null && !txHash.isBlank(),
+        true,
+        false);
+  }
+
+  private void markSponsorSlotBroadcasting(SponsorNonceContext context, String txHash) {
+    transitionSponsorSlot(
+        context,
+        "SIGNED",
+        "BROADCASTING",
+        null,
+        "execution-broadcast-" + context.transactionId(),
+        UUID.randomUUID().toString(),
+        LocalDateTime.now(appClock)
+            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()),
+        1,
+        true,
+        txHash != null && !txHash.isBlank(),
+        true,
+        false);
+  }
+
+  private void markSponsorSlotBroadcasted(SponsorNonceContext context) {
+    transitionSponsorSlot(
+        context, "BROADCASTING", "BROADCASTED", null, null, null, null, 0, true, true, true, true);
+  }
+
+  private void dropSponsorReservedSlot(SponsorNonceContext context, String releaseReason) {
+    transitionSponsorSlot(
+        context,
+        "RESERVED",
+        "DROPPED",
+        releaseReason,
+        null,
+        null,
+        null,
+        0,
+        false,
+        false,
+        false,
+        false);
+  }
+
+  private void transitionSponsorSlot(
+      SponsorNonceContext context,
+      String fromStatus,
+      String toStatus,
+      String releaseReason,
+      String broadcastClaimOwner,
+      String broadcastClaimToken,
+      LocalDateTime broadcastClaimExpiresAt,
+      int broadcastAttemptCount,
+      boolean hasRawTx,
+      boolean hasTxHash,
+      boolean hasSigningEvidence,
+      boolean hasBroadcastEvidence) {
+    executionTransactionGatewayPort.transitionSponsorNonceSlot(
+        new ExecutionTransactionGatewayPort.SponsorNonceSlotTransitionCommand(
+            context.chainId(),
+            context.fromAddress(),
+            context.nonce(),
+            fromStatus,
+            toStatus,
+            context.attemptId(),
+            context.transactionId(),
+            "DROPPED".equals(toStatus) ? context.attemptId() : null,
+            "DROPPED".equals(toStatus) ? context.transactionId() : null,
+            LocalDateTime.now(appClock),
+            releaseReason,
+            null,
+            broadcastClaimOwner,
+            broadcastClaimToken,
+            broadcastClaimExpiresAt,
+            broadcastAttemptCount,
+            hasRawTx,
+            hasTxHash,
+            hasSigningEvidence,
+            hasBroadcastEvidence,
+            false));
   }
 
   private void releaseSponsorExposure(
@@ -575,26 +708,6 @@ public class TransactionalExecuteExecutionIntentDelegate
   }
 
   /**
-   * Releases the reserved nonce on {@code web3_nonce_state} and logs {@code NONCE_GAP_DETECTED}
-   * with a fixed prefix when the CAS misses (another reservation advanced the cursor between
-   * reserve and release). Mirrors the internal-issuer delegate so both modules emit the same log
-   * shape — the PR #150 follow-up F-1 surface (a future {@code web3_nonce_gap_incidents} recorder)
-   * has a single grep target.
-   */
-  private void releaseAndLogIfGap(String fromAddress, long reservedNonce, String intentPublicId) {
-    boolean released =
-        executionTransactionGatewayPort.releaseReservedNonce(fromAddress, reservedNonce);
-    if (!released) {
-      log.error(
-          "NONCE_GAP_DETECTED: intentId={}, fromAddress={}, abandonedNonce={}"
-              + " — another reservation advanced the cursor before release",
-          intentPublicId,
-          fromAddress,
-          reservedNonce);
-    }
-  }
-
-  /**
    * Terminal cleanup-then-throw for EIP-7702 sponsor signing failures (KMS terminal or signature
    * recovery). Mirrors the existing {@code expire} / {@code markNonceStale} pattern (see lines
    * 92-108 / 174-189): writes commit because {@link ExecutionIntentTerminalException} is in {@code
@@ -620,4 +733,7 @@ public class TransactionalExecuteExecutionIntentDelegate
     publishTerminated(canceled, ExecutionIntentStatus.CANCELED, eventReason.name());
     throw new ExecutionIntentTerminalException(errorCode, false);
   }
+
+  private record SponsorNonceContext(
+      long chainId, String fromAddress, long nonce, Long attemptId, Long transactionId) {}
 }

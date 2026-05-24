@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.integration.e2e.web3;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -108,7 +109,14 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
                 BigInteger.valueOf(30_000_000_000L)));
     BDDMockito.given(executionEip1559SigningPort.sign(any()))
         .willReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash-signed"));
-    BDDMockito.given(executionTransactionGatewayPort.reserveNextNonce(anyString())).willReturn(77L);
+    BDDMockito.given(
+            executionTransactionGatewayPort.loadSponsorNonceSnapshot(anyLong(), anyString()))
+        .willReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(77L, 77L, 77L, 77L, 77L, 77L));
+    BDDMockito.given(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .willReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "ISSUE_NONCE", 77L, "ISSUE_NONCE", true, 1L, 1L));
   }
 
   @Test

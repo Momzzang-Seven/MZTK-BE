@@ -11,13 +11,16 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTr
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionSummaryResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorChainNonceSnapshotResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.ManageExecutionTransactionUseCase;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadPendingNoncePort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.TransferTransactionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorChainNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
@@ -33,9 +36,9 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   private final TransferTransactionPersistencePort transferTransactionPersistencePort;
   private final UpdateTransactionPort updateTransactionPort;
   private final RecordTransactionAuditPort recordTransactionAuditPort;
-  private final ReserveNoncePort reserveNoncePort;
-  private final LoadPendingNoncePort loadPendingNoncePort;
   private final Web3ContractPort web3ContractPort;
+  private final LoadSponsorChainNoncePort loadSponsorChainNoncePort;
+  private final CoordinateSponsorNonceUseCase coordinateSponsorNonceUseCase;
 
   @Override
   @Transactional(readOnly = true)
@@ -118,18 +121,23 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   }
 
   @Override
-  public long reserveNextNonce(String fromAddress) {
-    return reserveNoncePort.reserveNextNonce(fromAddress);
+  public SponsorChainNonceSnapshotResult loadSponsorNonceSnapshot(
+      long chainId, String fromAddress) {
+    LoadSponsorChainNoncePort.SponsorChainNonceSnapshot snapshot =
+        loadSponsorChainNoncePort.loadSnapshot(chainId, fromAddress);
+    return new SponsorChainNonceSnapshotResult(
+        snapshot.chainPendingNonce(),
+        snapshot.chainLatestNonce(),
+        snapshot.mainPendingNonce(),
+        snapshot.subPendingNonce(),
+        snapshot.mainLatestNonce(),
+        snapshot.subLatestNonce());
   }
 
   @Override
-  public boolean releaseReservedNonce(String fromAddress, long reservedNonce) {
-    return reserveNoncePort.releaseNonce(fromAddress, reservedNonce);
-  }
-
-  @Override
-  public long loadPendingNonce(String fromAddress) {
-    return loadPendingNoncePort.loadPendingNonce(fromAddress);
+  public SponsorNonceCoordinationResult coordinateSponsorNonce(
+      SponsorNonceCoordinationCommand command) {
+    return coordinateSponsorNonceUseCase.execute(command);
   }
 
   @Override

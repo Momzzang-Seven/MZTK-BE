@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -15,17 +16,22 @@ import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWalletInfo;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.service.ReservedNonceCompensator;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorChainNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.BroadcastAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.PrevalidateAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.SignAuditDetail;
@@ -42,10 +48,13 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class TransactionIssuerWorker extends AbstractWeb3Worker {
 
+  private static final int SPONSOR_NONCE_OPEN_WINDOW_SIZE = 3;
+
   private final LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort;
   private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
-  private final ReserveNoncePort reserveNoncePort;
-  private final ReservedNonceCompensator reservedNonceCompensator;
+  private final LoadSponsorChainNoncePort loadSponsorChainNoncePort;
+  private final CoordinateSponsorNonceUseCase coordinateSponsorNonceUseCase;
+  private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
   private final Web3ContractPort web3ContractPort;
   private final Web3CoreProperties web3CoreProperties;
 
@@ -57,8 +66,9 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       RecordTransactionAuditPort recordTransactionAuditPort,
       LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort,
       VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort,
-      ReserveNoncePort reserveNoncePort,
-      ReservedNonceCompensator reservedNonceCompensator,
+      LoadSponsorChainNoncePort loadSponsorChainNoncePort,
+      CoordinateSponsorNonceUseCase coordinateSponsorNonceUseCase,
+      ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase,
       Web3ContractPort web3ContractPort,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
@@ -71,8 +81,9 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         retryStrategy);
     this.loadRewardTreasuryWalletPort = loadRewardTreasuryWalletPort;
     this.verifyTreasuryWalletForSignPort = verifyTreasuryWalletForSignPort;
-    this.reserveNoncePort = reserveNoncePort;
-    this.reservedNonceCompensator = reservedNonceCompensator;
+    this.loadSponsorChainNoncePort = loadSponsorChainNoncePort;
+    this.coordinateSponsorNonceUseCase = coordinateSponsorNonceUseCase;
+    this.nonceSlotLifecycleUseCase = nonceSlotLifecycleUseCase;
     this.web3ContractPort = web3ContractPort;
     this.web3CoreProperties = web3CoreProperties;
   }
@@ -219,7 +230,11 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
 
-    long nonce = resolveNonce(item, signer.walletAddress());
+    NonceReservation nonceReservation = resolveNonce(item, signer.walletAddress());
+    if (nonceReservation == null) {
+      return;
+    }
+    long nonce = nonceReservation.nonce();
     Web3ContractPort.SignedTransaction signed;
     try {
       signed =
@@ -237,24 +252,29 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     } catch (KmsSignFailedException e) {
       log.warn("KMS sign failed for txId={}: {}", item.transactionId(), e.getMessage());
       if (KmsClientErrorClassifier.isTerminal(e)) {
-        terminalFailWithCompensation(
-            item, signer.walletAddress(), nonce, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
+        terminalFailAndDropReservedSlot(
+            item,
+            signer.walletAddress(),
+            nonceReservation,
+            Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
       } else {
         retry(item.transactionId(), Web3TxFailureReason.KMS_SIGN_FAILED.code(), item);
       }
       return;
     } catch (SignatureRecoveryException e) {
       log.warn("Signature recovery failed for txId={}: {}", item.transactionId(), e.getMessage());
-      terminalFailWithCompensation(
-          item, signer.walletAddress(), nonce, Web3TxFailureReason.SIGNATURE_INVALID);
+      terminalFailAndDropReservedSlot(
+          item, signer.walletAddress(), nonceReservation, Web3TxFailureReason.SIGNATURE_INVALID);
       return;
     }
 
     updateTransactionPort.markSigned(item.transactionId(), nonce, signed.rawTx(), signed.txHash());
+    markSlotSigned(item, signer.walletAddress(), nonceReservation, signed);
     Map<String, Object> signDetail = new SignAuditDetail(nonce, signed.txHash()).toMap();
     audit(item.transactionId(), Web3TransactionAuditEventType.SIGN, null, signDetail);
     auditStateChange(item.transactionId(), Web3TxStatus.CREATED, Web3TxStatus.SIGNED);
 
+    markSlotBroadcasting(item, signer.walletAddress(), nonceReservation, signed);
     Web3ContractPort.BroadcastResult broadcast =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(signed.rawTx()));
     Map<String, Object> broadcastDetail =
@@ -272,6 +292,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
               ? signed.txHash()
               : broadcast.txHash();
       updateTransactionPort.markPending(item.transactionId(), txHash);
+      markSlotBroadcasted(item, signer.walletAddress(), nonceReservation);
       auditStateChange(item.transactionId(), Web3TxStatus.SIGNED, Web3TxStatus.PENDING);
       return;
     }
@@ -306,32 +327,120 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     return itemFromAddress.trim().toLowerCase().equals(signerAddress.trim().toLowerCase());
   }
 
-  private long resolveNonce(
+  private NonceReservation resolveNonce(
       LoadTransactionWorkPort.TransactionWorkItem item, String treasuryAddress) {
     if (item.nonce() != null) {
-      return item.nonce();
+      return new NonceReservation(item.nonce(), null);
     }
 
-    long reservedNonce = reserveNoncePort.reserveNextNonce(treasuryAddress);
-    updateTransactionPort.assignNonce(item.transactionId(), reservedNonce);
-    return reservedNonce;
+    long chainId = web3CoreProperties.getChainId();
+    LoadSponsorChainNoncePort.SponsorChainNonceSnapshot snapshot =
+        loadSponsorChainNoncePort.loadSnapshot(chainId, treasuryAddress);
+    SponsorNonceCoordinationResult result =
+        coordinateSponsorNonceUseCase.execute(
+            new SponsorNonceCoordinationCommand(
+                chainId,
+                treasuryAddress,
+                snapshot.chainPendingNonce(),
+                snapshot.chainLatestNonce(),
+                snapshot.mainPendingNonce(),
+                snapshot.subPendingNonce(),
+                snapshot.mainLatestNonce(),
+                snapshot.subLatestNonce(),
+                SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                item.transactionId(),
+                null,
+                LocalDateTime.now()));
+    if (!result.reserved() || result.reservation() == null) {
+      retry(item.transactionId(), "SPONSOR_NONCE_" + result.decision().type().name(), item);
+      return null;
+    }
+    return new NonceReservation(result.reservation().nonce(), result.reservation().attemptId());
   }
 
-  // Always run the atomic compensator on terminal-after-resolveNonce paths. Re-entry from a prior
-  // transient retry leaves the cursor advanced and row.nonce assigned; clearing both here is safe
-  // because (a) the compensator clears the row's nonce idempotently before any other write, and
-  // (b) once committed, the non-retryable failure_reason permanently excludes the row from
-  // claimByStatus's SQL, so this code path cannot run twice on the same row.
-  private void terminalFailWithCompensation(
+  private void markSlotSigned(
       LoadTransactionWorkPort.TransactionWorkItem item,
       String fromAddress,
-      long nonce,
+      NonceReservation nonceReservation,
+      Web3ContractPort.SignedTransaction signed) {
+    nonceSlotLifecycleUseCase.transition(
+        baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.RESERVED)
+            .toStatus(SponsorNonceSlotStatus.SIGNED)
+            .hasRawTx(true)
+            .hasTxHash(signed.txHash() != null && !signed.txHash().isBlank())
+            .hasSigningEvidence(true)
+            .build());
+  }
+
+  private void markSlotBroadcasting(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String fromAddress,
+      NonceReservation nonceReservation,
+      Web3ContractPort.SignedTransaction signed) {
+    LocalDateTime now = LocalDateTime.now();
+    nonceSlotLifecycleUseCase.transition(
+        baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.SIGNED)
+            .toStatus(SponsorNonceSlotStatus.BROADCASTING)
+            .stateChangedAt(now)
+            .broadcastRecoveryClaimOwner(workerId)
+            .broadcastRecoveryClaimToken(UUID.randomUUID().toString())
+            .broadcastRecoveryClaimExpiresAt(now.plusSeconds(claimTtlSeconds()))
+            .broadcastRecoveryAttemptCount(1)
+            .hasRawTx(true)
+            .hasTxHash(signed.txHash() != null && !signed.txHash().isBlank())
+            .hasSigningEvidence(true)
+            .build());
+  }
+
+  private void markSlotBroadcasted(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String fromAddress,
+      NonceReservation nonceReservation) {
+    nonceSlotLifecycleUseCase.transition(
+        baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.BROADCASTING)
+            .toStatus(SponsorNonceSlotStatus.BROADCASTED)
+            .hasRawTx(true)
+            .hasTxHash(true)
+            .hasSigningEvidence(true)
+            .hasBroadcastEvidence(true)
+            .build());
+  }
+
+  private RecordSponsorNonceSlotTransitionCommand.RecordSponsorNonceSlotTransitionCommandBuilder
+      baseTransition(
+          LoadTransactionWorkPort.TransactionWorkItem item,
+          String fromAddress,
+          NonceReservation nonceReservation,
+          SponsorNonceSlotStatus fromStatus) {
+    return RecordSponsorNonceSlotTransitionCommand.builder()
+        .chainId(web3CoreProperties.getChainId())
+        .fromAddress(fromAddress)
+        .nonce(nonceReservation.nonce())
+        .fromStatus(fromStatus)
+        .activeAttemptId(nonceReservation.attemptId())
+        .activeTxId(item.transactionId())
+        .stateChangedAt(LocalDateTime.now());
+  }
+
+  private void terminalFailAndDropReservedSlot(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String fromAddress,
+      NonceReservation nonceReservation,
       Web3TxFailureReason terminalReason) {
-    reservedNonceCompensator.compensate(item.transactionId(), fromAddress, nonce, terminalReason);
+    nonceSlotLifecycleUseCase.transition(
+        baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.RESERVED)
+            .toStatus(SponsorNonceSlotStatus.DROPPED)
+            .releasedAttemptId(nonceReservation.attemptId())
+            .releasedTxId(item.transactionId())
+            .releaseReason(terminalReason.code())
+            .build());
+    updateTransactionPort.scheduleRetry(item.transactionId(), terminalReason.code(), null);
   }
 
   @Override
   protected List<Class<? extends Throwable>> nonRetryableExceptions() {
     return List.of(Web3InvalidInputException.class, Web3TransactionStateInvalidException.class);
   }
+
+  private record NonceReservation(long nonce, Long attemptId) {}
 }

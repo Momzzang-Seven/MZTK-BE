@@ -355,94 +355,58 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   @Test
-  void
-      execute_whenPendingOnchainTransactionUnconfirmedAndTtlValid_marksRetryableThenCreatesNewIntent() {
+  void execute_whenPendingOnchainTransactionUnconfirmed_marksSponsorNonceBlockedWithoutNewIntent() {
     WalletRegistrationSession pending = pendingOnchainSession();
-    WalletRegistrationSession retryable =
-        pending.markApprovalRetryable(
-            WalletRegistrationReceiptTimeout.ERROR_CODE,
-            WalletRegistrationReceiptTimeout.ERROR_REASON,
-            NOW.plusSeconds(4));
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
-        .thenReturn(Optional.of(pending), Optional.of(retryable));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(pending));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", null, NOW.plusMinutes(5))));
     when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-    givenApprovalAvailable();
-    givenMinimumRemainingTtl(30L);
-    when(buildDraftPort.build(any())).thenReturn(draft());
-    when(submitDraftPort.submit(any())).thenReturn(intentResult(RETRY_INTENT_ID));
 
     WalletRegistrationStatusResult result = service.execute(command(USER_ID));
 
-    ArgumentCaptor<WalletApprovalExecutionRequest> requestCaptor =
-        ArgumentCaptor.forClass(WalletApprovalExecutionRequest.class);
-    verify(buildDraftPort).build(requestCaptor.capture());
-    assertThat(requestCaptor.getValue().retryAttemptNo()).isEqualTo(1);
     ArgumentCaptor<WalletRegistrationSession> captor =
         ArgumentCaptor.forClass(WalletRegistrationSession.class);
-    verify(saveSessionPort, org.mockito.Mockito.times(2)).save(captor.capture());
-    assertThat(captor.getAllValues().get(0).getStatus())
-        .isEqualTo(WalletRegistrationStatus.APPROVAL_RETRYABLE);
-    assertThat(captor.getAllValues().get(0).getLastErrorCode())
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus())
+        .isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
+    assertThat(captor.getValue().getLastErrorCode())
         .isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
-    assertThat(captor.getAllValues().get(1).getLatestExecutionIntentId())
-        .isEqualTo(RETRY_INTENT_ID);
-    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.SIGN_APPROVAL);
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.CONTACT_SUPPORT);
+    verify(buildDraftPort, never()).build(any());
+    verify(submitDraftPort, never()).submit(any());
   }
 
   @Test
-  void execute_whenReceiptTimeoutRetryReusesPreviousIntent_rejectsAttach() {
+  void execute_whenReceiptTimeoutRetryWouldReusePreviousIntent_doesNotCreateReplacement() {
     WalletRegistrationSession pending = pendingOnchainSession();
-    WalletRegistrationSession retryable =
-        pending.markApprovalRetryable(
-            WalletRegistrationReceiptTimeout.ERROR_CODE,
-            WalletRegistrationReceiptTimeout.ERROR_REASON,
-            NOW.plusSeconds(4));
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
-        .thenReturn(Optional.of(pending), Optional.of(retryable));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(pending));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", null, NOW.plusMinutes(5))));
     when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-    givenApprovalAvailable();
-    givenMinimumRemainingTtl(30L);
-    when(buildDraftPort.build(any())).thenReturn(draft());
-    when(submitDraftPort.submit(any())).thenReturn(intentResult(INTENT_ID, true));
 
-    assertThatThrownBy(() -> service.execute(command(USER_ID)))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("reused previous intent");
+    WalletRegistrationStatusResult result = service.execute(command(USER_ID));
 
-    verify(saveSessionPort, org.mockito.Mockito.times(1)).save(any());
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
+    verify(buildDraftPort, never()).build(any());
+    verify(submitDraftPort, never()).submit(any());
     verify(cancelExecutionPort, never()).cancelIfSignable(any(), any(), any());
   }
 
   @Test
-  void execute_whenReceiptTimeoutRetryFindsOrphanRetryIntent_attachesExistingRetryIntent() {
+  void execute_whenReceiptTimeoutRetryWouldFindOrphanRetryIntent_doesNotCreateReplacement() {
     WalletRegistrationSession pending = pendingOnchainSession();
-    WalletRegistrationSession retryable =
-        pending.markApprovalRetryable(
-            WalletRegistrationReceiptTimeout.ERROR_CODE,
-            WalletRegistrationReceiptTimeout.ERROR_REASON,
-            NOW.plusSeconds(4));
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
-        .thenReturn(Optional.of(pending), Optional.of(retryable));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(pending));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(state("PENDING_ONCHAIN", "UNCONFIRMED", null, NOW.plusMinutes(5))));
     when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-    givenApprovalAvailable();
-    givenMinimumRemainingTtl(30L);
-    when(buildDraftPort.build(any())).thenReturn(draft());
-    when(submitDraftPort.submit(any())).thenReturn(intentResult(RETRY_INTENT_ID, true));
 
     WalletRegistrationStatusResult result = service.execute(command(USER_ID));
 
-    ArgumentCaptor<WalletRegistrationSession> captor =
-        ArgumentCaptor.forClass(WalletRegistrationSession.class);
-    verify(saveSessionPort, org.mockito.Mockito.times(2)).save(captor.capture());
-    WalletRegistrationSession attached = captor.getAllValues().get(1);
-    assertThat(attached.getLatestExecutionIntentId()).isEqualTo(RETRY_INTENT_ID);
-    assertThat(result.latestExecutionIntentId()).isEqualTo(RETRY_INTENT_ID);
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
+    assertThat(result.latestExecutionIntentId()).isEqualTo(INTENT_ID);
+    verify(buildDraftPort, never()).build(any());
+    verify(submitDraftPort, never()).submit(any());
     verify(cancelExecutionPort, never()).cancelIfSignable(any(), any(), any());
   }
 
@@ -469,7 +433,7 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   @Test
-  void execute_whenPendingOnchainTransactionUnconfirmedAndTtlElapsed_returnsTerminalStatus() {
+  void execute_whenPendingOnchainTransactionUnconfirmedAndTtlElapsed_returnsSponsorNonceBlocked() {
     WalletRegistrationSession pending = expiredPendingOnchainSession();
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(pending));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
@@ -479,8 +443,8 @@ class RetryWalletRegistrationApprovalServiceTest {
 
     WalletRegistrationStatusResult result = service.execute(command(USER_ID));
 
-    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_FAILED);
-    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.NONE);
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.CONTACT_SUPPORT);
     assertThat(result.lastErrorCode()).isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
     verify(buildDraftPort, never()).build(any());
     verify(submitDraftPort, never()).submit(any());

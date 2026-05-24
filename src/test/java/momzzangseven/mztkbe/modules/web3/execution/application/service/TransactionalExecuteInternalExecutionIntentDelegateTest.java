@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -142,6 +142,21 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
             });
   }
 
+  private void stubSponsorNonceReservation(long nonce, Long transactionId) {
+    when(executionTransactionGatewayPort.createAndFlush(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.TransactionRecord(
+                transactionId, ExecutionTransactionStatus.CREATED, null));
+    when(executionTransactionGatewayPort.loadSponsorNonceSnapshot(11155111L, SPONSOR_ADDRESS))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(
+                nonce, nonce, nonce, nonce, nonce, nonce));
+    when(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "ISSUE_NONCE", nonce, "ISSUE_NONCE", true, 9001L, transactionId));
+  }
+
   @Test
   void execute_returnsNotFoundWhenNoEligibleIntentExists() {
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
@@ -176,7 +191,6 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
@@ -196,7 +210,6 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
@@ -216,7 +229,6 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
@@ -224,13 +236,9 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   void execute_rebindsReservedNonceWhenLocalAllocatorAdvances() {
     ExecutionIntent intent = internalIntent();
     stubClaimAndTrackUpdates(intent);
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS)).thenReturn(13L);
+    stubSponsorNonceReservation(13L, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
-    when(executionTransactionGatewayPort.createAndFlush(any()))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.TransactionRecord(
-                77L, ExecutionTransactionStatus.CREATED, null));
     when(executionTransactionGatewayPort.broadcast("0xsigned"))
         .thenReturn(
             new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", null, "main"));
@@ -250,22 +258,16 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
             org.mockito.ArgumentMatchers.argThat(
                 command -> SPONSOR_KMS_KEY.equals(command.signer().kmsKeyId())));
     verify(executionTransactionGatewayPort)
-        .createAndFlush(
-            org.mockito.ArgumentMatchers.argThat(command -> command.nonce().equals(13L)));
+        .createAndFlush(org.mockito.ArgumentMatchers.argThat(command -> command.nonce() == null));
   }
 
   @Test
   void execute_marksPendingOnchainWhenBroadcastSucceeds() {
     ExecutionIntent intent = internalIntent();
     stubClaimAndTrackUpdates(intent);
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
+    stubSponsorNonceReservation(intent.getUnsignedTxSnapshot().expectedNonce(), 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
-    when(executionTransactionGatewayPort.createAndFlush(any()))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.TransactionRecord(
-                77L, ExecutionTransactionStatus.CREATED, null));
     when(executionTransactionGatewayPort.broadcast("0xsigned"))
         .thenReturn(
             new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", null, "main"));
@@ -282,22 +284,15 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
     assertThat(result.txHash()).isEqualTo("0xhash");
     verify(executionTransactionGatewayPort).markPending(77L, "0xhash");
-    // Happy-path regression: nonce stays consumed; release must NOT be called.
-    verify(executionTransactionGatewayPort, never()).releaseReservedNonce(any(), anyLong());
   }
 
   @Test
   void execute_marksSignedAndSchedulesRetryWhenBroadcastFails() {
     ExecutionIntent intent = internalIntent();
     stubClaimAndTrackUpdates(intent);
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
+    stubSponsorNonceReservation(intent.getUnsignedTxSnapshot().expectedNonce(), 78L);
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
-    when(executionTransactionGatewayPort.createAndFlush(any()))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.TransactionRecord(
-                78L, ExecutionTransactionStatus.CREATED, null));
     when(executionTransactionGatewayPort.broadcast("0xsigned"))
         .thenReturn(
             new ExecutionTransactionGatewayPort.BroadcastResult(
@@ -337,7 +332,6 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
                 event ->
                     event.executionIntentId().equals("intent-admin-settle")
                         && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
-    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
@@ -347,10 +341,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(expectedNonce);
-    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
-        .thenReturn(true);
+    stubSponsorNonceReservation(expectedNonce, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
 
@@ -362,7 +353,11 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
 
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.toStatus().equals("DROPPED") && command.nonce() == expectedNonce));
     ArgumentCaptor<
             momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent>
         captor =
@@ -372,7 +367,6 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     verify(publishExecutionIntentTerminatedPort).publish(captor.capture());
     assertThat(captor.getValue().failureReason())
         .isEqualTo(ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
-    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
 
@@ -382,44 +376,34 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(expectedNonce);
-    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
-        .thenReturn(true);
+    stubSponsorNonceReservation(expectedNonce, 77L);
     // No AWS error code → classifier returns false → transient.
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new KmsSignFailedException("kms throttled"));
 
-    ExecuteInternalExecutionIntentResult result =
-        delegate.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
-            gate);
-
-    // Critical: transient now reports executed=false so the batch loop exits the tick instead
-    // of re-claiming the same intent and hammering KMS batchSize times.
-    assertThat(result.executed()).isFalse();
-    assertThat(result.quarantined()).isFalse();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.AWAITING_SIGNATURE);
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteInternalExecutionIntentCommand(
+                        List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
+                    gate))
+        .isInstanceOf(InternalExecutionTransientRetryException.class)
+        .extracting(ex -> ((InternalExecutionTransientRetryException) ex).executionIntentStatus())
+        .isEqualTo(ExecutionIntentStatus.AWAITING_SIGNATURE);
     // Critical invariant: transient path must NOT cancel intent and must NOT publish the
     // terminated event — the QnA escrow refund cascade must not fire on a recoverable hiccup.
     verify(executionIntentPersistencePort, never()).update(any());
     verify(publishExecutionIntentTerminatedPort, never()).publish(any());
-    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
 
   @Test
-  void execute_logsNonceGapButContinuesWhenReleaseReservedNonceReturnsFalse() {
+  void execute_dropsReservedSlotAndContinuesWhenKmsTerminalFails() {
     ExecutionIntent intent = internalIntent();
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(expectedNonce);
-    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
-        .thenReturn(false); // simulate cursor advanced past abandoned nonce
+    stubSponsorNonceReservation(expectedNonce, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
 
@@ -429,10 +413,14 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
                 List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
             gate);
 
-    // Gap is logged as ERROR but the terminal cancellation flow still completes.
+    // Terminal cancellation still completes after the reserved slot is dropped.
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.toStatus().equals("DROPPED") && command.nonce() == expectedNonce));
   }
 
   @Test
@@ -441,10 +429,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(expectedNonce);
-    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
-        .thenReturn(true);
+    stubSponsorNonceReservation(expectedNonce, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new SignatureRecoveryException("recovery failed"));
 
@@ -456,7 +441,6 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
 
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
     ArgumentCaptor<
             momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent>
         captor =
@@ -466,7 +450,6 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     verify(publishExecutionIntentTerminatedPort).publish(captor.capture());
     assertThat(captor.getValue().failureReason())
         .isEqualTo(ExecutionFailureReason.SIGNATURE_INVALID.name());
-    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
   }
 
   @Test
@@ -475,10 +458,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(expectedNonce);
-    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
-        .thenReturn(true);
+    stubSponsorNonceReservation(expectedNonce, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new Web3InvalidInputException("invalid EVM address: broken"));
 
@@ -491,14 +471,12 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
     verify(publishExecutionIntentTerminatedPort)
         .publish(
             org.mockito.ArgumentMatchers.argThat(
                 event ->
                     event.executionIntentId().equals("intent-admin-settle")
                         && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
-    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
 

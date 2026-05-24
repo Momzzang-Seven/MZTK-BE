@@ -127,8 +127,15 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
         SPONSOR_ADDRESS,
         SPONSOR_KMS_KEY_ID);
 
-    // stub transaction gateway — nonce, create/flush, broadcast
-    BDDMockito.given(executionTransactionGatewayPort.reserveNextNonce(anyString())).willReturn(0L);
+    // stub transaction gateway — nonce coordination, create/flush, broadcast
+    BDDMockito.given(
+            executionTransactionGatewayPort.loadSponsorNonceSnapshot(anyLong(), anyString()))
+        .willReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(0L, 0L, 0L, 0L, 0L, 0L));
+    BDDMockito.given(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .willReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "ISSUE_NONCE", 0L, "ISSUE_NONCE", true, 1L, 1L));
     BDDMockito.given(executionTransactionGatewayPort.createAndFlush(any()))
         .willAnswer(
             inv -> {

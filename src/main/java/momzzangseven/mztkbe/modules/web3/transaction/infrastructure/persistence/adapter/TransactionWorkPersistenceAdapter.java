@@ -43,21 +43,21 @@ public class TransactionWorkPersistenceAdapter
           .map(code -> "'" + code + "'")
           .collect(Collectors.joining(","));
 
-  private static final String CLAIM_BY_STATUS_SQL =
+  private static final String CLAIM_BY_STATUS_SQL_TEMPLATE =
       """
-      SELECT id
-      FROM web3_transactions
-      WHERE status = :status
-        AND (processing_until IS NULL OR processing_until < :now)
+      SELECT t.id
+      FROM web3_transactions t
+      WHERE t.status = :status
+        AND (t.processing_until IS NULL OR t.processing_until < :now)
         AND (
-            failure_reason IS NULL
-            OR failure_reason NOT IN (%s)
+            t.failure_reason IS NULL
+            OR t.failure_reason NOT IN (%s)
         )
-      ORDER BY id
+        %s
+      ORDER BY t.id
       LIMIT :limit
       FOR UPDATE SKIP LOCKED
-      """
-          .formatted(NON_RETRYABLE_FAILURE_REASON_SQL);
+      """;
 
   private final EntityManager entityManager;
   private final Web3TransactionJpaRepository repository;
@@ -313,10 +313,53 @@ public class TransactionWorkPersistenceAdapter
   @SuppressWarnings("unchecked")
   private List<Number> selectClaimableIds(Web3TxStatus status, int limit, LocalDateTime now) {
     return entityManager
-        .createNativeQuery(CLAIM_BY_STATUS_SQL)
+        .createNativeQuery(claimByStatusSql(status))
         .setParameter("status", status.name())
         .setParameter("now", now)
         .setParameter("limit", limit)
         .getResultList();
+  }
+
+  private String claimByStatusSql(Web3TxStatus status) {
+    return CLAIM_BY_STATUS_SQL_TEMPLATE.formatted(
+        NON_RETRYABLE_FAILURE_REASON_SQL, nonceSlotPredicate(status));
+  }
+
+  private String nonceSlotPredicate(Web3TxStatus status) {
+    return switch (status) {
+      case SIGNED ->
+          """
+          AND (
+              NOT EXISTS (
+                  SELECT 1
+                  FROM web3_nonce_slots ns_any
+                  WHERE ns_any.active_tx_id = t.id
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM web3_nonce_slots ns
+                  WHERE ns.active_tx_id = t.id
+                    AND ns.status = 'SIGNED'
+              )
+          )
+          """;
+      case PENDING ->
+          """
+          AND (
+              NOT EXISTS (
+                  SELECT 1
+                  FROM web3_nonce_slots ns_any
+                  WHERE ns_any.active_tx_id = t.id
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM web3_nonce_slots ns
+                  WHERE ns.active_tx_id = t.id
+                    AND ns.status = 'BROADCASTED'
+              )
+          )
+          """;
+      default -> "";
+    };
   }
 }
