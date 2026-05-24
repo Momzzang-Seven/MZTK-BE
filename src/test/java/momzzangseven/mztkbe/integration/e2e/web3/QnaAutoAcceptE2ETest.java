@@ -69,7 +69,7 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
 
   private static final Instant NOW = Instant.parse("2026-04-17T01:00:00Z");
   private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
-  private static final String SPONSOR_ADDRESS = "0xd799cd2b5258edc2157bec7e2cd069f31f2678c2";
+  private static final String SPONSOR_ADDRESS = "0x" + "a".repeat(40);
   private static final String CALL_TARGET = "0x0000000000000000000000000000000000000002";
 
   @Autowired private JdbcTemplate jdbcTemplate;
