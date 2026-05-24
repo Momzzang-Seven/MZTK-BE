@@ -11,10 +11,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -22,8 +26,10 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3Co
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,12 +40,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class SignedRecoveryWorkerTest {
 
   private static final String DEFAULT_REASON = Web3TxFailureReason.BROADCAST_FAILED.code();
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-05-24T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 
   @Mock private LoadTransactionWorkPort loadTransactionWorkPort;
   @Mock private UpdateTransactionPort updateTransactionPort;
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase;
+  @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
   @Mock private RetryStrategy retryStrategy;
 
   private SignedRecoveryWorker worker;
@@ -48,6 +57,8 @@ class SignedRecoveryWorkerTest {
   void setUp() {
     TransactionRewardTokenProperties properties = new TransactionRewardTokenProperties();
     properties.getWorker().setClaimTtlSeconds(120);
+    Web3CoreProperties web3CoreProperties = new Web3CoreProperties();
+    web3CoreProperties.setChainId(84532L);
     worker =
         new SignedRecoveryWorker(
             loadTransactionWorkPort,
@@ -55,8 +66,11 @@ class SignedRecoveryWorkerTest {
             recordTransactionAuditPort,
             web3ContractPort,
             markExecutionIntentPendingOnchainUseCase,
+            nonceSlotLifecycleUseCase,
             properties,
-            retryStrategy);
+            retryStrategy,
+            web3CoreProperties,
+            FIXED_CLOCK);
   }
 
   @Test
@@ -67,7 +81,11 @@ class SignedRecoveryWorkerTest {
 
     worker.processBatch(1);
 
-    verifyNoInteractions(updateTransactionPort, web3ContractPort, recordTransactionAuditPort);
+    verifyNoInteractions(
+        updateTransactionPort,
+        web3ContractPort,
+        recordTransactionAuditPort,
+        nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -80,7 +98,7 @@ class SignedRecoveryWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.INVALID_SIGNED_TX.code(), null);
-    verifyNoInteractions(web3ContractPort);
+    verifyNoInteractions(web3ContractPort, nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -93,7 +111,7 @@ class SignedRecoveryWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.INVALID_SIGNED_TX.code(), null);
-    verifyNoInteractions(web3ContractPort);
+    verifyNoInteractions(web3ContractPort, nonceSlotLifecycleUseCase);
   }
 
   @Test
@@ -109,6 +127,20 @@ class SignedRecoveryWorkerTest {
 
     verify(updateTransactionPort).markPending(1L, "0x" + "b".repeat(64));
     verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
+    verify(nonceSlotLifecycleUseCase)
+        .transition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.getFromStatus() == SponsorNonceSlotStatus.SIGNED
+                        && command.getToStatus() == SponsorNonceSlotStatus.BROADCASTING
+                        && command.getActiveTxId().equals(1L)));
+    verify(nonceSlotLifecycleUseCase)
+        .transition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.getFromStatus() == SponsorNonceSlotStatus.BROADCASTING
+                        && command.getToStatus() == SponsorNonceSlotStatus.BROADCASTED
+                        && command.hasBroadcastEvidence()));
     verify(recordTransactionAuditPort, times(2))
         .record(any(RecordTransactionAuditPort.AuditCommand.class));
     verify(updateTransactionPort, never()).scheduleRetry(eq(1L), eq(DEFAULT_REASON), any());

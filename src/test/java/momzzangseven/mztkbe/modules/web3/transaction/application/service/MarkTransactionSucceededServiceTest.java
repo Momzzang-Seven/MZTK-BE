@@ -5,18 +5,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,10 +32,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class MarkTransactionSucceededServiceTest {
 
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-05-24T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+
   @Mock private LoadTransactionPort loadTransactionPort;
   @Mock private TransactionOutcomePublisher transactionOutcomePublisher;
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
+  @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
 
   private MarkTransactionSucceededService service;
 
@@ -41,7 +50,9 @@ class MarkTransactionSucceededServiceTest {
             loadTransactionPort,
             transactionOutcomePublisher,
             recordTransactionAuditPort,
-            web3ContractPort);
+            web3ContractPort,
+            nonceSlotLifecycleUseCase,
+            FIXED_CLOCK);
   }
 
   @Test
@@ -94,6 +105,9 @@ class MarkTransactionSucceededServiceTest {
                     "101",
                     7L,
                     9L,
+                    84532L,
+                    "0x" + "c".repeat(40),
+                    112L,
                     Web3TxStatus.UNCONFIRMED,
                     "0x" + "b".repeat(64),
                     null)));
@@ -116,6 +130,9 @@ class MarkTransactionSucceededServiceTest {
                     "101",
                     7L,
                     9L,
+                    84532L,
+                    "0x" + "c".repeat(40),
+                    112L,
                     Web3TxStatus.UNCONFIRMED,
                     "0x" + "a".repeat(64),
                     null)));
@@ -142,6 +159,9 @@ class MarkTransactionSucceededServiceTest {
                     "101",
                     7L,
                     9L,
+                    84532L,
+                    "0x" + "c".repeat(40),
+                    112L,
                     Web3TxStatus.UNCONFIRMED,
                     "0x" + "a".repeat(64),
                     null)));
@@ -168,6 +188,9 @@ class MarkTransactionSucceededServiceTest {
                     "101",
                     7L,
                     9L,
+                    84532L,
+                    "0x" + "c".repeat(40),
+                    112L,
                     Web3TxStatus.UNCONFIRMED,
                     "0x" + "a".repeat(64),
                     null)));
@@ -194,6 +217,9 @@ class MarkTransactionSucceededServiceTest {
                     "101",
                     7L,
                     9L,
+                    84532L,
+                    "0x" + "c".repeat(40),
+                    112L,
                     Web3TxStatus.UNCONFIRMED,
                     "0x" + "a".repeat(64),
                     null)));
@@ -211,6 +237,14 @@ class MarkTransactionSucceededServiceTest {
     verify(transactionOutcomePublisher)
         .markSucceededAndPublish(
             22L, "idem-22", Web3ReferenceType.USER_TO_USER, "101", 7L, 9L, "0x" + "a".repeat(64));
+    verify(nonceSlotLifecycleUseCase)
+        .transition(
+            org.mockito.ArgumentMatchers.argThat(
+                transition ->
+                    transition.getFromStatus() == SponsorNonceSlotStatus.STUCK
+                        && transition.getToStatus() == SponsorNonceSlotStatus.CONSUMED
+                        && transition.getConsumedTxId().equals(22L)
+                        && transition.hasReceiptEvidence()));
 
     ArgumentCaptor<RecordTransactionAuditPort.AuditCommand> captor =
         ArgumentCaptor.forClass(RecordTransactionAuditPort.AuditCommand.class);

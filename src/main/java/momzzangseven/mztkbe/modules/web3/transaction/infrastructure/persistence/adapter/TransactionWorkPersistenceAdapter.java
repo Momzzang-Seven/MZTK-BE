@@ -220,6 +220,9 @@ public class TransactionWorkPersistenceAdapter
                     entity.getReferenceId(),
                     entity.getFromUserId(),
                     entity.getToUserId(),
+                    entity.getChainId(),
+                    entity.getFromAddress(),
+                    entity.getNonce(),
                     entity.getStatus(),
                     entity.getTxHash(),
                     entity.getFailureReason()));
@@ -242,6 +245,9 @@ public class TransactionWorkPersistenceAdapter
                     entity.getReferenceId(),
                     entity.getFromUserId(),
                     entity.getToUserId(),
+                    entity.getChainId(),
+                    entity.getFromAddress(),
+                    entity.getNonce(),
                     entity.getStatus(),
                     entity.getTxHash(),
                     entity.getFailureReason()))
@@ -339,7 +345,7 @@ public class TransactionWorkPersistenceAdapter
                   SELECT 1
                   FROM web3_nonce_slots ns
                   WHERE ns.active_tx_id = t.id
-                    AND ns.status = 'SIGNED'
+                    AND ns.status IN ('SIGNED', 'BROADCASTING')
               )
           )
           """;
@@ -355,7 +361,7 @@ public class TransactionWorkPersistenceAdapter
                   SELECT 1
                   FROM web3_nonce_slots ns
                   WHERE ns.active_tx_id = t.id
-                    AND ns.status = 'BROADCASTED'
+                    AND ns.status IN ('BROADCASTED', 'BROADCASTING')
               )
           )
           """;

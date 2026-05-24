@@ -1,6 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,12 +15,15 @@ import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +39,8 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
   private final TransactionOutcomePublisher transactionOutcomePublisher;
   private final RecordTransactionAuditPort recordTransactionAuditPort;
   private final Web3ContractPort web3ContractPort;
+  private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  private final Clock appClock;
 
   @Override
   @AdminOnly(
@@ -69,6 +77,7 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
           "receipt proof is required (receipt.status == 1)");
     }
 
+    markNonceSlotConsumed(snapshot);
     transactionOutcomePublisher.markSucceededAndPublish(
         command.transactionId(),
         snapshot.idempotencyKey(),
@@ -91,6 +100,72 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
         .txHash(command.txHash())
         .explorerUrl(command.explorerUrl())
         .build();
+  }
+
+  private void markNonceSlotConsumed(LoadTransactionPort.TransactionSnapshot snapshot) {
+    if (snapshot.chainId() == null || snapshot.fromAddress() == null || snapshot.nonce() == null) {
+      log.warn(
+          "Skipping nonce slot consumed transition for admin override without slot scope: txId={}",
+          snapshot.transactionId());
+      return;
+    }
+    Web3TransactionStateInvalidException lastStaleException = null;
+    for (SponsorNonceSlotStatus fromStatus :
+        List.of(
+            SponsorNonceSlotStatus.STUCK,
+            SponsorNonceSlotStatus.BROADCASTED,
+            SponsorNonceSlotStatus.BROADCASTING,
+            SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)) {
+      try {
+        nonceSlotLifecycleUseCase.transition(
+            RecordSponsorNonceSlotTransitionCommand.builder()
+                .chainId(snapshot.chainId())
+                .fromAddress(snapshot.fromAddress())
+                .nonce(snapshot.nonce())
+                .fromStatus(fromStatus)
+                .toStatus(SponsorNonceSlotStatus.CONSUMED)
+                .activeTxId(snapshot.transactionId())
+                .consumedTxId(snapshot.transactionId())
+                .stateChangedAt(LocalDateTime.now(appClock))
+                .consumedReason("ADMIN_RECEIPT_STATUS_1")
+                .hasRawTx(false)
+                .hasTxHash(true)
+                .hasSigningEvidence(true)
+                .hasBroadcastEvidence(true)
+                .hasReceiptEvidence(true)
+                .build());
+        return;
+      } catch (Web3TransactionStateInvalidException e) {
+        if (isSlotNotFound(e) || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)) {
+          log.warn(
+              "Skipping nonce slot consumed transition for admin override txId={}: {}",
+              snapshot.transactionId(),
+              e.getMessage());
+          return;
+        }
+        if (isStaleTransition(e)) {
+          lastStaleException = e;
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (lastStaleException != null) {
+      throw lastStaleException;
+    }
+  }
+
+  private boolean isSlotNotFound(Web3TransactionStateInvalidException e) {
+    return e.getMessage() != null && e.getMessage().contains("nonce slot not found");
+  }
+
+  private boolean isStaleTransition(Web3TransactionStateInvalidException e) {
+    return e.getMessage() != null && e.getMessage().contains("stale nonce slot transition");
+  }
+
+  private boolean isStaleActual(
+      Web3TransactionStateInvalidException e, SponsorNonceSlotStatus actualStatus) {
+    return isStaleTransition(e) && e.getMessage().contains("actual=" + actualStatus);
   }
 
   private Map<String, Object> csOverrideAuditDetail(

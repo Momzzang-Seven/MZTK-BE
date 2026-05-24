@@ -3,11 +3,15 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
@@ -19,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceAttemptStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotAttemptEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotEntity;
@@ -39,6 +44,8 @@ class NonceSlotPersistenceAdapterTest {
   private static final long CHAIN_ID = 84532L;
   private static final String SPONSOR = "0x" + "a".repeat(40);
   private static final LocalDateTime NOW = LocalDateTime.parse("2026-05-24T12:00:00");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-05-24T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 
   @Mock private NonceSlotJpaRepository slotRepository;
   @Mock private NonceSlotAttemptJpaRepository attemptRepository;
@@ -49,9 +56,17 @@ class NonceSlotPersistenceAdapterTest {
 
   @BeforeEach
   void setUp() {
+    TransactionRewardTokenProperties properties = new TransactionRewardTokenProperties();
+    properties.getWorker().setClaimTtlSeconds(120);
+    properties.getWorker().setReceiptTimeoutSeconds(60);
     adapter =
         new NonceSlotPersistenceAdapter(
-            slotRepository, attemptRepository, evidenceRepository, transactionRepository);
+            slotRepository,
+            attemptRepository,
+            evidenceRepository,
+            transactionRepository,
+            properties,
+            FIXED_CLOCK);
   }
 
   @Test
@@ -172,6 +187,82 @@ class NonceSlotPersistenceAdapterTest {
   }
 
   @Test
+  void recordTransition_backendReceiptConsumedKeepsAttemptTerminalReasonNull() {
+    NonceSlotEntity slot = slotEntity(51L, SponsorNonceSlotStatus.BROADCASTED, 1, 100L, 10L);
+    NonceSlotAttemptEntity attempt =
+        NonceSlotAttemptEntity.builder()
+            .id(100L)
+            .chainId(CHAIN_ID)
+            .fromAddress(SPONSOR)
+            .nonce(51L)
+            .attemptNo(1)
+            .txId(10L)
+            .status(SponsorNonceAttemptStatus.BROADCASTED)
+            .idempotencyKey("intent:sponsor:51:attempt:1")
+            .build();
+    when(slotRepository.findByScopeForUpdate(CHAIN_ID, SPONSOR, 51L)).thenReturn(Optional.of(slot));
+    when(attemptRepository.findByIdAndChainIdAndFromAddressAndNonce(100L, CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(attempt));
+    when(slotRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(attemptRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    adapter.recordTransition(
+        RecordSponsorNonceSlotTransitionCommand.builder()
+            .chainId(CHAIN_ID)
+            .fromAddress(SPONSOR)
+            .nonce(51L)
+            .fromStatus(SponsorNonceSlotStatus.BROADCASTED)
+            .toStatus(SponsorNonceSlotStatus.CONSUMED)
+            .consumedTxId(10L)
+            .consumedReason("RECEIPT_STATUS_1")
+            .hasReceiptEvidence(true)
+            .stateChangedAt(NOW)
+            .build());
+
+    assertThat(attempt.getStatus()).isEqualTo(SponsorNonceAttemptStatus.CONSUMED);
+    assertThat(attempt.getTerminalReason()).isNull();
+    assertThat(attempt.getReceiptObservedAt()).isEqualTo(NOW);
+    assertThat(slot.getConsumedReason()).isEqualTo("RECEIPT_STATUS_1");
+  }
+
+  @Test
+  void recordTransition_droppedUsesReleasedAttemptFallbackWhenCommandOmitsIt() {
+    NonceSlotEntity slot = slotEntity(51L, SponsorNonceSlotStatus.RESERVED, 1, 100L, 10L);
+    NonceSlotAttemptEntity attempt =
+        NonceSlotAttemptEntity.builder()
+            .id(100L)
+            .chainId(CHAIN_ID)
+            .fromAddress(SPONSOR)
+            .nonce(51L)
+            .attemptNo(1)
+            .txId(10L)
+            .status(SponsorNonceAttemptStatus.RESERVED)
+            .idempotencyKey("intent:sponsor:51:attempt:1")
+            .build();
+    when(slotRepository.findByScopeForUpdate(CHAIN_ID, SPONSOR, 51L)).thenReturn(Optional.of(slot));
+    when(attemptRepository.findByIdAndChainIdAndFromAddressAndNonce(100L, CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(attempt));
+    when(slotRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(attemptRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    adapter.recordTransition(
+        RecordSponsorNonceSlotTransitionCommand.builder()
+            .chainId(CHAIN_ID)
+            .fromAddress(SPONSOR)
+            .nonce(51L)
+            .fromStatus(SponsorNonceSlotStatus.RESERVED)
+            .toStatus(SponsorNonceSlotStatus.DROPPED)
+            .releasedTxId(10L)
+            .releaseReason("UNBROADCASTABLE_RESERVED_TIMEOUT")
+            .stateChangedAt(NOW)
+            .build());
+
+    assertThat(slot.getReleasedAttemptId()).isEqualTo(100L);
+    assertThat(attempt.getStatus()).isEqualTo(SponsorNonceAttemptStatus.DROPPED);
+    assertThat(attempt.getTerminalReason()).isEqualTo("UNBROADCASTABLE_RESERVED_TIMEOUT");
+  }
+
+  @Test
   void verifyUnbroadcastable_requiresAttemptAndTransactionToHaveNoChainReachableEvidence() {
     NonceSlotAttemptEntity attempt =
         NonceSlotAttemptEntity.builder()
@@ -213,6 +304,23 @@ class NonceSlotPersistenceAdapterTest {
     assertThat(result.get(1).nonce()).isEqualTo(51L);
     assertThat(result.get(1).status()).isEqualTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
     verify(slotRepository).findByScopeOrderByNonce(CHAIN_ID, SPONSOR);
+  }
+
+  @Test
+  void loadOpenOrBlockingSlots_mapsTimeoutAndReplacementEligibility() {
+    NonceSlotEntity reserved = slotEntity(50L, SponsorNonceSlotStatus.RESERVED, 1, 100L, 10L);
+    reserved.setUpdatedAt(NOW.minusSeconds(121));
+    NonceSlotEntity broadcasted = slotEntity(51L, SponsorNonceSlotStatus.BROADCASTED, 1, 101L, 11L);
+    broadcasted.setActiveTxHash("0x" + "b".repeat(64));
+    broadcasted.setLastBroadcastedAt(NOW.minusSeconds(61));
+    when(slotRepository.findByScopeAndStatusInOrderByNonce(anyLong(), any(String.class), any()))
+        .thenReturn(List.of(reserved, broadcasted));
+
+    var result = adapter.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR.toUpperCase());
+
+    assertThat(result.get(0).timedOut()).isTrue();
+    assertThat(result.get(1).timedOut()).isTrue();
+    assertThat(result.get(1).replacementEligible()).isTrue();
   }
 
   private Web3TransactionEntity transaction(Long id, long nonce) {

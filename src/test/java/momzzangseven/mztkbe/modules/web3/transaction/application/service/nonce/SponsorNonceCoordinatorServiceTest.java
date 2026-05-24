@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Recor
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.ReserveSponsorNonceSlotCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotReservation;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorNonceSlotsPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.SponsorNonceLockPort;
@@ -133,6 +134,62 @@ class SponsorNonceCoordinatorServiceTest {
   }
 
   @Test
+  void execute_whenReservedTimeoutIsUnbroadcastable_dropsAndRecomputesIssuedNonce() {
+    List<SponsorNonceSlot> timedOutReservation =
+        List.of(
+            SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.RESERVED)
+                .timedOut()
+                .build());
+    when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
+        .thenReturn(timedOutReservation)
+        .thenReturn(List.of());
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
+        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.RESERVED, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.verifyUnbroadcastable(any())).thenReturn(true);
+    when(nonceSlotLifecycleUseCase.reserve(any()))
+        .thenReturn(
+            new SponsorNonceSlotReservation(
+                CHAIN_ID, SPONSOR, 51L, 2, 101L, 11L, SponsorNonceSlotStatus.RESERVED));
+
+    var result = service.execute(command(51L, 50L, 11L, "intent:sponsor:51:attempt:2"));
+
+    assertThat(result.decision().type()).isEqualTo(SponsorNonceDecisionType.ISSUE_NONCE);
+    assertThat(result.reserved()).isTrue();
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
+    assertThat(transitionCaptor.getValue().getFromStatus())
+        .isEqualTo(SponsorNonceSlotStatus.RESERVED);
+    assertThat(transitionCaptor.getValue().getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
+    assertThat(transitionCaptor.getValue().getReleasedAttemptId()).isEqualTo(100L);
+  }
+
+  @Test
+  void execute_whenReservedTimeoutHasEvidence_marksOperatorReview() {
+    when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
+        .thenReturn(
+            List.of(
+                SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.RESERVED)
+                    .timedOut()
+                    .build()));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
+        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.RESERVED, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.verifyUnbroadcastable(any())).thenReturn(false);
+
+    var result = service.execute(command(51L, 50L, 11L, "intent:sponsor:51:attempt:2"));
+
+    assertThat(result.decision().type())
+        .isEqualTo(SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED);
+    assertThat(result.reserved()).isFalse();
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
+    assertThat(transitionCaptor.getValue().getToStatus())
+        .isEqualTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
+    verify(nonceSlotLifecycleUseCase, never()).reserve(any());
+  }
+
+  @Test
   void execute_canReturnDecisionOnlyWithoutMutatingSlot() {
     when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
         .thenReturn(List.of());
@@ -164,5 +221,12 @@ class SponsorNonceCoordinatorServiceTest {
 
   private SponsorNonceSlot slot(long nonce, SponsorNonceSlotStatus status) {
     return SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, nonce, status).build();
+  }
+
+  private SponsorNonceSlotView slotView(
+      long nonce, SponsorNonceSlotStatus status, Long attemptId, Long txId) {
+    return new SponsorNonceSlotView(
+        CHAIN_ID, SPONSOR, nonce, status, 1, attemptId, txId, null, null, null, null, null, null,
+        NOW);
   }
 }

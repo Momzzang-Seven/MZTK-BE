@@ -40,6 +40,7 @@ class SponsorNonceSlotStatusTest {
         SponsorNonceSlotStatus.BROADCASTING,
         SponsorNonceSlotStatus.BROADCASTED,
         SponsorNonceSlotStatus.CONSUMED,
+        SponsorNonceSlotStatus.STUCK,
         SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
     assertAllowed(
         SponsorNonceSlotStatus.BROADCASTED,
@@ -50,6 +51,7 @@ class SponsorNonceSlotStatusTest {
     assertAllowed(SponsorNonceSlotStatus.CONSUMED_UNKNOWN, SponsorNonceSlotStatus.CONSUMED);
     assertAllowed(
         SponsorNonceSlotStatus.STUCK,
+        SponsorNonceSlotStatus.CONSUMED,
         SponsorNonceSlotStatus.REPLACEMENT_PREPARING,
         SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
     assertAllowed(

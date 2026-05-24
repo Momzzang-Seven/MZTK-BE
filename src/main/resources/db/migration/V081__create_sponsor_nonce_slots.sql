@@ -430,6 +430,7 @@ INSERT INTO web3_nonce_slot_attempts(
     tx_hash,
     status,
     idempotency_key,
+    terminal_reason,
     signed_at,
     broadcasted_at,
     created_at,
@@ -448,9 +449,16 @@ SELECT
     CASE
         WHEN t.status = 'CREATED' THEN 'RESERVED'
         WHEN t.status = 'SIGNED' THEN 'SIGNED'
+        WHEN t.status = 'UNCONFIRMED'
+             AND t.failure_reason LIKE 'RECEIPT_TIMEOUT%' THEN 'STUCK'
         ELSE 'BROADCASTED'
     END,
     CONCAT('tx:', t.id, ':sponsor:', t.nonce, ':attempt:1'),
+    CASE
+        WHEN t.status = 'UNCONFIRMED'
+             AND t.failure_reason LIKE 'RECEIPT_TIMEOUT%' THEN t.failure_reason
+        ELSE NULL
+    END,
     CASE
         WHEN t.status = 'CREATED' THEN NULL
         ELSE t.signed_at
@@ -476,6 +484,7 @@ INSERT INTO web3_nonce_slots(
     active_tx_id,
     active_tx_hash,
     last_broadcasted_at,
+    stuck_reason,
     replacement_prepare_attempt_count,
     broadcast_recovery_attempt_count,
     created_at,
@@ -488,6 +497,8 @@ SELECT
     CASE
         WHEN t.status = 'CREATED' THEN 'RESERVED'
         WHEN t.status = 'SIGNED' THEN 'SIGNED'
+        WHEN t.status = 'UNCONFIRMED'
+             AND t.failure_reason LIKE 'RECEIPT_TIMEOUT%' THEN 'STUCK'
         ELSE 'BROADCASTED'
     END,
     a.attempt_no,
@@ -499,6 +510,11 @@ SELECT
     END,
     CASE
         WHEN t.status IN ('PENDING', 'UNCONFIRMED') THEN t.broadcasted_at
+        ELSE NULL
+    END,
+    CASE
+        WHEN t.status = 'UNCONFIRMED'
+             AND t.failure_reason LIKE 'RECEIPT_TIMEOUT%' THEN t.failure_reason
         ELSE NULL
     END,
     0,

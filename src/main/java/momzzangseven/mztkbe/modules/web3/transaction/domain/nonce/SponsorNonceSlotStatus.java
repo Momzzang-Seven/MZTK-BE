@@ -37,14 +37,18 @@ public enum SponsorNonceSlotStatus {
       case DROPPED -> next == RESERVED;
       case SIGNED -> next == BROADCASTING || next == OPERATOR_REVIEW_REQUIRED;
       case BROADCASTING ->
-          next == BROADCASTED || next == CONSUMED || next == OPERATOR_REVIEW_REQUIRED;
+          next == BROADCASTED
+              || next == CONSUMED
+              || next == STUCK
+              || next == OPERATOR_REVIEW_REQUIRED;
       case BROADCASTED ->
           next == CONSUMED
               || next == STUCK
               || next == CONSUMED_UNKNOWN
               || next == OPERATOR_REVIEW_REQUIRED;
       case CONSUMED_UNKNOWN -> next == CONSUMED;
-      case STUCK -> next == REPLACEMENT_PREPARING || next == OPERATOR_REVIEW_REQUIRED;
+      case STUCK ->
+          next == CONSUMED || next == REPLACEMENT_PREPARING || next == OPERATOR_REVIEW_REQUIRED;
       case REPLACEMENT_PREPARING ->
           next == REPLACEMENT_PREPARING || next == SIGNED || next == OPERATOR_REVIEW_REQUIRED;
       case OPERATOR_REVIEW_REQUIRED ->

@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter.nonce;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -24,6 +26,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceAttemptStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlot;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotAttemptEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotEntity;
@@ -58,6 +61,8 @@ public class NonceSlotPersistenceAdapter
   private final NonceSlotAttemptJpaRepository attemptRepository;
   private final NonceSlotEvidenceJpaRepository evidenceRepository;
   private final Web3TransactionJpaRepository transactionRepository;
+  private final TransactionRewardTokenProperties rewardTokenProperties;
+  private final Clock appClock;
 
   @Override
   @Transactional(readOnly = true)
@@ -377,7 +382,7 @@ public class NonceSlotPersistenceAdapter
                         "authoritative attempt is missing or outside nonce slot scope"));
     SponsorNonceAttemptStatus attemptStatus = resolveAttemptStatus(slot, command);
     attempt.setStatus(attemptStatus);
-    attempt.setTerminalReason(resolveTerminalReason(command));
+    attempt.setTerminalReason(resolveTerminalReason(attemptStatus, command));
     syncAttemptTransactionEvidence(slot, attempt);
     if (slot.getStatus() == SponsorNonceSlotStatus.SIGNED) {
       attempt.setSignedAt(command.getStateChangedAt());
@@ -407,7 +412,11 @@ public class NonceSlotPersistenceAdapter
     return SponsorNonceAttemptStatus.fromSlotStatus(slot.getStatus());
   }
 
-  private String resolveTerminalReason(RecordSponsorNonceSlotTransitionCommand command) {
+  private String resolveTerminalReason(
+      SponsorNonceAttemptStatus attemptStatus, RecordSponsorNonceSlotTransitionCommand command) {
+    if (attemptStatus == SponsorNonceAttemptStatus.CONSUMED) {
+      return null;
+    }
     if (command.getTerminalReason() != null && !command.getTerminalReason().isBlank()) {
       return command.getTerminalReason();
     }
@@ -423,7 +432,9 @@ public class NonceSlotPersistenceAdapter
   private Long authoritativeAttemptId(
       NonceSlotEntity slot, RecordSponsorNonceSlotTransitionCommand command) {
     if (command.getToStatus() == SponsorNonceSlotStatus.DROPPED) {
-      return command.getReleasedAttemptId();
+      return command.getReleasedAttemptId() == null
+          ? slot.getReleasedAttemptId()
+          : command.getReleasedAttemptId();
     }
     if (command.getToStatus() == SponsorNonceSlotStatus.CONSUMED
         && command.getConsumedAttemptId() != null) {
@@ -483,6 +494,7 @@ public class NonceSlotPersistenceAdapter
     if (entity.getActiveTxHash() != null) {
       builder.txHash().signingEvidence();
     }
+    applyTransactionEvidence(entity, builder);
     if (entity.getBroadcastStartedAt() != null || entity.getLastBroadcastedAt() != null) {
       builder.broadcastEvidence();
     }
@@ -492,7 +504,68 @@ public class NonceSlotPersistenceAdapter
     if (entity.getConsumedExternalEvidenceId() != null) {
       builder.retainedExternalEvidence();
     }
+    if (isTimedOut(entity)) {
+      builder.timedOut();
+    }
+    if (isReplacementEligible(entity)) {
+      builder.replacementEligible();
+    }
     return builder.build();
+  }
+
+  private void applyTransactionEvidence(NonceSlotEntity entity, SponsorNonceSlot.Builder builder) {
+    if (entity.getActiveTxId() == null) {
+      return;
+    }
+    transactionRepository
+        .findById(entity.getActiveTxId())
+        .ifPresent(
+            tx -> {
+              if (tx.getSignedRawTx() != null && !tx.getSignedRawTx().isBlank()) {
+                builder.rawTx().signingEvidence();
+              }
+              if (tx.getSignedAt() != null) {
+                builder.signingEvidence();
+              }
+              if (tx.getTxHash() != null && !tx.getTxHash().isBlank()) {
+                builder.txHash();
+              }
+              if (tx.getBroadcastedAt() != null) {
+                builder.broadcastEvidence();
+              }
+            });
+  }
+
+  private boolean isTimedOut(NonceSlotEntity entity) {
+    LocalDateTime baseline =
+        switch (entity.getStatus()) {
+          case RESERVED -> entity.getUpdatedAt();
+          case BROADCASTED ->
+              entity.getLastBroadcastedAt() == null
+                  ? entity.getBroadcastStartedAt()
+                  : entity.getLastBroadcastedAt();
+          default -> null;
+        };
+    if (baseline == null) {
+      return false;
+    }
+    Duration timeout =
+        switch (entity.getStatus()) {
+          case RESERVED ->
+              Duration.ofSeconds(rewardTokenProperties.getWorker().getClaimTtlSeconds());
+          case BROADCASTED ->
+              Duration.ofSeconds(rewardTokenProperties.getWorker().getReceiptTimeoutSeconds());
+          default -> Duration.ZERO;
+        };
+    return !baseline.plus(timeout).isAfter(LocalDateTime.now(appClock));
+  }
+
+  private boolean isReplacementEligible(NonceSlotEntity entity) {
+    return entity.getStatus() == SponsorNonceSlotStatus.BROADCASTED
+        && isTimedOut(entity)
+        && entity.getActiveTxHash() != null
+        && !entity.getActiveTxHash().isBlank()
+        && entity.getLastBroadcastedAt() != null;
   }
 
   private SponsorNonceSlotView toView(NonceSlotEntity entity) {
