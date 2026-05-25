@@ -33,12 +33,18 @@ public enum SponsorNonceSlotStatus {
       return false;
     }
     return switch (this) {
-      case RESERVED -> next == SIGNED || next == DROPPED || next == OPERATOR_REVIEW_REQUIRED;
+      case RESERVED ->
+          next == SIGNED
+              || next == DROPPED
+              || next == CONSUMED_UNKNOWN
+              || next == OPERATOR_REVIEW_REQUIRED;
       case DROPPED -> next == RESERVED;
-      case SIGNED -> next == BROADCASTING || next == OPERATOR_REVIEW_REQUIRED;
+      case SIGNED ->
+          next == BROADCASTING || next == CONSUMED_UNKNOWN || next == OPERATOR_REVIEW_REQUIRED;
       case BROADCASTING ->
           next == BROADCASTED
               || next == CONSUMED
+              || next == CONSUMED_UNKNOWN
               || next == STUCK
               || next == OPERATOR_REVIEW_REQUIRED;
       case BROADCASTED ->
@@ -48,9 +54,15 @@ public enum SponsorNonceSlotStatus {
               || next == OPERATOR_REVIEW_REQUIRED;
       case CONSUMED_UNKNOWN -> next == CONSUMED;
       case STUCK ->
-          next == CONSUMED || next == REPLACEMENT_PREPARING || next == OPERATOR_REVIEW_REQUIRED;
+          next == CONSUMED
+              || next == CONSUMED_UNKNOWN
+              || next == REPLACEMENT_PREPARING
+              || next == OPERATOR_REVIEW_REQUIRED;
       case REPLACEMENT_PREPARING ->
-          next == REPLACEMENT_PREPARING || next == SIGNED || next == OPERATOR_REVIEW_REQUIRED;
+          next == REPLACEMENT_PREPARING
+              || next == SIGNED
+              || next == CONSUMED_UNKNOWN
+              || next == OPERATOR_REVIEW_REQUIRED;
       case OPERATOR_REVIEW_REQUIRED ->
           next == CONSUMED || next == CONSUMED_UNKNOWN || next == STUCK || next == DROPPED;
       case CONSUMED -> false;

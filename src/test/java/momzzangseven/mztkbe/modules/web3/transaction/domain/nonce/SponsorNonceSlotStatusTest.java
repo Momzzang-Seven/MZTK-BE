@@ -30,16 +30,19 @@ class SponsorNonceSlotStatusTest {
         SponsorNonceSlotStatus.RESERVED,
         SponsorNonceSlotStatus.SIGNED,
         SponsorNonceSlotStatus.DROPPED,
+        SponsorNonceSlotStatus.CONSUMED_UNKNOWN,
         SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
     assertAllowed(SponsorNonceSlotStatus.DROPPED, SponsorNonceSlotStatus.RESERVED);
     assertAllowed(
         SponsorNonceSlotStatus.SIGNED,
         SponsorNonceSlotStatus.BROADCASTING,
+        SponsorNonceSlotStatus.CONSUMED_UNKNOWN,
         SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
     assertAllowed(
         SponsorNonceSlotStatus.BROADCASTING,
         SponsorNonceSlotStatus.BROADCASTED,
         SponsorNonceSlotStatus.CONSUMED,
+        SponsorNonceSlotStatus.CONSUMED_UNKNOWN,
         SponsorNonceSlotStatus.STUCK,
         SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
     assertAllowed(
@@ -52,12 +55,14 @@ class SponsorNonceSlotStatusTest {
     assertAllowed(
         SponsorNonceSlotStatus.STUCK,
         SponsorNonceSlotStatus.CONSUMED,
+        SponsorNonceSlotStatus.CONSUMED_UNKNOWN,
         SponsorNonceSlotStatus.REPLACEMENT_PREPARING,
         SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
     assertAllowed(
         SponsorNonceSlotStatus.REPLACEMENT_PREPARING,
         SponsorNonceSlotStatus.REPLACEMENT_PREPARING,
         SponsorNonceSlotStatus.SIGNED,
+        SponsorNonceSlotStatus.CONSUMED_UNKNOWN,
         SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
     assertAllowed(
         SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED,

@@ -111,6 +111,14 @@ class SponsorNonceDecisionServiceTest {
   }
 
   @Test
+  void decide_whenLatestAdvancedForBroadcastingSlot_consumesUnknownNonce() {
+    SponsorNonceDecision decision = decide(52, 52, slot(51, SponsorNonceSlotStatus.BROADCASTING));
+
+    assertDecision(decision, SponsorNonceDecisionType.CONSUME_UNKNOWN_NONCE, 51L);
+    assertThat(decision.reason()).isEqualTo("LATEST_PASSED_WITH_RPC_SNAPSHOT");
+  }
+
+  @Test
   void decide_whenPendingAdvancedButLatestDidNot_doesNotTreatNonceAsConsumed() {
     SponsorNonceDecision decision =
         decide(

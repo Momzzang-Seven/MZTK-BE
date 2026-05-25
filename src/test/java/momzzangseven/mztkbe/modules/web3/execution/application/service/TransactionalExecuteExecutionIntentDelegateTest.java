@@ -805,6 +805,31 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   @Test
+  void executeEip7702_whenSignedClaimLost_skipsDirectBroadcastAndBroadcastingTransition() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 99L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenReturn(new ExecutionEip7702GatewayPort.SignedPayload("0x04signed", "0xexpectedhash"));
+    when(executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .thenReturn(false);
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-7702", "0xauth", "0xsubmit", null),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(501L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
+    verify(executionTransactionGatewayPort).claimSignedForBroadcast(eq(501L), any(), any());
+    verify(executionTransactionGatewayPort, never()).broadcast(any());
+    verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+    verify(executionTransactionGatewayPort, never())
+        .transitionSponsorNonceSlot(argThat(command -> "BROADCASTING".equals(command.toStatus())));
+  }
+
+  @Test
   void executeEip7702_happyPath_marksPendingOnchainAndConsumesReservedExposure() {
     // [M-53] EIP-7702 happy path: sign + broadcast 모두 성공 → markPending + status=PENDING_ONCHAIN.
     BigInteger reservedCost = BigInteger.valueOf(7_777L);

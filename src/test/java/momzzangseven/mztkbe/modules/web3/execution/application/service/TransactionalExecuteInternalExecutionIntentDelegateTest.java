@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -295,6 +296,32 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
     assertThat(result.txHash()).isEqualTo("0xhash");
     verify(executionTransactionGatewayPort).markPending(77L, "0xhash");
+  }
+
+  @Test
+  void execute_whenSignedClaimLost_skipsDirectBroadcastAndBroadcastingTransition() {
+    ExecutionIntent intent = internalIntent();
+    stubClaimAndTrackUpdates(intent);
+    stubSponsorNonceReservation(intent.getUnsignedTxSnapshot().expectedNonce(), 77L);
+    when(executionEip1559SigningPort.sign(any()))
+        .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
+    when(executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .thenReturn(false);
+
+    ExecuteInternalExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
+            gate);
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(77L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
+    verify(executionTransactionGatewayPort, never()).broadcast(any());
+    verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+    verify(executionTransactionGatewayPort, never())
+        .transitionSponsorNonceSlot(argThat(command -> "BROADCASTING".equals(command.toStatus())));
   }
 
   @Test

@@ -258,6 +258,34 @@ class SponsorNonceCoordinatorServiceTest {
   }
 
   @Test
+  void execute_whenBroadcastingLatestPassed_recordsEvidenceAndConsumesUnknown() {
+    when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
+        .thenReturn(List.of(slot(51L, SponsorNonceSlotStatus.BROADCASTING)))
+        .thenReturn(List.of());
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
+        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTING, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.recordEvidence(any(RecordSponsorNonceEvidenceCommand.class)))
+        .thenReturn(unknownConsumedEvidence(51L, 201L));
+    when(nonceSlotLifecycleUseCase.reserve(any()))
+        .thenReturn(
+            new SponsorNonceSlotReservation(
+                CHAIN_ID, SPONSOR, 52L, 1, 101L, 11L, SponsorNonceSlotStatus.RESERVED));
+
+    var result = service.execute(command(52L, 52L, 11L, "intent:sponsor:52:attempt:1"));
+
+    assertThat(result.decision().type()).isEqualTo(SponsorNonceDecisionType.ISSUE_NONCE);
+    assertThat(result.reservation().nonce()).isEqualTo(52L);
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
+    assertThat(transitionCaptor.getValue().getFromStatus())
+        .isEqualTo(SponsorNonceSlotStatus.BROADCASTING);
+    assertThat(transitionCaptor.getValue().getToStatus())
+        .isEqualTo(SponsorNonceSlotStatus.CONSUMED_UNKNOWN);
+    assertThat(transitionCaptor.getValue().getConsumedExternalEvidenceId()).isEqualTo(201L);
+  }
+
+  @Test
   void execute_whenDbSlotGapHasNoChainReachableEvidence_reservesGapNonce() {
     when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
         .thenReturn(
