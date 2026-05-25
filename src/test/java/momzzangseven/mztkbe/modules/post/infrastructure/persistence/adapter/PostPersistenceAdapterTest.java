@@ -4,6 +4,8 @@ import static momzzangseven.mztkbe.modules.post.infrastructure.persistence.entit
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -91,19 +93,19 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("loadPost returns empty when missing (write-tx path: findByIdForUpdate)")
+  @DisplayName("loadPost returns empty when missing (no-lock path: findById)")
   void loadPostReturnsEmptyWhenMissing() {
-    // 단위 테스트 환경에서는 Spring 트랜잭션 컨텍스트가 없으므로
-    // isCurrentTransactionReadOnly() == false → findByIdForUpdate 경로 실행
-    when(postJpaRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+    when(postJpaRepository.findById(999L)).thenReturn(Optional.empty());
 
     Optional<Post> result = postPersistenceAdapter.loadPost(999L);
 
     assertThat(result).isEmpty();
+    verify(postJpaRepository).findById(999L);
+    verify(postJpaRepository, never()).findByIdForUpdate(anyLong());
   }
 
   @Test
-  @DisplayName("loadPost maps found entity with empty tags (write-tx path: findByIdForUpdate)")
+  @DisplayName("loadPost maps found entity with empty tags (no-lock path: findById)")
   void loadPostMapsFoundEntity() {
     PostEntity entity =
         PostEntity.builder()
@@ -116,9 +118,7 @@ class PostPersistenceAdapterTest {
             .status(PostStatus.OPEN)
             .build();
 
-    // 단위 테스트 환경에서는 Spring 트랜잭션 컨텍스트가 없으므로
-    // isCurrentTransactionReadOnly() == false → findByIdForUpdate 경로 실행
-    when(postJpaRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(entity));
+    when(postJpaRepository.findById(10L)).thenReturn(Optional.of(entity));
 
     Optional<Post> result = postPersistenceAdapter.loadPost(10L);
 
@@ -126,6 +126,8 @@ class PostPersistenceAdapterTest {
     assertThat(result.orElseThrow().getId()).isEqualTo(10L);
     assertThat(result.orElseThrow().getType()).isEqualTo(PostType.QUESTION);
     assertThat(result.orElseThrow().getTags()).isEmpty();
+    verify(postJpaRepository).findById(10L);
+    verify(postJpaRepository, never()).findByIdForUpdate(anyLong());
   }
 
   @Test
@@ -142,11 +144,22 @@ class PostPersistenceAdapterTest {
             .status(PostStatus.RESOLVED)
             .build();
 
-    when(postJpaRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(entity));
+    when(postJpaRepository.findById(11L)).thenReturn(Optional.of(entity));
 
     assertThatThrownBy(() -> postPersistenceAdapter.loadPost(11L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("acceptedAnswerId");
+  }
+
+  @Test
+  @DisplayName("loadPost never acquires PESSIMISTIC_WRITE — MOM-459 regression guard")
+  void loadPostNeverAcquiresLock() {
+    when(postJpaRepository.findById(any())).thenReturn(Optional.empty());
+
+    postPersistenceAdapter.loadPost(42L);
+
+    verify(postJpaRepository).findById(42L);
+    verify(postJpaRepository, never()).findByIdForUpdate(anyLong());
   }
 
   @Test

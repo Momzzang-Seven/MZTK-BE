@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -828,6 +829,26 @@ class PostProcessServiceTest {
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("Blocked posts");
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+  }
+
+  @Test
+  @DisplayName("MOM-459 regression: updatePost / deletePost never request locked post load")
+  void updateAndDeleteNeverAcquirePostLock() {
+    Long ownerId = 7L;
+    Long updatePostId = 80L;
+    Long deletePostId = 81L;
+    Post updateTarget = ownedPost(ownerId, updatePostId);
+    Post deleteTarget = ownedPost(ownerId, deletePostId);
+
+    when(postPersistencePort.loadPost(updatePostId)).thenReturn(Optional.of(updateTarget));
+    when(postPersistencePort.loadPost(deletePostId)).thenReturn(Optional.of(deleteTarget));
+    when(loadPostAnswerIdsPort.loadAnswerIdsByPostId(deletePostId)).thenReturn(List.of());
+
+    postProcessService.updatePost(
+        ownerId, updatePostId, UpdatePostCommand.of(null, "new body", null, null));
+    postProcessService.deletePost(ownerId, deletePostId);
+
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
   }
 
   private Post questionPost(Long ownerId, Long postId) {

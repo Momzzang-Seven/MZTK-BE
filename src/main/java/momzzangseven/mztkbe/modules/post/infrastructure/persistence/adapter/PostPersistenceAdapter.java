@@ -26,7 +26,6 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Component
@@ -44,21 +43,15 @@ public class PostPersistenceAdapter implements PostPersistencePort {
   }
 
   /**
-   * 호출 트랜잭션의 읽기/쓰기 여부에 따라 락 전략을 자동으로 결정한다.
+   * 락 없이 게시글을 조회한다. 호출 트랜잭션의 readOnly 플래그를 보지 않는다.
    *
-   * <ul>
-   *   <li>읽기 전용 트랜잭션 (readOnly=true, e.g. GetPostService) → 락 없이 조회
-   *   <li>쓰기 트랜잭션 (e.g. PostProcessService) → PESSIMISTIC_WRITE 락을 걸고 조회
-   * </ul>
-   *
-   * 이를 통해 서비스 레이어는 단일 {@code loadPost} 포트에 의존하면서도, 수정·삭제 시나리오에서 동시성 정합성을 보장한다.
+   * <p>행 락이 필요한 호출자는 명시적으로 {@link #loadPostForUpdate(Long)} 를 사용해야 한다 (MOM-459).
    */
   @Override
   public Optional<Post> loadPost(Long postId) {
-    boolean readOnly = TransactionSynchronizationManager.isCurrentTransactionReadOnly();
-    Optional<PostEntity> entityOpt =
-        readOnly ? postJpaRepository.findById(postId) : postJpaRepository.findByIdForUpdate(postId);
-    return entityOpt.map(entity -> entity.toDomain(Collections.emptyList()));
+    return postJpaRepository
+        .findById(postId)
+        .map(entity -> entity.toDomain(Collections.emptyList()));
   }
 
   @Override
