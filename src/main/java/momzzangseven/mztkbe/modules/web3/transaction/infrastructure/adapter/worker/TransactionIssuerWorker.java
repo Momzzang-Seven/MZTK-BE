@@ -34,6 +34,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.BroadcastAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.PrevalidateAuditDetail;
@@ -415,7 +416,48 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
             .orElse(null);
 
     if (isActiveReservationOwnedByTransaction(slot, item.transactionId())) {
-      return new NonceReservation(item.nonce(), slot.activeAttemptId());
+      LoadSponsorChainNoncePort.SponsorChainNonceSnapshot snapshot =
+          loadSponsorChainNoncePort.loadSnapshot(item.chainId(), treasuryAddress);
+      SponsorNonceCoordinationResult reconciliation =
+          coordinateSponsorNonceUseCase.execute(
+              new SponsorNonceCoordinationCommand(
+                  item.chainId(),
+                  treasuryAddress,
+                  snapshot.chainPendingNonce(),
+                  snapshot.chainLatestNonce(),
+                  snapshot.mainPendingNonce(),
+                  snapshot.subPendingNonce(),
+                  snapshot.mainLatestNonce(),
+                  snapshot.subLatestNonce(),
+                  SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                  null,
+                  null,
+                  LocalDateTime.now()));
+      if (isRpcDisagreement(reconciliation)) {
+        retry(
+            item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_RPC_DISAGREEMENT.code(), item);
+        return null;
+      }
+      if (snapshot.chainLatestNonce() > item.nonce()) {
+        log.warn(
+            "sponsor nonce reservation consumed before signing: txId={}, nonce={}, chainLatest={}",
+            item.transactionId(),
+            item.nonce(),
+            snapshot.chainLatestNonce());
+        failPrevalidate(
+            item.transactionId(),
+            Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(),
+            false);
+        return null;
+      }
+      SponsorNonceSlotView refreshedSlot =
+          nonceSlotLifecycleUseCase.loadSlotsForReview(item.chainId(), treasuryAddress).stream()
+              .filter(candidate -> candidate.nonce() == item.nonce())
+              .findFirst()
+              .orElse(null);
+      if (isActiveReservationOwnedByTransaction(refreshedSlot, item.transactionId())) {
+        return new NonceReservation(item.nonce(), refreshedSlot.activeAttemptId());
+      }
     }
 
     log.warn(
@@ -436,6 +478,12 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         && slot.activeAttemptId() != null
         && transactionId != null
         && transactionId.equals(slot.activeTxId());
+  }
+
+  private boolean isRpcDisagreement(SponsorNonceCoordinationResult result) {
+    return result != null
+        && result.decision() != null
+        && result.decision().type() == SponsorNonceDecisionType.RPC_DISAGREEMENT;
   }
 
   private boolean isReservationStillOwnedByTransaction(

@@ -439,6 +439,72 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.NONCE_STALE));
   }
 
+  @Test
+  void executeEip7702_marksNonceStale_whenSubmittedReservedNonceWasConsumed() {
+    ExecutionIntent intent = existingEip7702Intent().toBuilder().submittedTxId(501L).build();
+    ExecutionTransactionGatewayPort.TransactionRecord transaction =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            501L, ExecutionTransactionStatus.CREATED, null, 11155111L, SPONSOR_ADDRESS, 41L);
+
+    stubFindAndTrackUpdates(intent);
+    when(executionTransactionGatewayPort.findById(501L)).thenReturn(Optional.of(transaction));
+    when(executionEip7702GatewayPort.toAuthorizationTuple(anyLong(), any(), any(), any()))
+        .thenReturn(
+            new ExecutionEip7702GatewayPort.AuthorizationTuple(
+                BigInteger.valueOf(11155111L),
+                "0x" + "2".repeat(40),
+                BigInteger.valueOf(12L),
+                BigInteger.ZERO,
+                BigInteger.ONE,
+                BigInteger.TWO));
+    when(executionEip7702GatewayPort.hashCalls(any())).thenReturn("0x" + "9".repeat(64));
+    when(executionEip7702GatewayPort.verifyAuthorizationSigner(
+            anyLong(), any(), any(), any(), any()))
+        .thenReturn(true);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getAuthorityNonce()));
+    when(executionEip7702GatewayPort.verifyExecutionSignature(any(), any(), any(), any(), any()))
+        .thenReturn(true);
+    when(executionEip7702GatewayPort.encodeExecute(any(), any(), any(), any()))
+        .thenReturn("0xexec");
+    when(executionEip7702GatewayPort.estimateGasWithAuthorization(any(), any(), any(), any()))
+        .thenReturn(BigInteger.valueOf(120_000));
+    when(executionEip7702GatewayPort.loadSponsorFeePlan())
+        .thenReturn(
+            new ExecutionEip7702GatewayPort.FeePlan(
+                BigInteger.valueOf(2_000_000_000L), BigInteger.valueOf(50_000_000_000L)));
+    when(executionTransactionGatewayPort.loadSponsorNonceSnapshot(11155111L, SPONSOR_ADDRESS))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(42, 42, 42L, 42L, 42L, 42L));
+    when(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "CONSUME_UNKNOWN_NONCE",
+                41L,
+                "LATEST_PASSED_WITH_RPC_SNAPSHOT",
+                false,
+                null,
+                null));
+    when(executionTransactionGatewayPort.findSponsorNonceSlot(11155111L, SPONSOR_ADDRESS, 41L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionGatewayPort.SponsorNonceSlotRecord(
+                    41L, "CONSUMED_UNKNOWN", null, null)));
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-7702", "0xauth", "0xsubmit", null),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.NONCE_STALE);
+    assertThat(result.transactionId()).isEqualTo(501L);
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.NONCE_STALE));
+    verify(executionTransactionGatewayPort)
+        .coordinateSponsorNonce(argThat(command -> command.transactionId() == null));
+    verify(executionEip7702GatewayPort, never()).signAndEncode(any());
+  }
+
   private ExecutionIntent existingEip1559Intent() throws Exception {
     TransferExecutionPayload payload =
         new TransferExecutionPayload(

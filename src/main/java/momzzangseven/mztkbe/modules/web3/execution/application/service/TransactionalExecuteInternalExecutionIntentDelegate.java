@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -298,8 +299,17 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                 submittedTransaction.status(),
                 submittedTransaction.txHash()));
       }
-      SponsorNonceContext sponsorNonce = resumeInternalSubmission(submittedTransaction);
-      ExecutionIntent signableIntent = rebindReservedNonce(intent, sponsorNonce.nonce());
+      Optional<SponsorNonceContext> sponsorNonce = resumeInternalSubmission(submittedTransaction);
+      if (sponsorNonce.isEmpty()) {
+        return InternalSigningPreparation.completed(
+            markInternalNonceStale(
+                intent,
+                actionHandler,
+                actionPlan,
+                submittedTransaction,
+                ErrorCode.NONCE_STALE_RECREATE_REQUIRED));
+      }
+      ExecutionIntent signableIntent = rebindReservedNonce(intent, sponsorNonce.get().nonce());
       if (signableIntent.getUnsignedTxSnapshot().expectedNonce()
               != intent.getUnsignedTxSnapshot().expectedNonce()
           || !signableIntent.getUnsignedTxFingerprint().equals(intent.getUnsignedTxFingerprint())) {
@@ -312,7 +322,12 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                     LocalDateTime.now(appClock)));
       }
       return InternalSigningPreparation.ready(
-          signableIntent, submittedTransaction, sponsorNonce, actionHandler, actionPlan, signer);
+          signableIntent,
+          submittedTransaction,
+          sponsorNonce.get(),
+          actionHandler,
+          actionPlan,
+          signer);
     }
 
     ExecutionTransactionGatewayPort.TransactionRecord created =
@@ -492,14 +507,60 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         && transaction.fromAddress().equalsIgnoreCase(expectedSigner);
   }
 
-  private SponsorNonceContext resumeInternalSubmission(
+  private Optional<SponsorNonceContext> resumeInternalSubmission(
       ExecutionTransactionGatewayPort.TransactionRecord transaction) {
-    return new SponsorNonceContext(
-        transaction.chainId(),
-        transaction.fromAddress(),
+    ExecutionTransactionGatewayPort.SponsorNonceSnapshot snapshot =
+        executionTransactionGatewayPort.loadSponsorNonceSnapshot(
+            transaction.chainId(), transaction.fromAddress());
+    ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord reconciliation =
+        executionTransactionGatewayPort.coordinateSponsorNonce(
+            new ExecutionTransactionGatewayPort.CoordinateSponsorNonceCommand(
+                transaction.chainId(),
+                transaction.fromAddress(),
+                snapshot.chainPendingNonce(),
+                snapshot.chainLatestNonce(),
+                snapshot.mainPendingNonce(),
+                snapshot.subPendingNonce(),
+                snapshot.mainLatestNonce(),
+                snapshot.subLatestNonce(),
+                SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                null,
+                null,
+                LocalDateTime.now(appClock)));
+    if (isRpcDisagreement(reconciliation)) {
+      throwSponsorNonceUnavailable(reconciliation);
+    }
+
+    Optional<ExecutionTransactionGatewayPort.SponsorNonceSlotRecord> slot =
+        executionTransactionGatewayPort.findSponsorNonceSlot(
+            transaction.chainId(), transaction.fromAddress(), transaction.nonce());
+    if (snapshot.chainLatestNonce() > transaction.nonce()) {
+      log.warn(
+          "submitted sponsor nonce was consumed before internal resume: txId={}, nonce={}, "
+              + "chainLatest={}",
+          transaction.transactionId(),
+          transaction.nonce(),
+          snapshot.chainLatestNonce());
+      return Optional.empty();
+    }
+    if (slot.isPresent() && isReservedSlotOwnedByTransaction(slot.get(), transaction)) {
+      return Optional.of(
+          new SponsorNonceContext(
+              transaction.chainId(),
+              transaction.fromAddress(),
+              transaction.nonce(),
+              slot.get().activeAttemptId(),
+              transaction.transactionId()));
+    }
+
+    log.warn(
+        "submitted internal sponsor nonce slot is no longer reusable: txId={}, nonce={}, "
+            + "slotStatus={}, slotActiveTxId={}",
+        transaction.transactionId(),
         transaction.nonce(),
-        null,
-        transaction.transactionId());
+        slot.map(ExecutionTransactionGatewayPort.SponsorNonceSlotRecord::status).orElse(null),
+        slot.map(ExecutionTransactionGatewayPort.SponsorNonceSlotRecord::activeTxId).orElse(null));
+    return Optional.empty();
   }
 
   private InternalSignedSubmission persistInternalSignedIntent(
@@ -618,6 +679,20 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         retryable);
   }
 
+  private boolean isRpcDisagreement(
+      ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination) {
+    return coordination != null && "RPC_DISAGREEMENT".equals(coordination.decisionType());
+  }
+
+  private boolean isReservedSlotOwnedByTransaction(
+      ExecutionTransactionGatewayPort.SponsorNonceSlotRecord slot,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction) {
+    return "RESERVED".equals(slot.status())
+        && slot.activeAttemptId() != null
+        && transaction.transactionId() != null
+        && transaction.transactionId().equals(slot.activeTxId());
+  }
+
   private void markSponsorSlotSigned(SponsorNonceContext context, String txHash) {
     transitionSponsorSlot(
         context,
@@ -712,6 +787,31 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
             hasSigningEvidence,
             hasBroadcastEvidence,
             false));
+  }
+
+  private ExecuteInternalExecutionIntentResult markInternalNonceStale(
+      ExecutionIntent intent,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      ErrorCode errorCode) {
+    LocalDateTime now = LocalDateTime.now(appClock);
+    ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+        executionTransactionGatewayPort, intent.getSubmittedTxId(), errorCode.name(), now);
+    ExecutionIntent staleIntent =
+        executionIntentPersistencePort.update(
+            intent.markNonceStale(errorCode.name(), errorCode.getMessage(), now));
+    if (actionHandler != null && actionPlan != null) {
+      publishTerminated(staleIntent, ExecutionIntentStatus.NONCE_STALE, errorCode.name());
+    }
+    return new ExecuteInternalExecutionIntentResult(
+        true,
+        false,
+        staleIntent.getPublicId(),
+        staleIntent.getStatus(),
+        transaction.transactionId(),
+        transaction.status(),
+        transaction.txHash());
   }
 
   private ExecutionIntent rebindReservedNonce(ExecutionIntent intent, long reservedNonce) {

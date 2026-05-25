@@ -843,6 +843,40 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
+  void processBatch_existingNonceConsumedOnChain_marksStaleWithoutSigning() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 5L)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, TREASURY_ADDRESS))
+        .thenReturn(
+            List.of(slotView(5L, SponsorNonceSlotStatus.RESERVED, 1001L, 1L)),
+            List.of(slotView(5L, SponsorNonceSlotStatus.CONSUMED_UNKNOWN, null, null)));
+    when(loadSponsorChainNoncePort.loadSnapshot(CHAIN_ID, TREASURY_ADDRESS))
+        .thenReturn(new LoadSponsorChainNoncePort.SponsorChainNonceSnapshot(6, 6, 6L, 6L, 6L, 6L));
+    when(coordinateSponsorNonceUseCase.execute(any(SponsorNonceCoordinationCommand.class)))
+        .thenReturn(
+            new SponsorNonceCoordinationResult(
+                SponsorNonceDecision.of(
+                    SponsorNonceDecisionType.CONSUME_UNKNOWN_NONCE,
+                    5L,
+                    "LATEST_PASSED_WITH_RPC_SNAPSHOT"),
+                null));
+
+    worker.processBatch(1);
+
+    verify(coordinateSponsorNonceUseCase)
+        .execute(
+            org.mockito.ArgumentMatchers.argThat(
+                command -> command.transactionId() == null && command.chainLatestNonce() == 6L));
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+    verify(web3ContractPort, never()).signTransfer(any(Web3ContractPort.SignTransferCommand.class));
+  }
+
+  @Test
   void processBatch_operatorReviewNonceDecision_marksTerminalWithoutRetryLoop() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
@@ -889,6 +923,10 @@ class TransactionIssuerWorkerTest {
   }
 
   private void stubExistingNonceSlot(long nonce, Long transactionId, Long attemptId) {
+    when(loadSponsorChainNoncePort.loadSnapshot(CHAIN_ID, TREASURY_ADDRESS))
+        .thenReturn(
+            new LoadSponsorChainNoncePort.SponsorChainNonceSnapshot(
+                nonce, nonce, nonce, nonce, nonce, nonce));
     when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, TREASURY_ADDRESS))
         .thenReturn(
             List.of(slotView(nonce, SponsorNonceSlotStatus.RESERVED, attemptId, transactionId)));

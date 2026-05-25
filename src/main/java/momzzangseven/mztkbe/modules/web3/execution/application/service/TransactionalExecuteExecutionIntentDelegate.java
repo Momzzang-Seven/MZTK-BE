@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -212,7 +213,7 @@ public class TransactionalExecuteExecutionIntentDelegate
     Eip7702Submission submission =
         submittedTransaction == null
             ? reserveEip7702Submission(intent, actionPlan, sponsorAddress, chainId)
-            : resumeEip7702Submission(submittedTransaction, sponsorAddress);
+            : resumeEip7702Submission(intent, submittedTransaction, sponsorAddress);
     if (submission.existingResult() != null) {
       return submission.existingResult();
     }
@@ -495,7 +496,8 @@ public class TransactionalExecuteExecutionIntentDelegate
             ExecutionTransactionGatewayPort.TransactionRecord transaction =
                 loadTransaction(current.getSubmittedTxId());
             if (canResumeEip7702Signing(current, transaction)) {
-              return resumeEip7702Submission(transaction, sponsorAddress);
+              return resumeEip7702SubmissionInCurrentTransaction(
+                  current, transaction, sponsorAddress);
             }
             return Eip7702Submission.existing(toResult(current, transaction));
           }
@@ -532,6 +534,35 @@ public class TransactionalExecuteExecutionIntentDelegate
   }
 
   private Eip7702Submission resumeEip7702Submission(
+      ExecutionIntent intent,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      String sponsorAddress) {
+    Optional<SponsorNonceContext> sponsorNonce =
+        resolveReusableSponsorNonce(transaction, sponsorAddress);
+    if (sponsorNonce.isEmpty()) {
+      return Eip7702Submission.existing(
+          markSubmittedSponsorNonceStale(
+              intent, transaction, ErrorCode.NONCE_STALE_RECREATE_REQUIRED));
+    }
+    return Eip7702Submission.reserved(transaction, sponsorNonce.get());
+  }
+
+  private Eip7702Submission resumeEip7702SubmissionInCurrentTransaction(
+      ExecutionIntent current,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      String sponsorAddress) {
+    Optional<SponsorNonceContext> sponsorNonce =
+        resolveReusableSponsorNonce(transaction, sponsorAddress);
+    if (sponsorNonce.isEmpty()) {
+      ExecutionIntent staleIntent =
+          markSubmittedSponsorNonceStaleInCurrentTransaction(
+              current, transaction, ErrorCode.NONCE_STALE_RECREATE_REQUIRED);
+      return Eip7702Submission.existing(toResult(staleIntent, transaction));
+    }
+    return Eip7702Submission.reserved(transaction, sponsorNonce.get());
+  }
+
+  private Optional<SponsorNonceContext> resolveReusableSponsorNonce(
       ExecutionTransactionGatewayPort.TransactionRecord transaction, String sponsorAddress) {
     if (transaction.chainId() == null || transaction.nonce() == null) {
       throw new Web3InvalidInputException("submitted sponsor transaction is not nonce-bound");
@@ -540,14 +571,59 @@ public class TransactionalExecuteExecutionIntentDelegate
         && !transaction.fromAddress().equalsIgnoreCase(sponsorAddress)) {
       throw new Web3InvalidInputException("submitted sponsor transaction sender mismatch");
     }
-    return Eip7702Submission.reserved(
-        transaction,
-        new SponsorNonceContext(
-            transaction.chainId(),
-            sponsorAddress,
-            transaction.nonce(),
-            null,
-            transaction.transactionId()));
+
+    ExecutionTransactionGatewayPort.SponsorNonceSnapshot snapshot =
+        executionTransactionGatewayPort.loadSponsorNonceSnapshot(
+            transaction.chainId(), sponsorAddress);
+    ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord reconciliation =
+        executionTransactionGatewayPort.coordinateSponsorNonce(
+            new ExecutionTransactionGatewayPort.CoordinateSponsorNonceCommand(
+                transaction.chainId(),
+                sponsorAddress,
+                snapshot.chainPendingNonce(),
+                snapshot.chainLatestNonce(),
+                snapshot.mainPendingNonce(),
+                snapshot.subPendingNonce(),
+                snapshot.mainLatestNonce(),
+                snapshot.subLatestNonce(),
+                SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                null,
+                null,
+                LocalDateTime.now(appClock)));
+    if (isRpcDisagreement(reconciliation)) {
+      throwSponsorNonceUnavailable(reconciliation);
+    }
+
+    Optional<ExecutionTransactionGatewayPort.SponsorNonceSlotRecord> slot =
+        executionTransactionGatewayPort.findSponsorNonceSlot(
+            transaction.chainId(), sponsorAddress, transaction.nonce());
+    if (snapshot.chainLatestNonce() > transaction.nonce()) {
+      log.warn(
+          "submitted sponsor nonce was consumed before EIP-7702 resume: txId={}, nonce={}, "
+              + "chainLatest={}",
+          transaction.transactionId(),
+          transaction.nonce(),
+          snapshot.chainLatestNonce());
+      return Optional.empty();
+    }
+    if (slot.isPresent() && isReservedSlotOwnedByTransaction(slot.get(), transaction)) {
+      return Optional.of(
+          new SponsorNonceContext(
+              transaction.chainId(),
+              sponsorAddress,
+              transaction.nonce(),
+              slot.get().activeAttemptId(),
+              transaction.transactionId()));
+    }
+
+    log.warn(
+        "submitted sponsor nonce slot is no longer reusable: txId={}, nonce={}, slotStatus={}, "
+            + "slotActiveTxId={}",
+        transaction.transactionId(),
+        transaction.nonce(),
+        slot.map(ExecutionTransactionGatewayPort.SponsorNonceSlotRecord::status).orElse(null),
+        slot.map(ExecutionTransactionGatewayPort.SponsorNonceSlotRecord::activeTxId).orElse(null));
+    return Optional.empty();
   }
 
   private Eip7702SignedSubmission persistEip7702SignedIntent(
@@ -683,6 +759,20 @@ public class TransactionalExecuteExecutionIntentDelegate
             + ", reason="
             + coordination.reason(),
         retryable);
+  }
+
+  private boolean isRpcDisagreement(
+      ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination) {
+    return coordination != null && "RPC_DISAGREEMENT".equals(coordination.decisionType());
+  }
+
+  private boolean isReservedSlotOwnedByTransaction(
+      ExecutionTransactionGatewayPort.SponsorNonceSlotRecord slot,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction) {
+    return "RESERVED".equals(slot.status())
+        && slot.activeAttemptId() != null
+        && transaction.transactionId() != null
+        && transaction.transactionId().equals(slot.activeTxId());
   }
 
   private void markSponsorSlotSigned(SponsorNonceContext context, String txHash) {
@@ -892,6 +982,49 @@ public class TransactionalExecuteExecutionIntentDelegate
           }
           publishTerminated(staleIntent, ExecutionIntentStatus.NONCE_STALE, errorCode.name());
         });
+  }
+
+  private ExecuteExecutionIntentResult markSubmittedSponsorNonceStale(
+      ExecutionIntent intent,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      ErrorCode errorCode) {
+    return transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(intent.getPublicId())
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + intent.getPublicId()));
+          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE) {
+            return toResult(current, transaction);
+          }
+          ExecutionIntent staleIntent =
+              markSubmittedSponsorNonceStaleInCurrentTransaction(current, transaction, errorCode);
+          return toResult(staleIntent, transaction);
+        });
+  }
+
+  private ExecutionIntent markSubmittedSponsorNonceStaleInCurrentTransaction(
+      ExecutionIntent current,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      ErrorCode errorCode) {
+    LocalDateTime now = LocalDateTime.now(appClock);
+    ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+        executionTransactionGatewayPort, current.getSubmittedTxId(), errorCode.name(), now);
+    ExecutionIntent staleIntent =
+        executionIntentPersistencePort.update(
+            current.markNonceStale(errorCode.name(), errorCode.getMessage(), now));
+    if (staleIntent.getMode() == ExecutionMode.EIP7702
+        && staleIntent.getReservedSponsorCostWei().signum() > 0) {
+      releaseSponsorExposure(
+          staleIntent.getRequesterUserId(),
+          staleIntent.resolveSponsorUsageDateKst(),
+          staleIntent.getReservedSponsorCostWei());
+    }
+    publishTerminated(staleIntent, ExecutionIntentStatus.NONCE_STALE, errorCode.name());
+    return staleIntent;
   }
 
   private void audit(

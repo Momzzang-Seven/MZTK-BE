@@ -325,6 +325,50 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   }
 
   @Test
+  void execute_marksNonceStale_whenSubmittedReservedNonceWasConsumed() {
+    ExecutionIntent intent = internalIntent().toBuilder().submittedTxId(77L).build();
+    ExecutionTransactionGatewayPort.TransactionRecord transaction =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            77L, ExecutionTransactionStatus.CREATED, null, 11155111L, SPONSOR_ADDRESS, 12L);
+
+    stubClaimAndTrackUpdates(intent);
+    when(executionTransactionGatewayPort.findById(77L)).thenReturn(Optional.of(transaction));
+    when(executionTransactionGatewayPort.loadSponsorNonceSnapshot(11155111L, SPONSOR_ADDRESS))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(13, 13, 13L, 13L, 13L, 13L));
+    when(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "CONSUME_UNKNOWN_NONCE",
+                12L,
+                "LATEST_PASSED_WITH_RPC_SNAPSHOT",
+                false,
+                null,
+                null));
+    when(executionTransactionGatewayPort.findSponsorNonceSlot(11155111L, SPONSOR_ADDRESS, 12L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionGatewayPort.SponsorNonceSlotRecord(
+                    12L, "CONSUMED_UNKNOWN", null, null)));
+
+    ExecuteInternalExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
+            gate);
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.quarantined()).isFalse();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.NONCE_STALE);
+    assertThat(result.transactionId()).isEqualTo(77L);
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.NONCE_STALE));
+    verify(executionTransactionGatewayPort)
+        .coordinateSponsorNonce(argThat(command -> command.transactionId() == null));
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
   void execute_marksSignedAndSchedulesRetryWhenBroadcastFails() {
     ExecutionIntent intent = internalIntent();
     stubClaimAndTrackUpdates(intent);

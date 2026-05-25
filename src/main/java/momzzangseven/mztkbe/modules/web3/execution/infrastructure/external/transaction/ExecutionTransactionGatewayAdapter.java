@@ -122,6 +122,18 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
   }
 
   @Override
+  public Optional<SponsorNonceSlotRecord> findSponsorNonceSlot(
+      long chainId, String fromAddress, long nonce) {
+    return manageNonceSlotLifecycleUseCase.loadSlotsForReview(chainId, fromAddress).stream()
+        .filter(slot -> slot.nonce() == nonce)
+        .findFirst()
+        .map(
+            slot ->
+                new SponsorNonceSlotRecord(
+                    slot.nonce(), slot.status().name(), slot.activeAttemptId(), slot.activeTxId()));
+  }
+
+  @Override
   public void transitionSponsorNonceSlot(SponsorNonceSlotTransitionCommand command) {
     manageNonceSlotLifecycleUseCase.transition(
         RecordSponsorNonceSlotTransitionCommand.builder()

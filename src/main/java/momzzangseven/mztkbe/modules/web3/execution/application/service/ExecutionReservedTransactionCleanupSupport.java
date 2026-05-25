@@ -75,7 +75,10 @@ final class ExecutionReservedTransactionCleanupSupport {
               false,
               false));
     } catch (Web3TransactionStateInvalidException e) {
-      if (isSlotNotFound(e) || isStaleActual(e, "DROPPED")) {
+      if (isSlotNotFound(e)
+          || isStaleActual(e, "DROPPED")
+          || isStaleActual(e, "CONSUMED")
+          || isStaleActual(e, "CONSUMED_UNKNOWN")) {
         log.debug(
             "Skipping already-cleaned execution sponsor nonce slot: txId={}, reason={}",
             transaction.transactionId(),

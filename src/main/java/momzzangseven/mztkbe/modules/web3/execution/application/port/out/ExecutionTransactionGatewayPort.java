@@ -28,6 +28,9 @@ public interface ExecutionTransactionGatewayPort {
 
   SponsorNonceCoordinationRecord coordinateSponsorNonce(CoordinateSponsorNonceCommand command);
 
+  Optional<SponsorNonceSlotRecord> findSponsorNonceSlot(
+      long chainId, String fromAddress, long nonce);
+
   void transitionSponsorNonceSlot(SponsorNonceSlotTransitionCommand command);
 
   void recordAudit(AuditCommand command);
@@ -84,6 +87,8 @@ public interface ExecutionTransactionGatewayPort {
       boolean reserved,
       Long attemptId,
       Long transactionId) {}
+
+  record SponsorNonceSlotRecord(long nonce, String status, Long activeAttemptId, Long activeTxId) {}
 
   record SponsorNonceSlotTransitionCommand(
       long chainId,
