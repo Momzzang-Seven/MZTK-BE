@@ -10,8 +10,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentCleanupProtectionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
@@ -22,6 +24,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionCleanupPolicy;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +37,7 @@ class ExecutionIntentCleanupServiceTest {
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private ExecutionIntentCleanupProtectionPort executionIntentCleanupProtectionPort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
+  @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
   @Mock private LoadExecutionCleanupPolicyPort loadExecutionCleanupPolicyPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
@@ -46,6 +50,7 @@ class ExecutionIntentCleanupServiceTest {
             executionIntentPersistencePort,
             executionIntentCleanupProtectionPort,
             sponsorDailyUsagePersistencePort,
+            executionTransactionGatewayPort,
             loadExecutionCleanupPolicyPort,
             publishExecutionIntentTerminatedPort);
   }
@@ -128,7 +133,64 @@ class ExecutionIntentCleanupServiceTest {
                         && event.terminalStatus() == ExecutionIntentStatus.EXPIRED));
   }
 
+  @Test
+  void runBatch_expiresSubmittedCreatedIntent_dropsReservedSlot() {
+    when(loadExecutionCleanupPolicyPort.loadCleanupPolicy()).thenReturn(cleanupPolicy());
+    when(executionIntentPersistencePort.findExpiredAwaitingSignatureIds(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(100)))
+        .thenReturn(List.of(10L));
+    when(executionIntentPersistencePort.findAllByIdsForUpdate(List.of(10L)))
+        .thenReturn(List.of(expiredIntent(99L)));
+    when(executionTransactionGatewayPort.findById(99L))
+        .thenReturn(
+            java.util.Optional.of(
+                new ExecutionTransactionGatewayPort.TransactionRecord(
+                    99L,
+                    ExecutionTransactionStatus.CREATED,
+                    null,
+                    84532L,
+                    "0x" + "6".repeat(40),
+                    12L)));
+    when(executionIntentPersistencePort.update(
+            org.mockito.ArgumentMatchers.any(ExecutionIntent.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(sponsorDailyUsagePersistencePort.findForUpdate(7L, LocalDate.of(2026, 2, 28)))
+        .thenReturn(java.util.Optional.empty());
+    when(executionIntentPersistencePort.findRetainedFinalizedIds(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(100)))
+        .thenReturn(List.of());
+    when(executionIntentCleanupProtectionPort.filterDeletableFinalizedIntentIds(List.of()))
+        .thenReturn(List.of());
+    when(sponsorDailyUsagePersistencePort.findUsageIdsForCleanup(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(100)))
+        .thenReturn(List.of());
+
+    ExecutionIntentCleanupService.CleanupBatchResult result =
+        service.runBatch(Instant.parse("2026-03-01T00:00:00Z"));
+
+    assertThat(result.expiredExecutionIntent()).isEqualTo(1);
+    verify(executionTransactionGatewayPort)
+        .scheduleRetry(99L, ErrorCode.EXECUTION_INTENT_EXPIRED.name(), null);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            argThat(
+                command ->
+                    command.chainId() == 84532L
+                        && command.nonce() == 12L
+                        && "RESERVED".equals(command.fromStatus())
+                        && "DROPPED".equals(command.toStatus())
+                        && command.activeTxId().equals(99L)
+                        && command.releasedTxId().equals(99L)
+                        && ErrorCode.EXECUTION_INTENT_EXPIRED
+                            .name()
+                            .equals(command.releaseReason())));
+  }
+
   private ExecutionIntent expiredIntent() {
+    return expiredIntent(null);
+  }
+
+  private ExecutionIntent expiredIntent(Long submittedTxId) {
     return ExecutionIntent.builder()
         .id(10L)
         .publicId("intent-10")
@@ -149,6 +211,7 @@ class ExecutionIntentCleanupServiceTest {
         .expiresAt(LocalDateTime.of(2026, 2, 28, 0, 0))
         .authorizationPayloadHash("0x" + "b".repeat(64))
         .executionDigest("0x" + "c".repeat(64))
+        .submittedTxId(submittedTxId)
         .reservedSponsorCostWei(new BigInteger("120"))
         .sponsorUsageDateKst(LocalDate.of(2026, 2, 28))
         .createdAt(LocalDateTime.of(2026, 2, 28, 0, 0))

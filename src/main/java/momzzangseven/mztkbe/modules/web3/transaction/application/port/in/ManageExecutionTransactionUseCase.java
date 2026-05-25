@@ -37,6 +37,9 @@ public interface ManageExecutionTransactionUseCase {
 
   void scheduleRetry(Long transactionId, String failureReason, LocalDateTime processingUntil);
 
+  boolean claimSignedForBroadcast(
+      Long transactionId, String workerId, LocalDateTime processingUntil);
+
   SponsorChainNonceSnapshotResult loadSponsorNonceSnapshot(long chainId, String fromAddress);
 
   SponsorNonceCoordinationResult coordinateSponsorNonce(SponsorNonceCoordinationCommand command);

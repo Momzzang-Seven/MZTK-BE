@@ -352,6 +352,41 @@ class TransactionWorkPersistenceAdapterTest {
   }
 
   @Test
+  void claimForProcessing_updatesLockWhenStatusAndLockAreClaimable() {
+    Query updateQuery = mockQuery();
+    LocalDateTime processingUntil = FIXED_NOW.plusSeconds(30);
+    when(entityManager.createQuery(startsWith("update Web3TransactionEntity t set t.processingBy")))
+        .thenReturn(updateQuery);
+    when(updateQuery.executeUpdate()).thenReturn(1);
+
+    boolean result =
+        adapter.claimForProcessing(
+            10L, Web3TxStatus.SIGNED, "execution-broadcast-10", processingUntil);
+
+    assertThat(result).isTrue();
+    verify(updateQuery).setParameter("workerId", "execution-broadcast-10");
+    verify(updateQuery).setParameter("processingUntil", processingUntil);
+    verify(updateQuery).setParameter("updatedAt", FIXED_NOW);
+    verify(updateQuery).setParameter("transactionId", 10L);
+    verify(updateQuery).setParameter("status", Web3TxStatus.SIGNED);
+    verify(updateQuery).setParameter("now", FIXED_NOW);
+  }
+
+  @Test
+  void claimForProcessing_returnsFalseWhenNoRowMatches() {
+    Query updateQuery = mockQuery();
+    when(entityManager.createQuery(startsWith("update Web3TransactionEntity t set t.processingBy")))
+        .thenReturn(updateQuery);
+    when(updateQuery.executeUpdate()).thenReturn(0);
+
+    boolean result =
+        adapter.claimForProcessing(
+            10L, Web3TxStatus.SIGNED, "execution-broadcast-10", FIXED_NOW.plusSeconds(30));
+
+    assertThat(result).isFalse();
+  }
+
+  @Test
   void loadLevelRewardsByReferenceIds_mapsSnapshots() {
     Web3TransactionEntity entity =
         Web3TransactionEntity.builder()

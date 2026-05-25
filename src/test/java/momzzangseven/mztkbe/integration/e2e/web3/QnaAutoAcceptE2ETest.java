@@ -106,6 +106,9 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
         .willReturn(BigInteger.valueOf(21L));
     org.mockito.BDDMockito.given(executionEip1559SigningPort.sign(any()))
         .willReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
+    org.mockito.BDDMockito.given(
+            executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .willReturn(true);
     org.mockito.BDDMockito.willAnswer(invocation -> draft(invocation.getArgument(0)))
         .given(buildQnaAdminExecutionDraftPort)
         .build(any());

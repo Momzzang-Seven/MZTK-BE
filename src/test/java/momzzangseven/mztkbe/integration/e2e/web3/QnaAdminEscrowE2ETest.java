@@ -117,6 +117,9 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         .willReturn(
             new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
                 "ISSUE_NONCE", 77L, "ISSUE_NONCE", true, 1L, 1L));
+    BDDMockito.given(
+            executionTransactionGatewayPort.claimSignedForBroadcast(any(), anyString(), any()))
+        .willReturn(true);
   }
 
   @Test

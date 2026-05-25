@@ -75,6 +75,13 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
   }
 
   @Override
+  public boolean claimSignedForBroadcast(
+      Long transactionId, String workerId, LocalDateTime processingUntil) {
+    return manageExecutionTransactionUseCase.claimSignedForBroadcast(
+        transactionId, workerId, processingUntil);
+  }
+
+  @Override
   public SponsorNonceSnapshot loadSponsorNonceSnapshot(long chainId, String fromAddress) {
     SponsorChainNonceSnapshotResult snapshot =
         manageExecutionTransactionUseCase.loadSponsorNonceSnapshot(chainId, fromAddress);

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
@@ -12,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Transf
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorChainNoncePort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecision;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -71,5 +73,20 @@ class ManageExecutionTransactionServiceTest {
 
     assertThat(result).isEqualTo(expected);
     verify(coordinateSponsorNonceUseCase).execute(command);
+  }
+
+  @Test
+  void claimSignedForBroadcast_delegatesSignedProcessingClaim() {
+    LocalDateTime processingUntil = LocalDateTime.of(2026, 4, 8, 12, 0);
+    when(updateTransactionPort.claimForProcessing(
+            10L, Web3TxStatus.SIGNED, "execution-broadcast-10", processingUntil))
+        .thenReturn(true);
+
+    boolean claimed =
+        service.claimSignedForBroadcast(10L, "execution-broadcast-10", processingUntil);
+
+    assertThat(claimed).isTrue();
+    verify(updateTransactionPort)
+        .claimForProcessing(10L, Web3TxStatus.SIGNED, "execution-broadcast-10", processingUntil);
   }
 }

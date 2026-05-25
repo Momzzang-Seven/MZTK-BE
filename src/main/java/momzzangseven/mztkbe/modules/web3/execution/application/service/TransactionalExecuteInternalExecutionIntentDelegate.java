@@ -219,6 +219,11 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
 
     LocalDateTime now = LocalDateTime.now(appClock);
     if (!intent.getExpiresAt().isAfter(now)) {
+      ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+          executionTransactionGatewayPort,
+          intent.getSubmittedTxId(),
+          ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
+          now);
       ExecutionIntent expired =
           executionIntentPersistencePort.update(
               intent.expire(
@@ -354,6 +359,9 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       SponsorNonceContext sponsorNonceContext) {
     runAfterCommitPort.runAfterCommitWithoutTransaction(
         () -> {
+          if (!claimSignedForDirectBroadcast(transactionId, "internal-broadcast-")) {
+            return;
+          }
           markSponsorSlotBroadcasting(sponsorNonceContext, fallbackTxHash);
           ExecutionTransactionGatewayPort.BroadcastResult broadcast =
               executionTransactionGatewayPort.broadcast(rawTx);
@@ -368,6 +376,22 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                       actionPlan,
                       sponsorNonceContext));
         });
+  }
+
+  private boolean claimSignedForDirectBroadcast(Long transactionId, String workerPrefix) {
+    String workerId = workerPrefix + transactionId;
+    LocalDateTime processingUntil =
+        LocalDateTime.now(appClock)
+            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds());
+    boolean claimed =
+        executionTransactionGatewayPort.claimSignedForBroadcast(
+            transactionId, workerId, processingUntil);
+    if (!claimed) {
+      log.info(
+          "Skipping direct internal execution broadcast because signed tx is already claimed or moved: txId={}",
+          transactionId);
+    }
+    return claimed;
   }
 
   private void persistBroadcastOutcome(
@@ -749,6 +773,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       String failureReason,
       ExecutionFailureReason eventReason) {
     LocalDateTime now = LocalDateTime.now(appClock);
+    ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+        executionTransactionGatewayPort, intent.getSubmittedTxId(), errorCode, now);
     ExecutionIntent canceled =
         executionIntentPersistencePort.update(
             intent.cancel(

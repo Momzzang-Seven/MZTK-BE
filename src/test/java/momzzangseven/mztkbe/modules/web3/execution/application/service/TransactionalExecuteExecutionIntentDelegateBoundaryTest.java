@@ -124,6 +124,9 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
         .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
         .thenReturn(new ExecutionRetryPolicy(30));
     lenient().when(loadExecutionChainIdPort.loadChainId()).thenReturn(11155111L);
+    lenient()
+        .when(executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .thenReturn(true);
   }
 
   @Test

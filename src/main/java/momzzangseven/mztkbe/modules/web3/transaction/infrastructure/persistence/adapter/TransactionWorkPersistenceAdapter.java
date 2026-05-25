@@ -194,6 +194,41 @@ public class TransactionWorkPersistenceAdapter
 
   @Override
   @Transactional
+  public boolean claimForProcessing(
+      Long transactionId, Web3TxStatus status, String workerId, LocalDateTime processingUntil) {
+    if (transactionId == null || transactionId <= 0) {
+      throw new Web3InvalidInputException("transactionId must be positive");
+    }
+    if (status == null) {
+      throw new Web3InvalidInputException("status is required");
+    }
+    if (workerId == null || workerId.isBlank()) {
+      throw new Web3InvalidInputException("workerId is required");
+    }
+    if (processingUntil == null) {
+      throw new Web3InvalidInputException("processingUntil is required");
+    }
+
+    LocalDateTime now = LocalDateTime.now(appClock);
+    int updated =
+        entityManager
+            .createQuery(
+                "update Web3TransactionEntity t set t.processingBy = :workerId,"
+                    + " t.processingUntil = :processingUntil, t.updatedAt = :updatedAt"
+                    + " where t.id = :transactionId and t.status = :status"
+                    + " and (t.processingUntil is null or t.processingUntil < :now)")
+            .setParameter("workerId", workerId)
+            .setParameter("processingUntil", processingUntil)
+            .setParameter("updatedAt", now)
+            .setParameter("transactionId", transactionId)
+            .setParameter("status", status)
+            .setParameter("now", now)
+            .executeUpdate();
+    return updated == 1;
+  }
+
+  @Override
+  @Transactional
   public void clearProcessingLock(Long transactionId) {
     Web3TransactionEntity entity = load(transactionId);
     Web3Transaction transaction = toDomain(entity);

@@ -132,6 +132,9 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
     lenient()
         .when(executionIntentPersistencePort.update(any()))
         .thenAnswer(invocation -> invocation.getArgument(0));
+    lenient()
+        .when(executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .thenReturn(true);
   }
 
   private void stubClaimAndTrackUpdates(ExecutionIntent initial) {

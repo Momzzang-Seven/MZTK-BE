@@ -353,6 +353,9 @@ public class TransactionalExecuteExecutionIntentDelegate
       SponsorNonceContext sponsorNonceContext) {
     runAfterCommitPort.runAfterCommitWithoutTransaction(
         () -> {
+          if (!claimSignedForDirectBroadcast(transactionId, "execution-broadcast-")) {
+            return;
+          }
           if (sponsorNonceContext != null) {
             markSponsorSlotBroadcasting(sponsorNonceContext, fallbackTxHash);
           }
@@ -370,6 +373,22 @@ public class TransactionalExecuteExecutionIntentDelegate
                       consumeSponsorExposureOnSuccess,
                       sponsorNonceContext));
         });
+  }
+
+  private boolean claimSignedForDirectBroadcast(Long transactionId, String workerPrefix) {
+    String workerId = workerPrefix + transactionId;
+    LocalDateTime processingUntil =
+        LocalDateTime.now(appClock)
+            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds());
+    boolean claimed =
+        executionTransactionGatewayPort.claimSignedForBroadcast(
+            transactionId, workerId, processingUntil);
+    if (!claimed) {
+      log.info(
+          "Skipping direct execution broadcast because signed tx is already claimed or moved: txId={}",
+          transactionId);
+    }
+    return claimed;
   }
 
   private void persistBroadcastOutcome(
@@ -819,6 +838,11 @@ public class TransactionalExecuteExecutionIntentDelegate
           if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE) {
             return;
           }
+          ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+              executionTransactionGatewayPort,
+              current.getSubmittedTxId(),
+              ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
+              appClock);
           ExecutionIntent expired =
               executionIntentPersistencePort.update(
                   current.expire(
@@ -850,6 +874,11 @@ public class TransactionalExecuteExecutionIntentDelegate
           if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE) {
             return;
           }
+          ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+              executionTransactionGatewayPort,
+              current.getSubmittedTxId(),
+              errorCode.name(),
+              appClock);
           ExecutionIntent staleIntent =
               executionIntentPersistencePort.update(
                   current.markNonceStale(

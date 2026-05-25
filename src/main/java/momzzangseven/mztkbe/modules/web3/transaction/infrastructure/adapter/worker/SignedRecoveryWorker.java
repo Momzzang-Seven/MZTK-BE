@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
@@ -172,6 +173,10 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         return SlotBroadcastPreparation.SKIP_SLOT_AFTER_SUCCESS;
       }
       if (isStaleActual(e, SponsorNonceSlotStatus.BROADCASTING)) {
+        if (!ownsNonceSlotInStatus(item, SponsorNonceSlotStatus.BROADCASTING)) {
+          scheduleStaleSlotRetry(item, SponsorNonceSlotStatus.BROADCASTING, e);
+          return SlotBroadcastPreparation.STOP;
+        }
         log.debug(
             "Using existing nonce slot broadcasting transition for txId={}: {}",
             item.transactionId(),
@@ -179,6 +184,10 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         return SlotBroadcastPreparation.MARK_BROADCASTED_AFTER_SUCCESS;
       }
       if (isStaleActual(e, SponsorNonceSlotStatus.BROADCASTED)) {
+        if (!ownsNonceSlotInStatus(item, SponsorNonceSlotStatus.BROADCASTED)) {
+          scheduleStaleSlotRetry(item, SponsorNonceSlotStatus.BROADCASTED, e);
+          return SlotBroadcastPreparation.STOP;
+        }
         log.debug(
             "Using already-broadcasted nonce slot for txId={}: {}",
             item.transactionId(),
@@ -196,6 +205,39 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
       }
       throw e;
     }
+  }
+
+  private boolean ownsNonceSlotInStatus(
+      LoadTransactionWorkPort.TransactionWorkItem item, SponsorNonceSlotStatus status) {
+    if (item.nonce() == null || item.fromAddress() == null || item.fromAddress().isBlank()) {
+      return false;
+    }
+    return nonceSlotLifecycleUseCase
+        .loadSlotsForReview(web3CoreProperties.getChainId(), item.fromAddress())
+        .stream()
+        .filter(slot -> slot.nonce() == item.nonce())
+        .anyMatch(slot -> isOwnedSlot(slot, item.transactionId(), status));
+  }
+
+  private boolean isOwnedSlot(
+      SponsorNonceSlotView slot, Long transactionId, SponsorNonceSlotStatus status) {
+    return slot.status() == status
+        && transactionId != null
+        && transactionId.equals(slot.activeTxId());
+  }
+
+  private void scheduleStaleSlotRetry(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      SponsorNonceSlotStatus actualStatus,
+      Web3TransactionStateInvalidException cause) {
+    log.warn(
+        "Refusing to reuse stale nonce slot state because it is not owned by tx: txId={}, nonce={}, actual={}, reason={}",
+        item.transactionId(),
+        item.nonce(),
+        actualStatus,
+        cause.getMessage());
+    updateTransactionPort.scheduleRetry(
+        item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
   }
 
   private void markPendingAfterBroadcast(

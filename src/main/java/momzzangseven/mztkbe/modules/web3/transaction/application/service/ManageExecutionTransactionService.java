@@ -123,6 +123,13 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   }
 
   @Override
+  public boolean claimSignedForBroadcast(
+      Long transactionId, String workerId, LocalDateTime processingUntil) {
+    return updateTransactionPort.claimForProcessing(
+        transactionId, Web3TxStatus.SIGNED, workerId, processingUntil);
+  }
+
+  @Override
   @Transactional(propagation = Propagation.NOT_SUPPORTED)
   public SponsorChainNonceSnapshotResult loadSponsorNonceSnapshot(
       long chainId, String fromAddress) {

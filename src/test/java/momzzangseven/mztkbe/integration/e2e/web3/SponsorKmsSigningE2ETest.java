@@ -148,6 +148,9 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
     BDDMockito.given(executionTransactionGatewayPort.broadcast(anyString()))
         .willReturn(
             new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xmockhash", null, "main"));
+    BDDMockito.given(
+            executionTransactionGatewayPort.claimSignedForBroadcast(any(), anyString(), any()))
+        .willReturn(true);
     BDDMockito.willDoNothing()
         .given(executionTransactionGatewayPort)
         .markSigned(any(), anyLong(), anyString(), anyString());

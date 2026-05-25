@@ -139,6 +139,9 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     lenient()
         .when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
+    lenient()
+        .when(executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .thenReturn(true);
   }
 
   private SponsorWalletGate sponsorGate() {

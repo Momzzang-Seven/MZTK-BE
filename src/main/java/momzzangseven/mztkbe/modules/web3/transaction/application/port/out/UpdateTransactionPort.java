@@ -18,5 +18,8 @@ public interface UpdateTransactionPort {
 
   void scheduleRetry(Long transactionId, String failureReason, LocalDateTime processingUntil);
 
+  boolean claimForProcessing(
+      Long transactionId, Web3TxStatus status, String workerId, LocalDateTime processingUntil);
+
   void clearProcessingLock(Long transactionId);
 }

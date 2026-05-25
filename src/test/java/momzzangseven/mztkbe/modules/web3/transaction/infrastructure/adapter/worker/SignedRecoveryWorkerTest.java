@@ -20,6 +20,7 @@ import java.time.ZoneId;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
@@ -203,6 +204,8 @@ class SignedRecoveryWorkerTest {
                 "stale nonce slot transition: expected=SIGNED, actual=BROADCASTED"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(84532L, "0x" + "a".repeat(40)))
+        .thenReturn(List.of(slot(SponsorNonceSlotStatus.BROADCASTED, 1L)));
 
     worker.processBatch(1);
 
@@ -213,6 +216,27 @@ class SignedRecoveryWorkerTest {
                 command ->
                     command.transactionId().equals(1L) && command.txHash().equals(existingHash)));
     verify(updateTransactionPort, never()).scheduleRetry(eq(1L), anyString(), any());
+  }
+
+  @Test
+  void processBatch_staleBroadcastingSlotOwnedByAnotherTx_stopsWithoutBroadcasting() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item("0xdeadbeef", "0x" + "a".repeat(64))));
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=SIGNED, actual=BROADCASTING"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(84532L, "0x" + "a".repeat(40)))
+        .thenReturn(List.of(slot(SponsorNonceSlotStatus.BROADCASTING, 99L)));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+    verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
+    verifyNoInteractions(persistSponsorNonceTransactionStateUseCase);
   }
 
   @Test
@@ -314,6 +338,39 @@ class SignedRecoveryWorkerTest {
         signedRawTx,
         null,
         LocalDateTime.now());
+  }
+
+  private SponsorNonceSlotView slot(SponsorNonceSlotStatus status, Long activeTxId) {
+    LocalDateTime now = LocalDateTime.now(FIXED_CLOCK);
+    return new SponsorNonceSlotView(
+        84532L,
+        "0x" + "a".repeat(40),
+        0L,
+        status,
+        1,
+        null,
+        activeTxId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        0,
+        now,
+        now);
   }
 
   private void verifyInvalidSignedSlotReviewTransition() {

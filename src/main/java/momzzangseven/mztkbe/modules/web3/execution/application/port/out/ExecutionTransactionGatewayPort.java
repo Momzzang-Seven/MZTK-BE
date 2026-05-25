@@ -21,6 +21,9 @@ public interface ExecutionTransactionGatewayPort {
 
   void scheduleRetry(Long transactionId, String failureReason, LocalDateTime processingUntil);
 
+  boolean claimSignedForBroadcast(
+      Long transactionId, String workerId, LocalDateTime processingUntil);
+
   SponsorNonceSnapshot loadSponsorNonceSnapshot(long chainId, String fromAddress);
 
   SponsorNonceCoordinationRecord coordinateSponsorNonce(CoordinateSponsorNonceCommand command);

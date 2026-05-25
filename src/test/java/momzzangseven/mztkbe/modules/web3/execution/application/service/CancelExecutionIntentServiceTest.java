@@ -17,6 +17,7 @@ import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -25,6 +26,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentS
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +45,7 @@ class CancelExecutionIntentServiceTest {
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
+  @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private CancelExecutionIntentService service;
@@ -53,6 +56,7 @@ class CancelExecutionIntentServiceTest {
         new CancelExecutionIntentService(
             executionIntentPersistencePort,
             sponsorDailyUsagePersistencePort,
+            executionTransactionGatewayPort,
             publishExecutionIntentTerminatedPort,
             FIXED_CLOCK);
   }
@@ -153,6 +157,41 @@ class CancelExecutionIntentServiceTest {
     verifyCancelUpdateAndEvent();
   }
 
+  @Test
+  void cancelIfSignable_dropsCreatedSubmittedTransactionAndReservedSlot() {
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent(ExecutionIntentStatus.AWAITING_SIGNATURE, null, 99L)));
+    when(executionTransactionGatewayPort.findById(99L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionGatewayPort.TransactionRecord(
+                    99L,
+                    ExecutionTransactionStatus.CREATED,
+                    null,
+                    84532L,
+                    "0x" + "6".repeat(40),
+                    12L)));
+    when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    boolean result = service.cancelIfSignable(command());
+
+    assertThat(result).isTrue();
+    verify(executionTransactionGatewayPort).scheduleRetry(99L, "ANSWER_014", null);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            argThat(
+                command ->
+                    command.chainId() == 84532L
+                        && command.nonce() == 12L
+                        && "RESERVED".equals(command.fromStatus())
+                        && "DROPPED".equals(command.toStatus())
+                        && command.activeTxId().equals(99L)
+                        && command.releasedTxId().equals(99L)
+                        && "ANSWER_014".equals(command.releaseReason())));
+    verifyCancelUpdateAndEvent();
+  }
+
   private CancelExecutionIntentCommand command() {
     return new CancelExecutionIntentCommand("intent-1", "ANSWER_014", "bind failed");
   }
@@ -176,6 +215,11 @@ class CancelExecutionIntentServiceTest {
   }
 
   private ExecutionIntent intent(ExecutionIntentStatus status, BigInteger reservedSponsorCostWei) {
+    return intent(status, reservedSponsorCostWei, null);
+  }
+
+  private ExecutionIntent intent(
+      ExecutionIntentStatus status, BigInteger reservedSponsorCostWei, Long submittedTxId) {
     return ExecutionIntent.builder()
         .id(1L)
         .publicId("intent-1")
@@ -196,6 +240,7 @@ class CancelExecutionIntentServiceTest {
         .expiresAt(FIXED_NOW.plusMinutes(5))
         .authorizationPayloadHash("0x" + "b".repeat(64))
         .executionDigest("0x" + "c".repeat(64))
+        .submittedTxId(submittedTxId)
         .reservedSponsorCostWei(reservedSponsorCostWei)
         .sponsorUsageDateKst(USAGE_DATE)
         .createdAt(FIXED_NOW.minusMinutes(1))
