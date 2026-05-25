@@ -556,7 +556,7 @@ public class TransactionalExecuteExecutionIntentDelegate
     if (sponsorNonce.isEmpty()) {
       ExecutionIntent staleIntent =
           markSubmittedSponsorNonceStaleInCurrentTransaction(
-              current, transaction, ErrorCode.NONCE_STALE_RECREATE_REQUIRED);
+              current, ErrorCode.NONCE_STALE_RECREATE_REQUIRED);
       return Eip7702Submission.existing(toResult(staleIntent, transaction));
     }
     return Eip7702Submission.reserved(transaction, sponsorNonce.get());
@@ -1001,15 +1001,13 @@ public class TransactionalExecuteExecutionIntentDelegate
             return toResult(current, transaction);
           }
           ExecutionIntent staleIntent =
-              markSubmittedSponsorNonceStaleInCurrentTransaction(current, transaction, errorCode);
+              markSubmittedSponsorNonceStaleInCurrentTransaction(current, errorCode);
           return toResult(staleIntent, transaction);
         });
   }
 
   private ExecutionIntent markSubmittedSponsorNonceStaleInCurrentTransaction(
-      ExecutionIntent current,
-      ExecutionTransactionGatewayPort.TransactionRecord transaction,
-      ErrorCode errorCode) {
+      ExecutionIntent current, ErrorCode errorCode) {
     LocalDateTime now = LocalDateTime.now(appClock);
     ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
         executionTransactionGatewayPort, current.getSubmittedTxId(), errorCode.name(), now);
