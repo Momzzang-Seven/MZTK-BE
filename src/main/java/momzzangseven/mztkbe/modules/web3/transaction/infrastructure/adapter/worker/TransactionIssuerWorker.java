@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Spons
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase.SponsorNonceTerminalReservedSlotFailureCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
@@ -502,22 +503,15 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       String fromAddress,
       NonceReservation nonceReservation,
       Web3TxFailureReason terminalReason) {
-    updateTransactionPort.scheduleRetry(item.transactionId(), terminalReason.code(), null);
-    try {
-      nonceSlotLifecycleUseCase.transition(
-          baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.RESERVED)
-              .toStatus(SponsorNonceSlotStatus.DROPPED)
-              .releasedAttemptId(nonceReservation.attemptId())
-              .releasedTxId(item.transactionId())
-              .releaseReason(terminalReason.code())
-              .build());
-    } catch (Web3TransactionStateInvalidException e) {
-      log.warn(
-          "Failed to drop reserved sponsor nonce slot after terminal signing failure: txId={}, nonce={}",
-          item.transactionId(),
-          nonceReservation.nonce(),
-          e);
-    }
+    persistSponsorNonceTransactionStateUseCase.failTerminalAndDropReservedSlot(
+        new SponsorNonceTerminalReservedSlotFailureCommand(
+            item.transactionId(),
+            web3CoreProperties.getChainId(),
+            fromAddress,
+            nonceReservation.nonce(),
+            nonceReservation.attemptId(),
+            terminalReason.code(),
+            LocalDateTime.now()));
   }
 
   @Override

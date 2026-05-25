@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
@@ -11,6 +12,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidExcepti
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.MarkExecutionIntentPendingOnchainPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
@@ -31,6 +33,7 @@ class PersistSponsorNonceTransactionStateServiceTest {
 
   @Mock private UpdateTransactionPort updateTransactionPort;
   @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  @Mock private MarkExecutionIntentPendingOnchainPort markExecutionIntentPendingOnchainPort;
 
   private PersistSponsorNonceTransactionStateService service;
 
@@ -38,7 +41,9 @@ class PersistSponsorNonceTransactionStateServiceTest {
   void setUp() {
     service =
         new PersistSponsorNonceTransactionStateService(
-            updateTransactionPort, nonceSlotLifecycleUseCase);
+            updateTransactionPort,
+            nonceSlotLifecycleUseCase,
+            markExecutionIntentPendingOnchainPort);
   }
 
   @Test
@@ -66,17 +71,34 @@ class PersistSponsorNonceTransactionStateServiceTest {
         new PersistSponsorNonceTransactionStateUseCase.SponsorNoncePendingCommand(
             1L, CHAIN_ID, FROM_ADDRESS, 7L, 1001L, "0x" + "b".repeat(64), NOW));
 
-    InOrder inOrder = inOrder(updateTransactionPort, nonceSlotLifecycleUseCase);
+    InOrder inOrder =
+        inOrder(
+            updateTransactionPort,
+            nonceSlotLifecycleUseCase,
+            markExecutionIntentPendingOnchainPort);
     inOrder.verify(updateTransactionPort).markPending(1L, "0x" + "b".repeat(64));
     ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> slotCaptor =
         ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
     inOrder.verify(nonceSlotLifecycleUseCase).transition(slotCaptor.capture());
+    inOrder.verify(markExecutionIntentPendingOnchainPort).markPendingOnchain(1L);
     RecordSponsorNonceSlotTransitionCommand command = slotCaptor.getValue();
     assertThat(command.getFromStatus()).isEqualTo(SponsorNonceSlotStatus.BROADCASTING);
     assertThat(command.getToStatus()).isEqualTo(SponsorNonceSlotStatus.BROADCASTED);
     assertThat(command.getActiveAttemptId()).isEqualTo(1001L);
     assertThat(command.getActiveTxId()).isEqualTo(1L);
     assertThat(command.hasBroadcastEvidence()).isTrue();
+  }
+
+  @Test
+  void markPendingWithoutSlotTransition_persistsTransactionAndExecutionIntentOnly() {
+    service.markPendingWithoutSlotTransition(
+        new PersistSponsorNonceTransactionStateUseCase.TransactionPendingCommand(
+            1L, "0x" + "b".repeat(64)));
+
+    InOrder inOrder = inOrder(updateTransactionPort, markExecutionIntentPendingOnchainPort);
+    inOrder.verify(updateTransactionPort).markPending(1L, "0x" + "b".repeat(64));
+    inOrder.verify(markExecutionIntentPendingOnchainPort).markPendingOnchain(1L);
+    verify(nonceSlotLifecycleUseCase, never()).transition(any());
   }
 
   @Test
@@ -110,5 +132,27 @@ class PersistSponsorNonceTransactionStateServiceTest {
 
     verify(updateTransactionPort)
         .updateStatus(1L, Web3TxStatus.UNCONFIRMED, null, "RECEIPT_TIMEOUT_MISSING_TX_HASH");
+  }
+
+  @Test
+  void failTerminalAndDropReservedSlot_schedulesFailureAndDropsSlotInOneUseCase() {
+    service.failTerminalAndDropReservedSlot(
+        new PersistSponsorNonceTransactionStateUseCase
+            .SponsorNonceTerminalReservedSlotFailureCommand(
+            1L, CHAIN_ID, FROM_ADDRESS, 7L, 1001L, "SIGNATURE_INVALID", NOW));
+
+    InOrder inOrder = inOrder(updateTransactionPort, nonceSlotLifecycleUseCase);
+    inOrder.verify(updateTransactionPort).scheduleRetry(1L, "SIGNATURE_INVALID", null);
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> slotCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    inOrder.verify(nonceSlotLifecycleUseCase).transition(slotCaptor.capture());
+    RecordSponsorNonceSlotTransitionCommand command = slotCaptor.getValue();
+    assertThat(command.getFromStatus()).isEqualTo(SponsorNonceSlotStatus.RESERVED);
+    assertThat(command.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
+    assertThat(command.getActiveAttemptId()).isEqualTo(1001L);
+    assertThat(command.getActiveTxId()).isEqualTo(1L);
+    assertThat(command.getReleasedAttemptId()).isEqualTo(1001L);
+    assertThat(command.getReleasedTxId()).isEqualTo(1L);
+    assertThat(command.getReleaseReason()).isEqualTo("SIGNATURE_INVALID");
   }
 }

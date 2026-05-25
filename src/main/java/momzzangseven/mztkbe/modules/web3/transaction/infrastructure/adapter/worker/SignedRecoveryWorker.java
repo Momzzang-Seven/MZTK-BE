@@ -8,7 +8,6 @@ import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
@@ -35,7 +34,6 @@ import org.springframework.stereotype.Component;
 public class SignedRecoveryWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
-  private final MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase;
   private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
   private final PersistSponsorNonceTransactionStateUseCase
       persistSponsorNonceTransactionStateUseCase;
@@ -49,7 +47,6 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
       UpdateTransactionPort updateTransactionPort,
       RecordTransactionAuditPort recordTransactionAuditPort,
       Web3ContractPort web3ContractPort,
-      MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase,
       ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase,
       PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase,
       TransactionRewardTokenProperties rewardTokenProperties,
@@ -63,7 +60,6 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         rewardTokenProperties,
         retryStrategy);
     this.web3ContractPort = web3ContractPort;
-    this.markExecutionIntentPendingOnchainUseCase = markExecutionIntentPendingOnchainUseCase;
     this.nonceSlotLifecycleUseCase = nonceSlotLifecycleUseCase;
     this.persistSponsorNonceTransactionStateUseCase = persistSponsorNonceTransactionStateUseCase;
     this.web3CoreProperties = web3CoreProperties;
@@ -98,6 +94,12 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
     if (slotPreparation == SlotBroadcastPreparation.STOP) {
       return;
     }
+    if (slotPreparation == SlotBroadcastPreparation.MARK_PENDING_WITHOUT_BROADCAST) {
+      if (markPendingWithoutBroadcast(item)) {
+        auditStateChange(item.transactionId(), Web3TxStatus.SIGNED, Web3TxStatus.PENDING);
+      }
+      return;
+    }
 
     Web3ContractPort.BroadcastResult broadcast =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(item.signedRawTx()));
@@ -117,7 +119,6 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
               ? item.txHash()
               : broadcast.txHash();
       markPendingAfterBroadcast(item, txHash, slotPreparation);
-      markExecutionIntentPendingOnchainUseCase.execute(item.transactionId());
       auditStateChange(item.transactionId(), Web3TxStatus.SIGNED, Web3TxStatus.PENDING);
       return;
     }
@@ -182,7 +183,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
             "Using already-broadcasted nonce slot for txId={}: {}",
             item.transactionId(),
             e.getMessage());
-        return SlotBroadcastPreparation.SKIP_SLOT_AFTER_SUCCESS;
+        return SlotBroadcastPreparation.MARK_PENDING_WITHOUT_BROADCAST;
       }
       if (isStaleTransition(e)) {
         log.warn(
@@ -213,7 +214,26 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
               LocalDateTime.now(appClock)));
       return;
     }
-    updateTransactionPort.markPending(item.transactionId(), txHash);
+    persistSponsorNonceTransactionStateUseCase.markPendingWithoutSlotTransition(
+        new PersistSponsorNonceTransactionStateUseCase.TransactionPendingCommand(
+            item.transactionId(), txHash));
+  }
+
+  private boolean markPendingWithoutBroadcast(LoadTransactionWorkPort.TransactionWorkItem item) {
+    if (item.txHash() == null || item.txHash().isBlank()) {
+      log.warn(
+          "Cannot recover already-broadcasted nonce slot without tx hash: txId={}",
+          item.transactionId());
+      updateTransactionPort.scheduleRetry(
+          item.transactionId(),
+          Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code(),
+          null);
+      return false;
+    }
+    persistSponsorNonceTransactionStateUseCase.markPendingWithoutSlotTransition(
+        new PersistSponsorNonceTransactionStateUseCase.TransactionPendingCommand(
+            item.transactionId(), item.txHash()));
+    return true;
   }
 
   private void markSignedSlotOperatorReview(
@@ -269,6 +289,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
 
   private enum SlotBroadcastPreparation {
     MARK_BROADCASTED_AFTER_SUCCESS,
+    MARK_PENDING_WITHOUT_BROADCAST,
     SKIP_SLOT_AFTER_SUCCESS,
     STOP
   }

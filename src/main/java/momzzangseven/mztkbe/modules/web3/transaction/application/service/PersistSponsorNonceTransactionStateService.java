@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidExcepti
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.MarkExecutionIntentPendingOnchainPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
@@ -21,6 +22,7 @@ public class PersistSponsorNonceTransactionStateService
 
   private final UpdateTransactionPort updateTransactionPort;
   private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  private final MarkExecutionIntentPendingOnchainPort markExecutionIntentPendingOnchainPort;
 
   @Override
   @Transactional
@@ -62,6 +64,14 @@ public class PersistSponsorNonceTransactionStateService
             .hasSigningEvidence(true)
             .hasBroadcastEvidence(true)
             .build());
+    markExecutionIntentPendingOnchainPort.markPendingOnchain(command.transactionId());
+  }
+
+  @Override
+  @Transactional
+  public void markPendingWithoutSlotTransition(TransactionPendingCommand command) {
+    updateTransactionPort.markPending(command.transactionId(), command.txHash());
+    markExecutionIntentPendingOnchainPort.markPendingOnchain(command.transactionId());
   }
 
   @Override
@@ -73,6 +83,38 @@ public class PersistSponsorNonceTransactionStateService
         Web3TxStatus.UNCONFIRMED,
         command.txHash(),
         command.failureReason());
+  }
+
+  @Override
+  @Transactional
+  public void failTerminalAndDropReservedSlot(
+      SponsorNonceTerminalReservedSlotFailureCommand command) {
+    updateTransactionPort.scheduleRetry(command.transactionId(), command.failureReason(), null);
+    try {
+      nonceSlotLifecycleUseCase.transition(
+          RecordSponsorNonceSlotTransitionCommand.builder()
+              .chainId(command.chainId())
+              .fromAddress(command.fromAddress())
+              .nonce(command.nonce())
+              .fromStatus(SponsorNonceSlotStatus.RESERVED)
+              .toStatus(SponsorNonceSlotStatus.DROPPED)
+              .activeAttemptId(command.attemptId())
+              .activeTxId(command.transactionId())
+              .releasedAttemptId(command.attemptId())
+              .releasedTxId(command.transactionId())
+              .stateChangedAt(command.stateChangedAt())
+              .releaseReason(command.failureReason())
+              .build());
+    } catch (Web3TransactionStateInvalidException e) {
+      if (isStaleActual(e, SponsorNonceSlotStatus.DROPPED)) {
+        log.debug(
+            "Skipping already-dropped reserved nonce slot for terminal tx failure: txId={}, nonce={}",
+            command.transactionId(),
+            command.nonce());
+        return;
+      }
+      throw e;
+    }
   }
 
   private void markNonceSlotStuck(SponsorNonceUnconfirmedCommand command) {

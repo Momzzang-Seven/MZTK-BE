@@ -28,6 +28,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Spons
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotReservation;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase.SponsorNonceTerminalReservedSlotFailureCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
@@ -404,14 +405,11 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
-    assertThat(transition.getNonce()).isEqualTo(99L);
-    assertThat(transition.getActiveAttemptId()).isEqualTo(1001L);
-    assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
-    assertThat(transition.getReleaseReason())
+    SponsorNonceTerminalReservedSlotFailureCommand command = captureTerminalFailureCommand();
+    assertThat(command.nonce()).isEqualTo(99L);
+    assertThat(command.attemptId()).isEqualTo(1001L);
+    assertThat(command.failureReason())
         .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code());
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
     verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
@@ -438,13 +436,12 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
-    assertThat(transition.getNonce()).isEqualTo(12L);
-    assertThat(transition.getActiveAttemptId()).isEqualTo(1001L);
-    assertThat(transition.getActiveTxId()).isEqualTo(1L);
-    assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
+    SponsorNonceTerminalReservedSlotFailureCommand command = captureTerminalFailureCommand();
+    assertThat(command.nonce()).isEqualTo(12L);
+    assertThat(command.attemptId()).isEqualTo(1001L);
+    assertThat(command.transactionId()).isEqualTo(1L);
+    assertThat(command.failureReason())
+        .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code());
     verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
@@ -601,12 +598,10 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
-    assertThat(transition.getNonce()).isEqualTo(5L);
-    assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
+    SponsorNonceTerminalReservedSlotFailureCommand command = captureTerminalFailureCommand();
+    assertThat(command.nonce()).isEqualTo(5L);
+    assertThat(command.failureReason()).isEqualTo(Web3TxFailureReason.SIGNATURE_INVALID.code());
     verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
   }
 
   @Test
@@ -624,12 +619,10 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
-    assertThat(transition.getNonce()).isEqualTo(42L);
-    assertThat(transition.getActiveAttemptId()).isEqualTo(1001L);
-    assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
+    SponsorNonceTerminalReservedSlotFailureCommand command = captureTerminalFailureCommand();
+    assertThat(command.nonce()).isEqualTo(42L);
+    assertThat(command.attemptId()).isEqualTo(1001L);
+    assertThat(command.failureReason()).isEqualTo(Web3TxFailureReason.SIGNATURE_INVALID.code());
   }
 
   @Test
@@ -911,6 +904,14 @@ class TransactionIssuerWorkerTest {
         ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
     verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
     return transitionCaptor.getValue();
+  }
+
+  private SponsorNonceTerminalReservedSlotFailureCommand captureTerminalFailureCommand() {
+    ArgumentCaptor<SponsorNonceTerminalReservedSlotFailureCommand> commandCaptor =
+        ArgumentCaptor.forClass(SponsorNonceTerminalReservedSlotFailureCommand.class);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .failTerminalAndDropReservedSlot(commandCaptor.capture());
+    return commandCaptor.getValue();
   }
 
   private List<RecordSponsorNonceSlotTransitionCommand> captureSlotTransitions() {

@@ -19,7 +19,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
@@ -51,7 +50,6 @@ class SignedRecoveryWorkerTest {
   @Mock private UpdateTransactionPort updateTransactionPort;
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
-  @Mock private MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase;
   @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
 
   @Mock
@@ -73,7 +71,6 @@ class SignedRecoveryWorkerTest {
             updateTransactionPort,
             recordTransactionAuditPort,
             web3ContractPort,
-            markExecutionIntentPendingOnchainUseCase,
             nonceSlotLifecycleUseCase,
             persistSponsorNonceTransactionStateUseCase,
             properties,
@@ -147,7 +144,6 @@ class SignedRecoveryWorkerTest {
                         && command.nonce() == 0L
                         && command.attemptId() == null
                         && command.txHash().equals("0x" + "b".repeat(64))));
-    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
     verify(nonceSlotLifecycleUseCase)
         .transition(
             org.mockito.ArgumentMatchers.argThat(
@@ -176,7 +172,6 @@ class SignedRecoveryWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command ->
                     command.transactionId().equals(1L) && command.txHash().equals(existingHash)));
-    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
   }
 
   @Test
@@ -195,7 +190,29 @@ class SignedRecoveryWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command ->
                     command.transactionId().equals(1L) && command.txHash().equals(existingHash)));
-    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
+  }
+
+  @Test
+  void processBatch_slotAlreadyBroadcasted_marksPendingWithoutRebroadcasting() {
+    String existingHash = "0x" + "a".repeat(64);
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item("0xdeadbeef", existingHash)));
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=SIGNED, actual=BROADCASTED"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+
+    worker.processBatch(1);
+
+    verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markPendingWithoutSlotTransition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L) && command.txHash().equals(existingHash)));
+    verify(updateTransactionPort, never()).scheduleRetry(eq(1L), anyString(), any());
   }
 
   @Test

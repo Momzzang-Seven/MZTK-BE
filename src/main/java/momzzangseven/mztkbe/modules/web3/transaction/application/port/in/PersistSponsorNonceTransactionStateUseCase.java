@@ -8,7 +8,11 @@ public interface PersistSponsorNonceTransactionStateUseCase {
 
   void markPending(SponsorNoncePendingCommand command);
 
+  void markPendingWithoutSlotTransition(TransactionPendingCommand command);
+
   void markUnconfirmed(SponsorNonceUnconfirmedCommand command);
+
+  void failTerminalAndDropReservedSlot(SponsorNonceTerminalReservedSlotFailureCommand command);
 
   record SponsorNonceSignedCommand(
       Long transactionId,
@@ -29,12 +33,23 @@ public interface PersistSponsorNonceTransactionStateUseCase {
       String txHash,
       LocalDateTime stateChangedAt) {}
 
+  record TransactionPendingCommand(Long transactionId, String txHash) {}
+
   record SponsorNonceUnconfirmedCommand(
       Long transactionId,
       long chainId,
       String fromAddress,
       Long nonce,
       String txHash,
+      String failureReason,
+      LocalDateTime stateChangedAt) {}
+
+  record SponsorNonceTerminalReservedSlotFailureCommand(
+      Long transactionId,
+      long chainId,
+      String fromAddress,
+      long nonce,
+      Long attemptId,
       String failureReason,
       LocalDateTime stateChangedAt) {}
 }
