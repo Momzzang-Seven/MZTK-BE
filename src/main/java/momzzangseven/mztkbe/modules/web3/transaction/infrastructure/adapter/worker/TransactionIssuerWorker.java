@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Recor
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
@@ -56,6 +57,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private final LoadSponsorChainNoncePort loadSponsorChainNoncePort;
   private final CoordinateSponsorNonceUseCase coordinateSponsorNonceUseCase;
   private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  private final PersistSponsorNonceTransactionStateUseCase
+      persistSponsorNonceTransactionStateUseCase;
   private final Web3ContractPort web3ContractPort;
   private final Web3CoreProperties web3CoreProperties;
 
@@ -70,6 +73,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       LoadSponsorChainNoncePort loadSponsorChainNoncePort,
       CoordinateSponsorNonceUseCase coordinateSponsorNonceUseCase,
       ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase,
+      PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase,
       Web3ContractPort web3ContractPort,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
@@ -85,6 +89,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     this.loadSponsorChainNoncePort = loadSponsorChainNoncePort;
     this.coordinateSponsorNonceUseCase = coordinateSponsorNonceUseCase;
     this.nonceSlotLifecycleUseCase = nonceSlotLifecycleUseCase;
+    this.persistSponsorNonceTransactionStateUseCase = persistSponsorNonceTransactionStateUseCase;
     this.web3ContractPort = web3ContractPort;
     this.web3CoreProperties = web3CoreProperties;
   }
@@ -280,8 +285,16 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
 
-    updateTransactionPort.markSigned(item.transactionId(), nonce, signed.rawTx(), signed.txHash());
-    markSlotSigned(item, signer.walletAddress(), nonceReservation, signed);
+    persistSponsorNonceTransactionStateUseCase.markSigned(
+        new PersistSponsorNonceTransactionStateUseCase.SponsorNonceSignedCommand(
+            item.transactionId(),
+            web3CoreProperties.getChainId(),
+            signer.walletAddress(),
+            nonce,
+            nonceReservation.attemptId(),
+            signed.rawTx(),
+            signed.txHash(),
+            LocalDateTime.now()));
     Map<String, Object> signDetail = new SignAuditDetail(nonce, signed.txHash()).toMap();
     audit(item.transactionId(), Web3TransactionAuditEventType.SIGN, null, signDetail);
     auditStateChange(item.transactionId(), Web3TxStatus.CREATED, Web3TxStatus.SIGNED);
@@ -303,8 +316,15 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
           (broadcast.txHash() == null || broadcast.txHash().isBlank())
               ? signed.txHash()
               : broadcast.txHash();
-      updateTransactionPort.markPending(item.transactionId(), txHash);
-      markSlotBroadcasted(item, signer.walletAddress(), nonceReservation);
+      persistSponsorNonceTransactionStateUseCase.markPending(
+          new PersistSponsorNonceTransactionStateUseCase.SponsorNoncePendingCommand(
+              item.transactionId(),
+              web3CoreProperties.getChainId(),
+              signer.walletAddress(),
+              nonceReservation.nonce(),
+              nonceReservation.attemptId(),
+              txHash,
+              LocalDateTime.now()));
       auditStateChange(item.transactionId(), Web3TxStatus.SIGNED, Web3TxStatus.PENDING);
       return;
     }
@@ -441,20 +461,6 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     }
   }
 
-  private void markSlotSigned(
-      LoadTransactionWorkPort.TransactionWorkItem item,
-      String fromAddress,
-      NonceReservation nonceReservation,
-      Web3ContractPort.SignedTransaction signed) {
-    nonceSlotLifecycleUseCase.transition(
-        baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.RESERVED)
-            .toStatus(SponsorNonceSlotStatus.SIGNED)
-            .hasRawTx(true)
-            .hasTxHash(signed.txHash() != null && !signed.txHash().isBlank())
-            .hasSigningEvidence(true)
-            .build());
-  }
-
   private void markSlotBroadcasting(
       LoadTransactionWorkPort.TransactionWorkItem item,
       String fromAddress,
@@ -472,20 +478,6 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
             .hasRawTx(true)
             .hasTxHash(signed.txHash() != null && !signed.txHash().isBlank())
             .hasSigningEvidence(true)
-            .build());
-  }
-
-  private void markSlotBroadcasted(
-      LoadTransactionWorkPort.TransactionWorkItem item,
-      String fromAddress,
-      NonceReservation nonceReservation) {
-    nonceSlotLifecycleUseCase.transition(
-        baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.BROADCASTING)
-            .toStatus(SponsorNonceSlotStatus.BROADCASTED)
-            .hasRawTx(true)
-            .hasTxHash(true)
-            .hasSigningEvidence(true)
-            .hasBroadcastEvidence(true)
             .build());
   }
 

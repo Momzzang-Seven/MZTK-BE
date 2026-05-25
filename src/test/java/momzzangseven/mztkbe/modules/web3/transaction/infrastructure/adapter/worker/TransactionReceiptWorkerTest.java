@@ -3,8 +3,8 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.wor
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -17,9 +17,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -28,7 +26,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.service.Transac
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
@@ -53,7 +50,10 @@ class TransactionReceiptWorkerTest {
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private TransactionOutcomePublisher transactionOutcomePublisher;
-  @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+
+  @Mock
+  private PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase;
+
   @Mock private RetryStrategy retryStrategy;
 
   private TransactionRewardTokenProperties properties;
@@ -76,7 +76,7 @@ class TransactionReceiptWorkerTest {
             recordTransactionAuditPort,
             web3ContractPort,
             transactionOutcomePublisher,
-            nonceSlotLifecycleUseCase,
+            persistSponsorNonceTransactionStateUseCase,
             properties,
             retryStrategy,
             web3CoreProperties,
@@ -95,7 +95,7 @@ class TransactionReceiptWorkerTest {
         updateTransactionPort,
         web3ContractPort,
         transactionOutcomePublisher,
-        nonceSlotLifecycleUseCase);
+        persistSponsorNonceTransactionStateUseCase);
   }
 
   @Test
@@ -106,10 +106,17 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, " ", "RECEIPT_TIMEOUT_MISSING_TX_HASH");
-    verifyMissingTxHashStuckTransition();
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce().equals(0L)
+                        && command.txHash().equals(" ")
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_MISSING_TX_HASH")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -120,10 +127,17 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, null, "RECEIPT_TIMEOUT_MISSING_TX_HASH");
-    verifyMissingTxHashStuckTransition();
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce().equals(0L)
+                        && command.txHash() == null
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_MISSING_TX_HASH")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -136,10 +150,14 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_0S");
-    verifyStuckTransition("RECEIPT_TIMEOUT_0S");
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.txHash().equals(txHash)
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_0S")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -152,10 +170,14 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_5S");
-    verifyStuckTransition("RECEIPT_TIMEOUT_5S");
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.txHash().equals(txHash)
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_5S")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -167,10 +189,14 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_60S");
-    verifyStuckTransition("RECEIPT_TIMEOUT_60S");
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.txHash().equals(txHash)
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_60S")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -185,36 +211,21 @@ class TransactionReceiptWorkerTest {
     worker.processBatch(1);
 
     verify(transactionOutcomePublisher)
-        .markSucceededAndPublish(
-            1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", 1L, 2L, txHash);
-    verify(nonceSlotLifecycleUseCase)
-        .transition(
-            org.mockito.ArgumentMatchers.argThat(
+        .markSucceededWithNonceSlotAndPublish(
+            eq(1L),
+            eq("idem-1"),
+            eq(Web3ReferenceType.LEVEL_UP_REWARD),
+            eq("101"),
+            eq(1L),
+            eq(2L),
+            eq(txHash),
+            argThat(
                 command ->
-                    command.getToStatus() == SponsorNonceSlotStatus.CONSUMED
-                        && command.getConsumedTxId().equals(1L)));
+                    command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce().equals(0L)
+                        && command.consumedReason().equals("RECEIPT_STATUS_1")));
     verify(updateTransactionPort, never()).scheduleRetry(eq(1L), anyString(), any());
-  }
-
-  @Test
-  void processBatch_receiptFoundAndSuccess_continuesWhenSlotAlreadyConsumed() {
-    String txHash = "0x" + "a".repeat(64);
-    when(loadTransactionWorkPort.claimByStatus(
-            eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(1))));
-    when(web3ContractPort.getReceipt(txHash))
-        .thenReturn(new Web3ContractPort.ReceiptResult(txHash, true, true, "rpc-a", false, null));
-    doThrow(
-            new Web3TransactionStateInvalidException(
-                "stale nonce slot transition: expected=BROADCASTED, actual=CONSUMED"))
-        .when(nonceSlotLifecycleUseCase)
-        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-
-    worker.processBatch(1);
-
-    verify(transactionOutcomePublisher)
-        .markSucceededAndPublish(
-            1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", 1L, 2L, txHash);
   }
 
   @Test
@@ -229,17 +240,21 @@ class TransactionReceiptWorkerTest {
     worker.processBatch(1);
 
     verify(transactionOutcomePublisher)
-        .markFailedOnchainAndPublish(
-            1L,
-            "idem-1",
-            Web3ReferenceType.LEVEL_UP_REWARD,
-            "101",
-            1L,
-            2L,
-            txHash,
-            "RECEIPT_STATUS_0");
-    verify(nonceSlotLifecycleUseCase)
-        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+        .markFailedOnchainWithNonceSlotAndPublish(
+            eq(1L),
+            eq("idem-1"),
+            eq(Web3ReferenceType.LEVEL_UP_REWARD),
+            eq("101"),
+            eq(1L),
+            eq(2L),
+            eq(txHash),
+            eq("RECEIPT_STATUS_0"),
+            argThat(
+                command ->
+                    command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce().equals(0L)
+                        && command.consumedReason().equals("RECEIPT_STATUS_0")));
   }
 
   @Test
@@ -323,31 +338,5 @@ class TransactionReceiptWorkerTest {
         "0xdeadbeef",
         null,
         broadcastedAt);
-  }
-
-  private void verifyStuckTransition(String stuckReason) {
-    verify(nonceSlotLifecycleUseCase)
-        .transition(
-            org.mockito.ArgumentMatchers.argThat(
-                command ->
-                    command.getFromStatus() == SponsorNonceSlotStatus.BROADCASTED
-                        && command.getToStatus() == SponsorNonceSlotStatus.STUCK
-                        && command.getActiveTxId().equals(1L)
-                        && command.getStuckReason().equals(stuckReason)
-                        && command.hasTxHash()
-                        && command.hasBroadcastEvidence()));
-  }
-
-  private void verifyMissingTxHashStuckTransition() {
-    verify(nonceSlotLifecycleUseCase)
-        .transition(
-            org.mockito.ArgumentMatchers.argThat(
-                command ->
-                    command.getFromStatus() == SponsorNonceSlotStatus.BROADCASTED
-                        && command.getToStatus() == SponsorNonceSlotStatus.STUCK
-                        && command.getActiveTxId().equals(1L)
-                        && command.getStuckReason().equals("RECEIPT_TIMEOUT_MISSING_TX_HASH")
-                        && !command.hasTxHash()
-                        && command.hasBroadcastEvidence()));
   }
 }

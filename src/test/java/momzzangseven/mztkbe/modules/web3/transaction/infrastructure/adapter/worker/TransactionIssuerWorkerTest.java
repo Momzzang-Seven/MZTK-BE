@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -28,6 +27,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Spons
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotReservation;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
@@ -68,6 +68,10 @@ class TransactionIssuerWorkerTest {
   @Mock private LoadSponsorChainNoncePort loadSponsorChainNoncePort;
   @Mock private CoordinateSponsorNonceUseCase coordinateSponsorNonceUseCase;
   @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+
+  @Mock
+  private PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase;
+
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private RetryStrategy retryStrategy;
 
@@ -94,6 +98,7 @@ class TransactionIssuerWorkerTest {
             loadSponsorChainNoncePort,
             coordinateSponsorNonceUseCase,
             nonceSlotLifecycleUseCase,
+            persistSponsorNonceTransactionStateUseCase,
             web3ContractPort,
             rewardProperties,
             retryStrategy,
@@ -334,7 +339,7 @@ class TransactionIssuerWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort).scheduleRetry(1L, "RPC_TEMP", retryAt);
-    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
   @Test
@@ -351,7 +356,7 @@ class TransactionIssuerWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort).scheduleRetry(1L, "PREVALIDATE_TRANSFER_FALSE", null);
-    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
   @Test
@@ -373,7 +378,7 @@ class TransactionIssuerWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED.code(), retryAt);
-    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
   @Test
@@ -407,7 +412,7 @@ class TransactionIssuerWorkerTest {
         .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code());
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
-    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
   @Test
@@ -440,7 +445,7 @@ class TransactionIssuerWorkerTest {
     assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
-    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
   @Test
@@ -567,7 +572,16 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).markPending(1L, "0x" + "e".repeat(64));
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markPending(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals(TREASURY_ADDRESS)
+                        && command.nonce() == 7L
+                        && command.attemptId().equals(1001L)
+                        && command.txHash().equals("0x" + "e".repeat(64))));
     verify(updateTransactionPort, never())
         .scheduleRetry(eq(1L), eq(Web3TxFailureReason.FROM_ADDRESS_MISMATCH.code()), any());
   }
@@ -590,7 +604,7 @@ class TransactionIssuerWorkerTest {
     RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
     assertThat(transition.getNonce()).isEqualTo(5L);
     assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
-    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
   }
@@ -636,11 +650,32 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).markSigned(1L, 7L, "0xdeadbeef", "0x" + "d".repeat(64));
-    verify(updateTransactionPort).markPending(1L, "0x" + "d".repeat(64));
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markSigned(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals(TREASURY_ADDRESS)
+                        && command.nonce() == 7L
+                        && command.attemptId().equals(1001L)
+                        && command.signedRawTx().equals("0xdeadbeef")
+                        && command.txHash().equals("0x" + "d".repeat(64))));
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markPending(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals(TREASURY_ADDRESS)
+                        && command.nonce() == 7L
+                        && command.attemptId().equals(1001L)
+                        && command.txHash().equals("0x" + "d".repeat(64))));
     verify(updateTransactionPort, never()).assignNonce(any(), any(Long.class));
     List<RecordSponsorNonceSlotTransitionCommand> transitions = captureSlotTransitions();
-    assertThat(transitions).hasSize(3);
+    assertThat(transitions)
+        .extracting(RecordSponsorNonceSlotTransitionCommand::getToStatus)
+        .containsExactly(SponsorNonceSlotStatus.BROADCASTING);
     assertThat(transitions).allMatch(transition -> transition.getActiveAttemptId().equals(1001L));
     verify(recordTransactionAuditPort, atLeastOnce())
         .record(any(RecordTransactionAuditPort.AuditCommand.class));
@@ -674,14 +709,31 @@ class TransactionIssuerWorkerTest {
     assertThat(commandCaptor.getValue().treasurySigner().walletAddress())
         .isEqualTo(TREASURY_ADDRESS);
     assertThat(commandCaptor.getValue().treasurySigner().kmsKeyId()).isEqualTo(KMS_KEY_ID);
-    verify(updateTransactionPort).markPending(1L, "0x" + "e".repeat(64));
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markSigned(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals(TREASURY_ADDRESS)
+                        && command.nonce() == 33L
+                        && command.attemptId().equals(1001L)
+                        && command.signedRawTx().equals("0xdeadbeef")
+                        && command.txHash().equals("0x" + "d".repeat(64))));
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markPending(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.fromAddress().equals(TREASURY_ADDRESS)
+                        && command.nonce() == 33L
+                        && command.attemptId().equals(1001L)
+                        && command.txHash().equals("0x" + "e".repeat(64))));
     List<RecordSponsorNonceSlotTransitionCommand> transitions = captureSlotTransitions();
     assertThat(transitions)
         .extracting(RecordSponsorNonceSlotTransitionCommand::getToStatus)
-        .containsExactly(
-            SponsorNonceSlotStatus.SIGNED,
-            SponsorNonceSlotStatus.BROADCASTING,
-            SponsorNonceSlotStatus.BROADCASTED);
+        .containsExactly(SponsorNonceSlotStatus.BROADCASTING);
     assertThat(transitions).allMatch(transition -> transition.getActiveAttemptId().equals(1001L));
   }
 
@@ -718,7 +770,7 @@ class TransactionIssuerWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
-    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
     verify(nonceSlotLifecycleUseCase, never())
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
     verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
@@ -864,7 +916,7 @@ class TransactionIssuerWorkerTest {
   private List<RecordSponsorNonceSlotTransitionCommand> captureSlotTransitions() {
     ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
         ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
-    verify(nonceSlotLifecycleUseCase, times(3)).transition(transitionCaptor.capture());
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
     return transitionCaptor.getAllValues();
   }
 

@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidExcepti
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
@@ -36,6 +37,8 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
   private final Web3ContractPort web3ContractPort;
   private final MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase;
   private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  private final PersistSponsorNonceTransactionStateUseCase
+      persistSponsorNonceTransactionStateUseCase;
   private final Web3CoreProperties web3CoreProperties;
   private final Clock appClock;
 
@@ -48,6 +51,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
       Web3ContractPort web3ContractPort,
       MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase,
       ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase,
+      PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
       Web3CoreProperties web3CoreProperties,
@@ -61,6 +65,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
     this.web3ContractPort = web3ContractPort;
     this.markExecutionIntentPendingOnchainUseCase = markExecutionIntentPendingOnchainUseCase;
     this.nonceSlotLifecycleUseCase = nonceSlotLifecycleUseCase;
+    this.persistSponsorNonceTransactionStateUseCase = persistSponsorNonceTransactionStateUseCase;
     this.web3CoreProperties = web3CoreProperties;
     this.appClock = appClock;
   }
@@ -89,6 +94,11 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
       return;
     }
 
+    SlotBroadcastPreparation slotPreparation = prepareSlotForBroadcast(item);
+    if (slotPreparation == SlotBroadcastPreparation.STOP) {
+      return;
+    }
+
     Web3ContractPort.BroadcastResult broadcast =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(item.signedRawTx()));
 
@@ -106,10 +116,8 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
           (broadcast.txHash() == null || broadcast.txHash().isBlank())
               ? item.txHash()
               : broadcast.txHash();
-      markSlotBroadcasting(item, txHash);
-      updateTransactionPort.markPending(item.transactionId(), txHash);
+      markPendingAfterBroadcast(item, txHash, slotPreparation);
       markExecutionIntentPendingOnchainUseCase.execute(item.transactionId());
-      markSlotBroadcasted(item);
       auditStateChange(item.transactionId(), Web3TxStatus.SIGNED, Web3TxStatus.PENDING);
       return;
     }
@@ -129,10 +137,10 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         new StateChangeAuditDetail(from, to).toMap());
   }
 
-  private void markSlotBroadcasting(
-      LoadTransactionWorkPort.TransactionWorkItem item, String txHash) {
+  private SlotBroadcastPreparation prepareSlotForBroadcast(
+      LoadTransactionWorkPort.TransactionWorkItem item) {
     if (item.nonce() == null) {
-      return;
+      return SlotBroadcastPreparation.SKIP_SLOT_AFTER_SUCCESS;
     }
     try {
       nonceSlotLifecycleUseCase.transition(
@@ -150,21 +158,62 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
                   LocalDateTime.now(appClock).plusSeconds(claimTtlSeconds()))
               .broadcastRecoveryAttemptCount(1)
               .hasRawTx(true)
-              .hasTxHash(txHash != null && !txHash.isBlank())
+              .hasTxHash(item.txHash() != null && !item.txHash().isBlank())
               .hasSigningEvidence(true)
               .build());
+      return SlotBroadcastPreparation.MARK_BROADCASTED_AFTER_SUCCESS;
     } catch (Web3TransactionStateInvalidException e) {
-      if (isSlotNotFound(e)
-          || isStaleActual(e, SponsorNonceSlotStatus.BROADCASTING)
-          || isStaleActual(e, SponsorNonceSlotStatus.BROADCASTED)) {
+      if (isSlotNotFound(e)) {
         log.debug(
-            "Skipping signed recovery broadcasting transition for txId={}: {}",
+            "Broadcasting signed recovery tx without nonce slot: txId={}, reason={}",
             item.transactionId(),
             e.getMessage());
-        return;
+        return SlotBroadcastPreparation.SKIP_SLOT_AFTER_SUCCESS;
+      }
+      if (isStaleActual(e, SponsorNonceSlotStatus.BROADCASTING)) {
+        log.debug(
+            "Using existing nonce slot broadcasting transition for txId={}: {}",
+            item.transactionId(),
+            e.getMessage());
+        return SlotBroadcastPreparation.MARK_BROADCASTED_AFTER_SUCCESS;
+      }
+      if (isStaleActual(e, SponsorNonceSlotStatus.BROADCASTED)) {
+        log.debug(
+            "Using already-broadcasted nonce slot for txId={}: {}",
+            item.transactionId(),
+            e.getMessage());
+        return SlotBroadcastPreparation.SKIP_SLOT_AFTER_SUCCESS;
+      }
+      if (isStaleTransition(e)) {
+        log.warn(
+            "Refusing to broadcast signed tx because nonce slot is not broadcastable: txId={}, reason={}",
+            item.transactionId(),
+            e.getMessage());
+        updateTransactionPort.scheduleRetry(
+            item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+        return SlotBroadcastPreparation.STOP;
       }
       throw e;
     }
+  }
+
+  private void markPendingAfterBroadcast(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String txHash,
+      SlotBroadcastPreparation slotPreparation) {
+    if (slotPreparation == SlotBroadcastPreparation.MARK_BROADCASTED_AFTER_SUCCESS) {
+      persistSponsorNonceTransactionStateUseCase.markPending(
+          new PersistSponsorNonceTransactionStateUseCase.SponsorNoncePendingCommand(
+              item.transactionId(),
+              web3CoreProperties.getChainId(),
+              item.fromAddress(),
+              item.nonce(),
+              null,
+              txHash,
+              LocalDateTime.now(appClock)));
+      return;
+    }
+    updateTransactionPort.markPending(item.transactionId(), txHash);
   }
 
   private void markSignedSlotOperatorReview(
@@ -200,50 +249,27 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
     }
   }
 
-  private void markSlotBroadcasted(LoadTransactionWorkPort.TransactionWorkItem item) {
-    if (item.nonce() == null) {
-      return;
-    }
-    try {
-      nonceSlotLifecycleUseCase.transition(
-          RecordSponsorNonceSlotTransitionCommand.builder()
-              .chainId(web3CoreProperties.getChainId())
-              .fromAddress(item.fromAddress())
-              .nonce(item.nonce())
-              .fromStatus(SponsorNonceSlotStatus.BROADCASTING)
-              .toStatus(SponsorNonceSlotStatus.BROADCASTED)
-              .activeTxId(item.transactionId())
-              .stateChangedAt(LocalDateTime.now(appClock))
-              .hasRawTx(true)
-              .hasTxHash(true)
-              .hasSigningEvidence(true)
-              .hasBroadcastEvidence(true)
-              .build());
-    } catch (Web3TransactionStateInvalidException e) {
-      if (isSlotNotFound(e) || isStaleActual(e, SponsorNonceSlotStatus.BROADCASTED)) {
-        log.debug(
-            "Skipping signed recovery broadcasted transition for txId={}: {}",
-            item.transactionId(),
-            e.getMessage());
-        return;
-      }
-      throw e;
-    }
-  }
-
   private boolean isSlotNotFound(Web3TransactionStateInvalidException e) {
     return e.getMessage() != null && e.getMessage().contains("nonce slot not found");
   }
 
+  private boolean isStaleTransition(Web3TransactionStateInvalidException e) {
+    return e.getMessage() != null && e.getMessage().contains("stale nonce slot transition");
+  }
+
   private boolean isStaleActual(
       Web3TransactionStateInvalidException e, SponsorNonceSlotStatus actualStatus) {
-    return e.getMessage() != null
-        && e.getMessage().contains("stale nonce slot transition")
-        && e.getMessage().contains("actual=" + actualStatus);
+    return isStaleTransition(e) && e.getMessage().contains("actual=" + actualStatus);
   }
 
   @Override
   protected List<Class<? extends Throwable>> nonRetryableExceptions() {
     return List.of(Web3InvalidInputException.class, Web3TransactionStateInvalidException.class);
+  }
+
+  private enum SlotBroadcastPreparation {
+    MARK_BROADCASTED_AFTER_SUCCESS,
+    SKIP_SLOT_AFTER_SUCCESS,
+    STOP
   }
 }
