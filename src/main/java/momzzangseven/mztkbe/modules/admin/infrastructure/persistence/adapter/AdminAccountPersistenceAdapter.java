@@ -7,9 +7,11 @@ import momzzangseven.mztkbe.modules.admin.application.port.out.CountActiveAdminA
 import momzzangseven.mztkbe.modules.admin.application.port.out.DeleteAdminAccountsPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SaveAdminAccountPort;
+import momzzangseven.mztkbe.modules.admin.domain.event.AdminAccountInvalidatedEvent;
 import momzzangseven.mztkbe.modules.admin.domain.model.AdminAccount;
 import momzzangseven.mztkbe.modules.admin.infrastructure.persistence.entity.AdminAccountEntity;
 import momzzangseven.mztkbe.modules.admin.infrastructure.persistence.repository.AdminAccountJpaRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,6 +27,7 @@ public class AdminAccountPersistenceAdapter
         CountActiveAdminAccountsPort {
 
   private final AdminAccountJpaRepository repository;
+  private final ApplicationEventPublisher eventPublisher;
 
   @Override
   public Optional<AdminAccount> findActiveByUserId(Long userId) {
@@ -55,6 +58,7 @@ public class AdminAccountPersistenceAdapter
   public AdminAccount save(AdminAccount account) {
     AdminAccountEntity entity = toEntity(account);
     AdminAccountEntity saved = repository.save(entity);
+    eventPublisher.publishEvent(new AdminAccountInvalidatedEvent(saved.getUserId()));
     return toDomain(saved);
   }
 
@@ -62,6 +66,7 @@ public class AdminAccountPersistenceAdapter
   public AdminAccount saveAndFlush(AdminAccount account) {
     AdminAccountEntity entity = toEntity(account);
     AdminAccountEntity saved = repository.saveAndFlush(entity);
+    eventPublisher.publishEvent(new AdminAccountInvalidatedEvent(saved.getUserId()));
     return toDomain(saved);
   }
 
@@ -69,6 +74,9 @@ public class AdminAccountPersistenceAdapter
   public List<Long> deleteAllAndReturnUserIds() {
     List<Long> userIds = repository.findAll().stream().map(AdminAccountEntity::getUserId).toList();
     repository.deleteAllInBulk();
+    for (Long userId : userIds) {
+      eventPublisher.publishEvent(new AdminAccountInvalidatedEvent(userId));
+    }
     return userIds;
   }
 
