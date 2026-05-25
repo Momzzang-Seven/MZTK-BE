@@ -149,7 +149,9 @@ management:
   tracing:
     sampling:
       enabled: true
-      probability: 1.0                      # 부하테스트 중 전수 수집 (운영 시 0.1로 낮출 것)
+      # 기본 0.1 (10% 샘플). 부하테스트 중에만 EC2 의 ~/apps/.env 에
+      # TRACING_SAMPLING_PROBABILITY=1.0 을 임시로 추가해 전수 수집한다.
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
   zipkin:
     tracing:
       endpoint: http://host.docker.internal:9411/api/v2/spans
