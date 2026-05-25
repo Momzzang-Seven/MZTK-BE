@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -36,6 +35,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -78,6 +78,13 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private final RunAfterCommitPort runAfterCommitPort = Runnable::run;
+  private final RunExecutionTransactionPort runExecutionTransactionPort =
+      new RunExecutionTransactionPort() {
+        @Override
+        public <T> T requiresNew(java.util.function.Supplier<T> action) {
+          return action.get();
+        }
+      };
   private TransactionalExecuteInternalExecutionIntentDelegate delegate;
   private InternalExecutionSignerGates gate;
 
@@ -93,6 +100,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
             List.of(executionActionHandlerPort),
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
+            runExecutionTransactionPort,
             FIXED_CLOCK);
 
     SponsorWalletGate sponsorGate =
@@ -339,8 +347,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   void execute_quarantinesIntentWhenKmsSignFailsWithTerminalAwsError_publishesWithKmsErrorCode() {
     ExecutionIntent intent = internalIntent();
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     stubSponsorNonceReservation(expectedNonce, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
@@ -376,25 +383,28 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   void execute_returnsTransientRetryWithExecutedFalseWhenKmsSignFailsTransiently() {
     ExecutionIntent intent = internalIntent();
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     stubSponsorNonceReservation(expectedNonce, 77L);
     // No AWS error code → classifier returns false → transient.
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new KmsSignFailedException("kms throttled"));
 
-    assertThatThrownBy(
-            () ->
-                delegate.execute(
-                    new ExecuteInternalExecutionIntentCommand(
-                        List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
-                    gate))
-        .isInstanceOf(InternalExecutionTransientRetryException.class)
-        .extracting(ex -> ((InternalExecutionTransientRetryException) ex).executionIntentStatus())
-        .isEqualTo(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    ExecuteInternalExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
+            gate);
+
+    assertThat(result.executed()).isFalse();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.AWAITING_SIGNATURE);
     // Critical invariant: transient path must NOT cancel intent and must NOT publish the
     // terminated event — the QnA escrow refund cascade must not fire on a recoverable hiccup.
-    verify(executionIntentPersistencePort, never()).update(any());
+    verify(executionIntentPersistencePort)
+        .update(
+            org.mockito.ArgumentMatchers.argThat(
+                updated ->
+                    updated.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE
+                        && Long.valueOf(77L).equals(updated.getSubmittedTxId())));
     verify(publishExecutionIntentTerminatedPort, never()).publish(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
@@ -403,8 +413,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   void execute_dropsReservedSlotAndContinuesWhenKmsTerminalFails() {
     ExecutionIntent intent = internalIntent();
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     stubSponsorNonceReservation(expectedNonce, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
@@ -431,8 +440,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   void execute_quarantinesIntentWhenSignatureRecoveryFails_publishesWithSignatureRecoveryCode() {
     ExecutionIntent intent = internalIntent();
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     stubSponsorNonceReservation(expectedNonce, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new SignatureRecoveryException("recovery failed"));
@@ -462,8 +470,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   void execute_quarantinesIntentWhenSigningInputIsInvalid() {
     ExecutionIntent intent = internalIntent();
     long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
+    stubClaimAndTrackUpdates(intent);
     stubSponsorNonceReservation(expectedNonce, 77L);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new Web3InvalidInputException("invalid EVM address: broken"));

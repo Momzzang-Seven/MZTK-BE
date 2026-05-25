@@ -519,5 +519,16 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     return List.of(Web3InvalidInputException.class, Web3TransactionStateInvalidException.class);
   }
 
+  @Override
+  protected String permanentFailureReason(Throwable throwable, String defaultFailureReason) {
+    if (throwable instanceof Web3TransactionStateInvalidException) {
+      return Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code();
+    }
+    if (throwable instanceof Web3InvalidInputException) {
+      return Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code();
+    }
+    return super.permanentFailureReason(throwable, defaultFailureReason);
+  }
+
   private record NonceReservation(long nonce, Long attemptId) {}
 }

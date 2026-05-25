@@ -164,6 +164,9 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
         result.transactionId(),
         momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus.valueOf(
             result.status().name()),
-        result.txHash());
+        result.txHash(),
+        result.chainId(),
+        result.fromAddress(),
+        result.nonce());
   }
 }

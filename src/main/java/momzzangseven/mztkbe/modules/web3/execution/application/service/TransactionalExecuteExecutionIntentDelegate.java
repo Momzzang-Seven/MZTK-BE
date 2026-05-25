@@ -28,6 +28,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
@@ -40,19 +41,18 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactio
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Transactional delegate for {@link ExecuteExecutionIntentService}.
  *
- * <p>Holds the FOR UPDATE intent lock + atomic write semantics. Sponsor-wallet preflight
- * (LoadSponsorTreasuryWalletPort + structural fail-fast + KMS DescribeKey verify) is performed by
- * the orchestrator before this method is entered, so external KMS latency never pins a JDBC
- * connection. The pre-validated sponsor signer enters via {@link SponsorWalletGate}.
+ * <p>Splits stateful DB phases from sponsor KMS signing. Sponsor-wallet preflight
+ * (LoadSponsorTreasuryWalletPort + structural fail-fast + KMS DescribeKey verify) runs in the
+ * orchestrator before this method is entered, nonce reservation runs in a short transaction, and
+ * the KMS signing call runs outside the DB transaction so sponsor nonce locks are not held across
+ * AWS latency.
  */
 @Slf4j
 @RequiredArgsConstructor
-@Transactional(noRollbackFor = ExecutionIntentTerminalException.class)
 public class TransactionalExecuteExecutionIntentDelegate
     implements ExecuteTransactionalExecutionIntentDelegatePort {
 
@@ -72,10 +72,11 @@ public class TransactionalExecuteExecutionIntentDelegate
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
   private final RunAfterCommitPort runAfterCommitPort;
+  private final RunExecutionTransactionPort transactionPort;
   private final Clock appClock;
 
   /**
-   * Executes the target intent within a single transaction.
+   * Executes the target intent.
    *
    * <p>{@code gate} is the pre-validated sponsor wallet handle — required for EIP-7702 intents and
    * {@code null} for EIP-1559 user-signed intents (which never use sponsor material). The EIP-7702
@@ -87,7 +88,7 @@ public class TransactionalExecuteExecutionIntentDelegate
       ExecuteExecutionIntentCommand command, SponsorWalletGate gate) {
     ExecutionIntent intent =
         executionIntentPersistencePort
-            .findByPublicIdForUpdate(command.executionIntentId())
+            .findByPublicId(command.executionIntentId())
             .orElseThrow(
                 () ->
                     new Web3InvalidInputException(
@@ -97,32 +98,21 @@ public class TransactionalExecuteExecutionIntentDelegate
       throw new Web3InvalidInputException("execution intent owner mismatch");
     }
 
-    if (intent.getSubmittedTxId() != null) {
-      return toResult(intent, loadTransaction(intent.getSubmittedTxId()));
-    }
+    ExecutionTransactionGatewayPort.TransactionRecord submittedTransaction =
+        intent.getSubmittedTxId() == null ? null : loadTransaction(intent.getSubmittedTxId());
 
     LocalDateTime now = LocalDateTime.now(appClock);
     if (!intent.getExpiresAt().isAfter(now)) {
-      ExecutionIntent expired =
-          executionIntentPersistencePort.update(
-              intent.expire(
-                  ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
-                  ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
-                  now));
-      if (expired.getMode() == ExecutionMode.EIP7702
-          && expired.getReservedSponsorCostWei().signum() > 0) {
-        releaseSponsorExposure(
-            expired.getRequesterUserId(),
-            expired.resolveSponsorUsageDateKst(),
-            expired.getReservedSponsorCostWei());
-      }
-      publishTerminated(
-          expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
+      expireIntent(intent);
       throw new ExecutionIntentTerminalException(ErrorCode.EXECUTION_INTENT_EXPIRED, false);
     }
 
+    if (submittedTransaction != null && !canResumeEip7702Signing(intent, submittedTransaction)) {
+      return toResult(intent, submittedTransaction);
+    }
+
     if (!intent.getStatus().isSignable()) {
-      return toResult(intent, null);
+      return toResult(intent, submittedTransaction);
     }
 
     ExecutionActionHandlerPort actionHandler = resolveActionHandler(intent);
@@ -130,7 +120,8 @@ public class TransactionalExecuteExecutionIntentDelegate
     actionHandler.beforeExecute(intent, actionPlan);
 
     return switch (intent.getMode()) {
-      case EIP7702 -> executeEip7702(command, intent, actionHandler, actionPlan, gate);
+      case EIP7702 ->
+          executeEip7702(command, intent, actionHandler, actionPlan, gate, submittedTransaction);
       case EIP1559 -> executeEip1559(command, intent, actionHandler, actionPlan);
     };
   }
@@ -140,7 +131,8 @@ public class TransactionalExecuteExecutionIntentDelegate
       ExecutionIntent intent,
       ExecutionActionHandlerPort actionHandler,
       ExecutionActionPlan actionPlan,
-      SponsorWalletGate gate) {
+      SponsorWalletGate gate,
+      ExecutionTransactionGatewayPort.TransactionRecord submittedTransaction) {
     Objects.requireNonNull(gate, "EIP-7702 path requires a sponsor wallet gate");
     //  Validate command, client given signatures.
     if (command.authorizationSignature() == null || command.authorizationSignature().isBlank()) {
@@ -186,20 +178,7 @@ public class TransactionalExecuteExecutionIntentDelegate
     BigInteger currentAuthorityNonce =
         executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress());
     if (currentAuthorityNonce.longValueExact() != intent.getAuthorityNonce()) {
-      ExecutionIntent staleIntent =
-          executionIntentPersistencePort.update(
-              intent.markNonceStale(
-                  ErrorCode.AUTH_NONCE_MISMATCH.name(),
-                  ErrorCode.AUTH_NONCE_MISMATCH.getMessage(),
-                  LocalDateTime.now(appClock)));
-      if (staleIntent.getReservedSponsorCostWei().signum() > 0) {
-        releaseSponsorExposure(
-            staleIntent.getRequesterUserId(),
-            staleIntent.resolveSponsorUsageDateKst(),
-            staleIntent.getReservedSponsorCostWei());
-      }
-      publishTerminated(
-          staleIntent, ExecutionIntentStatus.NONCE_STALE, ErrorCode.AUTH_NONCE_MISMATCH.name());
+      markNonceStale(intent, ErrorCode.AUTH_NONCE_MISMATCH);
       throw new ExecutionIntentTerminalException(ErrorCode.AUTH_NONCE_MISMATCH, false);
     }
 
@@ -230,28 +209,15 @@ public class TransactionalExecuteExecutionIntentDelegate
             java.util.List.of(authTuple));
     ExecutionEip7702GatewayPort.FeePlan feePlan = executionEip7702GatewayPort.loadSponsorFeePlan();
 
-    ExecutionTransactionGatewayPort.TransactionRecord created =
-        executionTransactionGatewayPort.createAndFlush(
-            new ExecutionTransactionGatewayPort.CreateTransactionCommand(
-                intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo(),
-                actionPlan.referenceType(),
-                intent.getResourceId(),
-                intent.getRequesterUserId(),
-                intent.getCounterpartyUserId(),
-                sponsorAddress,
-                intent.getAuthorityAddress(),
-                actionPlan.amountWei(),
-                chainId,
-                null,
-                ExecutionTransactionStatus.CREATED,
-                ExecutionTransactionType.EIP7702,
-                intent.getAuthorityAddress(),
-                intent.getAuthorityNonce(),
-                intent.getDelegateTarget(),
-                intent.getExpiresAt()));
-
-    SponsorNonceContext sponsorNonce =
-        reserveSponsorNonce(created.transactionId(), sponsorAddress, chainId);
+    Eip7702Submission submission =
+        submittedTransaction == null
+            ? reserveEip7702Submission(intent, actionPlan, sponsorAddress, chainId)
+            : resumeEip7702Submission(submittedTransaction, sponsorAddress);
+    if (submission.existingResult() != null) {
+      return submission.existingResult();
+    }
+    ExecutionTransactionGatewayPort.TransactionRecord created = submission.transaction();
+    SponsorNonceContext sponsorNonce = submission.sponsorNonce();
 
     // Make the signature. KMS sign errors are split into transient (rollback for user retry)
     // vs terminal (cancel + cascade event for QnA escrow refund), mirroring the EIP-1559
@@ -278,12 +244,10 @@ public class TransactionalExecuteExecutionIntentDelegate
           intent.getPublicId(),
           e.getMessage());
       if (KmsClientErrorClassifier.isTerminal(e)) {
-        markCreatedTransactionTerminal(
-            created.transactionId(), ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
-        dropSponsorReservedSlot(
-            sponsorNonce, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
-        cancelEip7702IntentAndCascade(
-            intent,
+        failEip7702SigningAndCancel(
+            intent.getPublicId(),
+            sponsorNonce,
+            ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name(),
             ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL,
             ErrorCode.WEB3_KMS_SIGN_FAILED,
             SPONSOR_KMS_SIGN_FAILED_TERMINAL);
@@ -298,11 +262,10 @@ public class TransactionalExecuteExecutionIntentDelegate
           "eip7702 sponsor signature recovery failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
-      markCreatedTransactionTerminal(
-          created.transactionId(), ExecutionFailureReason.SIGNATURE_INVALID.name());
-      dropSponsorReservedSlot(sponsorNonce, ExecutionFailureReason.SIGNATURE_INVALID.name());
-      cancelEip7702IntentAndCascade(
-          intent,
+      failEip7702SigningAndCancel(
+          intent.getPublicId(),
+          sponsorNonce,
+          ExecutionFailureReason.SIGNATURE_INVALID.name(),
           ExecutionFailureReason.SIGNATURE_INVALID,
           ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED,
           SPONSOR_SIGNATURE_INVALID);
@@ -310,20 +273,12 @@ public class TransactionalExecuteExecutionIntentDelegate
       throw e;
     }
 
-    executionTransactionGatewayPort.markSigned(
-        created.transactionId(),
-        sponsorNonce.nonce(),
-        signedPayload.rawTx(),
-        signedPayload.txHash());
-    markSponsorSlotSigned(sponsorNonce, signedPayload.txHash());
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.AUTHORIZATION,
-        null,
-        java.util.Map.of("mode", intent.getMode().name()));
-    ExecutionIntent signedIntent =
-        executionIntentPersistencePort.update(
-            intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    Eip7702SignedSubmission signedSubmission =
+        persistEip7702SignedIntent(intent.getPublicId(), sponsorNonce, signedPayload);
+    ExecutionIntent signedIntent = signedSubmission.intent();
+    if (!signedSubmission.signedNow()) {
+      return toResult(signedIntent, loadTransaction(created.transactionId()));
+    }
     scheduleBroadcastAfterCommit(
         signedIntent,
         created.transactionId(),
@@ -359,52 +314,17 @@ public class TransactionalExecuteExecutionIntentDelegate
     BigInteger currentPendingNonce =
         executionEip7702GatewayPort.loadPendingAccountNonce(decoded.signerAddress());
     if (currentPendingNonce.longValueExact() != intent.getUnsignedTxSnapshot().expectedNonce()) {
-      ExecutionIntent staleIntent =
-          executionIntentPersistencePort.update(
-              intent.markNonceStale(
-                  ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
-                  ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
-                  LocalDateTime.now(appClock)));
-      publishTerminated(
-          staleIntent,
-          ExecutionIntentStatus.NONCE_STALE,
-          ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name());
+      markNonceStale(intent, ErrorCode.NONCE_STALE_RECREATE_REQUIRED);
       throw new ExecutionIntentTerminalException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
     }
 
-    ExecutionTransactionGatewayPort.TransactionRecord created =
-        executionTransactionGatewayPort.createAndFlush(
-            new ExecutionTransactionGatewayPort.CreateTransactionCommand(
-                intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo(),
-                actionPlan.referenceType(),
-                intent.getResourceId(),
-                intent.getRequesterUserId(),
-                intent.getCounterpartyUserId(),
-                decoded.signerAddress(),
-                intent.getUnsignedTxSnapshot().toAddress(),
-                actionPlan.amountWei(),
-                intent.getUnsignedTxSnapshot().chainId(),
-                intent.getUnsignedTxSnapshot().expectedNonce(),
-                ExecutionTransactionStatus.CREATED,
-                ExecutionTransactionType.EIP1559,
-                null,
-                null,
-                null,
-                null));
-
-    executionTransactionGatewayPort.markSigned(
-        created.transactionId(),
-        intent.getUnsignedTxSnapshot().expectedNonce(),
-        decoded.rawTransaction(),
-        decoded.txHash());
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.SIGN,
-        null,
-        java.util.Map.of("mode", intent.getMode().name()));
-    ExecutionIntent signedIntent =
-        executionIntentPersistencePort.update(
-            intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    SignedSubmission signedSubmission =
+        persistEip1559SignedIntent(intent.getPublicId(), actionPlan, decoded);
+    ExecutionTransactionGatewayPort.TransactionRecord created = signedSubmission.transaction();
+    ExecutionIntent signedIntent = signedSubmission.intent();
+    if (created == null || signedIntent.getStatus() != ExecutionIntentStatus.SIGNED) {
+      return toResult(signedIntent, created);
+    }
     scheduleBroadcastAfterCommit(
         signedIntent,
         created.transactionId(),
@@ -453,6 +373,28 @@ public class TransactionalExecuteExecutionIntentDelegate
   }
 
   private void persistBroadcastOutcome(
+      String executionIntentId,
+      Long transactionId,
+      String fallbackTxHash,
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan,
+      boolean consumeSponsorExposureOnSuccess,
+      SponsorNonceContext sponsorNonceContext) {
+    transactionPort.requiresNew(
+        () ->
+            persistBroadcastOutcomeInTransaction(
+                executionIntentId,
+                transactionId,
+                fallbackTxHash,
+                broadcast,
+                actionHandler,
+                actionPlan,
+                consumeSponsorExposureOnSuccess,
+                sponsorNonceContext));
+  }
+
+  private void persistBroadcastOutcomeInTransaction(
       String executionIntentId,
       Long transactionId,
       String fallbackTxHash,
@@ -517,6 +459,169 @@ public class TransactionalExecuteExecutionIntentDelegate
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     ExecutionActionHookRunner.afterTransactionSubmitted(
         runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
+  }
+
+  private Eip7702Submission reserveEip7702Submission(
+      ExecutionIntent intent, ExecutionActionPlan actionPlan, String sponsorAddress, long chainId) {
+    return transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(intent.getPublicId())
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + intent.getPublicId()));
+          if (current.getSubmittedTxId() != null) {
+            ExecutionTransactionGatewayPort.TransactionRecord transaction =
+                loadTransaction(current.getSubmittedTxId());
+            if (canResumeEip7702Signing(current, transaction)) {
+              return resumeEip7702Submission(transaction, sponsorAddress);
+            }
+            return Eip7702Submission.existing(toResult(current, transaction));
+          }
+          if (!current.getStatus().isSignable()) {
+            return Eip7702Submission.existing(toResult(current, null));
+          }
+
+          ExecutionTransactionGatewayPort.TransactionRecord created =
+              executionTransactionGatewayPort.createAndFlush(
+                  new ExecutionTransactionGatewayPort.CreateTransactionCommand(
+                      current.getRootIdempotencyKey() + ":" + current.getAttemptNo(),
+                      actionPlan.referenceType(),
+                      current.getResourceId(),
+                      current.getRequesterUserId(),
+                      current.getCounterpartyUserId(),
+                      sponsorAddress,
+                      current.getAuthorityAddress(),
+                      actionPlan.amountWei(),
+                      chainId,
+                      null,
+                      ExecutionTransactionStatus.CREATED,
+                      ExecutionTransactionType.EIP7702,
+                      current.getAuthorityAddress(),
+                      current.getAuthorityNonce(),
+                      current.getDelegateTarget(),
+                      current.getExpiresAt()));
+          SponsorNonceContext sponsorNonce =
+              reserveSponsorNonce(created.transactionId(), sponsorAddress, chainId);
+          executionIntentPersistencePort.update(
+              current.bindSubmittedTransaction(
+                  created.transactionId(), LocalDateTime.now(appClock)));
+          return Eip7702Submission.reserved(created, sponsorNonce);
+        });
+  }
+
+  private Eip7702Submission resumeEip7702Submission(
+      ExecutionTransactionGatewayPort.TransactionRecord transaction, String sponsorAddress) {
+    if (transaction.chainId() == null || transaction.nonce() == null) {
+      throw new Web3InvalidInputException("submitted sponsor transaction is not nonce-bound");
+    }
+    if (transaction.fromAddress() != null
+        && !transaction.fromAddress().equalsIgnoreCase(sponsorAddress)) {
+      throw new Web3InvalidInputException("submitted sponsor transaction sender mismatch");
+    }
+    return Eip7702Submission.reserved(
+        transaction,
+        new SponsorNonceContext(
+            transaction.chainId(),
+            sponsorAddress,
+            transaction.nonce(),
+            null,
+            transaction.transactionId()));
+  }
+
+  private Eip7702SignedSubmission persistEip7702SignedIntent(
+      String executionIntentId,
+      SponsorNonceContext sponsorNonce,
+      ExecutionEip7702GatewayPort.SignedPayload signedPayload) {
+    return transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(executionIntentId)
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + executionIntentId));
+          if (current.getStatus() == ExecutionIntentStatus.SIGNED) {
+            return new Eip7702SignedSubmission(current, false);
+          }
+          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE
+              || !sponsorNonce.transactionId().equals(current.getSubmittedTxId())) {
+            throw new Web3InvalidInputException("execution intent signing state changed");
+          }
+          executionTransactionGatewayPort.markSigned(
+              sponsorNonce.transactionId(),
+              sponsorNonce.nonce(),
+              signedPayload.rawTx(),
+              signedPayload.txHash());
+          markSponsorSlotSigned(sponsorNonce, signedPayload.txHash());
+          audit(
+              sponsorNonce.transactionId(),
+              ExecutionAuditEventType.AUTHORIZATION,
+              null,
+              java.util.Map.of("mode", current.getMode().name()));
+          ExecutionIntent signedIntent =
+              executionIntentPersistencePort.update(
+                  current.markSigned(sponsorNonce.transactionId(), LocalDateTime.now(appClock)));
+          return new Eip7702SignedSubmission(signedIntent, true);
+        });
+  }
+
+  private SignedSubmission persistEip1559SignedIntent(
+      String executionIntentId,
+      ExecutionActionPlan actionPlan,
+      Eip1559TransactionCodecPort.DecodedSignedTransaction decoded) {
+    return transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(executionIntentId)
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + executionIntentId));
+          if (current.getSubmittedTxId() != null) {
+            return new SignedSubmission(current, loadTransaction(current.getSubmittedTxId()));
+          }
+          if (!current.getStatus().isSignable()) {
+            return new SignedSubmission(current, null);
+          }
+          ExecutionTransactionGatewayPort.TransactionRecord created =
+              executionTransactionGatewayPort.createAndFlush(
+                  new ExecutionTransactionGatewayPort.CreateTransactionCommand(
+                      current.getRootIdempotencyKey() + ":" + current.getAttemptNo(),
+                      actionPlan.referenceType(),
+                      current.getResourceId(),
+                      current.getRequesterUserId(),
+                      current.getCounterpartyUserId(),
+                      decoded.signerAddress(),
+                      current.getUnsignedTxSnapshot().toAddress(),
+                      actionPlan.amountWei(),
+                      current.getUnsignedTxSnapshot().chainId(),
+                      current.getUnsignedTxSnapshot().expectedNonce(),
+                      ExecutionTransactionStatus.CREATED,
+                      ExecutionTransactionType.EIP1559,
+                      null,
+                      null,
+                      null,
+                      null));
+          executionTransactionGatewayPort.markSigned(
+              created.transactionId(),
+              current.getUnsignedTxSnapshot().expectedNonce(),
+              decoded.rawTransaction(),
+              decoded.txHash());
+          audit(
+              created.transactionId(),
+              ExecutionAuditEventType.SIGN,
+              null,
+              java.util.Map.of("mode", current.getMode().name()));
+          ExecutionIntent signedIntent =
+              executionIntentPersistencePort.update(
+                  current.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+          return new SignedSubmission(signedIntent, created);
+        });
   }
 
   private SponsorNonceContext reserveSponsorNonce(
@@ -694,6 +799,72 @@ public class TransactionalExecuteExecutionIntentDelegate
         transaction == null ? null : transaction.txHash());
   }
 
+  private boolean canResumeEip7702Signing(
+      ExecutionIntent intent, ExecutionTransactionGatewayPort.TransactionRecord transaction) {
+    return intent.getMode() == ExecutionMode.EIP7702
+        && intent.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE
+        && transaction.status() == ExecutionTransactionStatus.CREATED;
+  }
+
+  private void expireIntent(ExecutionIntent intent) {
+    transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(intent.getPublicId())
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + intent.getPublicId()));
+          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE) {
+            return;
+          }
+          ExecutionIntent expired =
+              executionIntentPersistencePort.update(
+                  current.expire(
+                      ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
+                      ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
+                      LocalDateTime.now(appClock)));
+          if (expired.getMode() == ExecutionMode.EIP7702
+              && expired.getReservedSponsorCostWei().signum() > 0) {
+            releaseSponsorExposure(
+                expired.getRequesterUserId(),
+                expired.resolveSponsorUsageDateKst(),
+                expired.getReservedSponsorCostWei());
+          }
+          publishTerminated(
+              expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
+        });
+  }
+
+  private void markNonceStale(ExecutionIntent intent, ErrorCode errorCode) {
+    transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(intent.getPublicId())
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + intent.getPublicId()));
+          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE) {
+            return;
+          }
+          ExecutionIntent staleIntent =
+              executionIntentPersistencePort.update(
+                  current.markNonceStale(
+                      errorCode.name(), errorCode.getMessage(), LocalDateTime.now(appClock)));
+          if (staleIntent.getMode() == ExecutionMode.EIP7702
+              && staleIntent.getReservedSponsorCostWei().signum() > 0) {
+            releaseSponsorExposure(
+                staleIntent.getRequesterUserId(),
+                staleIntent.resolveSponsorUsageDateKst(),
+                staleIntent.getReservedSponsorCostWei());
+          }
+          publishTerminated(staleIntent, ExecutionIntentStatus.NONCE_STALE, errorCode.name());
+        });
+  }
+
   private void audit(
       Long transactionId,
       ExecutionAuditEventType eventType,
@@ -732,32 +903,62 @@ public class TransactionalExecuteExecutionIntentDelegate
         new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 
-  /**
-   * Terminal cleanup-then-throw for EIP-7702 sponsor signing failures (KMS terminal or signature
-   * recovery). Mirrors the existing {@code expire} / {@code markNonceStale} pattern (see lines
-   * 92-108 / 174-189): writes commit because {@link ExecutionIntentTerminalException} is in {@code
-   * noRollbackFor}.
-   *
-   * <p>Always throws; the {@code throw new IllegalStateException()} after the call sites is dead
-   * code that satisfies definite-assignment for {@code signedPayload}.
-   */
-  private void cancelEip7702IntentAndCascade(
-      ExecutionIntent intent,
+  private void failEip7702SigningAndCancel(
+      String executionIntentId,
+      SponsorNonceContext sponsorNonce,
+      String transactionFailureReason,
       ExecutionFailureReason eventReason,
       ErrorCode errorCode,
       String failureReason) {
-    LocalDateTime now = LocalDateTime.now(appClock);
-    ExecutionIntent canceled =
-        executionIntentPersistencePort.update(intent.cancel(errorCode.name(), failureReason, now));
-    if (canceled.getReservedSponsorCostWei().signum() > 0) {
-      releaseSponsorExposure(
-          canceled.getRequesterUserId(),
-          canceled.resolveSponsorUsageDateKst(),
-          canceled.getReservedSponsorCostWei());
-    }
-    publishTerminated(canceled, ExecutionIntentStatus.CANCELED, eventReason.name());
+    transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(executionIntentId)
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + executionIntentId));
+          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE
+              || !sponsorNonce.transactionId().equals(current.getSubmittedTxId())) {
+            return;
+          }
+          markCreatedTransactionTerminal(sponsorNonce.transactionId(), transactionFailureReason);
+          dropSponsorReservedSlot(sponsorNonce, transactionFailureReason);
+          ExecutionIntent canceled =
+              executionIntentPersistencePort.update(
+                  current.cancel(errorCode.name(), failureReason, LocalDateTime.now(appClock)));
+          if (canceled.getReservedSponsorCostWei().signum() > 0) {
+            releaseSponsorExposure(
+                canceled.getRequesterUserId(),
+                canceled.resolveSponsorUsageDateKst(),
+                canceled.getReservedSponsorCostWei());
+          }
+          publishTerminated(canceled, ExecutionIntentStatus.CANCELED, eventReason.name());
+        });
     throw new ExecutionIntentTerminalException(errorCode, false);
   }
+
+  private record Eip7702Submission(
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      SponsorNonceContext sponsorNonce,
+      ExecuteExecutionIntentResult existingResult) {
+
+    static Eip7702Submission reserved(
+        ExecutionTransactionGatewayPort.TransactionRecord transaction,
+        SponsorNonceContext sponsorNonce) {
+      return new Eip7702Submission(transaction, sponsorNonce, null);
+    }
+
+    static Eip7702Submission existing(ExecuteExecutionIntentResult result) {
+      return new Eip7702Submission(null, null, result);
+    }
+  }
+
+  private record SignedSubmission(
+      ExecutionIntent intent, ExecutionTransactionGatewayPort.TransactionRecord transaction) {}
+
+  private record Eip7702SignedSubmission(ExecutionIntent intent, boolean signedNow) {}
 
   private record SponsorNonceContext(
       long chainId, String fromAddress, long nonce, Long attemptId, Long transactionId) {}

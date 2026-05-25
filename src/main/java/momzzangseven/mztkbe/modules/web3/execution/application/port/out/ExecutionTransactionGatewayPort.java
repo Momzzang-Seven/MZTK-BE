@@ -39,7 +39,18 @@ public interface ExecutionTransactionGatewayPort {
 
   record BroadcastResult(boolean success, String txHash, String failureReason, String rpcAlias) {}
 
-  record TransactionRecord(Long transactionId, ExecutionTransactionStatus status, String txHash) {}
+  record TransactionRecord(
+      Long transactionId,
+      ExecutionTransactionStatus status,
+      String txHash,
+      Long chainId,
+      String fromAddress,
+      Long nonce) {
+
+    public TransactionRecord(Long transactionId, ExecutionTransactionStatus status, String txHash) {
+      this(transactionId, status, txHash, null, null, null);
+    }
+  }
 
   record SponsorNonceSnapshot(
       long chainPendingNonce,

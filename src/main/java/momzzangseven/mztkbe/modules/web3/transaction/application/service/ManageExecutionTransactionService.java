@@ -166,6 +166,9 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
     return new ExecutionTransactionRecordResult(
         transaction.getId(),
         TransactionStatus.valueOf(transaction.getStatus().name()),
-        transaction.getTxHash());
+        transaction.getTxHash(),
+        transaction.getChainId(),
+        transaction.getFromAddress(),
+        transaction.getNonce());
   }
 }

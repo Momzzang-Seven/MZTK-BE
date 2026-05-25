@@ -1,7 +1,7 @@
 -- MOM-458: sponsor nonce slot/window persistence.
 
 ALTER TABLE web3_transactions
-    ADD COLUMN IF NOT EXISTS chain_id BIGINT NOT NULL DEFAULT 84532;
+    ADD COLUMN IF NOT EXISTS chain_id BIGINT NOT NULL DEFAULT ${web3ChainId};
 
 DROP INDEX IF EXISTS uk_web3_tx_sender_nonce;
 

@@ -301,7 +301,8 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).scheduleRetry(1L, DEFAULT_REASON, null);
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code(), null);
   }
 
   @Test

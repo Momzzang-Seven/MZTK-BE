@@ -184,6 +184,24 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Binds a created transaction while sponsor signing is still pending. */
+  public ExecutionIntent bindSubmittedTransaction(Long nextSubmittedTxId, LocalDateTime now) {
+    requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    requireSubmittedTxId(nextSubmittedTxId);
+    requireNow(now);
+    return toBuilder().submittedTxId(nextSubmittedTxId).updatedAt(now).build();
+  }
+
+  /** Binds a created transaction and the nonce-fixed EIP-1559 snapshot before signing. */
+  public ExecutionIntent bindSubmittedTransactionAndUnsignedSnapshot(
+      Long nextSubmittedTxId,
+      UnsignedTxSnapshot nextUnsignedTxSnapshot,
+      String nextUnsignedTxFingerprint,
+      LocalDateTime now) {
+    return rebindUnsignedTxSnapshot(nextUnsignedTxSnapshot, nextUnsignedTxFingerprint)
+        .bindSubmittedTransaction(nextSubmittedTxId, now);
+  }
+
   /** Rebinds the stored EIP-1559 snapshot when the nonce is fixed at execution time. */
   public ExecutionIntent rebindUnsignedTxSnapshot(
       UnsignedTxSnapshot nextUnsignedTxSnapshot, String nextUnsignedTxFingerprint) {

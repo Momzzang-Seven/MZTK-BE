@@ -32,6 +32,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSpon
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionHookTransactionPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
@@ -258,6 +259,7 @@ public class ExecutionIntentServiceConfig {
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
       RunAfterCommitPort runAfterCommitPort,
+      RunExecutionTransactionPort runExecutionTransactionPort,
       Clock appClock) {
     return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -270,6 +272,7 @@ public class ExecutionIntentServiceConfig {
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
         runAfterCommitPort,
+        runExecutionTransactionPort,
         appClock);
   }
 
@@ -351,6 +354,19 @@ public class ExecutionIntentServiceConfig {
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
     transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     return action -> transactionTemplate.executeWithoutResult(status -> action.run());
+  }
+
+  @Bean
+  RunExecutionTransactionPort runExecutionTransactionPort(
+      PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    return new RunExecutionTransactionPort() {
+      @Override
+      public <T> T requiresNew(java.util.function.Supplier<T> action) {
+        return transactionTemplate.execute(status -> action.get());
+      }
+    };
   }
 
   @Bean

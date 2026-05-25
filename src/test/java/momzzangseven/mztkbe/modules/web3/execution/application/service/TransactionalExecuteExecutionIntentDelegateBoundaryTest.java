@@ -25,7 +25,6 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActi
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
@@ -35,6 +34,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -52,29 +52,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.aop.framework.ProxyFactory;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
-import org.springframework.transaction.interceptor.TransactionInterceptor;
-import org.springframework.transaction.support.AbstractPlatformTransactionManager;
-import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Runtime verification of {@link TransactionalExecuteExecutionIntentDelegate}'s
- * {@code @Transactional(noRollbackFor = ExecutionIntentTerminalException.class)} boundary
- * semantics.
+ * Runtime verification of {@link TransactionalExecuteExecutionIntentDelegate}'s explicit
+ * transaction-boundary semantics.
  *
- * <p>Recovers the assertions previously held by {@code
- * ExecuteExecutionIntentTransactionBoundaryTest} (which targeted the now-removed {@code
- * TransactionTemplate}-wrapper pattern). Wraps the delegate in a Spring AOP proxy backed by a
- * recording {@link AbstractPlatformTransactionManager} so we observe commit / rollback decisions
- * without needing a Spring context.
- *
- * <p>The MOM-397 invariant under test: terminal {@link ExecutionIntentTerminalException} commits
- * the upstream EXPIRED / NONCE_STALE state transition before the exception surfaces to the client,
- * and ordinary validation exceptions roll back unconditionally.
+ * <p>The MOM-397 invariant under test: terminal {@link ExecutionIntentTerminalException} persists
+ * the upstream EXPIRED / NONCE_STALE state transition before the exception surfaces to the client.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("TransactionalExecuteExecutionIntentDelegate transaction-boundary tests")
@@ -101,10 +87,12 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private final RunAfterCommitPort runAfterCommitPort = new TestRunAfterCommitPort();
+  private RecordingRunExecutionTransactionPort transactionPort;
   private TransactionalExecuteExecutionIntentDelegate rawDelegate;
 
   @BeforeEach
   void setUp() {
+    transactionPort = new RecordingRunExecutionTransactionPort();
     rawDelegate =
         new TransactionalExecuteExecutionIntentDelegate(
             executionIntentPersistencePort,
@@ -117,6 +105,7 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
             List.of(executionActionHandlerPort),
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
+            transactionPort,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
@@ -140,10 +129,10 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
   @Test
   @DisplayName("terminal 예외(EXPIRED)는 상태 변경을 커밋한 뒤 다시 던진다 — MOM-397 invariant")
   void terminalException_commitsStateBeforeRethrow() {
-    RecordingTransactionManager tm = new RecordingTransactionManager();
-    ExecuteTransactionalExecutionIntentDelegatePort proxied = wrapWithTransactionProxy(tm);
     ExecutionIntent expired =
         existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.minusSeconds(1)).build();
+    when(executionIntentPersistencePort.findByPublicId("intent-1"))
+        .thenReturn(Optional.of(expired));
     when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
         .thenReturn(Optional.of(expired));
     when(executionIntentPersistencePort.update(any()))
@@ -151,43 +140,37 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
 
     assertThatThrownBy(
             () ->
-                proxied.execute(
+                rawDelegate.execute(
                     new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
                     sponsorGate()))
         .isInstanceOf(ExecutionIntentTerminalException.class);
 
-    assertThat(tm.commits)
-        .as("noRollbackFor=ExecutionIntentTerminalException — EXPIRED state must be committed")
+    assertThat(transactionPort.commits)
+        .as("EXPIRED state transition must be committed before terminal exception is surfaced")
         .isEqualTo(1);
-    assertThat(tm.rollbacks).isZero();
+    assertThat(transactionPort.rollbacks).isZero();
   }
 
   @Test
-  @DisplayName("validation 예외(intent not found)는 커밋하지 않고 롤백한다")
-  void validationException_rollsBack() {
-    RecordingTransactionManager tm = new RecordingTransactionManager();
-    ExecuteTransactionalExecutionIntentDelegatePort proxied = wrapWithTransactionProxy(tm);
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("missing-intent"))
+  @DisplayName("validation 예외(intent not found)는 상태 트랜잭션을 열지 않는다")
+  void validationException_doesNotOpenStateTransaction() {
+    when(executionIntentPersistencePort.findByPublicId("missing-intent"))
         .thenReturn(Optional.empty());
 
     assertThatThrownBy(
             () ->
-                proxied.execute(
+                rawDelegate.execute(
                     new ExecuteExecutionIntentCommand(7L, "missing-intent", null, null, "0xsigned"),
                     sponsorGate()))
         .isInstanceOf(Web3InvalidInputException.class);
 
-    assertThat(tm.commits).isZero();
-    assertThat(tm.rollbacks)
-        .as("Generic Web3InvalidInputException must roll back; only terminal is whitelisted")
-        .isEqualTo(1);
+    assertThat(transactionPort.commits).isZero();
+    assertThat(transactionPort.rollbacks).isZero();
   }
 
   @Test
   @DisplayName("broadcast 이후 afterSubmitted 훅 실패는 제출 상태 커밋을 롤백하지 않는다")
   void afterSubmittedHookFailure_doesNotRollBackBroadcastState() {
-    RecordingTransactionManager tm = new RecordingTransactionManager();
-    ExecuteTransactionalExecutionIntentDelegatePort proxied = wrapWithTransactionProxy(tm);
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.plusMinutes(5)).build();
     Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
@@ -217,27 +200,17 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
         .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
 
     var result =
-        proxied.execute(
+        rawDelegate.execute(
             new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
             sponsorGate());
 
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
     assertThat(result.transactionId()).isEqualTo(202L);
-    assertThat(tm.commits).isEqualTo(1);
-    assertThat(tm.rollbacks).isZero();
+    assertThat(transactionPort.commits).isEqualTo(2);
+    assertThat(transactionPort.rollbacks).isZero();
     verify(executionTransactionGatewayPort).markPending(202L, "0xhash");
     verify(executionActionHandlerPort)
         .afterTransactionSubmitted(any(), any(), eq(ExecutionTransactionStatus.PENDING));
-  }
-
-  private ExecuteTransactionalExecutionIntentDelegatePort wrapWithTransactionProxy(
-      AbstractPlatformTransactionManager tm) {
-    TransactionInterceptor interceptor =
-        new TransactionInterceptor(tm, new AnnotationTransactionAttributeSource());
-    ProxyFactory proxyFactory = new ProxyFactory(rawDelegate);
-    proxyFactory.addAdvice(interceptor);
-    proxyFactory.setProxyTargetClass(false);
-    return (ExecuteTransactionalExecutionIntentDelegatePort) proxyFactory.getProxy();
   }
 
   private SponsorWalletGate sponsorGate() {
@@ -249,6 +222,8 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
 
   private void stubFindAndTrackUpdates(ExecutionIntent initial) {
     AtomicReference<ExecutionIntent> latest = new AtomicReference<>(initial);
+    when(executionIntentPersistencePort.findByPublicId(initial.getPublicId()))
+        .thenAnswer(invocation -> Optional.of(latest.get()));
     when(executionIntentPersistencePort.findByPublicIdForUpdate(initial.getPublicId()))
         .thenAnswer(invocation -> Optional.of(latest.get()));
     when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
@@ -295,29 +270,21 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
         FIXED_NOW);
   }
 
-  private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+  private static class RecordingRunExecutionTransactionPort implements RunExecutionTransactionPort {
 
     int commits;
     int rollbacks;
 
     @Override
-    protected Object doGetTransaction() {
-      return new Object();
-    }
-
-    @Override
-    protected void doBegin(Object transaction, TransactionDefinition definition) {
-      // No DB resources are needed; the test only observes commit/rollback decisions.
-    }
-
-    @Override
-    protected void doCommit(DefaultTransactionStatus status) {
-      commits++;
-    }
-
-    @Override
-    protected void doRollback(DefaultTransactionStatus status) {
-      rollbacks++;
+    public <T> T requiresNew(java.util.function.Supplier<T> action) {
+      try {
+        T result = action.get();
+        commits++;
+        return result;
+      } catch (RuntimeException e) {
+        rollbacks++;
+        throw e;
+      }
     }
   }
 
