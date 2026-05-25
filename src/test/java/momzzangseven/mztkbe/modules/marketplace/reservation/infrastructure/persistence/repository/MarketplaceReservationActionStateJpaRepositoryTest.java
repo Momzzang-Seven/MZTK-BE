@@ -148,6 +148,7 @@ class MarketplaceReservationActionStateJpaRepositoryTest {
                 .fromAddress("0x" + "1".repeat(40))
                 .toAddress("0x" + "2".repeat(40))
                 .amountWei(BigInteger.ONE)
+                .chainId(84532L)
                 .txType(Web3TxType.EIP1559)
                 .status(status)
                 .txHash("0x" + "a".repeat(64))

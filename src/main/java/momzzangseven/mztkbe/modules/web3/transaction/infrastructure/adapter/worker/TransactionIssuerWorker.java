@@ -269,6 +269,17 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
 
+    if (!isReservationStillOwnedByTransaction(item, signer.walletAddress(), nonceReservation)) {
+      log.warn(
+          "sponsor nonce reservation changed after signing: txId={}, nonce={}, attemptId={}",
+          item.transactionId(),
+          nonceReservation.nonce(),
+          nonceReservation.attemptId());
+      failPrevalidate(
+          item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), false);
+      return;
+    }
+
     updateTransactionPort.markSigned(item.transactionId(), nonce, signed.rawTx(), signed.txHash());
     markSlotSigned(item, signer.walletAddress(), nonceReservation, signed);
     Map<String, Object> signDetail = new SignAuditDetail(nonce, signed.txHash()).toMap();
@@ -391,6 +402,22 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         && slot.activeAttemptId() != null
         && transactionId != null
         && transactionId.equals(slot.activeTxId());
+  }
+
+  private boolean isReservationStillOwnedByTransaction(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String treasuryAddress,
+      NonceReservation nonceReservation) {
+    SponsorNonceSlotView slot =
+        nonceSlotLifecycleUseCase
+            .loadSlotsForReview(web3CoreProperties.getChainId(), treasuryAddress)
+            .stream()
+            .filter(candidate -> candidate.nonce() == nonceReservation.nonce())
+            .findFirst()
+            .orElse(null);
+    return isActiveReservationOwnedByTransaction(slot, item.transactionId())
+        && nonceReservation.attemptId() != null
+        && nonceReservation.attemptId().equals(slot.activeAttemptId());
   }
 
   private void handleUnreservedNonceDecision(

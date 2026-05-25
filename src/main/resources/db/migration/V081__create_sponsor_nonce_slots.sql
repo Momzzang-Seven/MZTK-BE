@@ -3,6 +3,10 @@
 ALTER TABLE web3_transactions
     ADD COLUMN IF NOT EXISTS chain_id BIGINT NOT NULL DEFAULT 84532;
 
+DROP INDEX IF EXISTS uk_web3_tx_sender_nonce;
+
+DROP INDEX IF EXISTS uk_web3_tx_eip7702_authority_nonce;
+
 UPDATE web3_transactions
 SET from_address = LOWER(from_address),
     to_address = LOWER(to_address),
@@ -13,13 +17,9 @@ WHERE from_address <> LOWER(from_address)
    OR (authority_address IS NOT NULL AND authority_address <> LOWER(authority_address))
    OR (delegate_target IS NOT NULL AND delegate_target <> LOWER(delegate_target));
 
-DROP INDEX IF EXISTS uk_web3_tx_sender_nonce;
-
 CREATE INDEX IF NOT EXISTS idx_web3_tx_sender_nonce
     ON web3_transactions(chain_id, from_address, nonce)
     WHERE nonce IS NOT NULL;
-
-DROP INDEX IF EXISTS uk_web3_tx_eip7702_authority_nonce;
 
 CREATE INDEX IF NOT EXISTS idx_web3_tx_eip7702_authority_nonce
     ON web3_transactions(authority_address, authorization_nonce)

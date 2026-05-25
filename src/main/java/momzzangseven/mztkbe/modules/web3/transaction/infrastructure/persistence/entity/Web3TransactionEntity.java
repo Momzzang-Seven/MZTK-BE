@@ -137,7 +137,7 @@ public class Web3TransactionEntity {
       txType = Web3TxType.EIP1559;
     }
     if (chainId == null) {
-      chainId = 84532L;
+      throw new IllegalStateException("chainId is required");
     }
     if (createdAt == null) {
       createdAt = now;

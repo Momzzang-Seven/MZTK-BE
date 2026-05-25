@@ -94,6 +94,7 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
                 .fromAddress(command.fromAddress())
                 .toAddress(command.toAddress())
                 .amountWei(command.amountWei())
+                .chainId(command.chainId())
                 .nonce(command.nonce())
                 .status(Web3TxStatus.valueOf(command.status().name()))
                 .txType(Web3TxType.valueOf(command.txType().name()))

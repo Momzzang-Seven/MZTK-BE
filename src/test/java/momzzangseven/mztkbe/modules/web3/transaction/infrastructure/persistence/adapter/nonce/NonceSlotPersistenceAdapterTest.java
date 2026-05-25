@@ -97,6 +97,11 @@ class NonceSlotPersistenceAdapterTest {
     verify(slotRepository).saveAndFlush(slotCaptor.capture());
     assertThat(slotCaptor.getValue().getStatus()).isEqualTo(SponsorNonceSlotStatus.RESERVED);
     assertThat(slotCaptor.getValue().getActiveAttemptId()).isEqualTo(100L);
+    assertThat(slotCaptor.getValue().getFromAddress()).isEqualTo(SPONSOR);
+    ArgumentCaptor<NonceSlotAttemptEntity> attemptCaptor =
+        ArgumentCaptor.forClass(NonceSlotAttemptEntity.class);
+    verify(attemptRepository).saveAndFlush(attemptCaptor.capture());
+    assertThat(attemptCaptor.getValue().getFromAddress()).isEqualTo(SPONSOR);
   }
 
   @Test
@@ -137,6 +142,21 @@ class NonceSlotPersistenceAdapterTest {
             CHAIN_ID, SPONSOR, 51L, 10L, "intent:sponsor:51:attempt:1", NOW));
 
     assertThat(transaction.getNonce()).isEqualTo(51L);
+  }
+
+  @Test
+  void reserve_rejectsTransactionThatAlreadyLeftCreatedEvenWhenNonceMatches() {
+    Web3TransactionEntity transaction = transaction(10L, 51L);
+    transaction.setStatus(Web3TxStatus.SIGNED);
+    when(transactionRepository.findById(10L)).thenReturn(Optional.of(transaction));
+
+    assertThatThrownBy(
+            () ->
+                adapter.reserve(
+                    new ReserveSponsorNonceSlotCommand(
+                        CHAIN_ID, SPONSOR, 51L, 10L, "intent:sponsor:51:attempt:1", NOW)))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("CREATED status");
   }
 
   @Test

@@ -657,6 +657,9 @@ class TransactionIssuerWorkerTest {
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
     stubSponsorNonceReservation(33L, 1L, 1001L);
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(
+            web3CoreProperties.getChainId(), TREASURY_ADDRESS))
+        .thenReturn(List.of(slotView(33L, SponsorNonceSlotStatus.RESERVED, 1001L, 1L)));
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
@@ -680,6 +683,45 @@ class TransactionIssuerWorkerTest {
             SponsorNonceSlotStatus.BROADCASTING,
             SponsorNonceSlotStatus.BROADCASTED);
     assertThat(transitions).allMatch(transition -> transition.getActiveAttemptId().equals(1001L));
+  }
+
+  @Test
+  void processBatch_reservationChangedAfterSign_marksStaleWithoutPersistingSignedRawTx() {
+    long chainId = web3CoreProperties.getChainId();
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(loadSponsorChainNoncePort.loadSnapshot(chainId, TREASURY_ADDRESS))
+        .thenReturn(
+            new LoadSponsorChainNoncePort.SponsorChainNonceSnapshot(33, 33, 33L, 33L, 33L, 33L));
+    when(coordinateSponsorNonceUseCase.execute(any(SponsorNonceCoordinationCommand.class)))
+        .thenReturn(
+            new SponsorNonceCoordinationResult(
+                SponsorNonceDecision.issue(33L),
+                new SponsorNonceSlotReservation(
+                    chainId,
+                    TREASURY_ADDRESS,
+                    33L,
+                    1,
+                    1001L,
+                    1L,
+                    SponsorNonceSlotStatus.RESERVED)));
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(chainId, TREASURY_ADDRESS))
+        .thenReturn(List.of(slotView(33L, SponsorNonceSlotStatus.DROPPED, null, null)));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    verify(nonceSlotLifecycleUseCase, never())
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
   }
 
   @Test

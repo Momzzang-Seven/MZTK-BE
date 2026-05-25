@@ -93,20 +93,20 @@ public class NonceSlotPersistenceAdapter
   @Override
   @Transactional
   public SponsorNonceSlotReservation reserve(ReserveSponsorNonceSlotCommand command) {
+    String normalizedAddress = EvmAddress.of(command.fromAddress()).value();
     Web3TransactionEntity transaction = loadTransaction(command.transactionId());
-    validateTransactionScope(
-        transaction, command.chainId(), command.fromAddress(), command.nonce());
+    validateTransactionScope(transaction, command.chainId(), normalizedAddress, command.nonce());
 
     NonceSlotEntity slot =
         slotRepository
-            .findByScopeForUpdate(command.chainId(), command.fromAddress(), command.nonce())
+            .findByScopeForUpdate(command.chainId(), normalizedAddress, command.nonce())
             .orElse(null);
     if (slot != null && slot.getStatus() != SponsorNonceSlotStatus.DROPPED) {
       throw new Web3TransactionStateInvalidException(
           "nonce slot is already active: chainId="
               + command.chainId()
               + ", fromAddress="
-              + command.fromAddress()
+              + normalizedAddress
               + ", nonce="
               + command.nonce()
               + ", status="
@@ -116,7 +116,7 @@ public class NonceSlotPersistenceAdapter
     int attemptNo =
         attemptRepository
                 .findTopByChainIdAndFromAddressAndNonceOrderByAttemptNoDesc(
-                    command.chainId(), command.fromAddress(), command.nonce())
+                    command.chainId(), normalizedAddress, command.nonce())
                 .map(NonceSlotAttemptEntity::getAttemptNo)
                 .orElse(0)
             + 1;
@@ -125,7 +125,7 @@ public class NonceSlotPersistenceAdapter
         attemptRepository.saveAndFlush(
             NonceSlotAttemptEntity.builder()
                 .chainId(command.chainId())
-                .fromAddress(command.fromAddress())
+                .fromAddress(normalizedAddress)
                 .nonce(command.nonce())
                 .attemptNo(attemptNo)
                 .txId(command.transactionId())
@@ -138,7 +138,7 @@ public class NonceSlotPersistenceAdapter
     NonceSlotEntity savedSlot =
         slotRepository.saveAndFlush(
             slot == null
-                ? newReservedSlot(command, attemptNo, attempt.getId())
+                ? newReservedSlot(command, normalizedAddress, attemptNo, attempt.getId())
                 : reactivateDroppedSlot(slot, command, attemptNo, attempt.getId()));
     return new SponsorNonceSlotReservation(
         savedSlot.getChainId(),
@@ -183,13 +183,11 @@ public class NonceSlotPersistenceAdapter
   @Override
   @Transactional
   public SponsorNonceEvidenceView record(RecordSponsorNonceEvidenceCommand command) {
+    String normalizedAddress = EvmAddress.of(command.fromAddress()).value();
     if (command.relatedEvidenceId() != null) {
       evidenceRepository
           .findByIdAndChainIdAndFromAddressAndNonce(
-              command.relatedEvidenceId(),
-              command.chainId(),
-              command.fromAddress(),
-              command.nonce())
+              command.relatedEvidenceId(), command.chainId(), normalizedAddress, command.nonce())
           .orElseThrow(
               () ->
                   new Web3TransactionStateInvalidException(
@@ -199,7 +197,7 @@ public class NonceSlotPersistenceAdapter
         evidenceRepository.saveAndFlush(
             NonceSlotEvidenceEntity.builder()
                 .chainId(command.chainId())
-                .fromAddress(command.fromAddress())
+                .fromAddress(normalizedAddress)
                 .nonce(command.nonce())
                 .evidenceType(command.evidenceType())
                 .evidenceSource(command.source())
@@ -215,18 +213,22 @@ public class NonceSlotPersistenceAdapter
   @Override
   @Transactional(readOnly = true)
   public boolean verifyUnbroadcastable(VerifyUnbroadcastableAttemptCommand command) {
+    String normalizedAddress = EvmAddress.of(command.fromAddress()).value();
     return attemptRepository
         .findByIdAndChainIdAndFromAddressAndNonce(
-            command.attemptId(), command.chainId(), command.fromAddress(), command.nonce())
+            command.attemptId(), command.chainId(), normalizedAddress, command.nonce())
         .map(attempt -> isUnbroadcastable(attempt, command.now()))
         .orElse(false);
   }
 
   private NonceSlotEntity newReservedSlot(
-      ReserveSponsorNonceSlotCommand command, int attemptNo, Long attemptId) {
+      ReserveSponsorNonceSlotCommand command,
+      String normalizedAddress,
+      int attemptNo,
+      Long attemptId) {
     return NonceSlotEntity.builder()
         .chainId(command.chainId())
-        .fromAddress(command.fromAddress())
+        .fromAddress(normalizedAddress)
         .nonce(command.nonce())
         .status(SponsorNonceSlotStatus.RESERVED)
         .attemptNo(attemptNo)
@@ -665,6 +667,10 @@ public class NonceSlotPersistenceAdapter
       Web3TransactionEntity transaction, long chainId, String fromAddress, long nonce) {
     if (!Long.valueOf(chainId).equals(transaction.getChainId())) {
       throw new Web3TransactionStateInvalidException("slot transaction chainId mismatch");
+    }
+    if (transaction.getStatus() != Web3TxStatus.CREATED) {
+      throw new Web3TransactionStateInvalidException(
+          "slot transaction can only reserve nonce in CREATED status");
     }
     if (!fromAddress.equals(EvmAddress.of(transaction.getFromAddress()).value())) {
       throw new Web3TransactionStateInvalidException("slot transaction sender mismatch");

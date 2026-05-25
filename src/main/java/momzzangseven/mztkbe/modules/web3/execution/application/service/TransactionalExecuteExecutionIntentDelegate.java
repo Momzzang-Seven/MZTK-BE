@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
@@ -220,6 +221,7 @@ public class TransactionalExecuteExecutionIntentDelegate
             calls, intent.getPublicId(), deadlineEpochSeconds, command.submitSignature());
 
     // Estimate gas, load fee plan via eip7702 module
+    long chainId = loadExecutionChainIdPort.loadChainId();
     BigInteger estimatedGas =
         executionEip7702GatewayPort.estimateGasWithAuthorization(
             sponsorAddress,
@@ -239,6 +241,7 @@ public class TransactionalExecuteExecutionIntentDelegate
                 sponsorAddress,
                 intent.getAuthorityAddress(),
                 actionPlan.amountWei(),
+                chainId,
                 null,
                 ExecutionTransactionStatus.CREATED,
                 ExecutionTransactionType.EIP7702,
@@ -247,7 +250,8 @@ public class TransactionalExecuteExecutionIntentDelegate
                 intent.getDelegateTarget(),
                 intent.getExpiresAt()));
 
-    SponsorNonceContext sponsorNonce = reserveSponsorNonce(created.transactionId(), sponsorAddress);
+    SponsorNonceContext sponsorNonce =
+        reserveSponsorNonce(created.transactionId(), sponsorAddress, chainId);
 
     // Make the signature. KMS sign errors are split into transient (rollback for user retry)
     // vs terminal (cancel + cascade event for QnA escrow refund), mirroring the EIP-1559
@@ -258,7 +262,7 @@ public class TransactionalExecuteExecutionIntentDelegate
       signedPayload =
           executionEip7702GatewayPort.signAndEncode(
               new ExecutionEip7702GatewayPort.SignCommand(
-                  loadExecutionChainIdPort.loadChainId(),
+                  chainId,
                   BigInteger.valueOf(sponsorNonce.nonce()),
                   feePlan.maxPriorityFeePerGas(),
                   feePlan.maxFeePerGas(),
@@ -379,6 +383,7 @@ public class TransactionalExecuteExecutionIntentDelegate
                 decoded.signerAddress(),
                 intent.getUnsignedTxSnapshot().toAddress(),
                 actionPlan.amountWei(),
+                intent.getUnsignedTxSnapshot().chainId(),
                 intent.getUnsignedTxSnapshot().expectedNonce(),
                 ExecutionTransactionStatus.CREATED,
                 ExecutionTransactionType.EIP1559,
@@ -514,8 +519,8 @@ public class TransactionalExecuteExecutionIntentDelegate
         runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
   }
 
-  private SponsorNonceContext reserveSponsorNonce(Long transactionId, String sponsorAddress) {
-    long chainId = loadExecutionChainIdPort.loadChainId();
+  private SponsorNonceContext reserveSponsorNonce(
+      Long transactionId, String sponsorAddress, long chainId) {
     ExecutionTransactionGatewayPort.SponsorNonceSnapshot snapshot =
         executionTransactionGatewayPort.loadSponsorNonceSnapshot(chainId, sponsorAddress);
     ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination =
@@ -534,14 +539,26 @@ public class TransactionalExecuteExecutionIntentDelegate
                 null,
                 LocalDateTime.now(appClock)));
     if (!coordination.reserved() || coordination.nonce() == null) {
-      throw new IllegalStateException(
-          "sponsor nonce unavailable: decision="
-              + coordination.decisionType()
-              + ", reason="
-              + coordination.reason());
+      throwSponsorNonceUnavailable(coordination);
     }
     return new SponsorNonceContext(
         chainId, sponsorAddress, coordination.nonce(), coordination.attemptId(), transactionId);
+  }
+
+  private void throwSponsorNonceUnavailable(
+      ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination) {
+    boolean retryable =
+        "WAIT_FOR_OPEN_WINDOW".equals(coordination.decisionType())
+            || "WAIT_FOR_IN_FLIGHT_SLOT".equals(coordination.decisionType())
+            || "WAIT_FOR_IN_FLIGHT_REPLACEMENT".equals(coordination.decisionType())
+            || "RPC_DISAGREEMENT".equals(coordination.decisionType());
+    throw new Web3TransferException(
+        ErrorCode.WEB3_SPONSOR_NONCE_UNAVAILABLE,
+        "sponsor nonce unavailable: decision="
+            + coordination.decisionType()
+            + ", reason="
+            + coordination.reason(),
+        retryable);
   }
 
   private void markSponsorSlotSigned(SponsorNonceContext context, String txHash) {

@@ -21,6 +21,7 @@ public class TransferTransaction {
   private final String fromAddress;
   private final String toAddress;
   private final BigInteger amountWei;
+  private final Long chainId;
   private final Long nonce;
   private final Web3TxType txType;
   private final String authorityAddress;

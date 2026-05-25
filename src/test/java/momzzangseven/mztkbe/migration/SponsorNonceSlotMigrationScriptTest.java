@@ -19,6 +19,8 @@ class SponsorNonceSlotMigrationScriptTest {
         .contains("DROP INDEX IF EXISTS uk_web3_tx_sender_nonce")
         .contains("CREATE INDEX IF NOT EXISTS idx_web3_tx_sender_nonce")
         .doesNotContain("HAVING COUNT(*) > 1");
+    assertThat(sql.indexOf("DROP INDEX IF EXISTS uk_web3_tx_sender_nonce"))
+        .isLessThan(sql.indexOf("SET from_address = LOWER(from_address)"));
   }
 
   @Test
@@ -28,5 +30,7 @@ class SponsorNonceSlotMigrationScriptTest {
     assertThat(sql)
         .contains("DROP INDEX IF EXISTS uk_web3_tx_eip7702_authority_nonce")
         .contains("CREATE INDEX IF NOT EXISTS idx_web3_tx_eip7702_authority_nonce");
+    assertThat(sql.indexOf("DROP INDEX IF EXISTS uk_web3_tx_eip7702_authority_nonce"))
+        .isLessThan(sql.indexOf("SET from_address = LOWER(from_address)"));
   }
 }

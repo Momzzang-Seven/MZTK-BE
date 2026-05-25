@@ -242,6 +242,15 @@ function upperHexAddress(address: string): string {
   return `0x${address.slice(2).toUpperCase()}`;
 }
 
+function isLocalBackendUrl(): boolean {
+  try {
+    const parsed = new URL(ENV.BACKEND_URL);
+    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function expectRecord(value: unknown, message: string): asserts value is Record<string, unknown> {
   expect(typeof value, message).toBe("object");
   expect(value, message).not.toBeNull();
@@ -292,6 +301,11 @@ test.describe("MOM-458 sponsor nonce slot admin API", () => {
     if (ENV.ADMIN_LOGIN_ID && ENV.ADMIN_PASSWORD) {
       adminAccessToken = await adminLogin(request, ENV.ADMIN_LOGIN_ID, ENV.ADMIN_PASSWORD);
     } else {
+      if (!isLocalBackendUrl()) {
+        throw new Error(
+          "ADMIN_LOGIN_ID and ADMIN_PASSWORD are required when BACKEND_URL is not local"
+        );
+      }
       seededAdmin = await setupAdmin(pool, request);
       adminAccessToken = await adminLogin(request, seededAdmin.loginId, seededAdmin.password);
     }

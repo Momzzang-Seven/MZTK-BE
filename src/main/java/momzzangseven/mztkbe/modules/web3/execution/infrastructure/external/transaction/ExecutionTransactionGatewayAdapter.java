@@ -48,6 +48,7 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
                 command.fromAddress(),
                 command.toAddress(),
                 command.amountWei(),
+                command.chainId(),
                 command.nonce(),
                 TransactionStatus.valueOf(command.status().name()),
                 TransactionType.valueOf(command.txType().name()),

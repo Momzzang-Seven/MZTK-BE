@@ -103,6 +103,7 @@ public interface ExecutionTransactionGatewayPort {
       String fromAddress,
       String toAddress,
       BigInteger amountWei,
+      Long chainId,
       Long nonce,
       ExecutionTransactionStatus status,
       ExecutionTransactionType txType,

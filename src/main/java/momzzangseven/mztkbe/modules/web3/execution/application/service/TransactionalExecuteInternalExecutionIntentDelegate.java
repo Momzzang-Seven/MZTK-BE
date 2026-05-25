@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
@@ -170,6 +171,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                 expectedSigner,
                 intent.getUnsignedTxSnapshot().toAddress(),
                 actionPlan.amountWei(),
+                intent.getUnsignedTxSnapshot().chainId(),
                 null,
                 ExecutionTransactionStatus.CREATED,
                 ExecutionTransactionType.EIP1559,
@@ -378,14 +380,26 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                 null,
                 LocalDateTime.now(appClock)));
     if (!coordination.reserved() || coordination.nonce() == null) {
-      throw new IllegalStateException(
-          "internal sponsor nonce unavailable: decision="
-              + coordination.decisionType()
-              + ", reason="
-              + coordination.reason());
+      throwSponsorNonceUnavailable(coordination);
     }
     return new SponsorNonceContext(
         chainId, sponsorAddress, coordination.nonce(), coordination.attemptId(), transactionId);
+  }
+
+  private void throwSponsorNonceUnavailable(
+      ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination) {
+    boolean retryable =
+        "WAIT_FOR_OPEN_WINDOW".equals(coordination.decisionType())
+            || "WAIT_FOR_IN_FLIGHT_SLOT".equals(coordination.decisionType())
+            || "WAIT_FOR_IN_FLIGHT_REPLACEMENT".equals(coordination.decisionType())
+            || "RPC_DISAGREEMENT".equals(coordination.decisionType());
+    throw new Web3TransferException(
+        ErrorCode.WEB3_SPONSOR_NONCE_UNAVAILABLE,
+        "internal sponsor nonce unavailable: decision="
+            + coordination.decisionType()
+            + ", reason="
+            + coordination.reason(),
+        retryable);
   }
 
   private void markSponsorSlotSigned(SponsorNonceContext context, String txHash) {
