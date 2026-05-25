@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -16,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
@@ -192,6 +194,27 @@ class TransactionReceiptWorkerTest {
                     command.getToStatus() == SponsorNonceSlotStatus.CONSUMED
                         && command.getConsumedTxId().equals(1L)));
     verify(updateTransactionPort, never()).scheduleRetry(eq(1L), anyString(), any());
+  }
+
+  @Test
+  void processBatch_receiptFoundAndSuccess_continuesWhenSlotAlreadyConsumed() {
+    String txHash = "0x" + "a".repeat(64);
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(1))));
+    when(web3ContractPort.getReceipt(txHash))
+        .thenReturn(new Web3ContractPort.ReceiptResult(txHash, true, true, "rpc-a", false, null));
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=BROADCASTED, actual=CONSUMED"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+
+    worker.processBatch(1);
+
+    verify(transactionOutcomePublisher)
+        .markSucceededAndPublish(
+            1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", 1L, 2L, txHash);
   }
 
   @Test

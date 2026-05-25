@@ -98,7 +98,8 @@ class SignedRecoveryWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.INVALID_SIGNED_TX.code(), null);
-    verifyNoInteractions(web3ContractPort, nonceSlotLifecycleUseCase);
+    verifyInvalidSignedSlotReviewTransition();
+    verifyNoInteractions(web3ContractPort);
   }
 
   @Test
@@ -111,7 +112,8 @@ class SignedRecoveryWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.INVALID_SIGNED_TX.code(), null);
-    verifyNoInteractions(web3ContractPort, nonceSlotLifecycleUseCase);
+    verifyInvalidSignedSlotReviewTransition();
+    verifyNoInteractions(web3ContractPort);
   }
 
   @Test
@@ -255,5 +257,18 @@ class SignedRecoveryWorkerTest {
         signedRawTx,
         null,
         LocalDateTime.now());
+  }
+
+  private void verifyInvalidSignedSlotReviewTransition() {
+    verify(nonceSlotLifecycleUseCase)
+        .transition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.getFromStatus() == SponsorNonceSlotStatus.SIGNED
+                        && command.getToStatus() == SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED
+                        && command.getActiveTxId().equals(1L)
+                        && command
+                            .getTerminalReason()
+                            .equals(Web3TxFailureReason.INVALID_SIGNED_TX.code())));
   }
 }

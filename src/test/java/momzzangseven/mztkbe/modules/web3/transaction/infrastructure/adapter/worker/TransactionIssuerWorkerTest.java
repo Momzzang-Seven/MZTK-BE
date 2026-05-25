@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Recor
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotReservation;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
@@ -40,6 +41,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceT
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecision;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
@@ -361,6 +363,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(5L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenThrow(new KmsSignFailedException("kms throttled"));
     when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
@@ -415,6 +418,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(12L, 1L, 1001L);
 
     software.amazon.awssdk.services.kms.model.KmsException kmsDenied =
         (software.amazon.awssdk.services.kms.model.KmsException)
@@ -431,7 +435,7 @@ class TransactionIssuerWorkerTest {
 
     RecordSponsorNonceSlotTransitionCommand transition = captureOnlySlotTransition();
     assertThat(transition.getNonce()).isEqualTo(12L);
-    assertThat(transition.getActiveAttemptId()).isNull();
+    assertThat(transition.getActiveAttemptId()).isEqualTo(1001L);
     assertThat(transition.getActiveTxId()).isEqualTo(1L);
     assertThat(transition.getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
     verify(updateTransactionPort)
@@ -475,6 +479,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(5L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenThrow(new KmsSignFailedException("kms throttled"));
     when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
@@ -553,6 +558,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(7L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
@@ -575,6 +581,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(5L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenThrow(new SignatureRecoveryException("recover mismatch"));
 
@@ -621,6 +628,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(7L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
@@ -631,7 +639,9 @@ class TransactionIssuerWorkerTest {
     verify(updateTransactionPort).markSigned(1L, 7L, "0xdeadbeef", "0x" + "d".repeat(64));
     verify(updateTransactionPort).markPending(1L, "0x" + "d".repeat(64));
     verify(updateTransactionPort, never()).assignNonce(any(), any(Long.class));
-    assertThat(captureSlotTransitions()).hasSize(3);
+    List<RecordSponsorNonceSlotTransitionCommand> transitions = captureSlotTransitions();
+    assertThat(transitions).hasSize(3);
+    assertThat(transitions).allMatch(transition -> transition.getActiveAttemptId().equals(1001L));
     verify(recordTransactionAuditPort, atLeastOnce())
         .record(any(RecordTransactionAuditPort.AuditCommand.class));
   }
@@ -682,6 +692,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(5L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
@@ -693,6 +704,52 @@ class TransactionIssuerWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.BROADCAST_FAILED.code(), retryAt);
+  }
+
+  @Test
+  void processBatch_existingNonceWithMismatchedSlot_marksStaleAndSkipsSigning() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 5L)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(
+            web3CoreProperties.getChainId(), TREASURY_ADDRESS))
+        .thenReturn(List.of(slotView(5L, SponsorNonceSlotStatus.RESERVED, 1001L, 2L)));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+    verify(web3ContractPort, never()).signTransfer(any(Web3ContractPort.SignTransferCommand.class));
+    verifyNoInteractions(loadSponsorChainNoncePort, coordinateSponsorNonceUseCase);
+  }
+
+  @Test
+  void processBatch_operatorReviewNonceDecision_marksTerminalWithoutRetryLoop() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(loadSponsorChainNoncePort.loadSnapshot(web3CoreProperties.getChainId(), TREASURY_ADDRESS))
+        .thenReturn(new LoadSponsorChainNoncePort.SponsorChainNonceSnapshot(5, 5, 5L, 5L, 5L, 5L));
+    when(coordinateSponsorNonceUseCase.execute(any(SponsorNonceCoordinationCommand.class)))
+        .thenReturn(
+            new SponsorNonceCoordinationResult(
+                SponsorNonceDecision.of(
+                    SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
+                    5L,
+                    "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED"),
+                null));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code(), null);
+    verify(web3ContractPort, never()).signTransfer(any(Web3ContractPort.SignTransferCommand.class));
   }
 
   private void stubSponsorNonceReservation(long nonce, Long transactionId, Long attemptId) {
@@ -713,6 +770,46 @@ class TransactionIssuerWorkerTest {
                     attemptId,
                     transactionId,
                     SponsorNonceSlotStatus.RESERVED)));
+  }
+
+  private void stubExistingNonceSlot(long nonce, Long transactionId, Long attemptId) {
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(
+            web3CoreProperties.getChainId(), TREASURY_ADDRESS))
+        .thenReturn(
+            List.of(slotView(nonce, SponsorNonceSlotStatus.RESERVED, attemptId, transactionId)));
+  }
+
+  private SponsorNonceSlotView slotView(
+      long nonce, SponsorNonceSlotStatus status, Long attemptId, Long transactionId) {
+    return new SponsorNonceSlotView(
+        web3CoreProperties.getChainId(),
+        TREASURY_ADDRESS,
+        nonce,
+        status,
+        1,
+        attemptId,
+        transactionId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        0,
+        LocalDateTime.now(),
+        LocalDateTime.now());
   }
 
   private RecordSponsorNonceSlotTransitionCommand captureOnlySlotTransition() {

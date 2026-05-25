@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWal
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
@@ -330,7 +331,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private NonceReservation resolveNonce(
       LoadTransactionWorkPort.TransactionWorkItem item, String treasuryAddress) {
     if (item.nonce() != null) {
-      return new NonceReservation(item.nonce(), null);
+      return resolveExistingNonceReservation(item, treasuryAddress);
     }
 
     long chainId = web3CoreProperties.getChainId();
@@ -352,10 +353,65 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
                 null,
                 LocalDateTime.now()));
     if (!result.reserved() || result.reservation() == null) {
-      retry(item.transactionId(), "SPONSOR_NONCE_" + result.decision().type().name(), item);
+      handleUnreservedNonceDecision(item, result);
       return null;
     }
     return new NonceReservation(result.reservation().nonce(), result.reservation().attemptId());
+  }
+
+  private NonceReservation resolveExistingNonceReservation(
+      LoadTransactionWorkPort.TransactionWorkItem item, String treasuryAddress) {
+    SponsorNonceSlotView slot =
+        nonceSlotLifecycleUseCase
+            .loadSlotsForReview(web3CoreProperties.getChainId(), treasuryAddress)
+            .stream()
+            .filter(candidate -> candidate.nonce() == item.nonce())
+            .findFirst()
+            .orElse(null);
+
+    if (isActiveReservationOwnedByTransaction(slot, item.transactionId())) {
+      return new NonceReservation(item.nonce(), slot.activeAttemptId());
+    }
+
+    log.warn(
+        "stale sponsor nonce reservation: txId={}, nonce={}, slotStatus={}, slotActiveTxId={}",
+        item.transactionId(),
+        item.nonce(),
+        slot == null ? null : slot.status(),
+        slot == null ? null : slot.activeTxId());
+    failPrevalidate(
+        item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), false);
+    return null;
+  }
+
+  private boolean isActiveReservationOwnedByTransaction(
+      SponsorNonceSlotView slot, Long transactionId) {
+    return slot != null
+        && slot.status() == SponsorNonceSlotStatus.RESERVED
+        && slot.activeAttemptId() != null
+        && transactionId != null
+        && transactionId.equals(slot.activeTxId());
+  }
+
+  private void handleUnreservedNonceDecision(
+      LoadTransactionWorkPort.TransactionWorkItem item, SponsorNonceCoordinationResult result) {
+    switch (result.decision().type()) {
+      case WAIT_FOR_OPEN_WINDOW, WAIT_FOR_IN_FLIGHT_SLOT, WAIT_FOR_IN_FLIGHT_REPLACEMENT ->
+          retry(
+              item.transactionId(),
+              Web3TxFailureReason.SPONSOR_NONCE_WAIT_FOR_OPEN_WINDOW.code(),
+              item);
+      case RPC_DISAGREEMENT ->
+          retry(
+              item.transactionId(),
+              Web3TxFailureReason.SPONSOR_NONCE_RPC_DISAGREEMENT.code(),
+              item);
+      default ->
+          failPrevalidate(
+              item.transactionId(),
+              Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code(),
+              false);
+    }
   }
 
   private void markSlotSigned(
@@ -427,14 +483,22 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       String fromAddress,
       NonceReservation nonceReservation,
       Web3TxFailureReason terminalReason) {
-    nonceSlotLifecycleUseCase.transition(
-        baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.RESERVED)
-            .toStatus(SponsorNonceSlotStatus.DROPPED)
-            .releasedAttemptId(nonceReservation.attemptId())
-            .releasedTxId(item.transactionId())
-            .releaseReason(terminalReason.code())
-            .build());
     updateTransactionPort.scheduleRetry(item.transactionId(), terminalReason.code(), null);
+    try {
+      nonceSlotLifecycleUseCase.transition(
+          baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.RESERVED)
+              .toStatus(SponsorNonceSlotStatus.DROPPED)
+              .releasedAttemptId(nonceReservation.attemptId())
+              .releasedTxId(item.transactionId())
+              .releaseReason(terminalReason.code())
+              .build());
+    } catch (Web3TransactionStateInvalidException e) {
+      log.warn(
+          "Failed to drop reserved sponsor nonce slot after terminal signing failure: txId={}, nonce={}",
+          item.transactionId(),
+          nonceReservation.nonce(),
+          e);
+    }
   }
 
   @Override

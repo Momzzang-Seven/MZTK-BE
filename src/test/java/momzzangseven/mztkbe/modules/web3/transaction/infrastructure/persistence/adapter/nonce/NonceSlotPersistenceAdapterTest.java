@@ -263,6 +263,30 @@ class NonceSlotPersistenceAdapterTest {
   }
 
   @Test
+  void recordTransition_rejectsStaleActiveTxOwnerBeforeMutatingSlot() {
+    NonceSlotEntity slot = slotEntity(51L, SponsorNonceSlotStatus.RESERVED, 1, 100L, 10L);
+    when(slotRepository.findByScopeForUpdate(CHAIN_ID, SPONSOR, 51L)).thenReturn(Optional.of(slot));
+
+    assertThatThrownBy(
+            () ->
+                adapter.recordTransition(
+                    RecordSponsorNonceSlotTransitionCommand.builder()
+                        .chainId(CHAIN_ID)
+                        .fromAddress(SPONSOR)
+                        .nonce(51L)
+                        .fromStatus(SponsorNonceSlotStatus.RESERVED)
+                        .toStatus(SponsorNonceSlotStatus.SIGNED)
+                        .activeAttemptId(100L)
+                        .activeTxId(11L)
+                        .stateChangedAt(NOW)
+                        .build()))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("activeTxId mismatch");
+
+    assertThat(slot.getStatus()).isEqualTo(SponsorNonceSlotStatus.RESERVED);
+  }
+
+  @Test
   void verifyUnbroadcastable_requiresAttemptAndTransactionToHaveNoChainReachableEvidence() {
     NonceSlotAttemptEntity attempt =
         NonceSlotAttemptEntity.builder()
@@ -281,9 +305,36 @@ class NonceSlotPersistenceAdapterTest {
 
     boolean result =
         adapter.verifyUnbroadcastable(
-            new VerifyUnbroadcastableAttemptCommand(CHAIN_ID, SPONSOR, 51L, 100L));
+            new VerifyUnbroadcastableAttemptCommand(CHAIN_ID, SPONSOR, 51L, 100L, NOW));
 
     assertThat(result).isTrue();
+  }
+
+  @Test
+  void verifyUnbroadcastable_rejectsTransactionWithActiveProcessingOrRetryDeadline() {
+    NonceSlotAttemptEntity attempt =
+        NonceSlotAttemptEntity.builder()
+            .id(100L)
+            .chainId(CHAIN_ID)
+            .fromAddress(SPONSOR)
+            .nonce(51L)
+            .attemptNo(1)
+            .txId(10L)
+            .status(SponsorNonceAttemptStatus.RESERVED)
+            .idempotencyKey("intent:sponsor:51:attempt:1")
+            .build();
+    Web3TransactionEntity transaction = transaction(10L, 51L);
+    transaction.setProcessingBy("issuer-1");
+    transaction.setProcessingUntil(NOW.plusSeconds(30));
+    when(attemptRepository.findByIdAndChainIdAndFromAddressAndNonce(100L, CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(attempt));
+    when(transactionRepository.findById(10L)).thenReturn(Optional.of(transaction));
+
+    boolean result =
+        adapter.verifyUnbroadcastable(
+            new VerifyUnbroadcastableAttemptCommand(CHAIN_ID, SPONSOR, 51L, 100L, NOW));
+
+    assertThat(result).isFalse();
   }
 
   @Test

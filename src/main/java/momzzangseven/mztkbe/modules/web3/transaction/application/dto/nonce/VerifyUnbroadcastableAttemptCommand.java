@@ -1,10 +1,11 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce;
 
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 public record VerifyUnbroadcastableAttemptCommand(
-    long chainId, String fromAddress, long nonce, Long attemptId) {
+    long chainId, String fromAddress, long nonce, Long attemptId, LocalDateTime now) {
 
   public VerifyUnbroadcastableAttemptCommand {
     if (chainId <= 0) {
@@ -16,6 +17,9 @@ public record VerifyUnbroadcastableAttemptCommand(
     }
     if (attemptId == null || attemptId <= 0) {
       throw new Web3InvalidInputException("attemptId must be positive");
+    }
+    if (now == null) {
+      now = LocalDateTime.now();
     }
   }
 }

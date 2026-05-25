@@ -168,7 +168,8 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
                 command.chainId(),
                 command.fromAddress(),
                 decision.nonce(),
-                slot.activeAttemptId()));
+                slot.activeAttemptId(),
+                command.now() == null ? LocalDateTime.now() : command.now()));
     if (!unbroadcastable) {
       markOperatorReview(command, slot, "DROP_UNBROADCASTABLE_HAS_CHAIN_REACHABLE_EVIDENCE");
       return false;

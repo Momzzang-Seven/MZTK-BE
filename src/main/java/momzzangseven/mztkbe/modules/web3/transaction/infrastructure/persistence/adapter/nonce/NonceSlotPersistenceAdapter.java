@@ -174,6 +174,7 @@ public class NonceSlotPersistenceAdapter
               + slot.getStatus());
     }
 
+    validateTransitionOwnership(slot, command);
     applyTransition(slot, command);
     updateAttemptStatus(slot, command);
     return toView(slotRepository.saveAndFlush(slot));
@@ -217,7 +218,7 @@ public class NonceSlotPersistenceAdapter
     return attemptRepository
         .findByIdAndChainIdAndFromAddressAndNonce(
             command.attemptId(), command.chainId(), command.fromAddress(), command.nonce())
-        .map(this::isUnbroadcastable)
+        .map(attempt -> isUnbroadcastable(attempt, command.now()))
         .orElse(false);
   }
 
@@ -446,6 +447,33 @@ public class NonceSlotPersistenceAdapter
     return slot.getActiveAttemptId();
   }
 
+  private void validateTransitionOwnership(
+      NonceSlotEntity slot, RecordSponsorNonceSlotTransitionCommand command) {
+    validateMatchingId("activeAttemptId", slot.getActiveAttemptId(), command.getActiveAttemptId());
+    validateMatchingId("activeTxId", slot.getActiveTxId(), command.getActiveTxId());
+
+    if (command.getToStatus() == SponsorNonceSlotStatus.DROPPED) {
+      validateMatchingId(
+          "releasedAttemptId", slot.getActiveAttemptId(), command.getReleasedAttemptId());
+      validateMatchingId("releasedTxId", slot.getActiveTxId(), command.getReleasedTxId());
+      return;
+    }
+
+    if (command.getToStatus() == SponsorNonceSlotStatus.CONSUMED) {
+      validateMatchingId(
+          "consumedAttemptId", slot.getActiveAttemptId(), command.getConsumedAttemptId());
+      validateMatchingId("consumedTxId", slot.getActiveTxId(), command.getConsumedTxId());
+    }
+  }
+
+  private void validateMatchingId(String fieldName, Long current, Long requested) {
+    if (current == null || requested == null || current.equals(requested)) {
+      return;
+    }
+    throw new Web3TransactionStateInvalidException(
+        "nonce slot " + fieldName + " mismatch: expected=" + current + ", requested=" + requested);
+  }
+
   private void syncTransactionEvidence(NonceSlotEntity slot) {
     if (slot.getActiveTxId() == null || slot.getStatus() == SponsorNonceSlotStatus.DROPPED) {
       return;
@@ -469,7 +497,7 @@ public class NonceSlotPersistenceAdapter
         .ifPresent(attempt::setTxHash);
   }
 
-  private boolean isUnbroadcastable(NonceSlotAttemptEntity attempt) {
+  private boolean isUnbroadcastable(NonceSlotAttemptEntity attempt, LocalDateTime now) {
     if (attempt.getTxHash() != null
         || attempt.getSignedAt() != null
         || attempt.getBroadcastStartedAt() != null
@@ -480,11 +508,22 @@ public class NonceSlotPersistenceAdapter
         .findById(attempt.getTxId())
         .map(
             tx ->
-                tx.getTxHash() == null
+                tx.getStatus() == Web3TxStatus.CREATED
+                    && !isProcessingActive(tx, now)
+                    && tx.getTxHash() == null
                     && tx.getSignedRawTx() == null
                     && tx.getSignedAt() == null
                     && tx.getBroadcastedAt() == null)
         .orElse(false);
+  }
+
+  private boolean isProcessingActive(Web3TransactionEntity transaction, LocalDateTime now) {
+    if (transaction.getProcessingUntil() != null && transaction.getProcessingUntil().isAfter(now)) {
+      return true;
+    }
+    return transaction.getProcessingBy() != null
+        && !transaction.getProcessingBy().isBlank()
+        && transaction.getProcessingUntil() == null;
   }
 
   private SponsorNonceSlot toDomainSlot(NonceSlotEntity entity) {

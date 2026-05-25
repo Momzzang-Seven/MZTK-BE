@@ -170,7 +170,10 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     }
     transitionSlotWithFallback(
         item,
-        List.of(SponsorNonceSlotStatus.BROADCASTED, SponsorNonceSlotStatus.BROADCASTING),
+        List.of(
+            SponsorNonceSlotStatus.BROADCASTED,
+            SponsorNonceSlotStatus.BROADCASTING,
+            SponsorNonceSlotStatus.STUCK),
         SponsorNonceSlotStatus.CONSUMED,
         consumedReason);
   }
@@ -225,6 +228,14 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
               e.getMessage());
           return;
         }
+        if (isStaleActual(e, toStatus)) {
+          log.debug(
+              "Skipping idempotent nonce slot {} transition for txId={}: {}",
+              toStatus,
+              item.transactionId(),
+              e.getMessage());
+          return;
+        }
         if (isStaleTransition(e)) {
           lastStaleException = e;
           continue;
@@ -272,6 +283,11 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
   private boolean isStaleTransition(Web3TransactionStateInvalidException e) {
     return e.getMessage() != null && e.getMessage().contains("stale nonce slot transition");
+  }
+
+  private boolean isStaleActual(
+      Web3TransactionStateInvalidException e, SponsorNonceSlotStatus actualStatus) {
+    return isStaleTransition(e) && e.getMessage().contains("actual=" + actualStatus);
   }
 
   private void auditReceiptPoll(
