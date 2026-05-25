@@ -25,7 +25,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -38,7 +37,6 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
   private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
   private final PersistSponsorNonceTransactionStateUseCase
       persistSponsorNonceTransactionStateUseCase;
-  private final Web3CoreProperties web3CoreProperties;
   private final Clock appClock;
 
   private final String workerId = "signed-recovery-" + UUID.randomUUID().toString().substring(0, 8);
@@ -52,7 +50,6 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
       PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
-      Web3CoreProperties web3CoreProperties,
       Clock appClock) {
     super(
         loadTransactionWorkPort,
@@ -63,7 +60,6 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
     this.web3ContractPort = web3ContractPort;
     this.nonceSlotLifecycleUseCase = nonceSlotLifecycleUseCase;
     this.persistSponsorNonceTransactionStateUseCase = persistSponsorNonceTransactionStateUseCase;
-    this.web3CoreProperties = web3CoreProperties;
     this.appClock = appClock;
   }
 
@@ -147,7 +143,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
     try {
       nonceSlotLifecycleUseCase.transition(
           RecordSponsorNonceSlotTransitionCommand.builder()
-              .chainId(web3CoreProperties.getChainId())
+              .chainId(item.chainId())
               .fromAddress(item.fromAddress())
               .nonce(item.nonce())
               .fromStatus(SponsorNonceSlotStatus.SIGNED)
@@ -212,9 +208,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
     if (item.nonce() == null || item.fromAddress() == null || item.fromAddress().isBlank()) {
       return false;
     }
-    return nonceSlotLifecycleUseCase
-        .loadSlotsForReview(web3CoreProperties.getChainId(), item.fromAddress())
-        .stream()
+    return nonceSlotLifecycleUseCase.loadSlotsForReview(item.chainId(), item.fromAddress()).stream()
         .filter(slot -> slot.nonce() == item.nonce())
         .anyMatch(slot -> isOwnedSlot(slot, item.transactionId(), status));
   }
@@ -248,7 +242,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
       persistSponsorNonceTransactionStateUseCase.markPending(
           new PersistSponsorNonceTransactionStateUseCase.SponsorNoncePendingCommand(
               item.transactionId(),
-              web3CoreProperties.getChainId(),
+              item.chainId(),
               item.fromAddress(),
               item.nonce(),
               null,
@@ -286,7 +280,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
     try {
       nonceSlotLifecycleUseCase.transition(
           RecordSponsorNonceSlotTransitionCommand.builder()
-              .chainId(web3CoreProperties.getChainId())
+              .chainId(item.chainId())
               .fromAddress(item.fromAddress())
               .nonce(item.nonce())
               .fromStatus(SponsorNonceSlotStatus.SIGNED)

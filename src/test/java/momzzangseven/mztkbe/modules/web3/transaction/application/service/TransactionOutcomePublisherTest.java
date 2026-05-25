@@ -6,11 +6,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
@@ -111,6 +114,8 @@ class TransactionOutcomePublisherTest {
                 "stale nonce slot transition: expected=BROADCASTED, actual=CONSUMED"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, FROM_ADDRESS))
+        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.CONSUMED, TX_ID, TX_ID)));
 
     service.markSucceededWithNonceSlotAndPublish(
         TX_ID,
@@ -124,6 +129,33 @@ class TransactionOutcomePublisherTest {
 
     verify(updateTransactionPort).updateStatus(TX_ID, Web3TxStatus.SUCCEEDED, TX_HASH, null);
     verify(eventPublisher).publishEvent(any(Web3TransactionSucceededEvent.class));
+  }
+
+  @Test
+  void markSucceededWithNonceSlotAndPublish_throws_whenConsumedSlotBelongsToOtherTx() {
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=BROADCASTED, actual=CONSUMED"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, FROM_ADDRESS))
+        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.CONSUMED, 99L, 99L)));
+
+    assertThatThrownBy(
+            () ->
+                service.markSucceededWithNonceSlotAndPublish(
+                    TX_ID,
+                    IDEMPOTENCY_KEY,
+                    REFERENCE_TYPE,
+                    REFERENCE_ID,
+                    FROM_USER_ID,
+                    TO_USER_ID,
+                    TX_HASH,
+                    nonceReceiptCommand("RECEIPT_STATUS_1")))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("actual=CONSUMED");
+
+    verifyNoInteractions(updateTransactionPort, eventPublisher);
   }
 
   @Test
@@ -254,5 +286,39 @@ class TransactionOutcomePublisherTest {
       String consumedReason) {
     return new TransactionOutcomePublisher.SponsorNonceReceiptCommand(
         CHAIN_ID, FROM_ADDRESS, 7L, consumedReason, LocalDateTime.parse("2026-05-24T12:00:00"));
+  }
+
+  private SponsorNonceSlotView slotView(
+      SponsorNonceSlotStatus status, Long activeTxId, Long consumedTxId) {
+    LocalDateTime now = LocalDateTime.parse("2026-05-24T12:00:00");
+    return new SponsorNonceSlotView(
+        CHAIN_ID,
+        FROM_ADDRESS,
+        7L,
+        status,
+        1,
+        1001L,
+        activeTxId,
+        TX_HASH,
+        null,
+        consumedTxId,
+        null,
+        status == SponsorNonceSlotStatus.CONSUMED ? now : null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        0,
+        now,
+        now);
   }
 }

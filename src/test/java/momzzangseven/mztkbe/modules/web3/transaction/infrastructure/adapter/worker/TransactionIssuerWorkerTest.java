@@ -46,7 +46,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDe
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,6 +59,7 @@ class TransactionIssuerWorkerTest {
   private static final String TREASURY_ADDRESS = "0x" + "c".repeat(40);
   private static final String KMS_KEY_ID = "alias/reward-treasury";
   private static final String WALLET_ALIAS = "reward-treasury";
+  private static final long CHAIN_ID = 11155111L;
 
   @Mock private LoadTransactionWorkPort loadTransactionWorkPort;
   @Mock private UpdateTransactionPort updateTransactionPort;
@@ -77,7 +77,6 @@ class TransactionIssuerWorkerTest {
   @Mock private RetryStrategy retryStrategy;
 
   private TransactionRewardTokenProperties rewardProperties;
-  private Web3CoreProperties web3CoreProperties;
   private TransactionIssuerWorker worker;
 
   @BeforeEach
@@ -85,9 +84,6 @@ class TransactionIssuerWorkerTest {
     rewardProperties = new TransactionRewardTokenProperties();
     rewardProperties.getWorker().setClaimTtlSeconds(120);
     rewardProperties.setTokenContractAddress("0x" + "a".repeat(40));
-
-    web3CoreProperties = new Web3CoreProperties();
-    web3CoreProperties.setChainId(11155111L);
 
     worker =
         new TransactionIssuerWorker(
@@ -102,8 +98,7 @@ class TransactionIssuerWorkerTest {
             persistSponsorNonceTransactionStateUseCase,
             web3ContractPort,
             rewardProperties,
-            retryStrategy,
-            web3CoreProperties);
+            retryStrategy);
   }
 
   @Test
@@ -511,6 +506,7 @@ class TransactionIssuerWorkerTest {
             "101",
             1L,
             2L,
+            CHAIN_ID,
             mintedFromAddress, // minted under the old treasury
             "0x" + "d".repeat(40),
             BigInteger.ONE,
@@ -545,6 +541,7 @@ class TransactionIssuerWorkerTest {
             "101",
             1L,
             2L,
+            CHAIN_ID,
             TREASURY_ADDRESS.toUpperCase(), // mixed-case minted address
             "0x" + "d".repeat(40),
             BigInteger.ONE,
@@ -574,7 +571,7 @@ class TransactionIssuerWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command ->
                     command.transactionId().equals(1L)
-                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.chainId() == CHAIN_ID
                         && command.fromAddress().equals(TREASURY_ADDRESS)
                         && command.nonce() == 7L
                         && command.attemptId().equals(1001L)
@@ -648,7 +645,7 @@ class TransactionIssuerWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command ->
                     command.transactionId().equals(1L)
-                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.chainId() == CHAIN_ID
                         && command.fromAddress().equals(TREASURY_ADDRESS)
                         && command.nonce() == 7L
                         && command.attemptId().equals(1001L)
@@ -659,7 +656,7 @@ class TransactionIssuerWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command ->
                     command.transactionId().equals(1L)
-                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.chainId() == CHAIN_ID
                         && command.fromAddress().equals(TREASURY_ADDRESS)
                         && command.nonce() == 7L
                         && command.attemptId().equals(1001L)
@@ -685,8 +682,7 @@ class TransactionIssuerWorkerTest {
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
     stubSponsorNonceReservation(33L, 1L, 1001L);
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(
-            web3CoreProperties.getChainId(), TREASURY_ADDRESS))
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, TREASURY_ADDRESS))
         .thenReturn(List.of(slotView(33L, SponsorNonceSlotStatus.RESERVED, 1001L, 1L)));
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
@@ -707,7 +703,7 @@ class TransactionIssuerWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command ->
                     command.transactionId().equals(1L)
-                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.chainId() == CHAIN_ID
                         && command.fromAddress().equals(TREASURY_ADDRESS)
                         && command.nonce() == 33L
                         && command.attemptId().equals(1001L)
@@ -718,7 +714,7 @@ class TransactionIssuerWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command ->
                     command.transactionId().equals(1L)
-                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.chainId() == CHAIN_ID
                         && command.fromAddress().equals(TREASURY_ADDRESS)
                         && command.nonce() == 33L
                         && command.attemptId().equals(1001L)
@@ -732,7 +728,7 @@ class TransactionIssuerWorkerTest {
 
   @Test
   void processBatch_reservationChangedAfterSign_marksStaleWithoutPersistingSignedRawTx() {
-    long chainId = web3CoreProperties.getChainId();
+    long chainId = CHAIN_ID;
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, null)));
@@ -801,8 +797,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(
-            web3CoreProperties.getChainId(), TREASURY_ADDRESS))
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, TREASURY_ADDRESS))
         .thenReturn(List.of(slotView(5L, SponsorNonceSlotStatus.RESERVED, 1001L, 2L)));
 
     worker.processBatch(1);
@@ -821,7 +816,7 @@ class TransactionIssuerWorkerTest {
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
-    when(loadSponsorChainNoncePort.loadSnapshot(web3CoreProperties.getChainId(), TREASURY_ADDRESS))
+    when(loadSponsorChainNoncePort.loadSnapshot(CHAIN_ID, TREASURY_ADDRESS))
         .thenReturn(new LoadSponsorChainNoncePort.SponsorChainNonceSnapshot(5, 5, 5L, 5L, 5L, 5L));
     when(coordinateSponsorNonceUseCase.execute(any(SponsorNonceCoordinationCommand.class)))
         .thenReturn(
@@ -840,7 +835,7 @@ class TransactionIssuerWorkerTest {
   }
 
   private void stubSponsorNonceReservation(long nonce, Long transactionId, Long attemptId) {
-    long chainId = web3CoreProperties.getChainId();
+    long chainId = CHAIN_ID;
     when(loadSponsorChainNoncePort.loadSnapshot(chainId, TREASURY_ADDRESS))
         .thenReturn(
             new LoadSponsorChainNoncePort.SponsorChainNonceSnapshot(
@@ -860,8 +855,7 @@ class TransactionIssuerWorkerTest {
   }
 
   private void stubExistingNonceSlot(long nonce, Long transactionId, Long attemptId) {
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(
-            web3CoreProperties.getChainId(), TREASURY_ADDRESS))
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, TREASURY_ADDRESS))
         .thenReturn(
             List.of(slotView(nonce, SponsorNonceSlotStatus.RESERVED, attemptId, transactionId)));
   }
@@ -869,7 +863,7 @@ class TransactionIssuerWorkerTest {
   private SponsorNonceSlotView slotView(
       long nonce, SponsorNonceSlotStatus status, Long attemptId, Long transactionId) {
     return new SponsorNonceSlotView(
-        web3CoreProperties.getChainId(),
+        CHAIN_ID,
         TREASURY_ADDRESS,
         nonce,
         status,
@@ -948,6 +942,7 @@ class TransactionIssuerWorkerTest {
         "101",
         1L,
         2L,
+        CHAIN_ID,
         TREASURY_ADDRESS,
         "0x" + "d".repeat(40),
         BigInteger.ONE,

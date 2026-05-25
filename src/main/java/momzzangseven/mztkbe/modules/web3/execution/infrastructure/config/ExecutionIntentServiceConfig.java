@@ -313,9 +313,15 @@ public class ExecutionIntentServiceConfig {
   MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunAfterCommitPort runAfterCommitPort,
       Clock appClock) {
     return new MarkExecutionIntentPendingOnchainService(
-        executionIntentPersistencePort, sponsorDailyUsagePersistencePort, appClock);
+        executionIntentPersistencePort,
+        sponsorDailyUsagePersistencePort,
+        executionActionHandlerPorts,
+        runAfterCommitPort,
+        appClock);
   }
 
   @Bean

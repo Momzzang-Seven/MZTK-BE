@@ -28,7 +28,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureR
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +43,7 @@ class TransactionReceiptWorkerTest {
       Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
   private static final LocalDateTime FIXED_NOW =
       LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+  private static final long CHAIN_ID = 11155111L;
 
   @Mock private LoadTransactionWorkPort loadTransactionWorkPort;
   @Mock private UpdateTransactionPort updateTransactionPort;
@@ -57,7 +57,6 @@ class TransactionReceiptWorkerTest {
   @Mock private RetryStrategy retryStrategy;
 
   private TransactionRewardTokenProperties properties;
-  private Web3CoreProperties web3CoreProperties;
   private TransactionReceiptWorker worker;
 
   @BeforeEach
@@ -67,8 +66,6 @@ class TransactionReceiptWorkerTest {
     properties.getWorker().setReceiptTimeoutSeconds(60);
     properties.getWorker().setReceiptPollMinSeconds(2);
     properties.getWorker().setReceiptPollMaxSeconds(5);
-    web3CoreProperties = new Web3CoreProperties();
-    web3CoreProperties.setChainId(11155111L);
     worker =
         new TransactionReceiptWorker(
             loadTransactionWorkPort,
@@ -79,7 +76,6 @@ class TransactionReceiptWorkerTest {
             persistSponsorNonceTransactionStateUseCase,
             properties,
             retryStrategy,
-            web3CoreProperties,
             FIXED_CLOCK);
   }
 
@@ -111,7 +107,7 @@ class TransactionReceiptWorkerTest {
             argThat(
                 command ->
                     command.transactionId().equals(1L)
-                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.chainId() == CHAIN_ID
                         && command.fromAddress().equals("0x" + "a".repeat(40))
                         && command.nonce().equals(0L)
                         && command.txHash().equals(" ")
@@ -132,7 +128,7 @@ class TransactionReceiptWorkerTest {
             argThat(
                 command ->
                     command.transactionId().equals(1L)
-                        && command.chainId() == web3CoreProperties.getChainId()
+                        && command.chainId() == CHAIN_ID
                         && command.fromAddress().equals("0x" + "a".repeat(40))
                         && command.nonce().equals(0L)
                         && command.txHash() == null
@@ -221,7 +217,7 @@ class TransactionReceiptWorkerTest {
             eq(txHash),
             argThat(
                 command ->
-                    command.chainId() == web3CoreProperties.getChainId()
+                    command.chainId() == CHAIN_ID
                         && command.fromAddress().equals("0x" + "a".repeat(40))
                         && command.nonce().equals(0L)
                         && command.consumedReason().equals("RECEIPT_STATUS_1")));
@@ -251,7 +247,7 @@ class TransactionReceiptWorkerTest {
             eq("RECEIPT_STATUS_0"),
             argThat(
                 command ->
-                    command.chainId() == web3CoreProperties.getChainId()
+                    command.chainId() == CHAIN_ID
                         && command.fromAddress().equals("0x" + "a".repeat(40))
                         && command.nonce().equals(0L)
                         && command.consumedReason().equals("RECEIPT_STATUS_0")));
@@ -331,6 +327,7 @@ class TransactionReceiptWorkerTest {
         "101",
         1L,
         2L,
+        CHAIN_ID,
         "0x" + "a".repeat(40),
         "0x" + "b".repeat(40),
         BigInteger.ONE,

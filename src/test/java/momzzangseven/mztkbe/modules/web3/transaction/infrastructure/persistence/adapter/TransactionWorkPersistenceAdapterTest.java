@@ -122,6 +122,7 @@ class TransactionWorkPersistenceAdapterTest {
 
     assertThat(result).hasSize(2);
     assertThat(result.get(0).transactionId()).isEqualTo(1L);
+    assertThat(result.get(0).chainId()).isEqualTo(11155111L);
     assertThat(result.get(1).transactionId()).isEqualTo(2L);
 
     ArgumentCaptor<LocalDateTime> processingUntilCaptor =

@@ -1,15 +1,19 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.MarkExecutionIntentPendingOnchainPort;
@@ -135,6 +139,51 @@ class PersistSponsorNonceTransactionStateServiceTest {
   }
 
   @Test
+  void markUnconfirmed_updatesTransaction_whenSlotAlreadyStuckBySameTransaction() {
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=BROADCASTED, actual=STUCK"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, FROM_ADDRESS))
+        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.STUCK, 1L)));
+
+    service.markUnconfirmed(
+        new PersistSponsorNonceTransactionStateUseCase.SponsorNonceUnconfirmedCommand(
+            1L, CHAIN_ID, FROM_ADDRESS, 7L, "0x" + "b".repeat(64), "RECEIPT_TIMEOUT_60S", NOW));
+
+    verify(updateTransactionPort)
+        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, "0x" + "b".repeat(64), "RECEIPT_TIMEOUT_60S");
+  }
+
+  @Test
+  void markUnconfirmed_throws_whenStuckSlotBelongsToOtherTransaction() {
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=BROADCASTED, actual=STUCK"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, FROM_ADDRESS))
+        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.STUCK, 99L)));
+
+    assertThatThrownBy(
+            () ->
+                service.markUnconfirmed(
+                    new PersistSponsorNonceTransactionStateUseCase.SponsorNonceUnconfirmedCommand(
+                        1L,
+                        CHAIN_ID,
+                        FROM_ADDRESS,
+                        7L,
+                        "0x" + "b".repeat(64),
+                        "RECEIPT_TIMEOUT_60S",
+                        NOW)))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("actual=STUCK");
+
+    verify(updateTransactionPort, never()).updateStatus(any(), any(), any(), any());
+  }
+
+  @Test
   void failTerminalAndDropReservedSlot_schedulesFailureAndDropsSlotInOneUseCase() {
     service.failTerminalAndDropReservedSlot(
         new PersistSponsorNonceTransactionStateUseCase
@@ -154,5 +203,37 @@ class PersistSponsorNonceTransactionStateServiceTest {
     assertThat(command.getReleasedAttemptId()).isEqualTo(1001L);
     assertThat(command.getReleasedTxId()).isEqualTo(1L);
     assertThat(command.getReleaseReason()).isEqualTo("SIGNATURE_INVALID");
+  }
+
+  private SponsorNonceSlotView slotView(SponsorNonceSlotStatus status, Long activeTxId) {
+    return new SponsorNonceSlotView(
+        CHAIN_ID,
+        FROM_ADDRESS,
+        7L,
+        status,
+        1,
+        1001L,
+        activeTxId,
+        "0x" + "b".repeat(64),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "RECEIPT_TIMEOUT_60S",
+        null,
+        null,
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        0,
+        NOW,
+        NOW);
   }
 }

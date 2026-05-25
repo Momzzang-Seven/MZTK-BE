@@ -297,6 +297,7 @@ public class TransactionWorkPersistenceAdapter
         entity.getReferenceId(),
         entity.getFromUserId(),
         entity.getToUserId(),
+        entity.getChainId(),
         entity.getFromAddress(),
         entity.getToAddress(),
         entity.getAmountWei(),

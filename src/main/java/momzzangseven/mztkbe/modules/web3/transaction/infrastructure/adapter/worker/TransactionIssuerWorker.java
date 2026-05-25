@@ -41,7 +41,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -61,7 +60,6 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private final PersistSponsorNonceTransactionStateUseCase
       persistSponsorNonceTransactionStateUseCase;
   private final Web3ContractPort web3ContractPort;
-  private final Web3CoreProperties web3CoreProperties;
 
   private final String workerId = "issuer-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -77,8 +75,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase,
       Web3ContractPort web3ContractPort,
       TransactionRewardTokenProperties rewardTokenProperties,
-      RetryStrategy retryStrategy,
-      Web3CoreProperties web3CoreProperties) {
+      RetryStrategy retryStrategy) {
     super(
         loadTransactionWorkPort,
         updateTransactionPort,
@@ -92,7 +89,6 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     this.nonceSlotLifecycleUseCase = nonceSlotLifecycleUseCase;
     this.persistSponsorNonceTransactionStateUseCase = persistSponsorNonceTransactionStateUseCase;
     this.web3ContractPort = web3ContractPort;
-    this.web3CoreProperties = web3CoreProperties;
   }
 
   @Scheduled(fixedDelay = 1000L)
@@ -252,7 +248,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
                   item.toAddress(),
                   item.amountWei(),
                   nonce,
-                  web3CoreProperties.getChainId(),
+                  item.chainId(),
                   prevalidateResult.gasLimit(),
                   prevalidateResult.maxPriorityFeePerGas(),
                   prevalidateResult.maxFeePerGas()));
@@ -289,7 +285,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     persistSponsorNonceTransactionStateUseCase.markSigned(
         new PersistSponsorNonceTransactionStateUseCase.SponsorNonceSignedCommand(
             item.transactionId(),
-            web3CoreProperties.getChainId(),
+            item.chainId(),
             signer.walletAddress(),
             nonce,
             nonceReservation.attemptId(),
@@ -320,7 +316,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       persistSponsorNonceTransactionStateUseCase.markPending(
           new PersistSponsorNonceTransactionStateUseCase.SponsorNoncePendingCommand(
               item.transactionId(),
-              web3CoreProperties.getChainId(),
+              item.chainId(),
               signer.walletAddress(),
               nonceReservation.nonce(),
               nonceReservation.attemptId(),
@@ -366,7 +362,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return resolveExistingNonceReservation(item, treasuryAddress);
     }
 
-    long chainId = web3CoreProperties.getChainId();
+    long chainId = item.chainId();
     LoadSponsorChainNoncePort.SponsorChainNonceSnapshot snapshot =
         loadSponsorChainNoncePort.loadSnapshot(chainId, treasuryAddress);
     SponsorNonceCoordinationResult result =
@@ -394,9 +390,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private NonceReservation resolveExistingNonceReservation(
       LoadTransactionWorkPort.TransactionWorkItem item, String treasuryAddress) {
     SponsorNonceSlotView slot =
-        nonceSlotLifecycleUseCase
-            .loadSlotsForReview(web3CoreProperties.getChainId(), treasuryAddress)
-            .stream()
+        nonceSlotLifecycleUseCase.loadSlotsForReview(item.chainId(), treasuryAddress).stream()
             .filter(candidate -> candidate.nonce() == item.nonce())
             .findFirst()
             .orElse(null);
@@ -430,9 +424,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       String treasuryAddress,
       NonceReservation nonceReservation) {
     SponsorNonceSlotView slot =
-        nonceSlotLifecycleUseCase
-            .loadSlotsForReview(web3CoreProperties.getChainId(), treasuryAddress)
-            .stream()
+        nonceSlotLifecycleUseCase.loadSlotsForReview(item.chainId(), treasuryAddress).stream()
             .filter(candidate -> candidate.nonce() == nonceReservation.nonce())
             .findFirst()
             .orElse(null);
@@ -489,7 +481,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
           NonceReservation nonceReservation,
           SponsorNonceSlotStatus fromStatus) {
     return RecordSponsorNonceSlotTransitionCommand.builder()
-        .chainId(web3CoreProperties.getChainId())
+        .chainId(item.chainId())
         .fromAddress(fromAddress)
         .nonce(nonceReservation.nonce())
         .fromStatus(fromStatus)
@@ -506,7 +498,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     persistSponsorNonceTransactionStateUseCase.failTerminalAndDropReservedSlot(
         new SponsorNonceTerminalReservedSlotFailureCommand(
             item.transactionId(),
-            web3CoreProperties.getChainId(),
+            item.chainId(),
             fromAddress,
             nonceReservation.nonce(),
             nonceReservation.attemptId(),

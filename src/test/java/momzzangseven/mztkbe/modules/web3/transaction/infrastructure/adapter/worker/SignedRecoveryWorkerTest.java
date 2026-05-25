@@ -33,7 +33,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +45,7 @@ class SignedRecoveryWorkerTest {
   private static final String DEFAULT_REASON = Web3TxFailureReason.BROADCAST_FAILED.code();
   private static final Clock FIXED_CLOCK =
       Clock.fixed(Instant.parse("2026-05-24T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+  private static final long CHAIN_ID = 84532L;
 
   @Mock private LoadTransactionWorkPort loadTransactionWorkPort;
   @Mock private UpdateTransactionPort updateTransactionPort;
@@ -64,8 +64,6 @@ class SignedRecoveryWorkerTest {
   void setUp() {
     TransactionRewardTokenProperties properties = new TransactionRewardTokenProperties();
     properties.getWorker().setClaimTtlSeconds(120);
-    Web3CoreProperties web3CoreProperties = new Web3CoreProperties();
-    web3CoreProperties.setChainId(84532L);
     worker =
         new SignedRecoveryWorker(
             loadTransactionWorkPort,
@@ -76,7 +74,6 @@ class SignedRecoveryWorkerTest {
             persistSponsorNonceTransactionStateUseCase,
             properties,
             retryStrategy,
-            web3CoreProperties,
             FIXED_CLOCK);
   }
 
@@ -140,7 +137,7 @@ class SignedRecoveryWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command ->
                     command.transactionId().equals(1L)
-                        && command.chainId() == 84532L
+                        && command.chainId() == CHAIN_ID
                         && command.fromAddress().equals("0x" + "a".repeat(40))
                         && command.nonce() == 0L
                         && command.attemptId() == null
@@ -204,7 +201,7 @@ class SignedRecoveryWorkerTest {
                 "stale nonce slot transition: expected=SIGNED, actual=BROADCASTED"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(84532L, "0x" + "a".repeat(40)))
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, "0x" + "a".repeat(40)))
         .thenReturn(List.of(slot(SponsorNonceSlotStatus.BROADCASTED, 1L)));
 
     worker.processBatch(1);
@@ -228,7 +225,7 @@ class SignedRecoveryWorkerTest {
                 "stale nonce slot transition: expected=SIGNED, actual=BROADCASTING"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(84532L, "0x" + "a".repeat(40)))
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, "0x" + "a".repeat(40)))
         .thenReturn(List.of(slot(SponsorNonceSlotStatus.BROADCASTING, 99L)));
 
     worker.processBatch(1);
@@ -330,6 +327,7 @@ class SignedRecoveryWorkerTest {
         "101",
         1L,
         2L,
+        CHAIN_ID,
         "0x" + "a".repeat(40),
         "0x" + "b".repeat(40),
         BigInteger.ONE,
@@ -343,7 +341,7 @@ class SignedRecoveryWorkerTest {
   private SponsorNonceSlotView slot(SponsorNonceSlotStatus status, Long activeTxId) {
     LocalDateTime now = LocalDateTime.now(FIXED_CLOCK);
     return new SponsorNonceSlotView(
-        84532L,
+        CHAIN_ID,
         "0x" + "a".repeat(40),
         0L,
         status,

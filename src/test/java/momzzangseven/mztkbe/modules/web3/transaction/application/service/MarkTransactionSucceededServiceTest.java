@@ -2,18 +2,24 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
@@ -254,6 +260,54 @@ class MarkTransactionSucceededServiceTest {
   }
 
   @Test
+  void execute_marksSucceeded_whenNonceSlotAlreadyConsumedBySameTransaction() {
+    MarkTransactionSucceededCommand command = validCommand();
+    when(loadTransactionPort.loadById(22L)).thenReturn(Optional.of(unconfirmedSnapshotWithSlot()));
+    when(web3ContractPort.getReceipt("0x" + "a".repeat(64)))
+        .thenReturn(
+            new Web3ContractPort.ReceiptResult(
+                "0x" + "a".repeat(64), true, true, "main", false, null));
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=STUCK, actual=CONSUMED"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(84532L, "0x" + "c".repeat(40)))
+        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.CONSUMED, 22L, 22L)));
+
+    MarkTransactionSucceededResult result = service.execute(command);
+
+    assertThat(result.status()).isEqualTo(Web3TxStatus.SUCCEEDED);
+    verify(transactionOutcomePublisher)
+        .markSucceededAndPublish(
+            22L, "idem-22", Web3ReferenceType.USER_TO_USER, "101", 7L, 9L, "0x" + "a".repeat(64));
+  }
+
+  @Test
+  void execute_throws_whenConsumedNonceSlotBelongsToOtherTransaction() {
+    MarkTransactionSucceededCommand command = validCommand();
+    when(loadTransactionPort.loadById(22L)).thenReturn(Optional.of(unconfirmedSnapshotWithSlot()));
+    when(web3ContractPort.getReceipt("0x" + "a".repeat(64)))
+        .thenReturn(
+            new Web3ContractPort.ReceiptResult(
+                "0x" + "a".repeat(64), true, true, "main", false, null));
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=STUCK, actual=CONSUMED"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotsForReview(84532L, "0x" + "c".repeat(40)))
+        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.CONSUMED, 99L, 99L)));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("actual=CONSUMED");
+
+    verify(transactionOutcomePublisher, never())
+        .markSucceededAndPublish(any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
   void execute_allowsOverride_whenSnapshotTxHashIsNull() {
     MarkTransactionSucceededCommand command = validCommand();
     when(loadTransactionPort.loadById(22L))
@@ -285,5 +339,54 @@ class MarkTransactionSucceededServiceTest {
   private MarkTransactionSucceededCommand validCommand() {
     return new MarkTransactionSucceededCommand(
         1L, 22L, "0x" + "a".repeat(64), "https://explorer/tx/22", "manual proof", "ticket-22");
+  }
+
+  private LoadTransactionPort.TransactionSnapshot unconfirmedSnapshotWithSlot() {
+    return new LoadTransactionPort.TransactionSnapshot(
+        22L,
+        "idem-22",
+        Web3ReferenceType.USER_TO_USER,
+        "101",
+        7L,
+        9L,
+        84532L,
+        "0x" + "c".repeat(40),
+        112L,
+        Web3TxStatus.UNCONFIRMED,
+        "0x" + "a".repeat(64),
+        null);
+  }
+
+  private SponsorNonceSlotView slotView(
+      SponsorNonceSlotStatus status, Long activeTxId, Long consumedTxId) {
+    return new SponsorNonceSlotView(
+        84532L,
+        "0x" + "c".repeat(40),
+        112L,
+        status,
+        1,
+        1001L,
+        activeTxId,
+        "0x" + "a".repeat(64),
+        null,
+        consumedTxId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        0,
+        java.time.LocalDateTime.ofInstant(FIXED_CLOCK.instant(), FIXED_CLOCK.getZone()),
+        java.time.LocalDateTime.ofInstant(FIXED_CLOCK.instant(), FIXED_CLOCK.getZone()));
   }
 }

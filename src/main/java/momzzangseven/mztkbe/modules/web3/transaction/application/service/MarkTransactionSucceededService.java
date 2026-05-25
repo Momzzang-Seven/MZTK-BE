@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
@@ -136,12 +137,22 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
                 .build());
         return;
       } catch (Web3TransactionStateInvalidException e) {
-        if (isSlotNotFound(e) || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)) {
+        if (isSlotNotFound(e)) {
           log.warn(
               "Skipping nonce slot consumed transition for admin override txId={}: {}",
               snapshot.transactionId(),
               e.getMessage());
           return;
+        }
+        if (isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)) {
+          if (isSlotConsumedByTransaction(snapshot)) {
+            log.warn(
+                "Skipping already-consumed nonce slot transition for admin override txId={}: {}",
+                snapshot.transactionId(),
+                e.getMessage());
+            return;
+          }
+          throw e;
         }
         if (isStaleTransition(e)) {
           lastStaleException = e;
@@ -166,6 +177,20 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
   private boolean isStaleActual(
       Web3TransactionStateInvalidException e, SponsorNonceSlotStatus actualStatus) {
     return isStaleTransition(e) && e.getMessage().contains("actual=" + actualStatus);
+  }
+
+  private boolean isSlotConsumedByTransaction(LoadTransactionPort.TransactionSnapshot snapshot) {
+    return nonceSlotLifecycleUseCase
+        .loadSlotsForReview(snapshot.chainId(), snapshot.fromAddress())
+        .stream()
+        .filter(slot -> slot.nonce() == snapshot.nonce())
+        .anyMatch(slot -> isConsumedSlotForTransaction(slot, snapshot.transactionId()));
+  }
+
+  private boolean isConsumedSlotForTransaction(SponsorNonceSlotView slot, Long transactionId) {
+    return slot.status() == SponsorNonceSlotStatus.CONSUMED
+        && transactionId != null
+        && transactionId.equals(slot.consumedTxId());
   }
 
   private Map<String, Object> csOverrideAuditDetail(

@@ -22,7 +22,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -40,7 +39,6 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
   private final TransactionOutcomePublisher transactionOutcomePublisher;
   private final PersistSponsorNonceTransactionStateUseCase
       persistSponsorNonceTransactionStateUseCase;
-  private final Web3CoreProperties web3CoreProperties;
   private final Clock appClock;
 
   private final String workerId = "receipt-" + UUID.randomUUID().toString().substring(0, 8);
@@ -54,7 +52,6 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
-      Web3CoreProperties web3CoreProperties,
       Clock appClock) {
     super(
         loadTransactionWorkPort,
@@ -65,7 +62,6 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     this.web3ContractPort = web3ContractPort;
     this.transactionOutcomePublisher = transactionOutcomePublisher;
     this.persistSponsorNonceTransactionStateUseCase = persistSponsorNonceTransactionStateUseCase;
-    this.web3CoreProperties = web3CoreProperties;
     this.appClock = appClock;
   }
 
@@ -175,7 +171,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     persistSponsorNonceTransactionStateUseCase.markUnconfirmed(
         new PersistSponsorNonceTransactionStateUseCase.SponsorNonceUnconfirmedCommand(
             item.transactionId(),
-            web3CoreProperties.getChainId(),
+            item.chainId(),
             item.fromAddress(),
             item.nonce(),
             txHash,
@@ -189,7 +185,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       return null;
     }
     return new TransactionOutcomePublisher.SponsorNonceReceiptCommand(
-        web3CoreProperties.getChainId(),
+        item.chainId(),
         item.fromAddress(),
         item.nonce(),
         consumedReason,

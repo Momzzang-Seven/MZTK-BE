@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
@@ -165,12 +166,22 @@ public class TransactionOutcomePublisher {
                 .build());
         return;
       } catch (Web3TransactionStateInvalidException e) {
-        if (isSlotNotFound(e) || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)) {
+        if (isSlotNotFound(e)) {
           log.warn(
               "Skipping nonce slot consumed transition for txId={}: {}",
               transactionId,
               e.getMessage());
           return;
+        }
+        if (isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)) {
+          if (isSlotConsumedByTransaction(command, transactionId)) {
+            log.warn(
+                "Skipping already-consumed nonce slot transition for txId={}: {}",
+                transactionId,
+                e.getMessage());
+            return;
+          }
+          throw e;
         }
         if (isStaleTransition(e)) {
           lastStaleException = e;
@@ -214,6 +225,23 @@ public class TransactionOutcomePublisher {
   private boolean isStaleActual(
       Web3TransactionStateInvalidException e, SponsorNonceSlotStatus actualStatus) {
     return isStaleTransition(e) && e.getMessage().contains("actual=" + actualStatus);
+  }
+
+  private boolean isSlotConsumedByTransaction(
+      SponsorNonceReceiptCommand command, Long transactionId) {
+    if (transactionId == null || command.fromAddress() == null || command.fromAddress().isBlank()) {
+      return false;
+    }
+    return nonceSlotLifecycleUseCase
+        .loadSlotsForReview(command.chainId(), command.fromAddress())
+        .stream()
+        .filter(slot -> slot.nonce() == command.nonce())
+        .anyMatch(slot -> isConsumedSlotForTransaction(slot, transactionId));
+  }
+
+  private boolean isConsumedSlotForTransaction(SponsorNonceSlotView slot, Long transactionId) {
+    return slot.status() == SponsorNonceSlotStatus.CONSUMED
+        && transactionId.equals(slot.consumedTxId());
   }
 
   public record SponsorNonceReceiptCommand(
