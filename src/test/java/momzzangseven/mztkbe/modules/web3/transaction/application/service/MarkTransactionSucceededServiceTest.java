@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Spons
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RunTransactionStateUpdatePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
@@ -46,6 +47,13 @@ class MarkTransactionSucceededServiceTest {
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  private final RunTransactionStateUpdatePort transactionPort =
+      new RunTransactionStateUpdatePort() {
+        @Override
+        public <T> T requiresNew(java.util.function.Supplier<T> action) {
+          return action.get();
+        }
+      };
 
   private MarkTransactionSucceededService service;
 
@@ -58,6 +66,7 @@ class MarkTransactionSucceededServiceTest {
             recordTransactionAuditPort,
             web3ContractPort,
             nonceSlotLifecycleUseCase,
+            transactionPort,
             FIXED_CLOCK);
   }
 
@@ -308,6 +317,27 @@ class MarkTransactionSucceededServiceTest {
   }
 
   @Test
+  void execute_revalidatesSnapshotAfterReceiptLookupBeforeMutatingState() {
+    MarkTransactionSucceededCommand command = validCommand();
+    when(loadTransactionPort.loadById(22L))
+        .thenReturn(Optional.of(unconfirmedSnapshotWithSlot()))
+        .thenReturn(Optional.of(snapshotWithStatus(Web3TxStatus.PENDING)));
+    when(web3ContractPort.getReceipt("0x" + "a".repeat(64)))
+        .thenReturn(
+            new Web3ContractPort.ReceiptResult(
+                "0x" + "a".repeat(64), true, true, "main", false, null));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("only UNCONFIRMED");
+
+    verify(transactionOutcomePublisher, never())
+        .markSucceededAndPublish(any(), any(), any(), any(), any(), any(), any());
+    verify(nonceSlotLifecycleUseCase, never())
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+  }
+
+  @Test
   void execute_allowsOverride_whenSnapshotTxHashIsNull() {
     MarkTransactionSucceededCommand command = validCommand();
     when(loadTransactionPort.loadById(22L))
@@ -342,6 +372,10 @@ class MarkTransactionSucceededServiceTest {
   }
 
   private LoadTransactionPort.TransactionSnapshot unconfirmedSnapshotWithSlot() {
+    return snapshotWithStatus(Web3TxStatus.UNCONFIRMED);
+  }
+
+  private LoadTransactionPort.TransactionSnapshot snapshotWithStatus(Web3TxStatus status) {
     return new LoadTransactionPort.TransactionSnapshot(
         22L,
         "idem-22",
@@ -352,7 +386,7 @@ class MarkTransactionSucceededServiceTest {
         84532L,
         "0x" + "c".repeat(40),
         112L,
-        Web3TxStatus.UNCONFIRMED,
+        status,
         "0x" + "a".repeat(64),
         null);
   }

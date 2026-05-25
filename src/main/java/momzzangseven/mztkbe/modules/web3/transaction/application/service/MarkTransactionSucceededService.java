@@ -21,17 +21,16 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTra
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RunTransactionStateUpdatePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 @Slf4j
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class MarkTransactionSucceededService implements MarkTransactionSucceededUseCase {
@@ -41,6 +40,7 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
   private final RecordTransactionAuditPort recordTransactionAuditPort;
   private final Web3ContractPort web3ContractPort;
   private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  private final RunTransactionStateUpdatePort transactionPort;
   private final Clock appClock;
 
   @Override
@@ -50,33 +50,15 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
       operatorId = "#command.operatorId()",
       targetId = "#command.transactionId()")
   public MarkTransactionSucceededResult execute(MarkTransactionSucceededCommand command) {
-    if (command == null) {
-      throw new Web3InvalidInputException(Web3ValidationMessage.COMMAND_REQUIRED);
-    }
+    validateCommand(command);
+    loadOverridableSnapshot(command);
+    Web3ContractPort.ReceiptResult receipt = loadSuccessfulReceipt(command.txHash());
+    return transactionPort.requiresNew(() -> markSucceededInTransaction(command, receipt));
+  }
 
-    LoadTransactionPort.TransactionSnapshot snapshot =
-        loadTransactionPort
-            .loadById(command.transactionId())
-            .orElseThrow(() -> new Web3TransactionNotFoundException(command.transactionId()));
-
-    if (snapshot.status() != Web3TxStatus.UNCONFIRMED) {
-      throw new Web3TransactionStateInvalidException(
-          "only UNCONFIRMED can be overridden: currentStatus=" + snapshot.status());
-    }
-    if (snapshot.txHash() != null && !snapshot.txHash().equalsIgnoreCase(command.txHash())) {
-      throw new Web3TransactionStateInvalidException(
-          "txHash mismatch: existing=" + snapshot.txHash() + ", requested=" + command.txHash());
-    }
-
-    Web3ContractPort.ReceiptResult receipt = web3ContractPort.getReceipt(command.txHash());
-    if (receipt.rpcError()) {
-      throw new Web3TransactionStateInvalidException(
-          "receipt lookup failed: " + receipt.failureReason());
-    }
-    if (!receipt.found() || !Boolean.TRUE.equals(receipt.success())) {
-      throw new Web3TransactionStateInvalidException(
-          "receipt proof is required (receipt.status == 1)");
-    }
+  private MarkTransactionSucceededResult markSucceededInTransaction(
+      MarkTransactionSucceededCommand command, Web3ContractPort.ReceiptResult receipt) {
+    LoadTransactionPort.TransactionSnapshot snapshot = loadOverridableSnapshot(command);
 
     markNonceSlotConsumed(snapshot);
     transactionOutcomePublisher.markSucceededAndPublish(
@@ -101,6 +83,43 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
         .txHash(command.txHash())
         .explorerUrl(command.explorerUrl())
         .build();
+  }
+
+  private void validateCommand(MarkTransactionSucceededCommand command) {
+    if (command == null) {
+      throw new Web3InvalidInputException(Web3ValidationMessage.COMMAND_REQUIRED);
+    }
+  }
+
+  private LoadTransactionPort.TransactionSnapshot loadOverridableSnapshot(
+      MarkTransactionSucceededCommand command) {
+    LoadTransactionPort.TransactionSnapshot snapshot =
+        loadTransactionPort
+            .loadById(command.transactionId())
+            .orElseThrow(() -> new Web3TransactionNotFoundException(command.transactionId()));
+
+    if (snapshot.status() != Web3TxStatus.UNCONFIRMED) {
+      throw new Web3TransactionStateInvalidException(
+          "only UNCONFIRMED can be overridden: currentStatus=" + snapshot.status());
+    }
+    if (snapshot.txHash() != null && !snapshot.txHash().equalsIgnoreCase(command.txHash())) {
+      throw new Web3TransactionStateInvalidException(
+          "txHash mismatch: existing=" + snapshot.txHash() + ", requested=" + command.txHash());
+    }
+    return snapshot;
+  }
+
+  private Web3ContractPort.ReceiptResult loadSuccessfulReceipt(String txHash) {
+    Web3ContractPort.ReceiptResult receipt = web3ContractPort.getReceipt(txHash);
+    if (receipt.rpcError()) {
+      throw new Web3TransactionStateInvalidException(
+          "receipt lookup failed: " + receipt.failureReason());
+    }
+    if (!receipt.found() || !Boolean.TRUE.equals(receipt.success())) {
+      throw new Web3TransactionStateInvalidException(
+          "receipt proof is required (receipt.status == 1)");
+    }
+    return receipt;
   }
 
   private void markNonceSlotConsumed(LoadTransactionPort.TransactionSnapshot snapshot) {

@@ -101,18 +101,13 @@ public class SponsorNonceDecisionService {
         .filter(slot -> request.chainLatestNonce() > slot.nonce())
         .min(Comparator.comparingLong(SponsorNonceSlot::nonce))
         .map(
-            slot -> {
-              if (slot.hasRetainedExternalEvidence()) {
-                return SponsorNonceDecision.of(
+            slot ->
+                SponsorNonceDecision.of(
                     SponsorNonceDecisionType.CONSUME_UNKNOWN_NONCE,
                     slot.nonce(),
-                    "LATEST_PASSED_WITH_RETAINED_EXTERNAL_EVIDENCE");
-              }
-              return SponsorNonceDecision.of(
-                  SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
-                  slot.nonce(),
-                  "LATEST_PASSED_WITHOUT_RETAINED_EVIDENCE");
-            })
+                    slot.hasRetainedExternalEvidence()
+                        ? "LATEST_PASSED_WITH_RETAINED_EXTERNAL_EVIDENCE"
+                        : "LATEST_PASSED_WITH_RPC_SNAPSHOT"))
         .orElse(null);
   }
 

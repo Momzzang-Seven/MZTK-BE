@@ -296,6 +296,10 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     audit(item.transactionId(), Web3TransactionAuditEventType.SIGN, null, signDetail);
     auditStateChange(item.transactionId(), Web3TxStatus.CREATED, Web3TxStatus.SIGNED);
 
+    if (!claimSignedForDirectBroadcast(item.transactionId())) {
+      return;
+    }
+
     markSlotBroadcasting(item, signer.walletAddress(), nonceReservation, signed);
     Web3ContractPort.BroadcastResult broadcast =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(signed.rawTx()));
@@ -331,6 +335,21 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         broadcast.failureReason() != null
             ? broadcast.failureReason()
             : Web3TxFailureReason.BROADCAST_FAILED.code());
+  }
+
+  private boolean claimSignedForDirectBroadcast(Long transactionId) {
+    boolean claimed =
+        updateTransactionPort.claimForProcessing(
+            transactionId,
+            Web3TxStatus.SIGNED,
+            workerId,
+            LocalDateTime.now().plusSeconds(claimTtlSeconds()));
+    if (!claimed) {
+      log.info(
+          "Skipping direct reward broadcast because signed tx is already claimed or moved: txId={}",
+          transactionId);
+    }
+    return claimed;
   }
 
   private void failPrevalidate(Long transactionId, String failureReason, boolean retryable) {

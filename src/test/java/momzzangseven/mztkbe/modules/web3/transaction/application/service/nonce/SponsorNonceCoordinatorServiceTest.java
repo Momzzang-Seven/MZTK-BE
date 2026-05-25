@@ -9,15 +9,19 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceEvidenceCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.ReserveSponsorNonceSlotCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceEvidenceView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotReservation;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorNonceSlotsPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.SponsorNonceLockPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceEvidenceSource;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceEvidenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlot;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -222,16 +226,17 @@ class SponsorNonceCoordinatorServiceTest {
   }
 
   @Test
-  void execute_whenLatestPassedWithRetainedEvidence_consumesUnknownThenReservesNextNonce() {
+  void execute_whenLatestPassedWithoutRetainedEvidence_recordsEvidenceAndConsumesUnknown() {
     when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
         .thenReturn(
             List.of(
                 SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.BROADCASTED)
-                    .retainedExternalEvidence()
                     .build()))
         .thenReturn(List.of());
     when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
-        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L, 200L)));
+        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.recordEvidence(any(RecordSponsorNonceEvidenceCommand.class)))
+        .thenReturn(unknownConsumedEvidence(51L, 200L));
     when(nonceSlotLifecycleUseCase.reserve(any()))
         .thenReturn(
             new SponsorNonceSlotReservation(
@@ -249,6 +254,7 @@ class SponsorNonceCoordinatorServiceTest {
     assertThat(transitionCaptor.getValue().getConsumedExternalEvidenceId()).isEqualTo(200L);
     assertThat(transitionCaptor.getValue().getTerminalReason())
         .isEqualTo("SPONSOR_NONCE_CONSUMED_UNKNOWN");
+    verify(nonceSlotLifecycleUseCase).recordEvidence(any(RecordSponsorNonceEvidenceCommand.class));
   }
 
   @Test
@@ -365,6 +371,22 @@ class SponsorNonceCoordinatorServiceTest {
         null,
         null,
         0,
+        NOW,
+        NOW);
+  }
+
+  private SponsorNonceEvidenceView unknownConsumedEvidence(long nonce, long evidenceId) {
+    return new SponsorNonceEvidenceView(
+        evidenceId,
+        CHAIN_ID,
+        SPONSOR,
+        nonce,
+        SponsorNonceEvidenceType.UNKNOWN_CONSUMED_CLOSURE,
+        SponsorNonceEvidenceSource.SYSTEM,
+        null,
+        "{}",
+        null,
+        null,
         NOW,
         NOW);
   }

@@ -560,6 +560,7 @@ class TransactionIssuerWorkerTest {
     stubExistingNonceSlot(7L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
+    stubSignedBroadcastClaim(1L);
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
         .thenReturn(
             new Web3ContractPort.BroadcastResult(true, "0x" + "e".repeat(64), null, "main"));
@@ -635,6 +636,7 @@ class TransactionIssuerWorkerTest {
     stubExistingNonceSlot(7L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
+    stubSignedBroadcastClaim(1L);
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
         .thenReturn(new Web3ContractPort.BroadcastResult(true, " ", null, "main"));
 
@@ -686,6 +688,7 @@ class TransactionIssuerWorkerTest {
         .thenReturn(List.of(slotView(33L, SponsorNonceSlotStatus.RESERVED, 1001L, 1L)));
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
+    stubSignedBroadcastClaim(1L);
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
         .thenReturn(new Web3ContractPort.BroadcastResult(true, "0x" + "e".repeat(64), null, "sub"));
 
@@ -778,6 +781,7 @@ class TransactionIssuerWorkerTest {
     stubExistingNonceSlot(5L, 1L, 1001L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
+    stubSignedBroadcastClaim(1L);
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
         .thenReturn(new Web3ContractPort.BroadcastResult(false, null, null, "main"));
     when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
@@ -787,6 +791,36 @@ class TransactionIssuerWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.BROADCAST_FAILED.code(), retryAt);
+  }
+
+  @Test
+  void processBatch_whenSignedTxClaimLost_skipsDirectBroadcastForRecoveryWorker() {
+    LoadTransactionWorkPort.TransactionWorkItem item = item(1L, 7L);
+
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(7L, 1L, 1001L);
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
+    when(updateTransactionPort.claimForProcessing(
+            eq(1L), eq(Web3TxStatus.SIGNED), anyString(), any(LocalDateTime.class)))
+        .thenReturn(false);
+
+    worker.processBatch(1);
+
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markSigned(
+            any(PersistSponsorNonceTransactionStateUseCase.SponsorNonceSignedCommand.class));
+    verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
+    verify(persistSponsorNonceTransactionStateUseCase, never())
+        .markPending(
+            any(PersistSponsorNonceTransactionStateUseCase.SponsorNoncePendingCommand.class));
+    verify(nonceSlotLifecycleUseCase, never())
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
   }
 
   @Test
@@ -891,6 +925,12 @@ class TransactionIssuerWorkerTest {
         0,
         LocalDateTime.now(),
         LocalDateTime.now());
+  }
+
+  private void stubSignedBroadcastClaim(Long transactionId) {
+    when(updateTransactionPort.claimForProcessing(
+            eq(transactionId), eq(Web3TxStatus.SIGNED), anyString(), any(LocalDateTime.class)))
+        .thenReturn(true);
   }
 
   private RecordSponsorNonceSlotTransitionCommand captureOnlySlotTransition() {
