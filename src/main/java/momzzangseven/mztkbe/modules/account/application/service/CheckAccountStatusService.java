@@ -47,17 +47,23 @@ public class CheckAccountStatusService implements CheckAccountStatusUseCase {
 
   @Override
   public boolean isActive(Long userId) {
-    return loadStatus(userId).map(s -> s == AccountStatus.ACTIVE).orElse(false);
+    return findStatus(userId).map(s -> s == AccountStatus.ACTIVE).orElse(false);
   }
 
   @Override
   public boolean isDeleted(Long userId) {
-    return loadStatus(userId).map(s -> s == AccountStatus.DELETED).orElse(false);
+    return findStatus(userId).map(s -> s == AccountStatus.DELETED).orElse(false);
   }
 
   @Override
   public boolean isBlocked(Long userId) {
-    return loadStatus(userId).map(s -> s == AccountStatus.BLOCKED).orElse(false);
+    return findStatus(userId).map(s -> s == AccountStatus.BLOCKED).orElse(false);
+  }
+
+  @Override
+  public Optional<AccountStatus> findStatus(Long userId) {
+    return statusCache.get(
+        userId, id -> loadUserAccountPort.findByUserId(id).map(UserAccount::getStatus));
   }
 
   /**
@@ -70,10 +76,5 @@ public class CheckAccountStatusService implements CheckAccountStatusUseCase {
   public void onUserAccountInvalidated(UserAccountInvalidatedEvent event) {
     statusCache.invalidate(event.userId());
     log.debug("UserAccount status cache invalidated: userId={}", event.userId());
-  }
-
-  private Optional<AccountStatus> loadStatus(Long userId) {
-    return statusCache.get(
-        userId, id -> loadUserAccountPort.findByUserId(id).map(UserAccount::getStatus));
   }
 }

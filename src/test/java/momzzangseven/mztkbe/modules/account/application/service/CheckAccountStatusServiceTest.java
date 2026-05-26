@@ -177,6 +177,37 @@ class CheckAccountStatusServiceTest {
   }
 
   @Nested
+  @DisplayName("findStatus — raw AccountStatus 노출 (ReissueTokenService 가 사용)")
+  class FindStatus {
+
+    @Test
+    @DisplayName("findStatus 는 캐시 항목을 동일하게 공유 — isActive 이후 호출 시 포트 미호출")
+    void findStatusSharesCacheWithBooleanMethods() {
+      when(loadUserAccountPort.findByUserId(30L))
+          .thenReturn(Optional.of(accountWith(AccountStatus.BLOCKED)));
+
+      service.isActive(30L);
+      Optional<AccountStatus> status = service.findStatus(30L);
+
+      assertThat(status).contains(AccountStatus.BLOCKED);
+      verify(loadUserAccountPort, times(1)).findByUserId(30L);
+    }
+
+    @Test
+    @DisplayName("findStatus 가 absent userId 도 캐시 — 두 번째 호출은 포트 미호출")
+    void findStatusCachesEmpty() {
+      when(loadUserAccountPort.findByUserId(99L)).thenReturn(Optional.empty());
+
+      Optional<AccountStatus> first = service.findStatus(99L);
+      Optional<AccountStatus> second = service.findStatus(99L);
+
+      assertThat(first).isEmpty();
+      assertThat(second).isEmpty();
+      verify(loadUserAccountPort, times(1)).findByUserId(99L);
+    }
+  }
+
+  @Nested
   @DisplayName("invalidation 이벤트 수신 → 다음 호출에서 포트 재호출")
   class Invalidation {
 

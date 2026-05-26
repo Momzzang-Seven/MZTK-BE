@@ -19,12 +19,10 @@ import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenM
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenValidator;
 import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenCommand;
 import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenResult;
+import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.out.CheckAdminRefreshSubjectPort;
-import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.model.RefreshToken;
-import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
-import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,7 +37,7 @@ class ReissueTokenServiceTest {
   @Mock private RefreshTokenValidator validator;
   @Mock private RefreshTokenManager refreshTokenManager;
   @Mock private JwtTokenProvider jwtTokenProvider;
-  @Mock private LoadUserAccountPort loadUserAccountPort;
+  @Mock private CheckAccountStatusUseCase checkAccountStatusUseCase;
   @Mock private CheckAdminRefreshSubjectPort checkAdminRefreshSubjectPort;
 
   @InjectMocks private ReissueTokenService reissueTokenService;
@@ -60,7 +58,7 @@ class ReissueTokenServiceTest {
             .build();
 
     given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(1L);
-    given(loadUserAccountPort.findByUserId(1L)).willReturn(Optional.of(activeAccount(1L)));
+    given(checkAccountStatusUseCase.findStatus(1L)).willReturn(Optional.of(AccountStatus.ACTIVE));
     given(validator.inspectSecurityFlaw(incomingRefreshToken, 1L)).willReturn(dbToken);
     given(refreshTokenManager.rotateTokens(1L, dbToken))
         .willReturn(new RefreshTokenManager.TokenPair("new-access", "new-refresh"));
@@ -93,7 +91,7 @@ class ReissueTokenServiceTest {
         validator,
         refreshTokenManager,
         jwtTokenProvider,
-        loadUserAccountPort,
+        checkAccountStatusUseCase,
         checkAdminRefreshSubjectPort);
   }
 
@@ -104,7 +102,7 @@ class ReissueTokenServiceTest {
     ReissueTokenCommand command = new ReissueTokenCommand(incomingRefreshToken);
 
     given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(7L);
-    given(loadUserAccountPort.findByUserId(7L)).willReturn(Optional.of(deletedAccount(7L)));
+    given(checkAccountStatusUseCase.findStatus(7L)).willReturn(Optional.of(AccountStatus.DELETED));
 
     assertThatThrownBy(() -> reissueTokenService.execute(command))
         .isInstanceOf(UserWithdrawnException.class);
@@ -124,7 +122,7 @@ class ReissueTokenServiceTest {
     ReissueTokenCommand command = new ReissueTokenCommand(incomingRefreshToken);
 
     given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(7L);
-    given(loadUserAccountPort.findByUserId(7L)).willReturn(Optional.of(blockedAccount(7L)));
+    given(checkAccountStatusUseCase.findStatus(7L)).willReturn(Optional.of(AccountStatus.BLOCKED));
 
     assertThatThrownBy(() -> reissueTokenService.execute(command))
         .isInstanceOf(UserBlockedException.class);
@@ -144,7 +142,7 @@ class ReissueTokenServiceTest {
     ReissueTokenCommand command = new ReissueTokenCommand(incomingRefreshToken);
 
     given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(8L);
-    given(loadUserAccountPort.findByUserId(8L)).willReturn(Optional.empty());
+    given(checkAccountStatusUseCase.findStatus(8L)).willReturn(Optional.empty());
     given(checkAdminRefreshSubjectPort.isActiveAdmin(8L)).willReturn(false);
 
     assertThatThrownBy(() -> reissueTokenService.execute(command))
@@ -175,7 +173,7 @@ class ReissueTokenServiceTest {
             .build();
 
     given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(99L);
-    given(loadUserAccountPort.findByUserId(99L)).willReturn(Optional.empty());
+    given(checkAccountStatusUseCase.findStatus(99L)).willReturn(Optional.empty());
     given(checkAdminRefreshSubjectPort.isActiveAdmin(99L)).willReturn(true);
     given(validator.inspectSecurityFlaw(incomingRefreshToken, 99L)).willReturn(dbToken);
     given(refreshTokenManager.rotateTokens(99L, dbToken))
@@ -189,29 +187,5 @@ class ReissueTokenServiceTest {
     assertThat(result.refreshToken()).isEqualTo("new-admin-refresh");
     verify(validator).inspectSecurityFlaw(incomingRefreshToken, 99L);
     verify(refreshTokenManager).rotateTokens(99L, dbToken);
-  }
-
-  private UserAccount activeAccount(Long userId) {
-    return UserAccount.builder()
-        .userId(userId)
-        .provider(AuthProvider.LOCAL)
-        .status(AccountStatus.ACTIVE)
-        .build();
-  }
-
-  private UserAccount deletedAccount(Long userId) {
-    return UserAccount.builder()
-        .userId(userId)
-        .provider(AuthProvider.LOCAL)
-        .status(AccountStatus.DELETED)
-        .build();
-  }
-
-  private UserAccount blockedAccount(Long userId) {
-    return UserAccount.builder()
-        .userId(userId)
-        .provider(AuthProvider.LOCAL)
-        .status(AccountStatus.BLOCKED)
-        .build();
   }
 }

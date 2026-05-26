@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.account.application.service;
 
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
@@ -11,11 +12,11 @@ import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenM
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenValidator;
 import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenCommand;
 import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenResult;
+import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.in.ReissueTokenUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.out.CheckAdminRefreshSubjectPort;
-import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.model.RefreshToken;
-import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
+import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +29,7 @@ public class ReissueTokenService implements ReissueTokenUseCase {
   private final RefreshTokenValidator validator;
   private final RefreshTokenManager refreshTokenManager;
   private final JwtTokenProvider jwtTokenProvider;
-  private final LoadUserAccountPort loadUserAccountPort;
+  private final CheckAccountStatusUseCase checkAccountStatusUseCase;
   private final CheckAdminRefreshSubjectPort checkAdminRefreshSubjectPort;
 
   @Override
@@ -59,22 +60,18 @@ public class ReissueTokenService implements ReissueTokenUseCase {
   }
 
   private void validateRefreshSubject(Long userId) {
-    loadUserAccountPort
-        .findByUserId(userId)
-        .ifPresentOrElse(
-            this::validateUserAccount,
-            () -> {
-              if (!checkAdminRefreshSubjectPort.isActiveAdmin(userId)) {
-                throw new UserNotFoundException(userId);
-              }
-            });
-  }
-
-  private void validateUserAccount(UserAccount account) {
-    if (account.isDeleted()) {
+    Optional<AccountStatus> status = checkAccountStatusUseCase.findStatus(userId);
+    if (status.isEmpty()) {
+      if (!checkAdminRefreshSubjectPort.isActiveAdmin(userId)) {
+        throw new UserNotFoundException(userId);
+      }
+      return;
+    }
+    AccountStatus value = status.get();
+    if (value == AccountStatus.DELETED) {
       throw new UserWithdrawnException();
     }
-    if (account.isBlocked()) {
+    if (value == AccountStatus.BLOCKED) {
       throw new UserBlockedException();
     }
   }
