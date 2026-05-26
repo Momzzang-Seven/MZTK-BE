@@ -3,12 +3,16 @@ package momzzangseven.mztkbe.integration.e2e.comment;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
@@ -16,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTra
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -56,7 +61,13 @@ import org.springframework.transaction.support.TransactionTemplate;
       "web3.chain-id=1337",
       "web3.eip712.chain-id=1337",
       "web3.eip7702.enabled=false",
-      "web3.reward-token.enabled=false"
+      "web3.reward-token.enabled=false",
+      // The integration profile pins Hikari to maximum-pool-size=4 to keep e2e light. This
+      // test exercises N=5/10 concurrent commenters on the same post and must observe whether
+      // they parallelise — not whether they exhaust the pool. We override the pool just for
+      // this class so a pool-size constraint cannot mask the row-lock signal we are testing.
+      "spring.datasource.hikari.maximum-pool-size=20",
+      "spring.datasource.hikari.minimum-idle=0"
     })
 @DisplayName("[E2E] CommentService.createComment acquires no posts row lock (MOM-459)")
 class CommentCreateNoPostLockConcurrencyE2ETest extends E2ETestBase {
@@ -125,6 +136,214 @@ class CommentCreateNoPostLockConcurrencyE2ETest extends E2ETestBase {
           .isEqualTo(1L);
     } finally {
       requestDone.countDown();
+      executor.shutdownNow();
+      executor.awaitTermination(5, TimeUnit.SECONDS);
+    }
+  }
+
+  /**
+   * Scenario A — direct lock-absence proof via {@code FOR UPDATE NOWAIT} probe.
+   *
+   * <p>The original Tier 3 recommendation in {@code
+   * docs.local/analysis/post-comment-write-lock-bottleneck.md} was to assert that {@code pg_locks}
+   * carries no {@code posts}-row lock while concurrent {@code createComment} are in flight.
+   * PostgreSQL stores row-lock holders in tuple xmax — not in {@code pg_locks} — so a direct {@code
+   * pg_locks} query cannot observe the holder. We use the equivalent: a separate transaction that
+   * repeatedly attempts {@code SELECT … FOR NO KEY UPDATE NOWAIT} on the post row. If any commenter
+   * is holding a conflicting row lock, NOWAIT raises {@link CannotAcquireLockException} ({@code
+   * SQLState 55P03}). With MOM-459's lock-free {@code loadPost}, the probe must succeed every
+   * iteration.
+   *
+   * <p>We deliberately probe with {@code FOR NO KEY UPDATE} (not {@code FOR UPDATE}) — same
+   * reasoning as the single-holder scenario above: it still conflicts with the old auto-{@code FOR
+   * UPDATE} (so a regression makes NOWAIT fail) but does <em>not</em> conflict with the {@code FOR
+   * KEY SHARE} that PostgreSQL takes for {@code comments → posts} FK enforcement (so the INSERT
+   * itself does not contaminate the signal).
+   */
+  @Test
+  @DisplayName(
+      "concurrent createComment x N — posts row lock-free proven by FOR NO KEY UPDATE NOWAIT"
+          + " probe")
+  void concurrentCreateCommentLeavesPostsRowLockFreeProvenByNowaitProbe() throws Exception {
+    int concurrency = 5;
+    TestUser postAuthor = signupAndLogin("comment-nowait-author");
+    Long postId = createFreePost(postAuthor.accessToken(), "post under NOWAIT probe");
+
+    List<TestUser> commenters = new ArrayList<>(concurrency);
+    for (int i = 0; i < concurrency; i++) {
+      commenters.add(signupAndLogin("comment-nowait-commenter-" + i));
+    }
+
+    ExecutorService executor = Executors.newFixedThreadPool(concurrency + 1);
+    CountDownLatch start = new CountDownLatch(1);
+    AtomicBoolean shouldStop = new AtomicBoolean(false);
+    AtomicInteger probeSuccesses = new AtomicInteger(0);
+    AtomicInteger probeFailures = new AtomicInteger(0);
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+
+    try {
+      List<Future<ResponseEntity<String>>> commentFutures = new ArrayList<>(concurrency);
+      for (TestUser commenter : commenters) {
+        commentFutures.add(
+            executor.submit(
+                () -> {
+                  awaitLatch(start, "start");
+                  return restTemplate.exchange(
+                      baseUrl() + "/posts/" + postId + "/comments",
+                      HttpMethod.POST,
+                      new HttpEntity<>(
+                          Map.of("content", "concurrent comment"),
+                          bearerJsonHeaders(commenter.accessToken())),
+                      String.class);
+                }));
+      }
+
+      Future<?> probeFuture =
+          executor.submit(
+              () -> {
+                awaitLatch(start, "start");
+                while (!shouldStop.get()) {
+                  try {
+                    transactionTemplate.executeWithoutResult(
+                        status ->
+                            jdbcTemplate.queryForMap(
+                                "SELECT id FROM posts WHERE id = ? FOR NO KEY UPDATE NOWAIT",
+                                postId));
+                    probeSuccesses.incrementAndGet();
+                  } catch (CannotAcquireLockException ignored) {
+                    probeFailures.incrementAndGet();
+                  }
+                  try {
+                    Thread.sleep(5);
+                  } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                  }
+                }
+                return null;
+              });
+
+      start.countDown();
+
+      for (Future<ResponseEntity<String>> future : commentFutures) {
+        ResponseEntity<String> response = future.get(10, TimeUnit.SECONDS);
+        assertThat(response.getStatusCode())
+            .as("concurrent createComment should return 2xx — body=%s", response.getBody())
+            .isEqualTo(HttpStatus.OK);
+      }
+
+      shouldStop.set(true);
+      probeFuture.get(5, TimeUnit.SECONDS);
+
+      assertThat(probeSuccesses.get())
+          .as("NOWAIT probe should run at least once while commenters were in flight")
+          .isGreaterThanOrEqualTo(1);
+      assertThat(probeFailures.get())
+          .as(
+              "MOM-459 contract — posts row must stay lock-free while concurrent createComment are"
+                  + " in flight. NOWAIT failures (55P03) prove a conflicting row lock was held"
+                  + " (regression). successes=%d, failures=%d",
+              probeSuccesses.get(), probeFailures.get())
+          .isZero();
+
+      Long commentCount =
+          jdbcTemplate.queryForObject(
+              "SELECT COUNT(*) FROM comments WHERE post_id = ?", Long.class, postId);
+      assertThat(commentCount).isEqualTo((long) concurrency);
+    } finally {
+      shouldStop.set(true);
+      executor.shutdownNow();
+      executor.awaitTermination(5, TimeUnit.SECONDS);
+    }
+  }
+
+  /**
+   * Scenario B — observable consequence of the lock-free contract: N concurrent {@code
+   * createComment} on the same post must not serialize.
+   *
+   * <p>Under the old auto-{@code PESSIMISTIC_WRITE} path the {@code posts} row lock was held until
+   * outer commit, so N concurrent requests on the same post serialized — wall-time grew ≈ {@code N
+   * × single}. With MOM-459's lock-free {@code loadPost} the requests run in parallel and wall-time
+   * stays ≈ {@code single}.
+   *
+   * <p>We assert {@code parallel ≤ max(baseline × 5, 1500 ms)} — the {@code × 5} margin decisively
+   * rejects the old {@code × 10} serialization while tolerating JIT / connection-pool / scheduling
+   * noise; the {@code 1500 ms} floor protects against an artificially small baseline.
+   */
+  @Test
+  @DisplayName("concurrent createComment x N on the same post do not serialize on a row lock")
+  void concurrentCreateCommentDoesNotSerializeOnPostsRowLock() throws Exception {
+    int concurrency = 10;
+    TestUser postAuthor = signupAndLogin("comment-parallel-author");
+    Long postId = createFreePost(postAuthor.accessToken(), "post under parallel commenters");
+
+    TestUser baselineCommenter = signupAndLogin("comment-parallel-baseline");
+    long baselineStart = System.nanoTime();
+    ResponseEntity<String> baseline =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId + "/comments",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("content", "baseline"), bearerJsonHeaders(baselineCommenter.accessToken())),
+            String.class);
+    long baselineNanos = System.nanoTime() - baselineStart;
+    assertThat(baseline.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+    List<TestUser> commenters = new ArrayList<>(concurrency);
+    for (int i = 0; i < concurrency; i++) {
+      commenters.add(signupAndLogin("comment-parallel-commenter-" + i));
+    }
+
+    ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+    CountDownLatch start = new CountDownLatch(1);
+    List<Future<ResponseEntity<String>>> futures = new ArrayList<>(concurrency);
+
+    try {
+      for (TestUser commenter : commenters) {
+        futures.add(
+            executor.submit(
+                () -> {
+                  awaitLatch(start, "start");
+                  return restTemplate.exchange(
+                      baseUrl() + "/posts/" + postId + "/comments",
+                      HttpMethod.POST,
+                      new HttpEntity<>(
+                          Map.of("content", "parallel comment"),
+                          bearerJsonHeaders(commenter.accessToken())),
+                      String.class);
+                }));
+      }
+
+      long parallelStart = System.nanoTime();
+      start.countDown();
+      for (Future<ResponseEntity<String>> future : futures) {
+        ResponseEntity<String> response = future.get(15, TimeUnit.SECONDS);
+        assertThat(response.getStatusCode())
+            .as("parallel createComment should return 2xx — body=%s", response.getBody())
+            .isEqualTo(HttpStatus.OK);
+      }
+      long parallelNanos = System.nanoTime() - parallelStart;
+
+      long baselineMillis = baselineNanos / 1_000_000;
+      long parallelMillis = parallelNanos / 1_000_000;
+      long upperBoundMillis = Math.max(baselineMillis * 5, 1500L);
+      assertThat(parallelMillis)
+          .as(
+              "MOM-459 — concurrent createComment must not serialize on posts row lock."
+                  + " baseline=%d ms, parallel(N=%d)=%d ms, upper bound=%d ms."
+                  + " Serialized (old code) would be ≈ N × baseline = %d ms.",
+              baselineMillis,
+              concurrency,
+              parallelMillis,
+              upperBoundMillis,
+              concurrency * baselineMillis)
+          .isLessThanOrEqualTo(upperBoundMillis);
+
+      Long commentCount =
+          jdbcTemplate.queryForObject(
+              "SELECT COUNT(*) FROM comments WHERE post_id = ?", Long.class, postId);
+      assertThat(commentCount).isEqualTo((long) (concurrency + 1));
+    } finally {
       executor.shutdownNow();
       executor.awaitTermination(5, TimeUnit.SECONDS);
     }
