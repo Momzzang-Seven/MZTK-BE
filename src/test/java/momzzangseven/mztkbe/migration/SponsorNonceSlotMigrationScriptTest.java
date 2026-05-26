@@ -28,8 +28,15 @@ class SponsorNonceSlotMigrationScriptTest {
         .doesNotContain("HAVING COUNT(*) > 1");
     assertThat(backfillSql)
         .contains("-- flyway:executeInTransaction=false")
+        .contains("HAVING COUNT(*) > 1")
         .contains("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_sender_nonce")
         .contains("SET from_address = LOWER(from_address)");
+    assertThat(backfillSql.indexOf("HAVING COUNT(*) > 1"))
+        .isLessThan(backfillSql.indexOf("SET from_address = LOWER(from_address)"));
+    assertThat(backfillSql.indexOf("SET from_address = LOWER(from_address)"))
+        .isLessThan(
+            backfillSql.indexOf(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_sender_nonce"));
   }
 
   @Test
@@ -42,6 +49,10 @@ class SponsorNonceSlotMigrationScriptTest {
         .doesNotContain(
             "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_eip7702_authority_nonce");
     assertThat(backfillSql)
+        .contains("DROP INDEX idx_web3_tx_sender_nonce")
+        .contains("DROP INDEX idx_web3_tx_eip7702_authority_nonce")
+        .contains("DROP INDEX uk_web3_tx_id_chain_sender_nonce")
+        .contains("NOT i.indisvalid OR NOT i.indisready")
         .contains("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_eip7702_authority_nonce");
   }
 
@@ -62,6 +73,8 @@ class SponsorNonceSlotMigrationScriptTest {
         .contains("INSERT INTO web3_nonce_slot_attempts")
         .contains("INSERT INTO web3_nonce_slots")
         .contains("CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_web3_tx_id_chain_sender_nonce")
+        .contains("VALIDATE CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope")
+        .contains("VALIDATE CONSTRAINT fk_web3_nonce_slots_active_tx")
         .contains("NOT VALID");
   }
 }

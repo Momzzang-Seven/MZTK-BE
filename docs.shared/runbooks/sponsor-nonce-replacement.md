@@ -15,6 +15,21 @@ There is currently no public/admin write API for closing nonce slots. The admin 
 read-only. Treat this document as an investigation and escalation runbook, not as permission to run
 ad-hoc SQL.
 
+## Migration rollout checklist
+
+Before applying the MOM-458 nonce-slot migrations to production-like data, run V084 on a staging
+snapshot with comparable `web3_transactions` volume.
+
+- Record the row counts for `web3_transactions`, rows with `nonce IS NOT NULL`, and active
+  `CREATED`/`SIGNED`/`PENDING`/`UNCONFIRMED` transactions.
+- Measure elapsed time for lower-case address normalization, `web3_nonce_slot_attempts` backfill,
+  `web3_nonce_slots` backfill, and constraint validation.
+- Watch PostgreSQL locks and blocked sessions during the normalization and validation statements.
+- If V084 fails after a concurrent index statement, rerun the migration only after confirming the
+  invalid-index cleanup path ran or manually dropping the invalid index with a reviewed DB change.
+- Do not promote the migration if duplicate `(chain_id, lower(from_address), nonce)` transaction
+  scopes are reported by the preflight guard. Resolve the duplicate transaction history first.
+
 ## Trigger
 
 Use this runbook when admin nonce slot review shows one of these conditions:

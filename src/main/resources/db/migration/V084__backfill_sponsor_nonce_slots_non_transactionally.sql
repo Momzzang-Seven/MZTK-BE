@@ -1,15 +1,22 @@
 -- flyway:executeInTransaction=false
 -- MOM-458: non-transactional lookup indexes, normalization, and sponsor nonce slot backfill.
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_sender_nonce
-    ON web3_transactions(chain_id, from_address, nonce)
-    WHERE nonce IS NOT NULL;
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_eip7702_authority_nonce
-    ON web3_transactions(authority_address, authorization_nonce)
-    WHERE tx_type = 'EIP7702'
-      AND authority_address IS NOT NULL
-      AND authorization_nonce IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM (
+            SELECT chain_id, LOWER(from_address), nonce
+            FROM web3_transactions
+            WHERE nonce IS NOT NULL
+            GROUP BY chain_id, LOWER(from_address), nonce
+            HAVING COUNT(*) > 1
+        ) duplicate_nonce_scope
+    ) THEN
+        RAISE EXCEPTION
+            'Duplicate web3 transaction nonce scopes would be created by lower-case normalization';
+    END IF;
+END $$;
 
 UPDATE web3_transactions
 SET from_address = LOWER(from_address),
@@ -36,6 +43,54 @@ INSERT INTO web3_nonce_state(from_address, next_nonce, updated_at)
 SELECT from_address, next_nonce, updated_at
 FROM normalized_nonce_state;
 
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_index i ON i.indexrelid = c.oid
+        WHERE c.oid = to_regclass('idx_web3_tx_sender_nonce')
+          AND (NOT i.indisvalid OR NOT i.indisready)
+    ) THEN
+        DROP INDEX idx_web3_tx_sender_nonce;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_index i ON i.indexrelid = c.oid
+        WHERE c.oid = to_regclass('idx_web3_tx_eip7702_authority_nonce')
+          AND (NOT i.indisvalid OR NOT i.indisready)
+    ) THEN
+        DROP INDEX idx_web3_tx_eip7702_authority_nonce;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'uk_web3_tx_id_chain_sender_nonce'
+          AND conrelid = 'web3_transactions'::regclass
+    ) AND EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_index i ON i.indexrelid = c.oid
+        WHERE c.oid = to_regclass('uk_web3_tx_id_chain_sender_nonce')
+          AND (NOT i.indisvalid OR NOT i.indisready)
+    ) THEN
+        DROP INDEX uk_web3_tx_id_chain_sender_nonce;
+    END IF;
+END $$;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_sender_nonce
+    ON web3_transactions(chain_id, from_address, nonce)
+    WHERE nonce IS NOT NULL;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_eip7702_authority_nonce
+    ON web3_transactions(authority_address, authorization_nonce)
+    WHERE tx_type = 'EIP7702'
+      AND authority_address IS NOT NULL
+      AND authorization_nonce IS NOT NULL;
+
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_web3_tx_id_chain_sender_nonce
     ON web3_transactions(id, chain_id, from_address, nonce);
 
@@ -47,6 +102,70 @@ BEGIN
         ALTER TABLE web3_transactions
             ADD CONSTRAINT uk_web3_tx_id_chain_sender_nonce
             UNIQUE USING INDEX uk_web3_tx_id_chain_sender_nonce;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_web3_tx_addresses_lower'
+          AND conrelid = 'web3_transactions'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_transactions VALIDATE CONSTRAINT ck_web3_tx_addresses_lower;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_web3_nonce_state_from_lower'
+          AND conrelid = 'web3_nonce_state'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_state VALIDATE CONSTRAINT ck_web3_nonce_state_from_lower;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_web3_nonce_slot_attempt_tx_scope'
+          AND conrelid = 'web3_nonce_slot_attempts'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_slot_attempts
+            VALIDATE CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_web3_nonce_slots_active_tx'
+          AND conrelid = 'web3_nonce_slots'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_active_tx;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_web3_nonce_slots_consumed_tx'
+          AND conrelid = 'web3_nonce_slots'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_consumed_tx;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_web3_nonce_slots_released_tx'
+          AND conrelid = 'web3_nonce_slots'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_released_tx;
     END IF;
 END $$;
 
