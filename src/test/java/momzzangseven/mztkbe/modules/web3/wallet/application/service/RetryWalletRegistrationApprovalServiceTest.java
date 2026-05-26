@@ -85,6 +85,7 @@ class RetryWalletRegistrationApprovalServiceTest {
         new RetryWalletRegistrationApprovalService(
             lockSessionPort,
             saveSessionPort,
+            new WalletRegistrationReceiptTimeoutMarker(saveSessionPort),
             loadExecutionStatePort,
             loadWalletApprovalCapabilityPort,
             loadWalletApprovalTtlPolicyPort,

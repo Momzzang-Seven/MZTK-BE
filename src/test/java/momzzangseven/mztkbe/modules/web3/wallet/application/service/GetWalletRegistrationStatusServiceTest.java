@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrati
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationStatusResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
@@ -41,6 +42,7 @@ class GetWalletRegistrationStatusServiceTest {
   private static final Long USER_ID = 1L;
 
   @Mock private LoadWalletRegistrationSessionPort loadSessionPort;
+  @Mock private LockWalletRegistrationSessionPort lockSessionPort;
   @Mock private LoadWalletApprovalExecutionStatePort loadExecutionStatePort;
   @Mock private SaveWalletRegistrationSessionPort saveSessionPort;
 
@@ -50,7 +52,11 @@ class GetWalletRegistrationStatusServiceTest {
   void setUp() {
     service =
         new GetWalletRegistrationStatusService(
-            loadSessionPort, loadExecutionStatePort, saveSessionPort, FIXED_CLOCK);
+            loadSessionPort,
+            lockSessionPort,
+            loadExecutionStatePort,
+            new WalletRegistrationReceiptTimeoutMarker(saveSessionPort),
+            FIXED_CLOCK);
   }
 
   @Test
@@ -170,6 +176,8 @@ class GetWalletRegistrationStatusServiceTest {
   void execute_whenReceiptTimeoutDetected_marksSponsorNonceBlocked() {
     when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
         .thenReturn(Optional.of(approvalPendingOnchainSession()));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(approvalPendingOnchainSession()));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(receiptTimeoutState()));
     when(saveSessionPort.save(any(WalletRegistrationSession.class)))
@@ -182,13 +190,36 @@ class GetWalletRegistrationStatusServiceTest {
     assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.CONTACT_SUPPORT);
     assertThat(result.lastErrorCode()).isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
     assertThat(result.supportMessageKey()).isEqualTo("WALLET_APPROVAL_OPERATOR_REVIEW");
+    verify(lockSessionPort).lockByPublicIdForUpdate(REGISTRATION_ID);
     verify(saveSessionPort).save(any(WalletRegistrationSession.class));
   }
 
+  @Test
+  void execute_whenReceiptTimeoutSnapshotIsStale_doesNotOverwriteLockedRetrySession() {
+    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+        .thenReturn(Optional.of(approvalPendingOnchainSession()));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(approvalRequiredSession("intent-2")));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(receiptTimeoutState()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, "intent-2"))
+        .thenReturn(Optional.empty());
+
+    WalletRegistrationStatusResult result =
+        service.execute(new GetWalletRegistrationStatusQuery(USER_ID, REGISTRATION_ID));
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_REQUIRED);
+    verify(saveSessionPort, never()).save(any(WalletRegistrationSession.class));
+  }
+
   private static WalletRegistrationSession approvalRequiredSession() {
+    return approvalRequiredSession(INTENT_ID);
+  }
+
+  private static WalletRegistrationSession approvalRequiredSession(String intentId) {
     return WalletRegistrationSession.create(
             REGISTRATION_ID, USER_ID, "0x" + "a".repeat(40), "nonce-1", NOW.plusMinutes(30), NOW)
-        .attachApprovalIntent(INTENT_ID, NOW.plusMinutes(30), NOW.plusSeconds(1));
+        .attachApprovalIntent(intentId, NOW.plusMinutes(30), NOW.plusSeconds(1));
   }
 
   private static WalletRegistrationSession expiredApprovalRequiredSession() {

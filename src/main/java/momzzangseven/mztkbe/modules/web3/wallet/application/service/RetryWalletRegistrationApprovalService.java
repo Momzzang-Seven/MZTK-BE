@@ -48,6 +48,7 @@ public class RetryWalletRegistrationApprovalService
 
   private final LockWalletRegistrationSessionPort lockSessionPort;
   private final SaveWalletRegistrationSessionPort saveSessionPort;
+  private final WalletRegistrationReceiptTimeoutMarker receiptTimeoutMarker;
   private final LoadWalletApprovalExecutionStatePort loadExecutionStatePort;
   private final LoadWalletApprovalCapabilityPort loadWalletApprovalCapabilityPort;
   private final LoadWalletApprovalTtlPolicyPort loadWalletApprovalTtlPolicyPort;
@@ -112,19 +113,7 @@ public class RetryWalletRegistrationApprovalService
       return Optional.empty();
     }
 
-    WalletRegistrationSession updated =
-        session.markSponsorNonceBlocked(
-            WalletRegistrationReceiptTimeout.ERROR_CODE,
-            WalletRegistrationReceiptTimeout.ERROR_REASON,
-            now);
-    log.warn(
-        "wallet registration sponsor nonce blocked: registrationId={}, walletAddress={}, "
-            + "latestExecutionIntentId={}, errorCode={}",
-        updated.getPublicId(),
-        updated.getWalletAddress(),
-        updated.getLatestExecutionIntentId(),
-        WalletRegistrationReceiptTimeout.ERROR_CODE);
-    WalletRegistrationSession saved = saveSessionPort.save(updated);
+    WalletRegistrationSession saved = receiptTimeoutMarker.markSponsorNonceBlocked(session, now);
     return Optional.of(
         RetryApprovalPreparation.reusable(
             WalletRegistrationStatusResult.from(saved, currentState.orElse(null), now)));
