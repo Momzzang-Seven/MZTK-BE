@@ -106,7 +106,7 @@ public class RetryWalletRegistrationApprovalService
       WalletRegistrationSession session,
       Optional<WalletApprovalExecutionStateView> currentState,
       LocalDateTime now) {
-    if (session.getStatus() != WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+    if (!canMarkSponsorNonceBlocked(session)
         || currentState.filter(WalletRegistrationReceiptTimeout::isCurrent).isEmpty()) {
       return Optional.empty();
     }
@@ -115,6 +115,10 @@ public class RetryWalletRegistrationApprovalService
     return Optional.of(
         RetryApprovalPreparation.reusable(
             WalletRegistrationStatusResult.from(saved, currentState.orElse(null), now)));
+  }
+
+  private boolean canMarkSponsorNonceBlocked(WalletRegistrationSession session) {
+    return !session.isTerminal() && !session.getStatus().isConfirmedButNotFinalized();
   }
 
   private WalletRegistrationSession backfillReceiptTimeoutExecutionIntentIfNeeded(

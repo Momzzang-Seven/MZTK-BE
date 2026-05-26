@@ -487,12 +487,6 @@ public class TransactionalExecuteExecutionIntentDelegate
               true,
               true,
               LocalDateTime.now(appClock)));
-      ExecutionActionHookRunner.afterTransactionSubmitted(
-          runAfterCommitPort,
-          actionHandler,
-          current,
-          actionPlan,
-          ExecutionTransactionStatus.SIGNED);
       return;
     }
 

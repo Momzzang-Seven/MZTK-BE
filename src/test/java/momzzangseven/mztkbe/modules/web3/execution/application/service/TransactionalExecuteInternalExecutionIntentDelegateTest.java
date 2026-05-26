@@ -432,6 +432,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
                         && command.hasBroadcastEvidence()));
     verify(executionTransactionGatewayPort, never()).scheduleRetry(any(), any(), any());
     verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+    verify(executionActionHandlerPort, never()).afterTransactionSubmitted(any(), any(), any());
   }
 
   @Test

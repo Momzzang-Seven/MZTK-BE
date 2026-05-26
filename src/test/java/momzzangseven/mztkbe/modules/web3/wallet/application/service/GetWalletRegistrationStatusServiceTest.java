@@ -188,6 +188,24 @@ class GetWalletRegistrationStatusServiceTest {
   }
 
   @Test
+  void execute_whenSignedTransactionUnconfirmed_marksSponsorNonceBlocked() {
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(approvalSignedSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(receiptTimeoutState()));
+    when(saveSessionPort.save(any(WalletRegistrationSession.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    WalletRegistrationStatusResult result =
+        service.execute(new GetWalletRegistrationStatusQuery(USER_ID, REGISTRATION_ID));
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.CONTACT_SUPPORT);
+    assertThat(result.lastErrorCode()).isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
+    verify(saveSessionPort).save(any(WalletRegistrationSession.class));
+  }
+
+  @Test
   void execute_whenLockedSessionHasNewRetryIntent_doesNotOverwriteRetrySession() {
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalRequiredSession("intent-2")));
@@ -216,10 +234,14 @@ class GetWalletRegistrationStatusServiceTest {
   }
 
   private static WalletRegistrationSession approvalPendingOnchainSession() {
-    return approvalRequiredSession()
-        .markApprovalSigned(INTENT_ID, 10L, "0x" + "b".repeat(64), "SIGNED", NOW.minusSeconds(2))
+    return approvalSignedSession()
         .markApprovalPendingOnchain(
             INTENT_ID, 10L, "0x" + "b".repeat(64), "PENDING_ONCHAIN", NOW.minusSeconds(1));
+  }
+
+  private static WalletRegistrationSession approvalSignedSession() {
+    return approvalRequiredSession()
+        .markApprovalSigned(INTENT_ID, 10L, "0x" + "b".repeat(64), "SIGNED", NOW.minusSeconds(2));
   }
 
   private static WalletApprovalExecutionStateView signableState() {

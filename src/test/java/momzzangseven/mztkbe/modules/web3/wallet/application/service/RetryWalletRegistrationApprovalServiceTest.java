@@ -379,6 +379,25 @@ class RetryWalletRegistrationApprovalServiceTest {
   }
 
   @Test
+  void execute_whenSignedTransactionUnconfirmed_marksSponsorNonceBlockedWithoutNewIntent() {
+    WalletRegistrationSession signed =
+        approvalRequiredSession()
+            .markApprovalSigned(
+                INTENT_ID, 10L, "0x" + "c".repeat(64), "SIGNED", NOW.plusSeconds(2));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(signed));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(state("SIGNED", "UNCONFIRMED", null, NOW.plusMinutes(5))));
+    when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    WalletRegistrationStatusResult result = service.execute(command(USER_ID));
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.CONTACT_SUPPORT);
+    verify(buildDraftPort, never()).build(any());
+    verify(submitDraftPort, never()).submit(any());
+  }
+
+  @Test
   void execute_whenReceiptTimeoutRetryWouldReusePreviousIntent_doesNotCreateReplacement() {
     WalletRegistrationSession pending = pendingOnchainSession();
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(pending));

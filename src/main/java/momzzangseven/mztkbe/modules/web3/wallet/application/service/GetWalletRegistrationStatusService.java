@@ -13,7 +13,6 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetWalletReg
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
-import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,7 +69,11 @@ public class GetWalletRegistrationStatusService implements GetWalletRegistration
   private boolean isReceiptTimeout(
       WalletRegistrationSession session,
       Optional<WalletApprovalExecutionStateView> executionState) {
-    return session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+    return canMarkSponsorNonceBlocked(session)
         && executionState.filter(WalletRegistrationReceiptTimeout::isCurrent).isPresent();
+  }
+
+  private boolean canMarkSponsorNonceBlocked(WalletRegistrationSession session) {
+    return !session.isTerminal() && !session.getStatus().isConfirmedButNotFinalized();
   }
 }
