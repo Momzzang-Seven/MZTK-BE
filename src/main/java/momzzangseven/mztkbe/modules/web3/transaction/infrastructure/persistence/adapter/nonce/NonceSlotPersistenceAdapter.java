@@ -5,6 +5,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
@@ -35,6 +38,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.nonce.NonceSlotAttemptJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.nonce.NonceSlotEvidenceJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.nonce.NonceSlotJpaRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,6 +61,7 @@ public class NonceSlotPersistenceAdapter
           SponsorNonceSlotStatus.STUCK,
           SponsorNonceSlotStatus.CONSUMED_UNKNOWN,
           SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
+  private static final int COORDINATION_VISIBLE_SLOT_SCAN_LIMIT = 64;
 
   private final NonceSlotJpaRepository slotRepository;
   private final NonceSlotAttemptJpaRepository attemptRepository;
@@ -72,12 +77,14 @@ public class NonceSlotPersistenceAdapter
       throw new Web3InvalidInputException("chainId must be positive");
     }
     String normalizedAddress = EvmAddress.of(fromAddress).value();
-    return slotRepository
-        .findByScopeAndStatusInOrderByNonce(
-            chainId, normalizedAddress, COORDINATION_VISIBLE_STATUSES)
-        .stream()
-        .map(this::toDomainSlot)
-        .toList();
+    List<NonceSlotEntity> slots =
+        slotRepository.findByScopeAndStatusInOrderByNonce(
+            chainId,
+            normalizedAddress,
+            COORDINATION_VISIBLE_STATUSES,
+            PageRequest.of(0, COORDINATION_VISIBLE_SLOT_SCAN_LIMIT));
+    Map<Long, Web3TransactionEntity> activeTransactions = loadActiveTransactions(slots);
+    return slots.stream().map(slot -> toDomainSlot(slot, activeTransactions)).toList();
   }
 
   @Override
@@ -536,13 +543,18 @@ public class NonceSlotPersistenceAdapter
   }
 
   private SponsorNonceSlot toDomainSlot(NonceSlotEntity entity) {
+    return toDomainSlot(entity, Map.of());
+  }
+
+  private SponsorNonceSlot toDomainSlot(
+      NonceSlotEntity entity, Map<Long, Web3TransactionEntity> activeTransactions) {
     SponsorNonceSlot.Builder builder =
         SponsorNonceSlot.builder(
             entity.getChainId(), entity.getFromAddress(), entity.getNonce(), entity.getStatus());
     if (entity.getActiveTxHash() != null) {
       builder.txHash().signingEvidence();
     }
-    applyTransactionEvidence(entity, builder);
+    applyTransactionEvidence(entity, builder, activeTransactions);
     if (entity.getBroadcastStartedAt() != null || entity.getLastBroadcastedAt() != null) {
       builder.broadcastEvidence();
     }
@@ -561,33 +573,53 @@ public class NonceSlotPersistenceAdapter
     return builder.build();
   }
 
-  private void applyTransactionEvidence(NonceSlotEntity entity, SponsorNonceSlot.Builder builder) {
+  private Map<Long, Web3TransactionEntity> loadActiveTransactions(List<NonceSlotEntity> slots) {
+    List<Long> activeTxIds =
+        slots.stream()
+            .map(NonceSlotEntity::getActiveTxId)
+            .filter(id -> id != null)
+            .distinct()
+            .toList();
+    if (activeTxIds.isEmpty()) {
+      return Map.of();
+    }
+    return transactionRepository.findByIdIn(activeTxIds).stream()
+        .collect(Collectors.toMap(Web3TransactionEntity::getId, Function.identity()));
+  }
+
+  private void applyTransactionEvidence(
+      NonceSlotEntity entity,
+      SponsorNonceSlot.Builder builder,
+      Map<Long, Web3TransactionEntity> activeTransactions) {
     if (entity.getActiveTxId() == null) {
       return;
     }
-    transactionRepository
-        .findById(entity.getActiveTxId())
-        .ifPresent(
-            tx -> {
-              if (tx.getSignedRawTx() != null && !tx.getSignedRawTx().isBlank()) {
-                builder.rawTx().signingEvidence();
-              }
-              if (tx.getSignedAt() != null) {
-                builder.signingEvidence();
-              }
-              if (tx.getTxHash() != null && !tx.getTxHash().isBlank()) {
-                builder.txHash();
-              }
-              if (tx.getBroadcastedAt() != null) {
-                builder.broadcastEvidence();
-              }
-            });
+    Web3TransactionEntity tx = activeTransactions.get(entity.getActiveTxId());
+    if (tx == null && activeTransactions.isEmpty()) {
+      tx = transactionRepository.findById(entity.getActiveTxId()).orElse(null);
+    }
+    if (tx == null) {
+      return;
+    }
+    if (tx.getSignedRawTx() != null && !tx.getSignedRawTx().isBlank()) {
+      builder.rawTx().signingEvidence();
+    }
+    if (tx.getSignedAt() != null) {
+      builder.signingEvidence();
+    }
+    if (tx.getTxHash() != null && !tx.getTxHash().isBlank()) {
+      builder.txHash();
+    }
+    if (tx.getBroadcastedAt() != null) {
+      builder.broadcastEvidence();
+    }
   }
 
   private boolean isTimedOut(NonceSlotEntity entity) {
     LocalDateTime baseline =
         switch (entity.getStatus()) {
           case RESERVED -> entity.getUpdatedAt();
+          case BROADCASTING -> entity.getBroadcastStartedAt();
           case BROADCASTED ->
               entity.getLastBroadcastedAt() == null
                   ? entity.getBroadcastStartedAt()
@@ -599,7 +631,7 @@ public class NonceSlotPersistenceAdapter
     }
     Duration timeout =
         switch (entity.getStatus()) {
-          case RESERVED ->
+          case RESERVED, BROADCASTING ->
               Duration.ofSeconds(rewardTokenProperties.getWorker().getClaimTtlSeconds());
           case BROADCASTED ->
               Duration.ofSeconds(rewardTokenProperties.getWorker().getReceiptTimeoutSeconds());

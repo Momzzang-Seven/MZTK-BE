@@ -55,6 +55,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
     implements ExecuteTransactionalInternalExecutionIntentDelegatePort {
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
+  private static final String BROADCAST_ALREADY_KNOWN = "BROADCAST_ALREADY_KNOWN";
   private static final String INTERNAL_ISSUER_INVALID_INTENT = "INTERNAL_ISSUER_INVALID_INTENT";
   private static final int SPONSOR_NONCE_OPEN_WINDOW_SIZE = 3;
   private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
@@ -455,7 +456,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       return;
     }
 
-    if (broadcast.success()) {
+    if (broadcast.success() || isBroadcastAlreadyKnown(broadcast)) {
       String txHash =
           broadcast.txHash() == null || broadcast.txHash().isBlank()
               ? fallbackTxHash
@@ -485,6 +486,11 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     ExecutionActionHookRunner.afterTransactionSubmitted(
         runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
+  }
+
+  private boolean isBroadcastAlreadyKnown(
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
+    return broadcast != null && BROADCAST_ALREADY_KNOWN.equals(broadcast.failureReason());
   }
 
   private ExecutionTransactionGatewayPort.TransactionRecord loadTransaction(Long transactionId) {

@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
 public interface NonceSlotJpaRepository extends JpaRepository<NonceSlotEntity, NonceSlotId> {
@@ -26,7 +27,8 @@ public interface NonceSlotJpaRepository extends JpaRepository<NonceSlotEntity, N
   List<NonceSlotEntity> findByScopeAndStatusInOrderByNonce(
       @Param("chainId") Long chainId,
       @Param("fromAddress") String fromAddress,
-      @Param("statuses") Collection<SponsorNonceSlotStatus> statuses);
+      @Param("statuses") Collection<SponsorNonceSlotStatus> statuses,
+      Pageable pageable);
 
   @Query(
       """

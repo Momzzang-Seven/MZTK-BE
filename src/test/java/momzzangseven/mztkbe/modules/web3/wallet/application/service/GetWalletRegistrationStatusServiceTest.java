@@ -19,7 +19,6 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrati
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationStatusResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
@@ -41,7 +40,6 @@ class GetWalletRegistrationStatusServiceTest {
   private static final String EIP7702_DEADLINE_TOO_CLOSE = "EIP7702_DEADLINE_TOO_CLOSE";
   private static final Long USER_ID = 1L;
 
-  @Mock private LoadWalletRegistrationSessionPort loadSessionPort;
   @Mock private LockWalletRegistrationSessionPort lockSessionPort;
   @Mock private LoadWalletApprovalExecutionStatePort loadExecutionStatePort;
   @Mock private SaveWalletRegistrationSessionPort saveSessionPort;
@@ -52,7 +50,6 @@ class GetWalletRegistrationStatusServiceTest {
   void setUp() {
     service =
         new GetWalletRegistrationStatusService(
-            loadSessionPort,
             lockSessionPort,
             loadExecutionStatePort,
             new WalletRegistrationReceiptTimeoutMarker(saveSessionPort),
@@ -61,7 +58,7 @@ class GetWalletRegistrationStatusServiceTest {
 
   @Test
   void execute_whenWrongUser_doesNotLoadExecutionState() {
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, 2L)).thenReturn(Optional.empty());
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.empty());
 
     assertThatThrownBy(
             () -> service.execute(new GetWalletRegistrationStatusQuery(2L, REGISTRATION_ID)))
@@ -74,7 +71,7 @@ class GetWalletRegistrationStatusServiceTest {
 
   @Test
   void execute_whenApprovalRequiredAndSignable_returnsRecoverableWeb3() {
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalRequiredSession()));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(signableState()));
@@ -92,7 +89,7 @@ class GetWalletRegistrationStatusServiceTest {
   void execute_usesSessionErrorMetadataWithoutMutatingExpiredReadableState() {
     WalletRegistrationSession session =
         approvalRequiredSession().markApprovalRetryable("EXPIRED", "sign request expired", NOW);
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(session));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(expiredState()));
@@ -108,7 +105,7 @@ class GetWalletRegistrationStatusServiceTest {
 
   @Test
   void execute_whenApprovalRequiredDeadlineTooClose_exposesRetryReason() {
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalRequiredSession()));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(deadlineTooCloseState()));
@@ -124,7 +121,7 @@ class GetWalletRegistrationStatusServiceTest {
 
   @Test
   void execute_whenApprovalRequiredSessionTtlElapsed_returnsExpiredView() {
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(expiredApprovalRequiredSession()));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(signableState()));
@@ -145,7 +142,7 @@ class GetWalletRegistrationStatusServiceTest {
             .toBuilder()
             .approvalExpiresAt(NOW.minusSeconds(1))
             .build();
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(session));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(expiredState()));
@@ -159,7 +156,7 @@ class GetWalletRegistrationStatusServiceTest {
 
   @Test
   void execute_whenApprovalRequiredButExecutionSubmitted_waitsForTransaction() {
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalRequiredSession()));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(submittedState()));
@@ -174,8 +171,6 @@ class GetWalletRegistrationStatusServiceTest {
 
   @Test
   void execute_whenReceiptTimeoutDetected_marksSponsorNonceBlocked() {
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
-        .thenReturn(Optional.of(approvalPendingOnchainSession()));
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalPendingOnchainSession()));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
@@ -195,13 +190,9 @@ class GetWalletRegistrationStatusServiceTest {
   }
 
   @Test
-  void execute_whenReceiptTimeoutSnapshotIsStale_doesNotOverwriteLockedRetrySession() {
-    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
-        .thenReturn(Optional.of(approvalPendingOnchainSession()));
+  void execute_whenLockedSessionHasNewRetryIntent_doesNotOverwriteRetrySession() {
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalRequiredSession("intent-2")));
-    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
-        .thenReturn(Optional.of(receiptTimeoutState()));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, "intent-2"))
         .thenReturn(Optional.empty());
 

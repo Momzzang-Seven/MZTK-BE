@@ -63,7 +63,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
     this.appClock = appClock;
   }
 
-  @Scheduled(fixedDelay = 1000L)
+  @Scheduled(fixedDelayString = "${web3.transaction.signed-recovery.fixed-delay:1000}")
   public void run() {
     processBatch(20);
   }
@@ -110,7 +110,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         broadcast.rpcAlias(),
         detail);
 
-    if (broadcast.success()) {
+    if (broadcast.success() || isBroadcastAlreadyKnown(broadcast)) {
       String txHash =
           (broadcast.txHash() == null || broadcast.txHash().isBlank())
               ? item.txHash()
@@ -125,6 +125,11 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         broadcast.failureReason() != null
             ? broadcast.failureReason()
             : Web3TxFailureReason.BROADCAST_FAILED.code());
+  }
+
+  private boolean isBroadcastAlreadyKnown(Web3ContractPort.BroadcastResult broadcast) {
+    return broadcast != null
+        && Web3TxFailureReason.BROADCAST_ALREADY_KNOWN.code().equals(broadcast.failureReason());
   }
 
   private void auditStateChange(Long transactionId, Web3TxStatus from, Web3TxStatus to) {

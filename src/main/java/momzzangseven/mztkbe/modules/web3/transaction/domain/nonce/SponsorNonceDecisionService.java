@@ -147,10 +147,28 @@ public class SponsorNonceDecisionService {
               lowestOpen.nonce(),
               "REPLACEMENT_PREPARING_IN_FLIGHT");
       case RESERVED -> decideReserved(lowestOpen);
-      case SIGNED, BROADCASTING -> null;
+      case SIGNED -> null;
+      case BROADCASTING -> decideBroadcasting(request, lowestOpen);
       case BROADCASTED -> decideBroadcasted(request, lowestOpen);
       case CONSUMED, CONSUMED_UNKNOWN, OPERATOR_REVIEW_REQUIRED, DROPPED -> null;
     };
+  }
+
+  private SponsorNonceDecision decideBroadcasting(
+      SponsorNonceDecisionRequest request, SponsorNonceSlot slot) {
+    if (request.chainLatestNonce() > slot.nonce()) {
+      return SponsorNonceDecision.of(
+          SponsorNonceDecisionType.CONSUME_UNKNOWN_NONCE,
+          slot.nonce(),
+          "BROADCASTING_LATEST_PASSED_WITH_RPC_SNAPSHOT");
+    }
+    if (!slot.timedOut()) {
+      return null;
+    }
+    return SponsorNonceDecision.of(
+        SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
+        slot.nonce(),
+        "BROADCASTING_TIMEOUT_RECHECK_REQUIRED");
   }
 
   private SponsorNonceDecision decideReserved(SponsorNonceSlot slot) {

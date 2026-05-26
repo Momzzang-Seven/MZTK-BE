@@ -5,7 +5,6 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -36,7 +35,6 @@ import org.springframework.stereotype.Service;
 /** User-facing retry service for creating a new approval intent without redoing ownership proof. */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class RetryWalletRegistrationApprovalService
     implements RetryWalletRegistrationApprovalUseCase {
 

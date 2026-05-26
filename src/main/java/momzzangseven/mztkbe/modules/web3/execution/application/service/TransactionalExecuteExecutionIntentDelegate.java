@@ -58,6 +58,7 @@ public class TransactionalExecuteExecutionIntentDelegate
     implements ExecuteTransactionalExecutionIntentDelegatePort {
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
+  private static final String BROADCAST_ALREADY_KNOWN = "BROADCAST_ALREADY_KNOWN";
   private static final int SPONSOR_NONCE_OPEN_WINDOW_SIZE = 3;
   private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
       "sponsor kms sign failed (terminal)";
@@ -441,7 +442,7 @@ public class TransactionalExecuteExecutionIntentDelegate
       return;
     }
 
-    if (broadcast.success()) {
+    if (broadcast.success() || isBroadcastAlreadyKnown(broadcast)) {
       String txHash =
           broadcast.txHash() == null || broadcast.txHash().isBlank()
               ? fallbackTxHash
@@ -479,6 +480,11 @@ public class TransactionalExecuteExecutionIntentDelegate
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     ExecutionActionHookRunner.afterTransactionSubmitted(
         runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
+  }
+
+  private boolean isBroadcastAlreadyKnown(
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
+    return broadcast != null && BROADCAST_ALREADY_KNOWN.equals(broadcast.failureReason());
   }
 
   private Eip7702Submission reserveEip7702Submission(

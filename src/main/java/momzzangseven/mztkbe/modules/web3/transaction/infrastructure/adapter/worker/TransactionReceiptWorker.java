@@ -65,7 +65,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     this.appClock = appClock;
   }
 
-  @Scheduled(fixedDelay = 1000L)
+  @Scheduled(fixedDelayString = "${web3.transaction.receipt.fixed-delay:1000}")
   public void run() {
     processBatch(20);
   }

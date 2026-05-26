@@ -115,7 +115,16 @@ class SponsorNonceDecisionServiceTest {
     SponsorNonceDecision decision = decide(52, 52, slot(51, SponsorNonceSlotStatus.BROADCASTING));
 
     assertDecision(decision, SponsorNonceDecisionType.CONSUME_UNKNOWN_NONCE, 51L);
-    assertThat(decision.reason()).isEqualTo("LATEST_PASSED_WITH_RPC_SNAPSHOT");
+    assertThat(decision.reason()).isEqualTo("BROADCASTING_LATEST_PASSED_WITH_RPC_SNAPSHOT");
+  }
+
+  @Test
+  void decide_whenBroadcastingTimedOutAndLatestNotAdvanced_requiresOperatorReview() {
+    SponsorNonceDecision decision =
+        decide(51, 51, slotBuilder(51, SponsorNonceSlotStatus.BROADCASTING).timedOut().build());
+
+    assertDecision(decision, SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED, 51L);
+    assertThat(decision.reason()).isEqualTo("BROADCASTING_TIMEOUT_RECHECK_REQUIRED");
   }
 
   @Test

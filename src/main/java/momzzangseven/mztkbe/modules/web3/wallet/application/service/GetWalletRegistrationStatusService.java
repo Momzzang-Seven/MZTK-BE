@@ -11,7 +11,6 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrati
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationStatusResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetWalletRegistrationStatusUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LockWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
@@ -23,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetWalletRegistrationStatusService implements GetWalletRegistrationStatusUseCase {
 
-  private final LoadWalletRegistrationSessionPort loadSessionPort;
   private final LockWalletRegistrationSessionPort lockSessionPort;
   private final LoadWalletApprovalExecutionStatePort loadExecutionStatePort;
   private final WalletRegistrationReceiptTimeoutMarker receiptTimeoutMarker;
@@ -33,29 +31,21 @@ public class GetWalletRegistrationStatusService implements GetWalletRegistration
   @Transactional
   public WalletRegistrationStatusResult execute(GetWalletRegistrationStatusQuery query) {
     WalletRegistrationSession session =
-        loadSessionPort
-            .loadByPublicIdAndUserId(query.registrationId(), query.requesterUserId())
+        lockSessionPort
+            .lockByPublicIdForUpdate(query.registrationId())
             .orElseThrow(WalletNotFoundException::new);
+    if (!session.getUserId().equals(query.requesterUserId())) {
+      throw new WalletNotFoundException();
+    }
     Optional<WalletApprovalExecutionStateView> executionState = loadExecutionState(session);
     LocalDateTime now = LocalDateTime.now(appClock);
     if (!isReceiptTimeout(session, executionState)) {
       return WalletRegistrationStatusResult.from(session, executionState.orElse(null), now);
     }
 
-    WalletRegistrationSession lockedSession =
-        lockSessionPort
-            .lockByPublicIdForUpdate(query.registrationId())
-            .orElseThrow(WalletNotFoundException::new);
-    if (!lockedSession.getUserId().equals(query.requesterUserId())) {
-      throw new WalletNotFoundException();
-    }
-
-    Optional<WalletApprovalExecutionStateView> lockedExecutionState =
-        loadExecutionState(lockedSession);
     WalletRegistrationSession visibleSession =
-        markSponsorNonceBlockedIfReceiptTimeout(lockedSession, lockedExecutionState, now);
-    return WalletRegistrationStatusResult.from(
-        visibleSession, lockedExecutionState.orElse(null), now);
+        markSponsorNonceBlockedIfReceiptTimeout(session, executionState, now);
+    return WalletRegistrationStatusResult.from(visibleSession, executionState.orElse(null), now);
   }
 
   private Optional<WalletApprovalExecutionStateView> loadExecutionState(

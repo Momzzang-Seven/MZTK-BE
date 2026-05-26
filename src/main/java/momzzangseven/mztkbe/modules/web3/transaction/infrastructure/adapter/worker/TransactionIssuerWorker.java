@@ -313,7 +313,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         broadcast.rpcAlias(),
         broadcastDetail);
 
-    if (broadcast.success()) {
+    if (broadcast.success() || isBroadcastAlreadyKnown(broadcast)) {
       String txHash =
           (broadcast.txHash() == null || broadcast.txHash().isBlank())
               ? signed.txHash()
@@ -336,6 +336,11 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         broadcast.failureReason() != null
             ? broadcast.failureReason()
             : Web3TxFailureReason.BROADCAST_FAILED.code());
+  }
+
+  private boolean isBroadcastAlreadyKnown(Web3ContractPort.BroadcastResult broadcast) {
+    return broadcast != null
+        && Web3TxFailureReason.BROADCAST_ALREADY_KNOWN.code().equals(broadcast.failureReason());
   }
 
   private boolean claimSignedForDirectBroadcast(Long transactionId) {
