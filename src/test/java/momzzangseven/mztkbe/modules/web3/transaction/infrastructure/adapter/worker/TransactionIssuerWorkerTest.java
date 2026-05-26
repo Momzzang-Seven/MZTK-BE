@@ -816,7 +816,8 @@ class TransactionIssuerWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+        .markUnconfirmedForSponsorNonceReview(
+            1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code());
     verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
     verify(nonceSlotLifecycleUseCase, never())
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
@@ -935,7 +936,8 @@ class TransactionIssuerWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+        .markUnconfirmedForSponsorNonceReview(
+            1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code());
     verify(web3ContractPort, never()).signTransfer(any(Web3ContractPort.SignTransferCommand.class));
     verifyNoInteractions(loadSponsorChainNoncePort, coordinateSponsorNonceUseCase);
   }
@@ -968,7 +970,8 @@ class TransactionIssuerWorkerTest {
             org.mockito.ArgumentMatchers.argThat(
                 command -> command.transactionId() == null && command.chainLatestNonce() == 6L));
     verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+        .markUnconfirmedForSponsorNonceReview(
+            1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code());
     verify(web3ContractPort, never()).signTransfer(any(Web3ContractPort.SignTransferCommand.class));
   }
 

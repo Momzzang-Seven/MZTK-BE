@@ -229,8 +229,8 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
             "Refusing to broadcast signed tx because nonce slot is not broadcastable: txId={}, reason={}",
             item.transactionId(),
             e.getMessage());
-        updateTransactionPort.scheduleRetry(
-            item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+        markSponsorNonceReview(
+            item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
         return SlotBroadcastPreparation.STOP;
       }
       throw e;
@@ -265,8 +265,11 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         item.nonce(),
         actualStatus,
         cause.getMessage());
-    updateTransactionPort.scheduleRetry(
-        item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+    markSponsorNonceReview(item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
+  }
+
+  private void markSponsorNonceReview(Long transactionId, Web3TxFailureReason failureReason) {
+    updateTransactionPort.markUnconfirmedForSponsorNonceReview(transactionId, failureReason.code());
   }
 
   private void markPendingAfterBroadcast(
@@ -295,10 +298,8 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
       log.warn(
           "Cannot recover already-broadcasted nonce slot without tx hash: txId={}",
           item.transactionId());
-      updateTransactionPort.scheduleRetry(
-          item.transactionId(),
-          Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code(),
-          null);
+      markSponsorNonceReview(
+          item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED);
       return false;
     }
     persistSponsorNonceTransactionStateUseCase.markPendingWithoutSlotTransition(

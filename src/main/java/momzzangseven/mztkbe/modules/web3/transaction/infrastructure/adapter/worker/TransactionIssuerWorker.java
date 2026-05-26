@@ -294,8 +294,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
           item.transactionId(),
           nonceReservation.nonce(),
           nonceReservation.attemptId());
-      failPrevalidate(
-          item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), false);
+      markSponsorNonceReview(item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
       return;
     }
 
@@ -551,10 +550,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
             item.transactionId(),
             item.nonce(),
             snapshot.chainLatestNonce());
-        failPrevalidate(
-            item.transactionId(),
-            Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(),
-            false);
+        markSponsorNonceReview(
+            item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
         return null;
       }
       SponsorNonceSlotView refreshedSlot =
@@ -572,9 +569,12 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         item.nonce(),
         slot == null ? null : slot.status(),
         slot == null ? null : slot.activeTxId());
-    failPrevalidate(
-        item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), false);
+    markSponsorNonceReview(item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
     return null;
+  }
+
+  private void markSponsorNonceReview(Long transactionId, Web3TxFailureReason failureReason) {
+    updateTransactionPort.markUnconfirmedForSponsorNonceReview(transactionId, failureReason.code());
   }
 
   private boolean isActiveReservationOwnedByTransaction(

@@ -228,7 +228,8 @@ class SignedRecoveryWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+        .markUnconfirmedForSponsorNonceReview(
+            1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code());
     verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
     verifyNoInteractions(persistSponsorNonceTransactionStateUseCase);
   }
@@ -247,7 +248,8 @@ class SignedRecoveryWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code(), null);
+        .markUnconfirmedForSponsorNonceReview(
+            1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code());
     verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
     verifyNoInteractions(persistSponsorNonceTransactionStateUseCase);
   }
