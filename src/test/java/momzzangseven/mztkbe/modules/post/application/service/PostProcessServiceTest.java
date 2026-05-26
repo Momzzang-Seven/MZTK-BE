@@ -897,6 +897,28 @@ class PostProcessServiceTest {
 
   @Test
   @DisplayName(
+      "MOM-459 race: a new answer committed between Phase 1 and Phase 2 still blocks the edit")
+  void updatePostRejectsWhenAnswerInsertRacesBetweenSnapshotAndLock() {
+    Long ownerId = 7L;
+    Long postId = 91L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of(null, "edited body", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    // Phase 1 sees an unanswered question; before Phase 2 acquires the row lock,
+    // another transaction has inserted an answer (answers table is not gated by
+    // the posts row lock). Phase 2's re-count under the lock must catch this.
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L, 1L);
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostInvalidInputException.class);
+
+    verify(postPersistencePort, never()).savePost(any(Post.class));
+  }
+
+  @Test
+  @DisplayName(
       "MOM-459: deletePost stays lock-free — whole-row delete cannot lose concurrent updates")
   void deletePostStaysLockFree() {
     Long ownerId = 7L;

@@ -100,26 +100,31 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
   private UpdatePreparation prepareLocalUpdate(
       Long currentUserId, Long postId, UpdatePostCommand command) {
-    // Phase 1 — lock-free reads. Fail-fast for clearly-invalid requests and pre-fetch
-    // values that don't depend on the live posts row state (answer counts, image
-    // validation). Keeps the row lock window in Phase 2 as small as possible.
+    // Phase 1 — lock-free fail-fast against the current snapshot. The active-answer
+    // pre-count rejects the common "edit on already-answered question" case without
+    // ever acquiring the row lock. It is NOT trusted for the actual merge decision
+    // (a concurrent answer insert can race past us here — answers table is not gated
+    // by the posts row lock); Phase 2 re-counts under the lock for that.
     Post snapshot = loadPostOrThrow(postId);
     snapshot.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(snapshot);
     validateQuestionUpdatePublicationAllowed(snapshot);
-    long activeAnswerCount = countActiveAnswers(snapshot);
+    snapshot.validateEditable(countActiveAnswers(snapshot));
     validatePostImagesIfPresent(currentUserId, postId, snapshot.getType(), command.imageIds());
 
     // Phase 2 — acquire the posts row lock and re-validate every concurrent-mutable
-    // invariant from the locked snapshot before merging. JPA save() rewrites every
+    // invariant from inside the lock window before merging. JPA save() rewrites every
     // mapped column from the in-memory Post, so the source must be the freshly locked
     // row — otherwise an admin/sync mutation committed between Phase 1 and Phase 2
-    // would be silently reverted (MOM-459 lost-update guard).
+    // would be silently reverted (MOM-459 lost-update guard). The answer count is
+    // re-queried here too so a concurrent answer insert in answers table — which our
+    // posts row lock does not block — cannot sneak past validateEditable.
     Post post =
         postPersistencePort.loadPostForUpdate(postId).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     validateQuestionUpdatePublicationAllowed(post);
+    long activeAnswerCount = countActiveAnswers(post);
 
     boolean contentChanged =
         command.content() != null && !command.content().equals(post.getContent());
