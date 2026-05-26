@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -79,7 +81,9 @@ class PostProcessServiceTest {
         UpdatePostCommand.of(null, "new content", List.of(Long.valueOf(1)), List.of("java"));
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    // Strict stub (no lenient): the happy-path MUST reach Phase 2 and call loadPostForUpdate.
+    // If a future refactor merges Phase 1/2 or drops the lock, Mockito surfaces it here.
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
 
     postProcessService.updatePost(ownerId, postId, command);
 
@@ -92,6 +96,7 @@ class PostProcessServiceTest {
     assertThat(saved.getTags()).containsExactly("java");
     assertThat(saved.getUpdatedAt()).isAfter(post.getUpdatedAt());
 
+    verify(postPersistencePort, atLeastOnce()).loadPostForUpdate(postId);
     verify(linkTagPort).updateTags(postId, List.of("java"));
     verify(validatePostImagesPort)
         .validateAttachableImages(ownerId, postId, post.getType(), List.of(1L));
@@ -217,6 +222,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostUnauthorizedException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
     verifyNoInteractions(
         linkTagPort, validatePostImagesPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
@@ -284,6 +290,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostInvalidInputException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
     verifyNoInteractions(
         linkTagPort, validatePostImagesPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
@@ -304,6 +311,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostInvalidInputException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
     verifyNoInteractions(
         linkTagPort, validatePostImagesPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
@@ -579,6 +587,7 @@ class PostProcessServiceTest {
         .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_009"));
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
     verifyNoInteractions(
         countAnswersPort,
         validatePostImagesPort,
@@ -606,6 +615,7 @@ class PostProcessServiceTest {
         .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_009"));
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
     verifyNoInteractions(
         countAnswersPort,
         validatePostImagesPort,
@@ -635,6 +645,7 @@ class PostProcessServiceTest {
         .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_008"));
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
     verifyNoInteractions(
         countAnswersPort,
         validatePostImagesPort,
@@ -661,6 +672,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostUnauthorizedException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
     verifyNoInteractions(
         countAnswersPort,
         validatePostImagesPort,
@@ -863,6 +875,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("Blocked posts");
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
   }
 
   @Test
@@ -871,14 +884,21 @@ class PostProcessServiceTest {
   void updatePostMergesFromLockedSnapshotToAvoidLostUpdate() {
     Long ownerId = 7L;
     Long postId = 90L;
-    // Phase 1: stale snapshot — admin has not (yet) moderated.
+    // Phase 1: stale snapshot — admin/sync has not (yet) mutated the row.
     Post snapshot = ownedPost(ownerId, postId);
-    // Phase 2: row-locked load returns a freshly mutated state (e.g. admin sync just
-    // pushed publicationStatus → PENDING). updatePost must merge from THIS, otherwise
-    // JPA save() rewrites publicationStatus back to its stale Phase 1 value.
+    // Phase 2: row-locked load returns a freshly mutated state. Every lock-preserved field that
+    // a FREE post's domain invariants allow to vary carries a sentinel that differs from the
+    // Phase 1 snapshot, so JPA save() rewriting any of these columns from the wrong source is
+    // caught by the assertion block below. The fields we cannot vary here without violating
+    // domain invariants are status / acceptedAnswerId (FREE posts must remain OPEN with no
+    // accepted answer per Post.validateAndResolveStatus) and moderationStatus (BLOCKED would
+    // short-circuit Phase 1 — covered separately by updateBlockedPostRejected).
     Post locked =
         ownedPost(ownerId, postId).toBuilder()
             .publicationStatus(PostPublicationStatus.PENDING)
+            .currentCreateExecutionIntentId("locked-intent-id")
+            .publicationFailureTerminalStatus("LOCKED_TERMINAL")
+            .publicationFailureReason("locked failure reason")
             .build();
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(snapshot));
@@ -889,10 +909,13 @@ class PostProcessServiceTest {
 
     ArgumentCaptor<Post> saved = ArgumentCaptor.forClass(Post.class);
     verify(postPersistencePort).savePost(saved.capture());
-    assertThat(saved.getValue().getPublicationStatus())
-        .as("savePost must carry the locked snapshot's publicationStatus, not the stale one")
-        .isEqualTo(PostPublicationStatus.PENDING);
-    assertThat(saved.getValue().getContent()).isEqualTo("new body");
+    Post savedPost = saved.getValue();
+    assertThat(savedPost.getPublicationStatus()).isEqualTo(PostPublicationStatus.PENDING);
+    assertThat(savedPost.getCurrentCreateExecutionIntentId()).isEqualTo("locked-intent-id");
+    assertThat(savedPost.getPublicationFailureTerminalStatus()).isEqualTo("LOCKED_TERMINAL");
+    assertThat(savedPost.getPublicationFailureReason()).isEqualTo("locked failure reason");
+    assertThat(savedPost.getContent()).isEqualTo("new body");
+    verify(postPersistencePort, atLeastOnce()).loadPostForUpdate(postId);
   }
 
   @Test
@@ -913,6 +936,31 @@ class PostProcessServiceTest {
 
     assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
         .isInstanceOf(PostInvalidInputException.class);
+
+    verify(postPersistencePort, never()).savePost(any(Post.class));
+    // Lock the "count once in Phase 1 fail-fast, recount under the row lock in Phase 2" contract.
+    // Collapsing the two counts into one (a tempting simplification) would silently widen the
+    // race window — assert the invariant explicitly so that refactor regresses the test.
+    verify(countAnswersPort, times(2)).countOnchainBlockingAnswers(postId);
+  }
+
+  @Test
+  @DisplayName(
+      "MOM-459: post hard-delete committed between Phase 1 and Phase 2 throws PostNotFoundException")
+  void updatePostThrowsWhenRowDeletedBetweenSnapshotAndLock() {
+    Long ownerId = 7L;
+    Long postId = 92L;
+    Post snapshot = ownedPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of(null, "edited body", null, null);
+
+    // Phase 1 finds the post; before Phase 2 acquires the row lock, a concurrent hard-delete
+    // commits and removes the row. loadPostForUpdate must return Optional.empty() and the
+    // service must surface PostNotFoundException — never NPE through to savePost(null).
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(snapshot));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostNotFoundException.class);
 
     verify(postPersistencePort, never()).savePost(any(Post.class));
   }

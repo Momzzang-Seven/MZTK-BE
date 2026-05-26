@@ -6,6 +6,8 @@ import static momzzangseven.mztkbe.modules.tag.infrastructure.persistence.entity
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +36,7 @@ public class PostPersistenceAdapter implements PostPersistencePort {
 
   private final PostJpaRepository postJpaRepository;
   private final JPAQueryFactory queryFactory;
+  private final EntityManager entityManager;
 
   @Override
   public Post savePost(Post post) {
@@ -54,11 +57,23 @@ public class PostPersistenceAdapter implements PostPersistencePort {
         .map(entity -> entity.toDomain(Collections.emptyList()));
   }
 
+  /**
+   * row 락(SELECT … FOR UPDATE)을 잡고 게시글을 조회한다.
+   *
+   * <p>동일 영속성 컨텍스트에 같은 ID 의 managed entity 가 이미 attach 되어 있는 경우, Hibernate JPQL 의 default 동작은 SQL
+   * 결과를 폐기하고 캐시된 인스턴스를 반환하는 것이다. 그렇게 되면 lock 은 잡지만 in-memory state 는 Phase 1 snapshot 그대로라
+   * lost-update 가드가 무력화된다. 본 메서드는 lock 획득 직후 명시적으로 {@link EntityManager#refresh(Object,
+   * LockModeType)} 를 호출해 DB 상태와 강제 재동기화한다 (MOM-459).
+   */
   @Override
   public Optional<Post> loadPostForUpdate(Long postId) {
     return postJpaRepository
         .findByIdForUpdate(postId)
-        .map(entity -> entity.toDomain(Collections.emptyList()));
+        .map(
+            entity -> {
+              entityManager.refresh(entity, LockModeType.PESSIMISTIC_WRITE);
+              return entity.toDomain(Collections.emptyList());
+            });
   }
 
   @Override

@@ -14,6 +14,8 @@ import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +47,7 @@ class PostPersistenceAdapterTest {
   @Mock private PostJpaRepository postJpaRepository;
   @Mock private JPAQueryFactory queryFactory;
   @Mock private JPAQuery<PostEntity> jpaQuery;
+  @Mock private EntityManager entityManager;
 
   @InjectMocks private PostPersistenceAdapter postPersistenceAdapter;
 
@@ -163,7 +166,8 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("loadPostForUpdate delegates to repository lock query")
+  @DisplayName(
+      "loadPostForUpdate delegates to repository lock query and forces refresh against L1 cache")
   void loadPostForUpdateDelegates() {
     PostEntity entity =
         PostEntity.builder()
@@ -182,6 +186,9 @@ class PostPersistenceAdapterTest {
 
     assertThat(result).isPresent();
     verify(postJpaRepository).findByIdForUpdate(15L);
+    // MOM-459: forcing a refresh after the locked find is the bug-fix invariant. Removing it
+    // means Hibernate returns a cached Phase 1 instance and the lost-update guard is a no-op.
+    verify(entityManager).refresh(entity, LockModeType.PESSIMISTIC_WRITE);
   }
 
   @Test
