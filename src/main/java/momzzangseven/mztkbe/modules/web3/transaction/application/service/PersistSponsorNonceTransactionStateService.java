@@ -50,21 +50,7 @@ public class PersistSponsorNonceTransactionStateService
   @Transactional
   public void markPending(SponsorNoncePendingCommand command) {
     updateTransactionPort.markPending(command.transactionId(), command.txHash());
-    nonceSlotLifecycleUseCase.transition(
-        RecordSponsorNonceSlotTransitionCommand.builder()
-            .chainId(command.chainId())
-            .fromAddress(command.fromAddress())
-            .nonce(command.nonce())
-            .fromStatus(SponsorNonceSlotStatus.BROADCASTING)
-            .toStatus(SponsorNonceSlotStatus.BROADCASTED)
-            .activeAttemptId(command.attemptId())
-            .activeTxId(command.transactionId())
-            .stateChangedAt(command.stateChangedAt())
-            .hasRawTx(true)
-            .hasTxHash(command.txHash() != null && !command.txHash().isBlank())
-            .hasSigningEvidence(true)
-            .hasBroadcastEvidence(true)
-            .build());
+    markNonceSlotBroadcasted(command);
     markExecutionIntentPendingOnchainPort.markPendingOnchain(command.transactionId());
   }
 
@@ -171,6 +157,38 @@ public class PersistSponsorNonceTransactionStateService
     }
   }
 
+  private void markNonceSlotBroadcasted(SponsorNoncePendingCommand command) {
+    try {
+      nonceSlotLifecycleUseCase.transition(
+          RecordSponsorNonceSlotTransitionCommand.builder()
+              .chainId(command.chainId())
+              .fromAddress(command.fromAddress())
+              .nonce(command.nonce())
+              .fromStatus(SponsorNonceSlotStatus.BROADCASTING)
+              .toStatus(SponsorNonceSlotStatus.BROADCASTED)
+              .activeAttemptId(command.attemptId())
+              .activeTxId(command.transactionId())
+              .stateChangedAt(command.stateChangedAt())
+              .hasRawTx(true)
+              .hasTxHash(command.txHash() != null && !command.txHash().isBlank())
+              .hasSigningEvidence(true)
+              .hasBroadcastEvidence(true)
+              .build());
+    } catch (Web3TransactionStateInvalidException e) {
+      if (isStaleActual(e, SponsorNonceSlotStatus.BROADCASTED)) {
+        if (isSlotBroadcastedByTransaction(command)) {
+          log.warn(
+              "Skipping already-broadcasted nonce slot transition for txId={}: {}",
+              command.transactionId(),
+              e.getMessage());
+          return;
+        }
+        throw e;
+      }
+      throw e;
+    }
+  }
+
   private boolean isSlotNotFound(Web3TransactionStateInvalidException e) {
     return e.getMessage() != null && e.getMessage().contains("nonce slot not found");
   }
@@ -195,9 +213,31 @@ public class PersistSponsorNonceTransactionStateService
         .anyMatch(slot -> isStuckSlotForTransaction(slot, command.transactionId()));
   }
 
+  private boolean isSlotBroadcastedByTransaction(SponsorNoncePendingCommand command) {
+    if (command.fromAddress() == null || command.fromAddress().isBlank()) {
+      return false;
+    }
+    return nonceSlotLifecycleUseCase
+        .loadSlotsForReview(command.chainId(), command.fromAddress())
+        .stream()
+        .filter(slot -> slot.nonce() == command.nonce())
+        .anyMatch(
+            slot ->
+                isBroadcastedSlotForTransaction(
+                    slot, command.transactionId(), command.attemptId()));
+  }
+
   private boolean isStuckSlotForTransaction(SponsorNonceSlotView slot, Long transactionId) {
     return slot.status() == SponsorNonceSlotStatus.STUCK
         && transactionId != null
         && transactionId.equals(slot.activeTxId());
+  }
+
+  private boolean isBroadcastedSlotForTransaction(
+      SponsorNonceSlotView slot, Long transactionId, Long attemptId) {
+    return slot.status() == SponsorNonceSlotStatus.BROADCASTED
+        && transactionId != null
+        && transactionId.equals(slot.activeTxId())
+        && (attemptId == null || attemptId.equals(slot.activeAttemptId()));
   }
 }

@@ -92,7 +92,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     this.web3ContractPort = web3ContractPort;
   }
 
-  @Scheduled(fixedDelay = 1000L)
+  @Scheduled(fixedDelayString = "${web3.transaction.issuer.fixed-delay:1000}")
   public void run() {
     processBatch(20);
   }

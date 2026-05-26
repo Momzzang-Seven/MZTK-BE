@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.nonce;
+package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.external.nonce;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;

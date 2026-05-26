@@ -902,6 +902,34 @@ class TransactionIssuerWorkerTest {
     verify(web3ContractPort, never()).signTransfer(any(Web3ContractPort.SignTransferCommand.class));
   }
 
+  @Test
+  void processBatch_waitForOpenWindowNonceDecisionSchedulesWindowRetry() {
+    assertUnreservedDecisionSchedulesRetry(
+        SponsorNonceDecisionType.WAIT_FOR_OPEN_WINDOW,
+        Web3TxFailureReason.SPONSOR_NONCE_WAIT_FOR_OPEN_WINDOW);
+  }
+
+  @Test
+  void processBatch_waitForInFlightSlotNonceDecisionSchedulesWindowRetry() {
+    assertUnreservedDecisionSchedulesRetry(
+        SponsorNonceDecisionType.WAIT_FOR_IN_FLIGHT_SLOT,
+        Web3TxFailureReason.SPONSOR_NONCE_WAIT_FOR_OPEN_WINDOW);
+  }
+
+  @Test
+  void processBatch_waitForInFlightReplacementNonceDecisionSchedulesWindowRetry() {
+    assertUnreservedDecisionSchedulesRetry(
+        SponsorNonceDecisionType.WAIT_FOR_IN_FLIGHT_REPLACEMENT,
+        Web3TxFailureReason.SPONSOR_NONCE_WAIT_FOR_OPEN_WINDOW);
+  }
+
+  @Test
+  void processBatch_rpcDisagreementNonceDecisionSchedulesRpcDisagreementRetry() {
+    assertUnreservedDecisionSchedulesRetry(
+        SponsorNonceDecisionType.RPC_DISAGREEMENT,
+        Web3TxFailureReason.SPONSOR_NONCE_RPC_DISAGREEMENT);
+  }
+
   private void stubSponsorNonceReservation(long nonce, Long transactionId, Long attemptId) {
     long chainId = CHAIN_ID;
     when(loadSponsorChainNoncePort.loadSnapshot(chainId, TREASURY_ADDRESS))
@@ -920,6 +948,27 @@ class TransactionIssuerWorkerTest {
                     attemptId,
                     transactionId,
                     SponsorNonceSlotStatus.RESERVED)));
+  }
+
+  private void assertUnreservedDecisionSchedulesRetry(
+      SponsorNonceDecisionType decisionType, Web3TxFailureReason expectedFailureReason) {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(loadSponsorChainNoncePort.loadSnapshot(CHAIN_ID, TREASURY_ADDRESS))
+        .thenReturn(new LoadSponsorChainNoncePort.SponsorChainNonceSnapshot(5, 5, 5L, 5L, 5L, 5L));
+    when(coordinateSponsorNonceUseCase.execute(any(SponsorNonceCoordinationCommand.class)))
+        .thenReturn(
+            new SponsorNonceCoordinationResult(
+                SponsorNonceDecision.of(decisionType, 5L, decisionType.name()), null));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort).scheduleRetry(1L, expectedFailureReason.code(), null);
+    verify(web3ContractPort, never()).signTransfer(any(Web3ContractPort.SignTransferCommand.class));
   }
 
   private void stubExistingNonceSlot(long nonce, Long transactionId, Long attemptId) {

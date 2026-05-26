@@ -135,7 +135,8 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
             SponsorNonceSlotStatus.STUCK,
             SponsorNonceSlotStatus.BROADCASTED,
             SponsorNonceSlotStatus.BROADCASTING,
-            SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)) {
+            SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED,
+            SponsorNonceSlotStatus.CONSUMED_UNKNOWN)) {
       try {
         nonceSlotLifecycleUseCase.transition(
             RecordSponsorNonceSlotTransitionCommand.builder()

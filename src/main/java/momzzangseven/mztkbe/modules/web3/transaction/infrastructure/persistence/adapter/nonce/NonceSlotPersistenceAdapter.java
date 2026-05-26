@@ -47,7 +47,7 @@ public class NonceSlotPersistenceAdapter
         RecordSponsorNonceEvidencePort,
         VerifyUnbroadcastableAttemptPort {
 
-  private static final EnumSet<SponsorNonceSlotStatus> OPEN_OR_BLOCKING_STATUSES =
+  private static final EnumSet<SponsorNonceSlotStatus> COORDINATION_VISIBLE_STATUSES =
       EnumSet.of(
           SponsorNonceSlotStatus.RESERVED,
           SponsorNonceSlotStatus.REPLACEMENT_PREPARING,
@@ -55,6 +55,7 @@ public class NonceSlotPersistenceAdapter
           SponsorNonceSlotStatus.BROADCASTING,
           SponsorNonceSlotStatus.BROADCASTED,
           SponsorNonceSlotStatus.STUCK,
+          SponsorNonceSlotStatus.CONSUMED_UNKNOWN,
           SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
 
   private final NonceSlotJpaRepository slotRepository;
@@ -72,7 +73,8 @@ public class NonceSlotPersistenceAdapter
     }
     String normalizedAddress = EvmAddress.of(fromAddress).value();
     return slotRepository
-        .findByScopeAndStatusInOrderByNonce(chainId, normalizedAddress, OPEN_OR_BLOCKING_STATUSES)
+        .findByScopeAndStatusInOrderByNonce(
+            chainId, normalizedAddress, COORDINATION_VISIBLE_STATUSES)
         .stream()
         .map(this::toDomainSlot)
         .toList();
@@ -95,7 +97,11 @@ public class NonceSlotPersistenceAdapter
   public SponsorNonceSlotReservation reserve(ReserveSponsorNonceSlotCommand command) {
     String normalizedAddress = EvmAddress.of(command.fromAddress()).value();
     Web3TransactionEntity transaction = loadTransaction(command.transactionId());
-    validateTransactionScope(transaction, command.chainId(), normalizedAddress, command.nonce());
+    boolean nonceAssigned =
+        validateTransactionScope(transaction, command.chainId(), normalizedAddress, command.nonce());
+    if (nonceAssigned) {
+      transactionRepository.saveAndFlush(transaction);
+    }
 
     NonceSlotEntity slot =
         slotRepository
@@ -663,7 +669,7 @@ public class NonceSlotPersistenceAdapter
         .orElseThrow(() -> new Web3TransactionNotFoundException(transactionId));
   }
 
-  private void validateTransactionScope(
+  private boolean validateTransactionScope(
       Web3TransactionEntity transaction, long chainId, String fromAddress, long nonce) {
     if (!Long.valueOf(chainId).equals(transaction.getChainId())) {
       throw new Web3TransactionStateInvalidException("slot transaction chainId mismatch");
@@ -681,11 +687,12 @@ public class NonceSlotPersistenceAdapter
             "slot transaction nonce can only be assigned in CREATED status");
       }
       transaction.setNonce(nonce);
-      return;
+      return true;
     }
     if (!Long.valueOf(nonce).equals(transaction.getNonce())) {
       throw new Web3TransactionStateInvalidException("slot transaction nonce mismatch");
     }
+    return false;
   }
 
   private void clearReplacementClaim(NonceSlotEntity slot) {

@@ -48,6 +48,8 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
       decision = decisionService.decide(toDecisionRequest(command, slots));
       switch (decision.type()) {
         case REPLACE_LOWEST_NONCE -> {
+          // Automatic same-nonce replacement is intentionally not implemented yet. See
+          // docs.shared/runbooks/sponsor-nonce-replacement.md for the operator resolution path.
           markReplacementUnsupported(command, decision, slots);
           decision =
               SponsorNonceDecision.of(

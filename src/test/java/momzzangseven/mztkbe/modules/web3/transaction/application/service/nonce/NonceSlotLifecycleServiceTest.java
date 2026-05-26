@@ -101,6 +101,192 @@ class NonceSlotLifecycleServiceTest {
   }
 
   @Test
+  void transition_rejectsBackendConsumedWithoutReceiptEvidence() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.BROADCASTED, SponsorNonceSlotStatus.CONSUMED)
+            .consumedTxId(10L)
+            .hasTxHash(true)
+            .hasSigningEvidence(true)
+            .hasBroadcastEvidence(true)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("backend-owned CONSUMED requires receipt evidence");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsBackendConsumedWithExternalEvidenceId() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.CONSUMED_UNKNOWN, SponsorNonceSlotStatus.CONSUMED)
+            .consumedTxId(10L)
+            .consumedExternalEvidenceId(200L)
+            .hasReceiptEvidence(true)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("backend-owned CONSUMED must clear consumedExternalEvidenceId");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsReplacementPreparingWithoutClaimOwner() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.STUCK, SponsorNonceSlotStatus.REPLACEMENT_PREPARING)
+            .replacementClaimExpiresAt(NOW.plusMinutes(5))
+            .replacementPrepareAttemptCount(1)
+            .stuckReason("LOWEST_NONCE_STUCK")
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("replacementClaimOwner is required");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsReplacementPreparingWithoutClaimExpiresAt() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.STUCK, SponsorNonceSlotStatus.REPLACEMENT_PREPARING)
+            .replacementClaimOwner("operator")
+            .replacementPrepareAttemptCount(1)
+            .stuckReason("LOWEST_NONCE_STUCK")
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("replacementClaimExpiresAt is required");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsReplacementPreparingWithoutPositiveAttemptCount() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.STUCK, SponsorNonceSlotStatus.REPLACEMENT_PREPARING)
+            .replacementClaimOwner("operator")
+            .replacementClaimExpiresAt(NOW.plusMinutes(5))
+            .stuckReason("LOWEST_NONCE_STUCK")
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("replacementPrepareAttemptCount must be positive");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsReplacementPreparingWithoutStuckReason() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.STUCK, SponsorNonceSlotStatus.REPLACEMENT_PREPARING)
+            .replacementClaimOwner("operator")
+            .replacementClaimExpiresAt(NOW.plusMinutes(5))
+            .replacementPrepareAttemptCount(1)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("stuckReason is required");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsBroadcastingWithoutRecoveryClaimToken() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.SIGNED, SponsorNonceSlotStatus.BROADCASTING)
+            .broadcastRecoveryClaimOwner("issuer-1")
+            .broadcastRecoveryClaimExpiresAt(NOW.plusMinutes(5))
+            .broadcastRecoveryAttemptCount(1)
+            .hasTxHash(true)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("broadcastRecoveryClaimToken is required");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsBroadcastingWithoutRecoveryClaimOwner() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.SIGNED, SponsorNonceSlotStatus.BROADCASTING)
+            .broadcastRecoveryClaimToken("claim-token")
+            .broadcastRecoveryClaimExpiresAt(NOW.plusMinutes(5))
+            .broadcastRecoveryAttemptCount(1)
+            .hasTxHash(true)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("broadcastRecoveryClaimOwner is required");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsBroadcastingWithoutRecoveryClaimExpiresAt() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.SIGNED, SponsorNonceSlotStatus.BROADCASTING)
+            .broadcastRecoveryClaimOwner("issuer-1")
+            .broadcastRecoveryClaimToken("claim-token")
+            .broadcastRecoveryAttemptCount(1)
+            .hasTxHash(true)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("broadcastRecoveryClaimExpiresAt is required");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsBroadcastingWithoutPositiveRecoveryAttemptCount() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.SIGNED, SponsorNonceSlotStatus.BROADCASTING)
+            .broadcastRecoveryClaimOwner("issuer-1")
+            .broadcastRecoveryClaimToken("claim-token")
+            .broadcastRecoveryClaimExpiresAt(NOW.plusMinutes(5))
+            .hasTxHash(true)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("broadcastRecoveryAttemptCount must be positive");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsBroadcastingWithoutSignedTransactionEvidence() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.SIGNED, SponsorNonceSlotStatus.BROADCASTING)
+            .activeTxId(null)
+            .broadcastRecoveryClaimOwner("issuer-1")
+            .broadcastRecoveryClaimToken("claim-token")
+            .broadcastRecoveryClaimExpiresAt(NOW.plusMinutes(5))
+            .broadcastRecoveryAttemptCount(1)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("BROADCASTING requires an active signed transaction");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
+  void transition_rejectsStaleRecoveryMetadataOnSignedTransition() {
+    RecordSponsorNonceSlotTransitionCommand command =
+        baseTransition(SponsorNonceSlotStatus.RESERVED, SponsorNonceSlotStatus.SIGNED)
+            .replacementClaimOwner("operator")
+            .hasSigningEvidence(true)
+            .build();
+
+    assertThatThrownBy(() -> service.transition(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("status-scoped recovery metadata must be cleared");
+    verifyNoInteractions(recordSponsorNonceSlotTransitionPort);
+  }
+
+  @Test
   void recordEvidence_rejectsAdminEvidenceWithoutCreatedBy() {
     RecordSponsorNonceEvidenceCommand command =
         new RecordSponsorNonceEvidenceCommand(
@@ -118,6 +304,90 @@ class NonceSlotLifecycleServiceTest {
     assertThatThrownBy(() -> service.recordEvidence(command))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("createdBy is required");
+    verifyNoInteractions(recordSponsorNonceEvidencePort);
+  }
+
+  @Test
+  void recordEvidence_rejectsSystemEvidenceFromAdminSource() {
+    RecordSponsorNonceEvidenceCommand command =
+        new RecordSponsorNonceEvidenceCommand(
+            CHAIN_ID,
+            SPONSOR,
+            51L,
+            SponsorNonceEvidenceType.RPC_SNAPSHOT,
+            SponsorNonceEvidenceSource.ADMIN,
+            "main",
+            "{\"providerAlias\":\"main\",\"chainPendingNonce\":51,\"chainLatestNonce\":50}",
+            null,
+            "operator",
+            NOW);
+
+    assertThatThrownBy(() -> service.recordEvidence(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("RPC_SNAPSHOT evidence must use source SYSTEM");
+    verifyNoInteractions(recordSponsorNonceEvidencePort);
+  }
+
+  @Test
+  void recordEvidence_rejectsAdminEvidenceFromSystemSource() {
+    RecordSponsorNonceEvidenceCommand command =
+        new RecordSponsorNonceEvidenceCommand(
+            CHAIN_ID,
+            SPONSOR,
+            51L,
+            SponsorNonceEvidenceType.ADMIN_CONSUMED_PROOF,
+            SponsorNonceEvidenceSource.SYSTEM,
+            "main",
+            "{\"txHash\":\"0xabc\",\"outcome\":\"SUCCEEDED\"}",
+            null,
+            null,
+            NOW);
+
+    assertThatThrownBy(() -> service.recordEvidence(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("ADMIN_CONSUMED_PROOF evidence must use source ADMIN");
+    verifyNoInteractions(recordSponsorNonceEvidencePort);
+  }
+
+  @Test
+  void recordEvidence_rejectsUnknownToConsumedCorrectionWithoutRelatedEvidenceId() {
+    RecordSponsorNonceEvidenceCommand command =
+        new RecordSponsorNonceEvidenceCommand(
+            CHAIN_ID,
+            SPONSOR,
+            51L,
+            SponsorNonceEvidenceType.UNKNOWN_TO_CONSUMED_CORRECTION,
+            SponsorNonceEvidenceSource.SYSTEM,
+            "main",
+            "{\"correctionReason\":\"LATE_RECEIPT\",\"resolution\":\"CONSUMED\"}",
+            null,
+            null,
+            NOW);
+
+    assertThatThrownBy(() -> service.recordEvidence(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("relatedEvidenceId is required");
+    verifyNoInteractions(recordSponsorNonceEvidencePort);
+  }
+
+  @Test
+  void recordEvidence_rejectsInvalidJsonPayload() {
+    RecordSponsorNonceEvidenceCommand command =
+        new RecordSponsorNonceEvidenceCommand(
+            CHAIN_ID,
+            SPONSOR,
+            51L,
+            SponsorNonceEvidenceType.RPC_SNAPSHOT,
+            SponsorNonceEvidenceSource.SYSTEM,
+            "main",
+            "not-json",
+            null,
+            null,
+            NOW);
+
+    assertThatThrownBy(() -> service.recordEvidence(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("payloadJson must be valid JSON");
     verifyNoInteractions(recordSponsorNonceEvidencePort);
   }
 
