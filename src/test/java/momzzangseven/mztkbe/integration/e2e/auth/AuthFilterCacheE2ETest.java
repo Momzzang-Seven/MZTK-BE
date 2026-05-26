@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.integration.e2e.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.persistence.EntityManagerFactory;
 import java.util.Map;
 import java.util.UUID;
@@ -52,6 +54,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *       /users/me} 즉시 403 (cache stale 방어).
  *   <li>(3) admin token 으로 {@code GET /admin/dashboard/user-stats} 연속 호출 시 두 번째는 filter 가 발사하는
  *       {@link AdminAccountEntity} fetch 가 0 회 — admin 측 동일 cache contract 가 filter 경유로도 동작함을 확인.
+ *   <li>(4) 같은 access token 으로 {@code GET /users/me} 연속 호출 시 두 번째는 filter 가 발사하는 {@code
+ *       hikaricp.connections.acquire} count 가 첫 번째 대비 정확히 1 회 적다 — <b>cache hit 시 HikariCP
+ *       connection 을 0 회 잡는다</b> 는 PR-B 핵심 가설을 entity fetch 가 아닌 pool acquire counter 자체로 직접 측정.
  * </ul>
  *
  * <p>측정 원리: Hibernate Statistics 의 entity-scoped load/fetch count delta.
@@ -71,7 +76,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @TestPropertySource(
     properties = {
       "spring.jpa.properties.hibernate.generate_statistics=true",
-      "mztk.admin.bootstrap.enabled=false"
+      // AdminUserRoleManagementE2ETest 와 동일한 admin 설정 — admin 시드/로그인 흐름이 정상 동작하도록.
+      // mztk.admin.bootstrap.enabled=false 로 두면 LOCAL_ADMIN 로그인이 AUTH_002 로 실패한다.
+      "mztk.admin.recovery.anchor=test-e2e-recovery-anchor",
+      "mztk.admin.seed.seed-count=2"
     })
 class AuthFilterCacheE2ETest extends E2ETestBase {
 
@@ -83,6 +91,7 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
   @Autowired private EntityManagerFactory entityManagerFactory;
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private MeterRegistry meterRegistry;
 
   private Statistics statistics;
 
@@ -196,6 +205,47 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
   }
 
   // ============================================================
+  // Scenario (4) — Direct measurement of HikariCP acquire delta
+  //   "cache hit 시 connection grab = 0" 을 entity fetch 가 아닌
+  //   pool acquire counter 자체로 직접 입증.
+  // ============================================================
+
+  @Test
+  @DisplayName(
+      "GET /users/me cache miss(1st) vs hit(2nd) — Hikari acquire delta 정확히 1 차이 (filter grab=0 직접 입증)")
+  void cacheHitProducesZeroHikariAcquireForFilter() {
+    TestUser user = signupAndLogin("filter-grab-measurement");
+    HttpEntity<Void> request = new HttpEntity<>(bearerJsonHeaders(user.accessToken()));
+
+    // Hikari Micrometer Timer 가 첫 acquire 시점에 등록되므로 — signup/login 으로 이미 등록됨을 보장.
+    long beforeFirst = hikariAcquireCount();
+    ResponseEntity<String> first =
+        restTemplate.exchange(baseUrl() + "/users/me", HttpMethod.GET, request, String.class);
+    assertThat(first.getStatusCode().is2xxSuccessful()).isTrue();
+    long firstDelta = hikariAcquireCount() - beforeFirst;
+
+    long beforeSecond = hikariAcquireCount();
+    ResponseEntity<String> second =
+        restTemplate.exchange(baseUrl() + "/users/me", HttpMethod.GET, request, String.class);
+    assertThat(second.getStatusCode().is2xxSuccessful()).isTrue();
+    long secondDelta = hikariAcquireCount() - beforeSecond;
+
+    // 핸들러는 양 요청에서 동일한 acquire 수를 발생 (GetMyProfileService 의 read tx 들) → 양변 상쇄.
+    // 1st 는 filter 가 cache miss 로 loader 호출 = JpaTransactionManager 새 tx = +1 acquire.
+    // 2nd 는 filter 가 cache hit 으로 loader 미호출, @Transactional 도 제거됐으므로 tx 안 열림 = +0 acquire.
+    // → 차이 = 정확히 1. "cache hit 시 HikariCP connection 을 0 회 잡는다" 의 직접 측정.
+    assertThat(firstDelta)
+        .as("1st GET /users/me — filter cache miss + 핸들러 acquire, 최소 1회 이상")
+        .isGreaterThanOrEqualTo(1L);
+    assertThat(firstDelta - secondDelta)
+        .as(
+            "filter cache hit 으로 hikari acquire 가 1st 대비 정확히 1회 감소해야 함 "
+                + "(= cache hit 시 connection grab = 0 직접 입증). 1st=%d, 2nd=%d",
+            firstDelta, secondDelta)
+        .isEqualTo(1L);
+  }
+
+  // ============================================================
   // Measurement helpers
   // ============================================================
 
@@ -206,6 +256,19 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
    */
   private long userAccountFetchCount() {
     return entityFetchCount(UserAccountEntity.class);
+  }
+
+  /**
+   * Spring Boot 가 자동 등록하는 {@code hikaricp.connections.acquire} {@link Timer} 의 count — 즉 HikariCP
+   * 에서 connection 을 가져오려 시도한 횟수 (성공 + 실패). Cache hit 시 0 이 되어야 함을 측정하는 데 사용한다.
+   */
+  private long hikariAcquireCount() {
+    Timer timer = meterRegistry.find("hikaricp.connections.acquire").timer();
+    if (timer == null) {
+      throw new IllegalStateException(
+          "hikaricp.connections.acquire metric not registered — Hikari Micrometer binding 확인 필요");
+    }
+    return timer.count();
   }
 
   private long adminAccountFetchCount() {
