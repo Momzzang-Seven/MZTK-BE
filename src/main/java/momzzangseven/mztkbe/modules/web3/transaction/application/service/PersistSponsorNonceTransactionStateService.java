@@ -104,6 +104,46 @@ public class PersistSponsorNonceTransactionStateService
     }
   }
 
+  @Override
+  @Transactional
+  public void markBroadcastingOperatorReview(
+      SponsorNonceBroadcastingOperatorReviewCommand command) {
+    try {
+      nonceSlotLifecycleUseCase.transition(
+          RecordSponsorNonceSlotTransitionCommand.builder()
+              .chainId(command.chainId())
+              .fromAddress(command.fromAddress())
+              .nonce(command.nonce())
+              .fromStatus(SponsorNonceSlotStatus.BROADCASTING)
+              .toStatus(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
+              .activeAttemptId(command.attemptId())
+              .activeTxId(command.transactionId())
+              .stateChangedAt(command.stateChangedAt())
+              .terminalReason(command.slotTerminalReason())
+              .hasRawTx(command.hasRawTx())
+              .hasTxHash(command.hasTxHash())
+              .hasSigningEvidence(command.hasSigningEvidence())
+              .hasBroadcastEvidence(command.hasBroadcastEvidence())
+              .build());
+    } catch (Web3TransactionStateInvalidException e) {
+      if (isSlotNotFound(e)
+          || isStaleActual(e, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
+          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)
+          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED_UNKNOWN)
+          || isStaleActual(e, SponsorNonceSlotStatus.STUCK)) {
+        log.debug(
+            "Skipping broadcasting nonce slot operator review transition for txId={}, nonce={}: {}",
+            command.transactionId(),
+            command.nonce(),
+            e.getMessage());
+      } else {
+        throw e;
+      }
+    }
+    updateTransactionPort.markUnconfirmedForSponsorNonceReview(
+        command.transactionId(), command.transactionFailureReason());
+  }
+
   private void markNonceSlotStuck(SponsorNonceUnconfirmedCommand command) {
     if (command.nonce() == null) {
       return;

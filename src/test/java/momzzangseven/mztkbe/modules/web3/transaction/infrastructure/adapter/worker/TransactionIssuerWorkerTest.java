@@ -870,14 +870,27 @@ class TransactionIssuerWorkerTest {
 
     ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
         ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
-    verify(nonceSlotLifecycleUseCase, times(2)).transition(transitionCaptor.capture());
-    assertThat(transitionCaptor.getAllValues())
-        .extracting(RecordSponsorNonceSlotTransitionCommand::getToStatus)
-        .containsExactly(
-            SponsorNonceSlotStatus.BROADCASTING, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
-    verify(updateTransactionPort)
-        .markUnconfirmedForSponsorNonceReview(
-            1L, Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
+    assertThat(transitionCaptor.getValue().getToStatus())
+        .isEqualTo(SponsorNonceSlotStatus.BROADCASTING);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markBroadcastingOperatorReview(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals(TREASURY_ADDRESS)
+                        && command.nonce() == 5L
+                        && command.attemptId().equals(1001L)
+                        && command
+                            .slotTerminalReason()
+                            .equals(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code())
+                        && command
+                            .transactionFailureReason()
+                            .equals(
+                                Web3TxFailureReason
+                                    .SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED
+                                    .code())));
     verify(updateTransactionPort, never())
         .scheduleRetry(eq(1L), eq(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code()), any());
   }

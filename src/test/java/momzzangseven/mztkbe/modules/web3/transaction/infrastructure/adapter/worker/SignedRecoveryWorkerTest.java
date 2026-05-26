@@ -289,6 +289,40 @@ class SignedRecoveryWorkerTest {
   }
 
   @Test
+  void processBatch_broadcastNonceTooLow_marksOperatorReviewAtomically() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item("0xdeadbeef", "0x" + "a".repeat(64))));
+    when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
+        .thenReturn(
+            new Web3ContractPort.BroadcastResult(
+                false, null, Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code(), "rpc-a"));
+
+    worker.processBatch(1);
+
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markBroadcastingOperatorReview(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce() == 0L
+                        && command
+                            .slotTerminalReason()
+                            .equals(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code())
+                        && command
+                            .transactionFailureReason()
+                            .equals(
+                                Web3TxFailureReason
+                                    .SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED
+                                    .code())
+                        && command.hasBroadcastEvidence()));
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code()), any());
+  }
+
+  @Test
   void processBatch_exceptionAndShouldNotRetry_failsPermanently() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))

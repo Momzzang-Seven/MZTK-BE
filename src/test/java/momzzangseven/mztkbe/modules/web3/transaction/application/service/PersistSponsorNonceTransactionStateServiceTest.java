@@ -205,6 +205,41 @@ class PersistSponsorNonceTransactionStateServiceTest {
     assertThat(command.getReleaseReason()).isEqualTo("SIGNATURE_INVALID");
   }
 
+  @Test
+  void markBroadcastingOperatorReview_marksSlotAndTransactionInOneUseCase() {
+    service.markBroadcastingOperatorReview(
+        new PersistSponsorNonceTransactionStateUseCase
+            .SponsorNonceBroadcastingOperatorReviewCommand(
+            1L,
+            CHAIN_ID,
+            FROM_ADDRESS,
+            7L,
+            1001L,
+            "BROADCAST_NONCE_TOO_LOW",
+            "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED",
+            true,
+            true,
+            true,
+            true,
+            NOW));
+
+    InOrder inOrder = inOrder(nonceSlotLifecycleUseCase, updateTransactionPort);
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> slotCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    inOrder.verify(nonceSlotLifecycleUseCase).transition(slotCaptor.capture());
+    inOrder
+        .verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            1L, "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED");
+    RecordSponsorNonceSlotTransitionCommand command = slotCaptor.getValue();
+    assertThat(command.getFromStatus()).isEqualTo(SponsorNonceSlotStatus.BROADCASTING);
+    assertThat(command.getToStatus()).isEqualTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
+    assertThat(command.getActiveAttemptId()).isEqualTo(1001L);
+    assertThat(command.getActiveTxId()).isEqualTo(1L);
+    assertThat(command.getTerminalReason()).isEqualTo("BROADCAST_NONCE_TOO_LOW");
+    assertThat(command.hasBroadcastEvidence()).isTrue();
+  }
+
   private SponsorNonceSlotView slotView(SponsorNonceSlotStatus status, Long activeTxId) {
     return new SponsorNonceSlotView(
         CHAIN_ID,

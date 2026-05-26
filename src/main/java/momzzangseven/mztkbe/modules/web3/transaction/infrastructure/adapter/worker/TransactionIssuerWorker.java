@@ -347,13 +347,21 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
     if (isBroadcastNonceTooLow(broadcast)) {
-      markBroadcastingSlotOperatorReview(
-          item,
-          signer.walletAddress(),
-          nonceReservation,
-          Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code());
-      updateTransactionPort.markUnconfirmedForSponsorNonceReview(
-          item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
+      persistSponsorNonceTransactionStateUseCase.markBroadcastingOperatorReview(
+          new PersistSponsorNonceTransactionStateUseCase
+              .SponsorNonceBroadcastingOperatorReviewCommand(
+              item.transactionId(),
+              item.chainId(),
+              signer.walletAddress(),
+              nonceReservation.nonce(),
+              nonceReservation.attemptId(),
+              Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code(),
+              Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code(),
+              true,
+              true,
+              true,
+              true,
+              LocalDateTime.now()));
       return;
     }
 
@@ -636,37 +644,6 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
             .hasTxHash(signed.txHash() != null && !signed.txHash().isBlank())
             .hasSigningEvidence(true)
             .build());
-  }
-
-  private void markBroadcastingSlotOperatorReview(
-      LoadTransactionWorkPort.TransactionWorkItem item,
-      String fromAddress,
-      NonceReservation nonceReservation,
-      String terminalReason) {
-    try {
-      nonceSlotLifecycleUseCase.transition(
-          baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.BROADCASTING)
-              .toStatus(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
-              .stateChangedAt(LocalDateTime.now())
-              .terminalReason(terminalReason)
-              .hasRawTx(true)
-              .hasTxHash(true)
-              .hasSigningEvidence(true)
-              .hasBroadcastEvidence(true)
-              .build());
-    } catch (Web3TransactionStateInvalidException e) {
-      if (isSlotNotFound(e)
-          || isStaleActual(e, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
-          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)
-          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED_UNKNOWN)) {
-        log.debug(
-            "Skipping nonce-too-low operator review transition for txId={}: {}",
-            item.transactionId(),
-            e.getMessage());
-        return;
-      }
-      throw e;
-    }
   }
 
   private RecordSponsorNonceSlotTransitionCommand.RecordSponsorNonceSlotTransitionCommandBuilder
