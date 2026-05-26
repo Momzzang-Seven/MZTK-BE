@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.admin.infrastructure.persistence.entity.Admi
 import momzzangseven.mztkbe.modules.admin.infrastructure.persistence.repository.AdminAccountJpaRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Persistence adapter implementing all admin account output ports. Owns entity-to-domain and
@@ -30,31 +31,37 @@ public class AdminAccountPersistenceAdapter
   private final ApplicationEventPublisher eventPublisher;
 
   @Override
+  @Transactional(readOnly = true)
   public Optional<AdminAccount> findActiveByUserId(Long userId) {
     return repository.findByUserIdAndDeletedAtIsNull(userId).map(this::toDomain);
   }
 
   @Override
+  @Transactional(readOnly = true)
   public Optional<AdminAccount> findActiveByLoginId(String loginId) {
     return repository.findByLoginIdAndDeletedAtIsNull(loginId).map(this::toDomain);
   }
 
   @Override
+  @Transactional
   public Optional<AdminAccount> findActiveByLoginIdForUpdate(String loginId) {
     return repository.findByLoginIdAndDeletedAtIsNullForUpdate(loginId).map(this::toDomain);
   }
 
   @Override
+  @Transactional(readOnly = true)
   public boolean existsByLoginId(String loginId) {
     return repository.existsByLoginIdAndDeletedAtIsNull(loginId);
   }
 
   @Override
+  @Transactional(readOnly = true)
   public List<AdminAccount> findAllActive() {
     return repository.findAllByDeletedAtIsNull().stream().map(this::toDomain).toList();
   }
 
   @Override
+  @Transactional
   public AdminAccount save(AdminAccount account) {
     AdminAccountEntity entity = toEntity(account);
     AdminAccountEntity saved = repository.save(entity);
@@ -63,6 +70,7 @@ public class AdminAccountPersistenceAdapter
   }
 
   @Override
+  @Transactional
   public AdminAccount saveAndFlush(AdminAccount account) {
     AdminAccountEntity entity = toEntity(account);
     AdminAccountEntity saved = repository.saveAndFlush(entity);
@@ -71,6 +79,7 @@ public class AdminAccountPersistenceAdapter
   }
 
   @Override
+  @Transactional
   public List<Long> deleteAllAndReturnUserIds() {
     List<Long> userIds = repository.findAll().stream().map(AdminAccountEntity::getUserId).toList();
     repository.deleteAllInBulk();
@@ -81,11 +90,13 @@ public class AdminAccountPersistenceAdapter
   }
 
   @Override
+  @Transactional(readOnly = true)
   public long countActive() {
     return repository.countByDeletedAtIsNull();
   }
 
   @Override
+  @Transactional(readOnly = true)
   public long countActiveByRole(String roleName) {
     return repository.countActiveByRole(roleName);
   }

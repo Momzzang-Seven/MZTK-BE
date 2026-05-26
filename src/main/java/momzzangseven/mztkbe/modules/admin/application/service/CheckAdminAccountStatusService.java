@@ -20,7 +20,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
  */
 @Slf4j
 @Service
-@Transactional(readOnly = true)
 public class CheckAdminAccountStatusService implements CheckAdminAccountStatusUseCase {
 
   private static final Duration CACHE_TTL = Duration.ofSeconds(60);

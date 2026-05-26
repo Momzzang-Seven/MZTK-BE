@@ -30,7 +30,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
  */
 @Slf4j
 @Service
-@Transactional(readOnly = true)
 public class CheckAccountStatusService implements CheckAccountStatusUseCase {
 
   private static final Duration CACHE_TTL = Duration.ofSeconds(60);
@@ -69,7 +68,8 @@ public class CheckAccountStatusService implements CheckAccountStatusUseCase {
   /**
    * Drops the cached entry for {@code userId} once the publishing write transaction commits. Kept
    * non-transactional ({@link Propagation#NOT_SUPPORTED}) so the listener never takes a HikariCP
-   * connection just to invalidate an in-memory entry.
+   * connection just to invalidate an in-memory entry — defense in depth in case a class-level
+   * {@code @Transactional} is ever re-introduced.
    */
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   @Transactional(propagation = Propagation.NOT_SUPPORTED)
