@@ -897,6 +897,44 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   @Test
+  void executeEip7702_broadcastNonceTooLow_marksSponsorNonceOperatorReview() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 99L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenReturn(new ExecutionEip7702GatewayPort.SignedPayload("0x04signed", "0xexpectedhash"));
+    when(executionTransactionGatewayPort.broadcast("0x04signed"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(
+                false, null, "BROADCAST_NONCE_TOO_LOW", "main"));
+    stubFindAndTrackUpdates(intent);
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-7702", "0xauth", "0xsubmit", null),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(501L);
+    verify(executionTransactionGatewayPort)
+        .markSponsorNonceBroadcastingOperatorReview(
+            argThat(
+                command ->
+                    command.transactionId().equals(501L)
+                        && command.chainId() == 11155111L
+                        && command.fromAddress().equals(SPONSOR_ADDRESS)
+                        && command.nonce() == sponsorNonce
+                        && command.attemptId().equals(9001L)
+                        && command.slotTerminalReason().equals("BROADCAST_NONCE_TOO_LOW")
+                        && command
+                            .transactionFailureReason()
+                            .equals("SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED")
+                        && command.hasBroadcastEvidence()));
+    verify(executionTransactionGatewayPort, never()).scheduleRetry(any(), any(), any());
+    verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+  }
+
+  @Test
   void executeEip7702_happyPath_marksPendingOnchainAndConsumesReservedExposure() {
     // [M-53] EIP-7702 happy path: sign + broadcast 모두 성공 → markPending + status=PENDING_ONCHAIN.
     BigInteger reservedCost = BigInteger.valueOf(7_777L);

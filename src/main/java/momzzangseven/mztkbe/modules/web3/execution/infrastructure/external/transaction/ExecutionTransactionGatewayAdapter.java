@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Spons
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.ManageExecutionTransactionUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionAuditEventType;
@@ -29,6 +30,8 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
 
   private final ManageExecutionTransactionUseCase manageExecutionTransactionUseCase;
   private final ManageNonceSlotLifecycleUseCase manageNonceSlotLifecycleUseCase;
+  private final PersistSponsorNonceTransactionStateUseCase
+      persistSponsorNonceTransactionStateUseCase;
 
   @Override
   public Optional<TransactionRecord> findById(Long transactionId) {
@@ -130,6 +133,26 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
             slot ->
                 new SponsorNonceSlotRecord(
                     slot.nonce(), slot.status().name(), slot.activeAttemptId(), slot.activeTxId()));
+  }
+
+  @Override
+  public void markSponsorNonceBroadcastingOperatorReview(
+      SponsorNonceBroadcastingOperatorReviewCommand command) {
+    persistSponsorNonceTransactionStateUseCase.markBroadcastingOperatorReview(
+        new PersistSponsorNonceTransactionStateUseCase
+            .SponsorNonceBroadcastingOperatorReviewCommand(
+            command.transactionId(),
+            command.chainId(),
+            command.fromAddress(),
+            command.nonce(),
+            command.attemptId(),
+            command.slotTerminalReason(),
+            command.transactionFailureReason(),
+            command.hasRawTx(),
+            command.hasTxHash(),
+            command.hasSigningEvidence(),
+            command.hasBroadcastEvidence(),
+            command.stateChangedAt()));
   }
 
   @Override

@@ -395,6 +395,46 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   }
 
   @Test
+  void execute_broadcastNonceTooLow_marksSponsorNonceOperatorReview() {
+    ExecutionIntent intent = internalIntent();
+    long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
+    stubClaimAndTrackUpdates(intent);
+    stubSponsorNonceReservation(expectedNonce, 78L);
+    when(executionEip1559SigningPort.sign(any()))
+        .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(
+                false, null, "BROADCAST_NONCE_TOO_LOW", "main"));
+
+    ExecuteInternalExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
+            gate);
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(78L);
+    verify(executionTransactionGatewayPort)
+        .markSponsorNonceBroadcastingOperatorReview(
+            argThat(
+                command ->
+                    command.transactionId().equals(78L)
+                        && command.chainId() == 11155111L
+                        && command.fromAddress().equals(SPONSOR_ADDRESS)
+                        && command.nonce() == expectedNonce
+                        && command.attemptId().equals(9001L)
+                        && command.slotTerminalReason().equals("BROADCAST_NONCE_TOO_LOW")
+                        && command
+                            .transactionFailureReason()
+                            .equals("SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED")
+                        && command.hasBroadcastEvidence()));
+    verify(executionTransactionGatewayPort, never()).scheduleRetry(any(), any(), any());
+    verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+  }
+
+  @Test
   void execute_quarantinesIntentWhenSignerDoesNotMatch() {
     ExecutionIntent intent = internalIntentWithSigner("0x" + "5".repeat(40));
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))

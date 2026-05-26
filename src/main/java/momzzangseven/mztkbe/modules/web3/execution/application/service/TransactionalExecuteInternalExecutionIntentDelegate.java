@@ -56,6 +56,9 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
   private static final String BROADCAST_ALREADY_KNOWN = "BROADCAST_ALREADY_KNOWN";
+  private static final String BROADCAST_NONCE_TOO_LOW = "BROADCAST_NONCE_TOO_LOW";
+  private static final String SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED =
+      "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED";
   private static final String INTERNAL_ISSUER_INVALID_INTENT = "INTERNAL_ISSUER_INVALID_INTENT";
   private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
       "sponsor kms sign failed (terminal)";
@@ -475,6 +478,30 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       return;
     }
 
+    if (isBroadcastNonceTooLow(broadcast)) {
+      executionTransactionGatewayPort.markSponsorNonceBroadcastingOperatorReview(
+          new ExecutionTransactionGatewayPort.SponsorNonceBroadcastingOperatorReviewCommand(
+              transactionId,
+              sponsorNonceContext.chainId(),
+              sponsorNonceContext.fromAddress(),
+              sponsorNonceContext.nonce(),
+              sponsorNonceContext.attemptId(),
+              BROADCAST_NONCE_TOO_LOW,
+              SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED,
+              true,
+              fallbackTxHash != null && !fallbackTxHash.isBlank(),
+              true,
+              true,
+              LocalDateTime.now(appClock)));
+      ExecutionActionHookRunner.afterTransactionSubmitted(
+          runAfterCommitPort,
+          actionHandler,
+          current,
+          actionPlan,
+          ExecutionTransactionStatus.SIGNED);
+      return;
+    }
+
     String failureReason =
         broadcast.failureReason() == null || broadcast.failureReason().isBlank()
             ? BROADCAST_FAILED
@@ -491,6 +518,11 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
   private boolean isBroadcastAlreadyKnown(
       ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
     return broadcast != null && BROADCAST_ALREADY_KNOWN.equals(broadcast.failureReason());
+  }
+
+  private boolean isBroadcastNonceTooLow(
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
+    return broadcast != null && BROADCAST_NONCE_TOO_LOW.equals(broadcast.failureReason());
   }
 
   private ExecutionTransactionGatewayPort.TransactionRecord loadTransaction(Long transactionId) {

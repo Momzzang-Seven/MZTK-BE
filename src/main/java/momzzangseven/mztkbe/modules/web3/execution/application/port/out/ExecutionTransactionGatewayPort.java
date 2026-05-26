@@ -31,6 +31,9 @@ public interface ExecutionTransactionGatewayPort {
   Optional<SponsorNonceSlotRecord> findSponsorNonceSlot(
       long chainId, String fromAddress, long nonce);
 
+  void markSponsorNonceBroadcastingOperatorReview(
+      SponsorNonceBroadcastingOperatorReviewCommand command);
+
   void transitionSponsorNonceSlot(SponsorNonceSlotTransitionCommand command);
 
   void recordAudit(AuditCommand command);
@@ -89,6 +92,20 @@ public interface ExecutionTransactionGatewayPort {
       Long transactionId) {}
 
   record SponsorNonceSlotRecord(long nonce, String status, Long activeAttemptId, Long activeTxId) {}
+
+  record SponsorNonceBroadcastingOperatorReviewCommand(
+      Long transactionId,
+      long chainId,
+      String fromAddress,
+      long nonce,
+      Long attemptId,
+      String slotTerminalReason,
+      String transactionFailureReason,
+      boolean hasRawTx,
+      boolean hasTxHash,
+      boolean hasSigningEvidence,
+      boolean hasBroadcastEvidence,
+      LocalDateTime stateChangedAt) {}
 
   record SponsorNonceSlotTransitionCommand(
       long chainId,
