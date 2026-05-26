@@ -227,7 +227,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
               new Web3ContractPort.PrevalidateCommand(
                   signer.walletAddress(), item.toAddress(), item.amountWei()));
     } catch (RuntimeException e) {
-      if (item.nonce() == null || e instanceof Web3InvalidInputException) {
+      if (e instanceof Web3InvalidInputException) {
         dropReservedSlot(
             item, signer.walletAddress(), nonceReservation, prevalidateExceptionReason(e));
       }
@@ -350,7 +350,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
           signer.walletAddress(),
           nonceReservation,
           Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code());
-      retry(item.transactionId(), Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code());
+      updateTransactionPort.scheduleRetry(
+          item.transactionId(), Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code(), null);
       return;
     }
 
@@ -415,7 +416,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         failureReason == null || failureReason.isBlank()
             ? Web3TxFailureReason.PREVALIDATE_REVERT.code()
             : failureReason;
-    if (!retryable || item.nonce() == null) {
+    if (!retryable) {
       dropReservedSlot(item, fromAddress, nonceReservation, reason);
     }
     failPrevalidate(item.transactionId(), reason, retryable);
@@ -439,6 +440,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
               .toStatus(SponsorNonceSlotStatus.DROPPED)
               .stateChangedAt(LocalDateTime.now())
               .releasedAttemptId(nonceReservation.attemptId())
+              .releaseReason(terminalReason)
               .terminalReason(terminalReason)
               .build());
     } catch (Web3TransactionStateInvalidException e) {

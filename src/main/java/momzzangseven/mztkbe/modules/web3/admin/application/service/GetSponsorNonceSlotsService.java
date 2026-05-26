@@ -30,7 +30,7 @@ public class GetSponsorNonceSlotsService implements GetSponsorNonceSlotsUseCase 
     boolean hasNext =
         slots.size() == size
             && !loadSponsorNonceSlotReviewPort
-                .loadSlots(query.chainId(), normalizedAddress, page + 1, 1)
+                .loadSlots(query.chainId(), normalizedAddress, page + 1, size)
                 .isEmpty();
     return new GetSponsorNonceSlotsResult(
         query.chainId(), normalizedAddress, page, size, hasNext, slots);

@@ -336,6 +336,32 @@ class TransactionIssuerWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort).scheduleRetry(1L, "RPC_TEMP", retryAt);
+    verify(nonceSlotLifecycleUseCase, never())
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
+  }
+
+  @Test
+  void processBatch_prevalidateRetryableFailure_keepsNewReservationForRetry() {
+    LocalDateTime retryAt = LocalDateTime.now().plusSeconds(30);
+
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    stubSponsorNonceReservation(44L, 1L, 1001L);
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(
+            new Web3ContractPort.PrevalidateResult(
+                false, true, "RPC_TEMP", null, null, null, Map.of()));
+    when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
+        .thenReturn(retryAt);
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort).scheduleRetry(1L, "RPC_TEMP", retryAt);
+    verify(nonceSlotLifecycleUseCase, never())
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
     verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
@@ -354,6 +380,29 @@ class TransactionIssuerWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort).scheduleRetry(1L, "PREVALIDATE_TRANSFER_FALSE", null);
+    verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
+  }
+
+  @Test
+  void processBatch_prevalidateNonRetryableFailure_dropsNewReservationWithReleaseReason() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    stubSponsorNonceReservation(45L, 1L, 1002L);
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(
+            new Web3ContractPort.PrevalidateResult(
+                false, false, "PREVALIDATE_TRANSFER_FALSE", null, null, null, Map.of()));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort).scheduleRetry(1L, "PREVALIDATE_TRANSFER_FALSE", null);
+    List<RecordSponsorNonceSlotTransitionCommand> transitions = captureSlotTransitions();
+    assertThat(transitions).hasSize(1);
+    assertThat(transitions.get(0).getToStatus()).isEqualTo(SponsorNonceSlotStatus.DROPPED);
+    assertThat(transitions.get(0).getReleaseReason()).isEqualTo("PREVALIDATE_TRANSFER_FALSE");
+    assertThat(transitions.get(0).getReleasedAttemptId()).isEqualTo(1002L);
     verify(persistSponsorNonceTransactionStateUseCase, never()).markSigned(any());
   }
 
