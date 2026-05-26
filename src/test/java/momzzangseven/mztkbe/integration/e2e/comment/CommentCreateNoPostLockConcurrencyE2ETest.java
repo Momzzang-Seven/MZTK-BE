@@ -269,6 +269,22 @@ class CommentCreateNoPostLockConcurrencyE2ETest extends E2ETestBase {
    * <p>We assert {@code parallel ≤ max(baseline × 5, 1500 ms)} — the {@code × 5} margin decisively
    * rejects the old {@code × 10} serialization while tolerating JIT / connection-pool / scheduling
    * noise; the {@code 1500 ms} floor protects against an artificially small baseline.
+   *
+   * <p><b>Known fragility — full e2e suite runs:</b> the wall-time measurement is sensitive to
+   * JVM-shared environment (multiple SpringBootTest contexts cached in the same JVM, GC pause,
+   * background worker polling). When this test is part of the full {@code ./gradlew e2eTest} run, a
+   * single GC pause or a noisy neighbour context can push {@code parallelMillis} past the floor and
+   * fail this assertion even when the lock-removal contract still holds. If this test fails, RERUN
+   * IT ALONE to confirm the contract is intact:
+   *
+   * <pre>
+   * ./gradlew e2eTest --tests "*CommentCreateNoPostLockConcurrencyE2ETest.concurrentCreateCommentDoesNotSerializeOnPostsRowLock"
+   * </pre>
+   *
+   * <p>The primary lock-free regression signal is the sibling NOWAIT-probe test ({@link
+   * #concurrentCreateCommentLeavesPostsRowLockFreeProvenByNowaitProbe}), which is environment-noise
+   * insensitive — if that test passes and only this one fails, the regression is in the test
+   * harness, not in production code.
    */
   @Test
   @DisplayName("concurrent createComment x N on the same post do not serialize on a row lock")
@@ -331,7 +347,21 @@ class CommentCreateNoPostLockConcurrencyE2ETest extends E2ETestBase {
           .as(
               "MOM-459 — concurrent createComment must not serialize on posts row lock."
                   + " baseline=%d ms, parallel(N=%d)=%d ms, upper bound=%d ms."
-                  + " Serialized (old code) would be ≈ N × baseline = %d ms.",
+                  + " Serialized (old code) would be ≈ N × baseline = %d ms."
+                  + "%n"
+                  + "%n>>> KNOWN FRAGILITY: this wall-time measurement is sensitive to JVM-shared"
+                  + "%n>>> environment (multiple SpringBootTest contexts cached in the same JVM,"
+                  + "%n>>> GC pause, background worker polling). If this fails inside a full"
+                  + "%n>>> ./gradlew e2eTest suite run, RERUN IT ALONE to confirm the contract:"
+                  + "%n>>>"
+                  + "%n>>>   ./gradlew e2eTest --tests"
+                  + " \"*CommentCreateNoPostLockConcurrencyE2ETest.concurrentCreateCommentDoesNotSerializeOnPostsRowLock\""
+                  + "%n>>>"
+                  + "%n>>> Primary lock-free regression signal is the sibling NOWAIT-probe test"
+                  + "%n>>> (concurrentCreateCommentLeavesPostsRowLockFreeProvenByNowaitProbe),"
+                  + "%n>>> which is environment-noise insensitive. If THAT test passes and only"
+                  + "%n>>> this one fails, the regression is in the test harness, not in"
+                  + "%n>>> production code.",
               baselineMillis,
               concurrency,
               parallelMillis,
