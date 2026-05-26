@@ -265,7 +265,8 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         item.nonce(),
         actualStatus,
         cause.getMessage());
-    markSponsorNonceReview(item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
+    markSponsorNonceReview(
+        item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
   }
 
   private void markSponsorNonceReview(Long transactionId, Web3TxFailureReason failureReason) {

@@ -40,7 +40,7 @@ class SponsorNonceSlotMigrationScriptTest {
   }
 
   @Test
-  void migrationDropsEip7702AuthorityNonceUniqueIndexBeforeAddressNormalization() throws Exception {
+  void migrationRecreatesNonceUniqueIndexesAfterInvalidIndexCleanup() throws Exception {
     String sql = Files.readString(MIGRATION);
     String backfillSql = Files.readString(BACKFILL_MIGRATION);
 
@@ -52,8 +52,14 @@ class SponsorNonceSlotMigrationScriptTest {
         .contains("DROP INDEX idx_web3_tx_sender_nonce")
         .contains("DROP INDEX idx_web3_tx_eip7702_authority_nonce")
         .contains("DROP INDEX uk_web3_tx_id_chain_sender_nonce")
+        .contains("DROP INDEX uk_web3_tx_eip7702_authority_nonce")
+        .contains("DROP INDEX uk_web3_tx_non_reward_eip1559_sender_nonce")
         .contains("NOT i.indisvalid OR NOT i.indisready")
-        .contains("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_eip7702_authority_nonce");
+        .contains(
+            "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_web3_tx_eip7702_authority_nonce")
+        .contains(
+            "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "
+                + "uk_web3_tx_non_reward_eip1559_sender_nonce");
   }
 
   @Test

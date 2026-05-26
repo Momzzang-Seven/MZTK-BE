@@ -294,7 +294,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
           item.transactionId(),
           nonceReservation.nonce(),
           nonceReservation.attemptId());
-      markSponsorNonceReview(item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
+      markSponsorNonceReview(
+          item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
       return;
     }
 
@@ -569,7 +570,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         item.nonce(),
         slot == null ? null : slot.status(),
         slot == null ? null : slot.activeTxId());
-    markSponsorNonceReview(item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
+    markSponsorNonceReview(
+        item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION);
     return null;
   }
 
