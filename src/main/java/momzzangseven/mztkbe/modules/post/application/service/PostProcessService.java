@@ -100,12 +100,26 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
   private UpdatePreparation prepareLocalUpdate(
       Long currentUserId, Long postId, UpdatePostCommand command) {
-    Post post = loadPostOrThrow(postId);
+    // Phase 1 — lock-free reads. Fail-fast for clearly-invalid requests and pre-fetch
+    // values that don't depend on the live posts row state (answer counts, image
+    // validation). Keeps the row lock window in Phase 2 as small as possible.
+    Post snapshot = loadPostOrThrow(postId);
+    snapshot.validateOwnership(currentUserId);
+    postVisibilityPolicy.validateOwnerMutationAllowed(snapshot);
+    validateQuestionUpdatePublicationAllowed(snapshot);
+    long activeAnswerCount = countActiveAnswers(snapshot);
+    validatePostImagesIfPresent(currentUserId, postId, snapshot.getType(), command.imageIds());
+
+    // Phase 2 — acquire the posts row lock and re-validate every concurrent-mutable
+    // invariant from the locked snapshot before merging. JPA save() rewrites every
+    // mapped column from the in-memory Post, so the source must be the freshly locked
+    // row — otherwise an admin/sync mutation committed between Phase 1 and Phase 2
+    // would be silently reverted (MOM-459 lost-update guard).
+    Post post =
+        postPersistencePort.loadPostForUpdate(postId).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     validateQuestionUpdatePublicationAllowed(post);
-    long activeAnswerCount = countActiveAnswers(post);
-    validatePostImagesIfPresent(currentUserId, postId, post.getType(), command.imageIds());
 
     boolean contentChanged =
         command.content() != null && !command.content().equals(post.getContent());
