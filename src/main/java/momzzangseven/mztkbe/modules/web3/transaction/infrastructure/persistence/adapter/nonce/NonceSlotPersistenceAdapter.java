@@ -98,7 +98,8 @@ public class NonceSlotPersistenceAdapter
     String normalizedAddress = EvmAddress.of(command.fromAddress()).value();
     Web3TransactionEntity transaction = loadTransaction(command.transactionId());
     boolean nonceAssigned =
-        validateTransactionScope(transaction, command.chainId(), normalizedAddress, command.nonce());
+        validateTransactionScope(
+            transaction, command.chainId(), normalizedAddress, command.nonce());
     if (nonceAssigned) {
       transactionRepository.saveAndFlush(transaction);
     }
