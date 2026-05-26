@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
@@ -79,6 +80,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   private QnaAdminExecutionConfigurationValidator qnaAdminExecutionConfigurationValidator;
 
   @MockitoBean private QnaContractCallSupport qnaContractCallSupport;
+  @MockitoBean private LoadInternalExecutionSignerWalletPort loadInternalExecutionSignerWalletPort;
   @MockitoBean private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
   @MockitoBean private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   @MockitoBean private ExecutionEip1559SigningPort executionEip1559SigningPort;
@@ -88,6 +90,11 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   @BeforeEach
   void setUp() {
     BDDMockito.given(loadSponsorTreasuryWalletPort.load())
+        .willReturn(
+            Optional.of(
+                new TreasuryWalletInfo(
+                    "test-sponsor", "alias/test-sponsor", SIGNER_ADDRESS, true)));
+    BDDMockito.given(loadInternalExecutionSignerWalletPort.load(any()))
         .willReturn(
             Optional.of(
                 new TreasuryWalletInfo(
@@ -209,8 +216,10 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(createdCommandRef.get()).isNotNull();
     assertThat(createdCommandRef.get().fromAddress()).isEqualTo(SIGNER_ADDRESS);
     assertThat(createdCommandRef.get().toAddress()).isEqualTo(CALL_TARGET);
-    assertThat(createdCommandRef.get().nonce()).isEqualTo(77L);
-    assertThat(transactionNonce(801L)).isEqualTo(77L);
+    assertThat(createdCommandRef.get().nonce()).isNull();
+    BDDMockito.then(executionTransactionGatewayPort)
+        .should()
+        .markSigned(801L, 77L, "0xsigned", "0xhash-signed");
     assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("PENDING_ONCHAIN");
 
     markExecutionIntentSucceededUseCase.execute(801L);
@@ -297,8 +306,10 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(createdCommandRef.get()).isNotNull();
     assertThat(createdCommandRef.get().fromAddress()).isEqualTo(SIGNER_ADDRESS);
     assertThat(createdCommandRef.get().toAddress()).isEqualTo(CALL_TARGET);
-    assertThat(createdCommandRef.get().nonce()).isEqualTo(77L);
-    assertThat(transactionNonce(802L)).isEqualTo(77L);
+    assertThat(createdCommandRef.get().nonce()).isNull();
+    BDDMockito.then(executionTransactionGatewayPort)
+        .should()
+        .markSigned(802L, 77L, "0xsigned", "0xhash-signed");
     assertThat(latestExecutionIntentStatus(postId)).isEqualTo("PENDING_ONCHAIN");
 
     markExecutionIntentSucceededUseCase.execute(802L);
@@ -358,8 +369,8 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
 
   @Test
   @DisplayName(
-      "[E-11] loadSponsorTreasuryWalletPort 가 Optional.empty() → preflightSkipped (sponsor missing 의 internal 변형), intent claim 안 됨")
-  void runBatch_skipsClaim_whenLoadSponsorTreasuryWalletReturnsEmpty() throws Exception {
+      "[E-11] loadInternalExecutionSignerWalletPort 가 Optional.empty() → preflightSkipped, intent claim 안 됨")
+  void runBatch_skipsClaim_whenLoadInternalExecutionSignerWalletReturnsEmpty() throws Exception {
     AdminUser admin = createAdminAndLogin();
     TestUser asker = signupAndLogin("preflight-load-empty-asker");
     TestUser responder = signupAndLogin("preflight-load-empty-responder");
@@ -384,9 +395,10 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(settleResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
 
-    // Sponsor wallet missing entirely — preflight throws Web3InvalidInputException, internal
-    // service catches and returns preflightSkipped(). Batch loop exits, intent untouched.
-    BDDMockito.given(loadSponsorTreasuryWalletPort.load()).willReturn(Optional.empty());
+    // Internal signer wallet missing entirely — preflight throws Web3InvalidInputException,
+    // internal service catches and returns preflightSkipped(). Batch loop exits, intent untouched.
+    BDDMockito.given(loadInternalExecutionSignerWalletPort.load(any()))
+        .willReturn(Optional.empty());
 
     var batchResult = runInternalExecutionBatchUseCase.runBatch(NOW);
 
@@ -687,11 +699,6 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         jdbcTemplate.queryForObject(
             "select accepted from web3_qna_answers where answer_id = ?", Boolean.class, answerId);
     return Boolean.TRUE.equals(accepted);
-  }
-
-  private Long transactionNonce(Long transactionId) {
-    return jdbcTemplate.queryForObject(
-        "select nonce from web3_transactions where id = ?", Long.class, transactionId);
   }
 
   private boolean postExists(Long postId) {

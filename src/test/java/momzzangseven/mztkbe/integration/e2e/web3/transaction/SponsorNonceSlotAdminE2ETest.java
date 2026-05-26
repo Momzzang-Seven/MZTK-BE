@@ -87,6 +87,25 @@ class SponsorNonceSlotAdminE2ETest extends E2ETestBase {
     assertThat(userResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
   }
 
+  @Test
+  @DisplayName("[E2E-3] Sponsor nonce migration indexes and constraints are valid")
+  void sponsorNonceMigrationIndexesAndConstraintsAreValid() {
+    assertThat(indexIsValid("idx_web3_tx_sender_nonce")).isTrue();
+    assertThat(indexIsValid("uk_web3_tx_eip7702_authority_nonce")).isTrue();
+    assertThat(indexIsValid("uk_web3_tx_non_reward_eip1559_sender_nonce")).isTrue();
+    assertThat(indexIsValid("uk_web3_tx_id_chain_sender_nonce")).isTrue();
+    assertThat(indexIsUnique("uk_web3_tx_eip7702_authority_nonce")).isTrue();
+    assertThat(indexIsUnique("uk_web3_tx_non_reward_eip1559_sender_nonce")).isTrue();
+    assertThat(indexIsUnique("uk_web3_tx_id_chain_sender_nonce")).isTrue();
+    assertThat(constraintIsValidated("uk_web3_tx_id_chain_sender_nonce")).isTrue();
+    assertThat(constraintIsValidated("ck_web3_tx_addresses_lower")).isTrue();
+    assertThat(constraintIsValidated("ck_web3_nonce_state_from_lower")).isTrue();
+    assertThat(constraintIsValidated("fk_web3_nonce_slot_attempt_tx_scope")).isTrue();
+    assertThat(constraintIsValidated("fk_web3_nonce_slots_active_tx")).isTrue();
+    assertThat(constraintIsValidated("fk_web3_nonce_slots_consumed_tx")).isTrue();
+    assertThat(constraintIsValidated("fk_web3_nonce_slots_released_tx")).isTrue();
+  }
+
   private TestAdmin createAdminAndLogin() throws Exception {
     String email = "admin-" + uniqueToken() + "@internal.mztk.local";
     jdbcTemplate.update(
@@ -205,6 +224,47 @@ class SponsorNonceSlotAdminE2ETest extends E2ETestBase {
     assertThat(slot.at("/activeTxId").asLong()).isEqualTo(expected.txId());
     assertThat(slot.at("/activeTxHash").asText()).isEqualTo(expected.txHash());
     assertThat(slot.hasNonNull("updatedAt")).isTrue();
+  }
+
+  private boolean indexIsValid(String indexName) {
+    Boolean valid =
+        jdbcTemplate.queryForObject(
+            """
+            SELECT i.indisvalid AND i.indisready
+            FROM pg_index i
+            JOIN pg_class c ON c.oid = i.indexrelid
+            WHERE c.relname = ?
+            """,
+            Boolean.class,
+            indexName);
+    return Boolean.TRUE.equals(valid);
+  }
+
+  private boolean indexIsUnique(String indexName) {
+    Boolean unique =
+        jdbcTemplate.queryForObject(
+            """
+            SELECT i.indisunique
+            FROM pg_index i
+            JOIN pg_class c ON c.oid = i.indexrelid
+            WHERE c.relname = ?
+            """,
+            Boolean.class,
+            indexName);
+    return Boolean.TRUE.equals(unique);
+  }
+
+  private boolean constraintIsValidated(String constraintName) {
+    Boolean validated =
+        jdbcTemplate.queryForObject(
+            """
+            SELECT convalidated
+            FROM pg_constraint
+            WHERE conname = ?
+            """,
+            Boolean.class,
+            constraintName);
+    return Boolean.TRUE.equals(validated);
   }
 
   private static String uniqueToken() {
