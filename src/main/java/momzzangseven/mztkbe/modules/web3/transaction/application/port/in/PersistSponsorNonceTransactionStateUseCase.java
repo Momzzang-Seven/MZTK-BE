@@ -14,8 +14,9 @@ public interface PersistSponsorNonceTransactionStateUseCase {
 
   void failTerminalAndDropReservedSlot(SponsorNonceTerminalReservedSlotFailureCommand command);
 
-  void markBroadcastingOperatorReview(
-      SponsorNonceBroadcastingOperatorReviewCommand command);
+  void markSignedOperatorReview(SponsorNonceSignedOperatorReviewCommand command);
+
+  void markBroadcastingOperatorReview(SponsorNonceBroadcastingOperatorReviewCommand command);
 
   record SponsorNonceSignedCommand(
       Long transactionId,
@@ -56,11 +57,20 @@ public interface PersistSponsorNonceTransactionStateUseCase {
       String failureReason,
       LocalDateTime stateChangedAt) {}
 
+  record SponsorNonceSignedOperatorReviewCommand(
+      Long transactionId,
+      long chainId,
+      String fromAddress,
+      Long nonce,
+      String slotTerminalReason,
+      String transactionFailureReason,
+      LocalDateTime stateChangedAt) {}
+
   record SponsorNonceBroadcastingOperatorReviewCommand(
       Long transactionId,
       long chainId,
       String fromAddress,
-      long nonce,
+      Long nonce,
       Long attemptId,
       String slotTerminalReason,
       String transactionFailureReason,

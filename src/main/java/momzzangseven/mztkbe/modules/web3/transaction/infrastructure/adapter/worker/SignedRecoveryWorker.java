@@ -81,9 +81,15 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
 
   private void processItem(LoadTransactionWorkPort.TransactionWorkItem item) {
     if (item.signedRawTx() == null || item.signedRawTx().isBlank()) {
-      markSignedSlotOperatorReview(item, Web3TxFailureReason.INVALID_SIGNED_TX.code());
-      updateTransactionPort.scheduleRetry(
-          item.transactionId(), Web3TxFailureReason.INVALID_SIGNED_TX.code(), null);
+      persistSponsorNonceTransactionStateUseCase.markSignedOperatorReview(
+          new PersistSponsorNonceTransactionStateUseCase.SponsorNonceSignedOperatorReviewCommand(
+              item.transactionId(),
+              item.chainId(),
+              item.fromAddress(),
+              item.nonce(),
+              Web3TxFailureReason.INVALID_SIGNED_TX.code(),
+              Web3TxFailureReason.INVALID_SIGNED_TX.code(),
+              LocalDateTime.now(appClock)));
       return;
     }
 
@@ -299,39 +305,6 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         new PersistSponsorNonceTransactionStateUseCase.TransactionPendingCommand(
             item.transactionId(), item.txHash()));
     return true;
-  }
-
-  private void markSignedSlotOperatorReview(
-      LoadTransactionWorkPort.TransactionWorkItem item, String terminalReason) {
-    if (item.nonce() == null) {
-      return;
-    }
-    try {
-      nonceSlotLifecycleUseCase.transition(
-          RecordSponsorNonceSlotTransitionCommand.builder()
-              .chainId(item.chainId())
-              .fromAddress(item.fromAddress())
-              .nonce(item.nonce())
-              .fromStatus(SponsorNonceSlotStatus.SIGNED)
-              .toStatus(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
-              .activeTxId(item.transactionId())
-              .stateChangedAt(LocalDateTime.now(appClock))
-              .terminalReason(terminalReason)
-              .build());
-    } catch (Web3TransactionStateInvalidException e) {
-      if (isSlotNotFound(e)
-          || isStaleActual(e, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
-          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)
-          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED_UNKNOWN)
-          || isStaleActual(e, SponsorNonceSlotStatus.STUCK)) {
-        log.debug(
-            "Skipping signed recovery operator-review transition for txId={}: {}",
-            item.transactionId(),
-            e.getMessage());
-        return;
-      }
-      throw e;
-    }
   }
 
   private boolean isSlotNotFound(Web3TransactionStateInvalidException e) {

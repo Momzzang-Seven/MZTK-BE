@@ -206,6 +206,26 @@ class PersistSponsorNonceTransactionStateServiceTest {
   }
 
   @Test
+  void markSignedOperatorReview_marksSlotAndTransactionInOneUseCase() {
+    service.markSignedOperatorReview(
+        new PersistSponsorNonceTransactionStateUseCase.SponsorNonceSignedOperatorReviewCommand(
+            1L, CHAIN_ID, FROM_ADDRESS, 7L, "INVALID_SIGNED_TX", "INVALID_SIGNED_TX", NOW));
+
+    InOrder inOrder = inOrder(nonceSlotLifecycleUseCase, updateTransactionPort);
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> slotCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    inOrder.verify(nonceSlotLifecycleUseCase).transition(slotCaptor.capture());
+    inOrder
+        .verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(1L, "INVALID_SIGNED_TX");
+    RecordSponsorNonceSlotTransitionCommand command = slotCaptor.getValue();
+    assertThat(command.getFromStatus()).isEqualTo(SponsorNonceSlotStatus.SIGNED);
+    assertThat(command.getToStatus()).isEqualTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
+    assertThat(command.getActiveTxId()).isEqualTo(1L);
+    assertThat(command.getTerminalReason()).isEqualTo("INVALID_SIGNED_TX");
+  }
+
+  @Test
   void markBroadcastingOperatorReview_marksSlotAndTransactionInOneUseCase() {
     service.markBroadcastingOperatorReview(
         new PersistSponsorNonceTransactionStateUseCase
@@ -229,8 +249,7 @@ class PersistSponsorNonceTransactionStateServiceTest {
     inOrder.verify(nonceSlotLifecycleUseCase).transition(slotCaptor.capture());
     inOrder
         .verify(updateTransactionPort)
-        .markUnconfirmedForSponsorNonceReview(
-            1L, "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED");
+        .markUnconfirmedForSponsorNonceReview(1L, "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED");
     RecordSponsorNonceSlotTransitionCommand command = slotCaptor.getValue();
     assertThat(command.getFromStatus()).isEqualTo(SponsorNonceSlotStatus.BROADCASTING);
     assertThat(command.getToStatus()).isEqualTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
@@ -238,6 +257,33 @@ class PersistSponsorNonceTransactionStateServiceTest {
     assertThat(command.getActiveTxId()).isEqualTo(1L);
     assertThat(command.getTerminalReason()).isEqualTo("BROADCAST_NONCE_TOO_LOW");
     assertThat(command.hasBroadcastEvidence()).isTrue();
+  }
+
+  @Test
+  void markBroadcastingOperatorReview_doesNotDowngradeTransactionWhenSlotAlreadyConsumed() {
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=BROADCASTING, actual=CONSUMED"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+
+    service.markBroadcastingOperatorReview(
+        new PersistSponsorNonceTransactionStateUseCase
+            .SponsorNonceBroadcastingOperatorReviewCommand(
+            1L,
+            CHAIN_ID,
+            FROM_ADDRESS,
+            7L,
+            1001L,
+            "BROADCAST_NONCE_TOO_LOW",
+            "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED",
+            true,
+            true,
+            true,
+            true,
+            NOW));
+
+    verify(updateTransactionPort, never()).markUnconfirmedForSponsorNonceReview(any(), any());
   }
 
   private SponsorNonceSlotView slotView(SponsorNonceSlotStatus status, Long activeTxId) {

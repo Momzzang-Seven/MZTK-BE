@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -106,42 +107,106 @@ public class PersistSponsorNonceTransactionStateService
 
   @Override
   @Transactional
+  public void markSignedOperatorReview(SponsorNonceSignedOperatorReviewCommand command) {
+    boolean shouldMarkTransaction =
+        transitionSlotToOperatorReview(
+            command.chainId(),
+            command.fromAddress(),
+            command.nonce(),
+            SponsorNonceSlotStatus.SIGNED,
+            null,
+            command.transactionId(),
+            command.stateChangedAt(),
+            command.slotTerminalReason(),
+            false,
+            false,
+            false,
+            false);
+    if (shouldMarkTransaction) {
+      updateTransactionPort.markUnconfirmedForSponsorNonceReview(
+          command.transactionId(), command.transactionFailureReason());
+    }
+  }
+
+  @Override
+  @Transactional
   public void markBroadcastingOperatorReview(
       SponsorNonceBroadcastingOperatorReviewCommand command) {
+    boolean shouldMarkTransaction =
+        transitionSlotToOperatorReview(
+            command.chainId(),
+            command.fromAddress(),
+            command.nonce(),
+            SponsorNonceSlotStatus.BROADCASTING,
+            command.attemptId(),
+            command.transactionId(),
+            command.stateChangedAt(),
+            command.slotTerminalReason(),
+            command.hasRawTx(),
+            command.hasTxHash(),
+            command.hasSigningEvidence(),
+            command.hasBroadcastEvidence());
+    if (shouldMarkTransaction) {
+      updateTransactionPort.markUnconfirmedForSponsorNonceReview(
+          command.transactionId(), command.transactionFailureReason());
+    }
+  }
+
+  private boolean transitionSlotToOperatorReview(
+      long chainId,
+      String fromAddress,
+      Long nonce,
+      SponsorNonceSlotStatus fromStatus,
+      Long activeAttemptId,
+      Long activeTxId,
+      LocalDateTime stateChangedAt,
+      String terminalReason,
+      boolean hasRawTx,
+      boolean hasTxHash,
+      boolean hasSigningEvidence,
+      boolean hasBroadcastEvidence) {
+    if (nonce == null) {
+      return true;
+    }
     try {
       nonceSlotLifecycleUseCase.transition(
           RecordSponsorNonceSlotTransitionCommand.builder()
-              .chainId(command.chainId())
-              .fromAddress(command.fromAddress())
-              .nonce(command.nonce())
-              .fromStatus(SponsorNonceSlotStatus.BROADCASTING)
+              .chainId(chainId)
+              .fromAddress(fromAddress)
+              .nonce(nonce)
+              .fromStatus(fromStatus)
               .toStatus(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
-              .activeAttemptId(command.attemptId())
-              .activeTxId(command.transactionId())
-              .stateChangedAt(command.stateChangedAt())
-              .terminalReason(command.slotTerminalReason())
-              .hasRawTx(command.hasRawTx())
-              .hasTxHash(command.hasTxHash())
-              .hasSigningEvidence(command.hasSigningEvidence())
-              .hasBroadcastEvidence(command.hasBroadcastEvidence())
+              .activeAttemptId(activeAttemptId)
+              .activeTxId(activeTxId)
+              .stateChangedAt(stateChangedAt)
+              .terminalReason(terminalReason)
+              .hasRawTx(hasRawTx)
+              .hasTxHash(hasTxHash)
+              .hasSigningEvidence(hasSigningEvidence)
+              .hasBroadcastEvidence(hasBroadcastEvidence)
               .build());
+      return true;
     } catch (Web3TransactionStateInvalidException e) {
+      if (isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)) {
+        log.debug(
+            "Skipping transaction operator-review downgrade because nonce slot is consumed: txId={}, nonce={}",
+            activeTxId,
+            nonce);
+        return false;
+      }
       if (isSlotNotFound(e)
           || isStaleActual(e, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
-          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)
           || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED_UNKNOWN)
           || isStaleActual(e, SponsorNonceSlotStatus.STUCK)) {
         log.debug(
-            "Skipping broadcasting nonce slot operator review transition for txId={}, nonce={}: {}",
-            command.transactionId(),
-            command.nonce(),
+            "Skipping nonce slot operator review transition for txId={}, nonce={}: {}",
+            activeTxId,
+            nonce,
             e.getMessage());
-      } else {
-        throw e;
+        return true;
       }
+      throw e;
     }
-    updateTransactionPort.markUnconfirmedForSponsorNonceReview(
-        command.transactionId(), command.transactionFailureReason());
   }
 
   private void markNonceSlotStuck(SponsorNonceUnconfirmedCommand command) {
