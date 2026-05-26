@@ -53,7 +53,7 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
         case REPLACE_LOWEST_NONCE -> {
           // Automatic same-nonce replacement is intentionally not implemented yet. See
           // docs.shared/runbooks/sponsor-nonce-replacement.md for the operator resolution path.
-          markReplacementUnsupported(command, decision, slots);
+          markReplacementUnsupported(command, decision);
           decision =
               SponsorNonceDecision.of(
                   SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
@@ -132,18 +132,16 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
   }
 
   private void markReplacementUnsupported(
-      SponsorNonceCoordinationCommand command,
-      SponsorNonceDecision decision,
-      List<SponsorNonceSlot> slots) {
+      SponsorNonceCoordinationCommand command, SponsorNonceDecision decision) {
     if (decision.nonce() == null) {
       return;
     }
-    SponsorNonceSlot slot =
-        slots.stream()
-            .filter(candidate -> candidate.nonce() == decision.nonce())
-            .findFirst()
-            .orElse(null);
-    if (slot == null || slot.status() == SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED) {
+    SponsorNonceSlotView slot = loadSlotView(command, decision.nonce());
+    if (slot == null) {
+      return;
+    }
+    if (slot.status() == SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED) {
+      markActiveTransactionUnconfirmedForSponsorNonceReview(slot);
       return;
     }
     if (!slot.status().canTransitionTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)) {
@@ -156,9 +154,12 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
             .nonce(decision.nonce())
             .fromStatus(slot.status())
             .toStatus(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
+            .activeAttemptId(slot.activeAttemptId())
+            .activeTxId(slot.activeTxId())
             .stateChangedAt(command.now() == null ? LocalDateTime.now() : command.now())
             .terminalReason("REPLACEMENT_REQUIRES_OPERATOR_IMPLEMENTATION")
             .build());
+    markActiveTransactionUnconfirmedForSponsorNonceReview(slot);
   }
 
   private boolean dropUnbroadcastableReservation(
@@ -288,7 +289,8 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
       return null;
     }
     var slot =
-        nonceSlotLifecycleUseCase.loadSlotForReview(command.chainId(), command.fromAddress(), nonce);
+        nonceSlotLifecycleUseCase.loadSlotForReview(
+            command.chainId(), command.fromAddress(), nonce);
     return slot == null ? null : slot.orElse(null);
   }
 

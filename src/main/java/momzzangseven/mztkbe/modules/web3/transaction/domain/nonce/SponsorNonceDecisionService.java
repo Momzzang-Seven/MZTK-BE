@@ -111,7 +111,8 @@ public class SponsorNonceDecisionService {
   }
 
   private boolean canAutoConsumeUnknown(SponsorNonceSlot slot) {
-    return slot.status() != SponsorNonceSlotStatus.BROADCASTED || slot.hasRetainedExternalEvidence();
+    return slot.status() != SponsorNonceSlotStatus.BROADCASTED
+        || slot.hasRetainedExternalEvidence();
   }
 
   private String unknownConsumedReason(SponsorNonceSlot slot) {

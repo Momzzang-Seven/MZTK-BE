@@ -103,7 +103,8 @@ class SponsorNonceDecisionServiceTest {
   }
 
   @Test
-  void decide_whenBroadcastedTimedOutAndLatestAdvancedWithoutRetainedEvidence_requiresOperatorReview() {
+  void
+      decide_whenBroadcastedTimedOutAndLatestAdvancedWithoutRetainedEvidence_requiresOperatorReview() {
     SponsorNonceDecision decision =
         decide(52, 52, slotBuilder(51, SponsorNonceSlotStatus.BROADCASTED).timedOut().build());
 

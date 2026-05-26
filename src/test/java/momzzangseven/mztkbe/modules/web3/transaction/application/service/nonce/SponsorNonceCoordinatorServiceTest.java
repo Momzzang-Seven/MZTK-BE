@@ -129,6 +129,8 @@ class SponsorNonceCoordinatorServiceTest {
         .thenReturn(
             List.of(
                 slot(51L, SponsorNonceSlotStatus.STUCK), slot(52L, SponsorNonceSlotStatus.SIGNED)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(slotView(51L, SponsorNonceSlotStatus.STUCK, 100L, 10L)));
 
     var result = service.execute(command(51L, 50L, 10L, "intent:sponsor:53:attempt:1"));
 
@@ -142,6 +144,11 @@ class SponsorNonceCoordinatorServiceTest {
     assertThat(transitionCaptor.getValue().getFromStatus()).isEqualTo(SponsorNonceSlotStatus.STUCK);
     assertThat(transitionCaptor.getValue().getToStatus())
         .isEqualTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
+    assertThat(transitionCaptor.getValue().getActiveAttemptId()).isEqualTo(100L);
+    assertThat(transitionCaptor.getValue().getActiveTxId()).isEqualTo(10L);
+    verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            10L, Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
   }
 
   @Test
