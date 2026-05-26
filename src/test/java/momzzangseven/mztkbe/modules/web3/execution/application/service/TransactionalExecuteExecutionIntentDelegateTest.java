@@ -118,6 +118,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
             runExecutionTransactionPort,
+            3,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
@@ -956,6 +957,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
             runExecutionTransactionPort,
+            3,
             FIXED_CLOCK);
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder()
@@ -1004,6 +1006,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
             runExecutionTransactionPort,
+            3,
             FIXED_CLOCK);
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder()

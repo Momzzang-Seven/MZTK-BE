@@ -53,6 +53,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecut
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.SponsorNonceProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -260,6 +261,7 @@ public class ExecutionIntentServiceConfig {
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
       RunAfterCommitPort runAfterCommitPort,
       RunExecutionTransactionPort runExecutionTransactionPort,
+      SponsorNonceProperties sponsorNonceProperties,
       Clock appClock) {
     return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -273,6 +275,7 @@ public class ExecutionIntentServiceConfig {
         publishExecutionIntentTerminatedPort,
         runAfterCommitPort,
         runExecutionTransactionPort,
+        sponsorNonceProperties.getOpenWindowSize(),
         appClock);
   }
 

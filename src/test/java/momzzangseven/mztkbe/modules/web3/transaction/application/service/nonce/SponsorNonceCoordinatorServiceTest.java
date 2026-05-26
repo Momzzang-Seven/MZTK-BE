@@ -18,8 +18,10 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Spons
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotReservation;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorNonceSlotsPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.SponsorNonceLockPort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceEvidenceSource;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceEvidenceType;
@@ -43,6 +45,7 @@ class SponsorNonceCoordinatorServiceTest {
   @Mock private SponsorNonceLockPort sponsorNonceLockPort;
   @Mock private LoadSponsorNonceSlotsPort loadSponsorNonceSlotsPort;
   @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  @Mock private UpdateTransactionPort updateTransactionPort;
 
   private SponsorNonceCoordinatorService service;
 
@@ -50,7 +53,10 @@ class SponsorNonceCoordinatorServiceTest {
   void setUp() {
     service =
         new SponsorNonceCoordinatorService(
-            sponsorNonceLockPort, loadSponsorNonceSlotsPort, nonceSlotLifecycleUseCase);
+            sponsorNonceLockPort,
+            loadSponsorNonceSlotsPort,
+            nonceSlotLifecycleUseCase,
+            updateTransactionPort);
   }
 
   @Test
@@ -227,11 +233,43 @@ class SponsorNonceCoordinatorServiceTest {
   }
 
   @Test
-  void execute_whenLatestPassedWithoutRetainedEvidence_recordsEvidenceAndConsumesUnknown() {
+  void execute_whenBroadcastedLatestPassedWithoutRetainedEvidence_marksOperatorReview() {
     when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
         .thenReturn(
             List.of(
                 SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.BROADCASTED)
+                    .timedOut()
+                    .build()))
+        .thenReturn(List.of());
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L)));
+
+    var result = service.execute(command(52L, 52L, 11L, "intent:sponsor:52:attempt:1"));
+
+    assertThat(result.decision().type())
+        .isEqualTo(SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED);
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase).transition(transitionCaptor.capture());
+    assertThat(transitionCaptor.getValue().getToStatus())
+        .isEqualTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
+    assertThat(transitionCaptor.getValue().getTerminalReason())
+        .isEqualTo("BROADCASTED_LATEST_PASSED_WITHOUT_RETAINED_EVIDENCE");
+    verify(nonceSlotLifecycleUseCase, never())
+        .recordEvidence(any(RecordSponsorNonceEvidenceCommand.class));
+    verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            10L, Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
+  }
+
+  @Test
+  void execute_whenBroadcastedLatestPassedWithRetainedEvidence_consumesUnknownAndMarksTxReview() {
+    when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
+        .thenReturn(
+            List.of(
+                SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.BROADCASTED)
+                    .timedOut()
+                    .retainedExternalEvidence()
                     .build()))
         .thenReturn(List.of());
     when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
@@ -255,7 +293,9 @@ class SponsorNonceCoordinatorServiceTest {
     assertThat(transitionCaptor.getValue().getConsumedExternalEvidenceId()).isEqualTo(200L);
     assertThat(transitionCaptor.getValue().getTerminalReason())
         .isEqualTo("SPONSOR_NONCE_CONSUMED_UNKNOWN");
-    verify(nonceSlotLifecycleUseCase).recordEvidence(any(RecordSponsorNonceEvidenceCommand.class));
+    verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            10L, Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
   }
 
   @Test
@@ -284,6 +324,9 @@ class SponsorNonceCoordinatorServiceTest {
     assertThat(transitionCaptor.getValue().getToStatus())
         .isEqualTo(SponsorNonceSlotStatus.CONSUMED_UNKNOWN);
     assertThat(transitionCaptor.getValue().getConsumedExternalEvidenceId()).isEqualTo(201L);
+    verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            10L, Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
   }
 
   @Test

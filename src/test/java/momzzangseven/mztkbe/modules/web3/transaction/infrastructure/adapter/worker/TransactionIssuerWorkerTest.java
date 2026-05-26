@@ -45,6 +45,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDe
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.SponsorNonceProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,6 +78,7 @@ class TransactionIssuerWorkerTest {
   @Mock private RetryStrategy retryStrategy;
 
   private TransactionRewardTokenProperties rewardProperties;
+  private SponsorNonceProperties sponsorNonceProperties;
   private TransactionIssuerWorker worker;
 
   @BeforeEach
@@ -84,6 +86,7 @@ class TransactionIssuerWorkerTest {
     rewardProperties = new TransactionRewardTokenProperties();
     rewardProperties.getWorker().setClaimTtlSeconds(120);
     rewardProperties.setTokenContractAddress("0x" + "a".repeat(40));
+    sponsorNonceProperties = new SponsorNonceProperties();
 
     worker =
         new TransactionIssuerWorker(
@@ -97,6 +100,7 @@ class TransactionIssuerWorkerTest {
             nonceSlotLifecycleUseCase,
             persistSponsorNonceTransactionStateUseCase,
             web3ContractPort,
+            sponsorNonceProperties,
             rewardProperties,
             retryStrategy);
   }

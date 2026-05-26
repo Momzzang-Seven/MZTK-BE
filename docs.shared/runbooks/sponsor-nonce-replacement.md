@@ -41,6 +41,30 @@ Use logs/monitoring to make sure operator-review states do not depend on user re
   - labels: `chainId`, `status`, `errorCode`
   - alert on any increase over a short production window.
 
+## Availability SLO
+
+Sponsor nonce replacement is a manual recovery path until same-nonce replacement is implemented.
+Treat the following as production availability targets:
+
+- A sponsor scope must not stay in `OPERATOR_REVIEW_REQUIRED` for more than 15 minutes without an
+  acknowledged incident.
+- A sponsor scope must not block wallet registration or reward issuance for more than 30 minutes
+  without an owner, evidence collection status, and explicit repair decision.
+- If two or more users hit `SPONSOR_NONCE_BLOCKED` for the same sponsor scope within 10 minutes,
+  escalate to backend on-call immediately.
+- If the lowest blocking nonce cannot be classified as `CONSUMED`, `CONSUMED_UNKNOWN`, or
+  `DROPPED` within 30 minutes, freeze new sponsor-dependent rollout activity until a maintainer
+  decides whether to disable the affected flow or prepare a reviewed repair.
+
+Recommended alerts:
+
+- `OPERATOR_REVIEW_REQUIRED` slot count by `(chain_id, from_address)` is greater than zero for 15
+  minutes.
+- Oldest `OPERATOR_REVIEW_REQUIRED.updated_at` age exceeds 15 minutes.
+- `SPONSOR_NONCE_BLOCKED` wallet-registration count increases for the same sponsor scope.
+- Reward issuer emits repeated `SPONSOR_NONCE_WAIT_FOR_OPEN_WINDOW` or
+  `SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED` for the same sponsor scope.
+
 ## Investigation checklist
 
 1. Confirm the sponsor scope: `chain_id`, `from_address`, and lowest blocking `nonce`.

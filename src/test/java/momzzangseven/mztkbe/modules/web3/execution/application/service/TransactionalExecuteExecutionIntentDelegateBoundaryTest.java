@@ -106,6 +106,7 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
             transactionPort,
+            3,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))

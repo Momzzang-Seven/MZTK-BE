@@ -183,6 +183,17 @@ public class TransactionWorkPersistenceAdapter
 
   @Override
   @Transactional
+  public void markUnconfirmedForSponsorNonceReview(Long transactionId, String failureReason) {
+    Web3TransactionEntity entity = load(transactionId);
+    Web3Transaction transaction = toDomain(entity);
+    LocalDateTime now = LocalDateTime.now(appClock);
+    transaction.markUnconfirmedForSponsorNonceReview(failureReason, now);
+    apply(entity, transaction);
+    entity.setUpdatedAt(now);
+  }
+
+  @Override
+  @Transactional
   public void scheduleRetry(
       Long transactionId, String failureReason, LocalDateTime processingUntil) {
     Web3TransactionEntity entity = load(transactionId);

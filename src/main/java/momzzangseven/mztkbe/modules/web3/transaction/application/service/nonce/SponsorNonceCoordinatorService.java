@@ -13,8 +13,10 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.Spons
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.VerifyUnbroadcastableAttemptCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorNonceSlotsPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.SponsorNonceLockPort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecision;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionRequest;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceDecisionService;
@@ -33,6 +35,7 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
   private final SponsorNonceLockPort sponsorNonceLockPort;
   private final LoadSponsorNonceSlotsPort loadSponsorNonceSlotsPort;
   private final ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+  private final UpdateTransactionPort updateTransactionPort;
   private final SponsorNonceDecisionService decisionService = new SponsorNonceDecisionService();
 
   @Override
@@ -89,6 +92,10 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
                   SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED,
                   decision.nonce(),
                   "UNKNOWN_CONSUME_REQUIRES_OPERATOR_REVIEW");
+          decisionFinalized = true;
+        }
+        case OPERATOR_REVIEW_REQUIRED -> {
+          markOperatorReviewForDecision(command, decision);
           decisionFinalized = true;
         }
         default -> decisionFinalized = true;
@@ -264,16 +271,25 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
             .consumedReason(decision.reason())
             .terminalReason("SPONSOR_NONCE_CONSUMED_UNKNOWN")
             .build());
+    markActiveTransactionUnconfirmedForSponsorNonceReview(slot);
     return true;
+  }
+
+  private void markActiveTransactionUnconfirmedForSponsorNonceReview(SponsorNonceSlotView slot) {
+    if (slot.activeTxId() == null) {
+      return;
+    }
+    updateTransactionPort.markUnconfirmedForSponsorNonceReview(
+        slot.activeTxId(), Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
   }
 
   private SponsorNonceSlotView loadSlotView(SponsorNonceCoordinationCommand command, Long nonce) {
     if (nonce == null) {
       return null;
     }
-    return nonceSlotLifecycleUseCase
-        .loadSlotForReview(command.chainId(), command.fromAddress(), nonce)
-        .orElse(null);
+    var slot =
+        nonceSlotLifecycleUseCase.loadSlotForReview(command.chainId(), command.fromAddress(), nonce);
+    return slot == null ? null : slot.orElse(null);
   }
 
   private void markOperatorReview(
@@ -294,6 +310,16 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
             .stateChangedAt(command.now() == null ? LocalDateTime.now() : command.now())
             .terminalReason(reason)
             .build());
+    markActiveTransactionUnconfirmedForSponsorNonceReview(slot);
+  }
+
+  private void markOperatorReviewForDecision(
+      SponsorNonceCoordinationCommand command, SponsorNonceDecision decision) {
+    SponsorNonceSlotView slot = loadSlotView(command, decision.nonce());
+    if (slot == null) {
+      return;
+    }
+    markOperatorReview(command, slot, decision.reason());
   }
 
   private void markOperatorReviewIfPossible(

@@ -57,7 +57,6 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
   private static final String BROADCAST_ALREADY_KNOWN = "BROADCAST_ALREADY_KNOWN";
   private static final String INTERNAL_ISSUER_INVALID_INTENT = "INTERNAL_ISSUER_INVALID_INTENT";
-  private static final int SPONSOR_NONCE_OPEN_WINDOW_SIZE = 3;
   private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
       "sponsor kms sign failed (terminal)";
   private static final String SPONSOR_SIGNATURE_INVALID = "sponsor signature invalid";
@@ -71,6 +70,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
   private final RunAfterCommitPort runAfterCommitPort;
   private final RunExecutionTransactionPort transactionPort;
+  private final int sponsorNonceOpenWindowSize;
   private final Clock appClock;
 
   @Override
@@ -529,7 +529,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                 snapshot.subPendingNonce(),
                 snapshot.mainLatestNonce(),
                 snapshot.subLatestNonce(),
-                SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                sponsorNonceOpenWindowSize,
                 null,
                 null,
                 LocalDateTime.now(appClock)));
@@ -658,7 +658,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                 snapshot.subPendingNonce(),
                 snapshot.mainLatestNonce(),
                 snapshot.subLatestNonce(),
-                SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                sponsorNonceOpenWindowSize,
                 transactionId,
                 null,
                 LocalDateTime.now(appClock)));

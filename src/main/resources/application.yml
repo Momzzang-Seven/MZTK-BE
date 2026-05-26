@@ -183,6 +183,9 @@ web3:
     main: ${WEB3_RPC_MAIN}
     sub: ${WEB3_RPC_SUB}
 
+  sponsor-nonce:
+    open-window-size: ${WEB3_SPONSOR_NONCE_OPEN_WINDOW_SIZE:3}
+
   explorer:
     base-url: ${WEB3_EXPLORER_BASE_URL}
     api-url: ${WEB3_EXPLORER_API_URL}

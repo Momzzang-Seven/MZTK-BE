@@ -41,6 +41,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.SignAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.SponsorNonceProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -51,8 +52,6 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class TransactionIssuerWorker extends AbstractWeb3Worker {
 
-  private static final int SPONSOR_NONCE_OPEN_WINDOW_SIZE = 3;
-
   private final LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort;
   private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   private final LoadSponsorChainNoncePort loadSponsorChainNoncePort;
@@ -61,6 +60,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private final PersistSponsorNonceTransactionStateUseCase
       persistSponsorNonceTransactionStateUseCase;
   private final Web3ContractPort web3ContractPort;
+  private final int sponsorNonceOpenWindowSize;
 
   private final String workerId = "issuer-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -75,6 +75,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase,
       PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase,
       Web3ContractPort web3ContractPort,
+      SponsorNonceProperties sponsorNonceProperties,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy) {
     super(
@@ -90,6 +91,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     this.nonceSlotLifecycleUseCase = nonceSlotLifecycleUseCase;
     this.persistSponsorNonceTransactionStateUseCase = persistSponsorNonceTransactionStateUseCase;
     this.web3ContractPort = web3ContractPort;
+    this.sponsorNonceOpenWindowSize = sponsorNonceProperties.getOpenWindowSize();
   }
 
   @Scheduled(fixedDelayString = "${web3.transaction.issuer.fixed-delay:1000}")
@@ -494,7 +496,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
                 snapshot.subPendingNonce(),
                 snapshot.mainLatestNonce(),
                 snapshot.subLatestNonce(),
-                SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                sponsorNonceOpenWindowSize,
                 item.transactionId(),
                 null,
                 LocalDateTime.now()));
@@ -526,7 +528,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
                   snapshot.subPendingNonce(),
                   snapshot.mainLatestNonce(),
                   snapshot.subLatestNonce(),
-                  SPONSOR_NONCE_OPEN_WINDOW_SIZE,
+                  sponsorNonceOpenWindowSize,
                   null,
                   null,
                   LocalDateTime.now()));

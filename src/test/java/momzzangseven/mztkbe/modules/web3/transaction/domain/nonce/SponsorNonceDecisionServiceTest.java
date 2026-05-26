@@ -103,11 +103,12 @@ class SponsorNonceDecisionServiceTest {
   }
 
   @Test
-  void decide_whenLatestAdvancedWithoutRetainedEvidence_consumesUnknownNonce() {
+  void decide_whenBroadcastedTimedOutAndLatestAdvancedWithoutRetainedEvidence_requiresOperatorReview() {
     SponsorNonceDecision decision =
         decide(52, 52, slotBuilder(51, SponsorNonceSlotStatus.BROADCASTED).timedOut().build());
 
-    assertDecision(decision, SponsorNonceDecisionType.CONSUME_UNKNOWN_NONCE, 51L);
+    assertDecision(decision, SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED, 51L);
+    assertThat(decision.reason()).isEqualTo("BROADCASTED_LATEST_PASSED_WITHOUT_RETAINED_EVIDENCE");
   }
 
   @Test

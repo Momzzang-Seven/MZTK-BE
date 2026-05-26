@@ -102,6 +102,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
             runExecutionTransactionPort,
+            3,
             FIXED_CLOCK);
 
     SponsorWalletGate sponsorGate =

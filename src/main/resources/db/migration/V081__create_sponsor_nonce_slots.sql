@@ -1,3 +1,4 @@
+-- flyway:executeInTransaction=false
 -- MOM-458: sponsor nonce slot/window persistence.
 
 ALTER TABLE web3_transactions
@@ -7,65 +8,15 @@ DROP INDEX IF EXISTS uk_web3_tx_sender_nonce;
 
 DROP INDEX IF EXISTS uk_web3_tx_eip7702_authority_nonce;
 
-UPDATE web3_transactions
-SET from_address = LOWER(from_address),
-    to_address = LOWER(to_address),
-    authority_address = LOWER(authority_address),
-    delegate_target = LOWER(delegate_target)
-WHERE from_address <> LOWER(from_address)
-   OR to_address <> LOWER(to_address)
-   OR (authority_address IS NOT NULL AND authority_address <> LOWER(authority_address))
-   OR (delegate_target IS NOT NULL AND delegate_target <> LOWER(delegate_target));
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_sender_nonce
+    ON web3_transactions(chain_id, from_address, nonce)
+    WHERE nonce IS NOT NULL;
 
-WITH normalized_nonce_state AS (
-    SELECT
-        LOWER(from_address) AS from_address,
-        MAX(next_nonce) AS next_nonce,
-        MAX(updated_at) AS updated_at
-    FROM web3_nonce_state
-    GROUP BY LOWER(from_address)
-),
-deleted_nonce_state AS (
-    DELETE FROM web3_nonce_state
-)
-INSERT INTO web3_nonce_state(from_address, next_nonce, updated_at)
-SELECT from_address, next_nonce, updated_at
-FROM normalized_nonce_state;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'uk_web3_tx_id_chain_sender_nonce'
-    ) THEN
-        ALTER TABLE web3_transactions
-            ADD CONSTRAINT uk_web3_tx_id_chain_sender_nonce
-            UNIQUE (id, chain_id, from_address, nonce);
-    END IF;
-END $$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'ck_web3_tx_addresses_lower'
-    ) THEN
-        ALTER TABLE web3_transactions
-            ADD CONSTRAINT ck_web3_tx_addresses_lower
-            CHECK (
-                from_address = LOWER(from_address)
-                AND to_address = LOWER(to_address)
-                AND (authority_address IS NULL OR authority_address = LOWER(authority_address))
-                AND (delegate_target IS NULL OR delegate_target = LOWER(delegate_target))
-            );
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'ck_web3_nonce_state_from_lower'
-    ) THEN
-        ALTER TABLE web3_nonce_state
-            ADD CONSTRAINT ck_web3_nonce_state_from_lower
-            CHECK (from_address = LOWER(from_address));
-    END IF;
-END $$;
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_eip7702_authority_nonce
+    ON web3_transactions(authority_address, authorization_nonce)
+    WHERE tx_type = 'EIP7702'
+      AND authority_address IS NOT NULL
+      AND authorization_nonce IS NOT NULL;
 
 ALTER TABLE web3_transaction_audits
     DROP CONSTRAINT IF EXISTS web3_transaction_audits_web3_transaction_id_fkey;
@@ -148,10 +99,6 @@ CREATE TABLE IF NOT EXISTS web3_nonce_slot_attempts (
     CONSTRAINT uk_web3_nonce_slot_attempt_id_tx UNIQUE (id, tx_id),
     CONSTRAINT uk_web3_nonce_slot_attempt_idem UNIQUE (idempotency_key),
     CONSTRAINT uk_web3_nonce_slot_attempt_tx UNIQUE (tx_id),
-    CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope
-        FOREIGN KEY (tx_id, chain_id, from_address, nonce)
-        REFERENCES web3_transactions(id, chain_id, from_address, nonce)
-        ON DELETE RESTRICT,
     CONSTRAINT fk_web3_nonce_slot_attempt_superseded_by_scope
         FOREIGN KEY (superseded_by_attempt_id, chain_id, from_address, nonce)
         REFERENCES web3_nonce_slot_attempts(id, chain_id, from_address, nonce)
@@ -367,17 +314,9 @@ CREATE TABLE IF NOT EXISTS web3_nonce_slots (
         FOREIGN KEY (active_attempt_id, chain_id, from_address, nonce)
         REFERENCES web3_nonce_slot_attempts(id, chain_id, from_address, nonce)
         ON DELETE RESTRICT,
-    CONSTRAINT fk_web3_nonce_slots_active_tx
-        FOREIGN KEY (active_tx_id, chain_id, from_address, nonce)
-        REFERENCES web3_transactions(id, chain_id, from_address, nonce)
-        ON DELETE RESTRICT,
     CONSTRAINT fk_web3_nonce_slots_consumed_attempt
         FOREIGN KEY (consumed_attempt_id, chain_id, from_address, nonce)
         REFERENCES web3_nonce_slot_attempts(id, chain_id, from_address, nonce)
-        ON DELETE RESTRICT,
-    CONSTRAINT fk_web3_nonce_slots_consumed_tx
-        FOREIGN KEY (consumed_tx_id, chain_id, from_address, nonce)
-        REFERENCES web3_transactions(id, chain_id, from_address, nonce)
         ON DELETE RESTRICT,
     CONSTRAINT fk_web3_nonce_slots_consumed_external_evidence
         FOREIGN KEY (chain_id, from_address, nonce, consumed_external_evidence_id)
@@ -386,10 +325,6 @@ CREATE TABLE IF NOT EXISTS web3_nonce_slots (
     CONSTRAINT fk_web3_nonce_slots_released_attempt
         FOREIGN KEY (released_attempt_id, chain_id, from_address, nonce)
         REFERENCES web3_nonce_slot_attempts(id, chain_id, from_address, nonce)
-        ON DELETE RESTRICT,
-    CONSTRAINT fk_web3_nonce_slots_released_tx
-        FOREIGN KEY (released_tx_id, chain_id, from_address, nonce)
-        REFERENCES web3_transactions(id, chain_id, from_address, nonce)
         ON DELETE RESTRICT
 );
 
@@ -404,6 +339,69 @@ CREATE INDEX IF NOT EXISTS idx_web3_nonce_slots_active_tx
 
 CREATE INDEX IF NOT EXISTS idx_web3_nonce_slots_active_hash
     ON web3_nonce_slots(active_tx_hash);
+
+UPDATE web3_transactions
+SET from_address = LOWER(from_address),
+    to_address = LOWER(to_address),
+    authority_address = LOWER(authority_address),
+    delegate_target = LOWER(delegate_target)
+WHERE from_address <> LOWER(from_address)
+   OR to_address <> LOWER(to_address)
+   OR (authority_address IS NOT NULL AND authority_address <> LOWER(authority_address))
+   OR (delegate_target IS NOT NULL AND delegate_target <> LOWER(delegate_target));
+
+WITH normalized_nonce_state AS (
+    SELECT
+        LOWER(from_address) AS from_address,
+        MAX(next_nonce) AS next_nonce,
+        MAX(updated_at) AS updated_at
+    FROM web3_nonce_state
+    GROUP BY LOWER(from_address)
+),
+deleted_nonce_state AS (
+    DELETE FROM web3_nonce_state
+)
+INSERT INTO web3_nonce_state(from_address, next_nonce, updated_at)
+SELECT from_address, next_nonce, updated_at
+FROM normalized_nonce_state;
+
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uk_web3_tx_id_chain_sender_nonce
+    ON web3_transactions(id, chain_id, from_address, nonce);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'uk_web3_tx_id_chain_sender_nonce'
+    ) THEN
+        ALTER TABLE web3_transactions
+            ADD CONSTRAINT uk_web3_tx_id_chain_sender_nonce
+            UNIQUE USING INDEX uk_web3_tx_id_chain_sender_nonce;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_web3_tx_addresses_lower'
+    ) THEN
+        ALTER TABLE web3_transactions
+            ADD CONSTRAINT ck_web3_tx_addresses_lower
+            CHECK (
+                from_address = LOWER(from_address)
+                AND to_address = LOWER(to_address)
+                AND (authority_address IS NULL OR authority_address = LOWER(authority_address))
+                AND (delegate_target IS NULL OR delegate_target = LOWER(delegate_target))
+            ) NOT VALID;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_web3_nonce_state_from_lower'
+    ) THEN
+        ALTER TABLE web3_nonce_state
+            ADD CONSTRAINT ck_web3_nonce_state_from_lower
+            CHECK (from_address = LOWER(from_address)) NOT VALID;
+    END IF;
+END $$;
 
 INSERT INTO web3_sponsor_nonce_locks(chain_id, from_address, created_at, updated_at)
 SELECT DISTINCT chain_id, from_address, NOW(), NOW()
@@ -517,3 +515,50 @@ JOIN web3_nonce_slot_attempts a
 WHERE t.nonce IS NOT NULL
   AND t.status IN ('CREATED', 'SIGNED', 'PENDING', 'UNCONFIRMED')
 ON CONFLICT (chain_id, from_address, nonce) DO NOTHING;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_web3_nonce_slot_attempt_tx_scope'
+    ) THEN
+        ALTER TABLE web3_nonce_slot_attempts
+            ADD CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope
+            FOREIGN KEY (tx_id, chain_id, from_address, nonce)
+            REFERENCES web3_transactions(id, chain_id, from_address, nonce)
+            ON DELETE RESTRICT
+            NOT VALID;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_web3_nonce_slots_active_tx'
+    ) THEN
+        ALTER TABLE web3_nonce_slots
+            ADD CONSTRAINT fk_web3_nonce_slots_active_tx
+            FOREIGN KEY (active_tx_id, chain_id, from_address, nonce)
+            REFERENCES web3_transactions(id, chain_id, from_address, nonce)
+            ON DELETE RESTRICT
+            NOT VALID;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_web3_nonce_slots_consumed_tx'
+    ) THEN
+        ALTER TABLE web3_nonce_slots
+            ADD CONSTRAINT fk_web3_nonce_slots_consumed_tx
+            FOREIGN KEY (consumed_tx_id, chain_id, from_address, nonce)
+            REFERENCES web3_transactions(id, chain_id, from_address, nonce)
+            ON DELETE RESTRICT
+            NOT VALID;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_web3_nonce_slots_released_tx'
+    ) THEN
+        ALTER TABLE web3_nonce_slots
+            ADD CONSTRAINT fk_web3_nonce_slots_released_tx
+            FOREIGN KEY (released_tx_id, chain_id, from_address, nonce)
+            REFERENCES web3_transactions(id, chain_id, from_address, nonce)
+            ON DELETE RESTRICT
+            NOT VALID;
+    END IF;
+END $$;

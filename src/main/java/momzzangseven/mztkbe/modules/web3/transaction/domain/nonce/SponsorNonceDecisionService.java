@@ -99,6 +99,7 @@ public class SponsorNonceDecisionService {
     return request.slots().stream()
         .filter(slot -> slot.status().isOpenWindowCounted())
         .filter(slot -> request.chainLatestNonce() > slot.nonce())
+        .filter(this::canAutoConsumeUnknown)
         .min(Comparator.comparingLong(SponsorNonceSlot::nonce))
         .map(
             slot ->
@@ -109,9 +110,16 @@ public class SponsorNonceDecisionService {
         .orElse(null);
   }
 
+  private boolean canAutoConsumeUnknown(SponsorNonceSlot slot) {
+    return slot.status() != SponsorNonceSlotStatus.BROADCASTED || slot.hasRetainedExternalEvidence();
+  }
+
   private String unknownConsumedReason(SponsorNonceSlot slot) {
     if (slot.status() == SponsorNonceSlotStatus.BROADCASTING) {
       return "BROADCASTING_LATEST_PASSED_WITH_RPC_SNAPSHOT";
+    }
+    if (slot.status() == SponsorNonceSlotStatus.BROADCASTED && slot.hasRetainedExternalEvidence()) {
+      return "BROADCASTED_LATEST_PASSED_WITH_RETAINED_EXTERNAL_EVIDENCE";
     }
     if (slot.hasRetainedExternalEvidence()) {
       return "LATEST_PASSED_WITH_RETAINED_EXTERNAL_EVIDENCE";

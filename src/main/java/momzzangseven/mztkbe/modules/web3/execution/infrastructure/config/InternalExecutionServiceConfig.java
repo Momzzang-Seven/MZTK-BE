@@ -26,6 +26,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.GetIntern
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunInternalExecutionBatchService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteInternalExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.InternalExecutionSignerPreflight;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.SponsorNonceProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -58,6 +59,7 @@ public class InternalExecutionServiceConfig {
           PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
           RunAfterCommitPort runAfterCommitPort,
           RunExecutionTransactionPort runExecutionTransactionPort,
+          SponsorNonceProperties sponsorNonceProperties,
           Clock appClock) {
     return new TransactionalExecuteInternalExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -69,6 +71,7 @@ public class InternalExecutionServiceConfig {
         publishExecutionIntentTerminatedPort,
         runAfterCommitPort,
         runExecutionTransactionPort,
+        sponsorNonceProperties.getOpenWindowSize(),
         appClock);
   }
 
