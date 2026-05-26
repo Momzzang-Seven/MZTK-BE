@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
@@ -281,8 +280,8 @@ class MarkTransactionSucceededServiceTest {
                 "stale nonce slot transition: expected=STUCK, actual=CONSUMED"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(84532L, "0x" + "c".repeat(40)))
-        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.CONSUMED, 22L, 22L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(84532L, "0x" + "c".repeat(40), 112L))
+        .thenReturn(Optional.of(slotView(SponsorNonceSlotStatus.CONSUMED, 22L, 22L)));
 
     MarkTransactionSucceededResult result = service.execute(command);
 
@@ -305,8 +304,8 @@ class MarkTransactionSucceededServiceTest {
                 "stale nonce slot transition: expected=STUCK, actual=CONSUMED"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(84532L, "0x" + "c".repeat(40)))
-        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.CONSUMED, 99L, 99L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(84532L, "0x" + "c".repeat(40), 112L))
+        .thenReturn(Optional.of(slotView(SponsorNonceSlotStatus.CONSUMED, 99L, 99L)));
 
     assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(Web3TransactionStateInvalidException.class)

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
@@ -384,7 +386,8 @@ class NonceSlotPersistenceAdapterTest {
     NonceSlotEntity broadcasted = slotEntity(51L, SponsorNonceSlotStatus.BROADCASTED, 1, 101L, 11L);
     broadcasted.setActiveTxHash("0x" + "b".repeat(64));
     broadcasted.setLastBroadcastedAt(NOW.minusSeconds(61));
-    when(slotRepository.findByScopeAndStatusInOrderByNonce(anyLong(), any(String.class), any()))
+    when(slotRepository.findByScopeAndStatusInOrderByNonce(
+            anyLong(), any(String.class), any(), any()))
         .thenReturn(List.of(reserved, broadcasted));
 
     var result = adapter.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR.toUpperCase());
@@ -392,6 +395,13 @@ class NonceSlotPersistenceAdapterTest {
     assertThat(result.get(0).timedOut()).isTrue();
     assertThat(result.get(1).timedOut()).isTrue();
     assertThat(result.get(1).replacementEligible()).isTrue();
+    ArgumentCaptor<Collection> statusesCaptor = ArgumentCaptor.forClass(Collection.class);
+    verify(slotRepository)
+        .findByScopeAndStatusInOrderByNonce(
+            eq(CHAIN_ID), eq(SPONSOR), statusesCaptor.capture(), any());
+    assertThat(statusesCaptor.getValue())
+        .doesNotContain(SponsorNonceSlotStatus.CONSUMED_UNKNOWN)
+        .contains(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
   }
 
   private Web3TransactionEntity transaction(Long id, long nonce) {

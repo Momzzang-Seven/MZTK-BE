@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceEvidenceCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.ReserveSponsorNonceSlotCommand;
@@ -147,8 +148,8 @@ class SponsorNonceCoordinatorServiceTest {
     when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
         .thenReturn(timedOutReservation)
         .thenReturn(List.of());
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
-        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.RESERVED, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(slotView(51L, SponsorNonceSlotStatus.RESERVED, 100L, 10L)));
     when(nonceSlotLifecycleUseCase.verifyUnbroadcastable(any())).thenReturn(true);
     when(nonceSlotLifecycleUseCase.reserve(any()))
         .thenReturn(
@@ -176,8 +177,8 @@ class SponsorNonceCoordinatorServiceTest {
                 SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.RESERVED)
                     .timedOut()
                     .build()));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
-        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.RESERVED, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(slotView(51L, SponsorNonceSlotStatus.RESERVED, 100L, 10L)));
     when(nonceSlotLifecycleUseCase.verifyUnbroadcastable(any())).thenReturn(false);
 
     var result = service.execute(command(51L, 50L, 11L, "intent:sponsor:51:attempt:2"));
@@ -202,8 +203,8 @@ class SponsorNonceCoordinatorServiceTest {
                     .receiptEvidence()
                     .build()))
         .thenReturn(List.of());
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
-        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L)));
     when(nonceSlotLifecycleUseCase.reserve(any()))
         .thenReturn(
             new SponsorNonceSlotReservation(
@@ -233,8 +234,8 @@ class SponsorNonceCoordinatorServiceTest {
                 SponsorNonceSlot.builder(CHAIN_ID, SPONSOR, 51L, SponsorNonceSlotStatus.BROADCASTED)
                     .build()))
         .thenReturn(List.of());
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
-        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTED, 100L, 10L)));
     when(nonceSlotLifecycleUseCase.recordEvidence(any(RecordSponsorNonceEvidenceCommand.class)))
         .thenReturn(unknownConsumedEvidence(51L, 200L));
     when(nonceSlotLifecycleUseCase.reserve(any()))
@@ -262,8 +263,8 @@ class SponsorNonceCoordinatorServiceTest {
     when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
         .thenReturn(List.of(slot(51L, SponsorNonceSlotStatus.BROADCASTING)))
         .thenReturn(List.of());
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, SPONSOR))
-        .thenReturn(List.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTING, 100L, 10L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(Optional.of(slotView(51L, SponsorNonceSlotStatus.BROADCASTING, 100L, 10L)));
     when(nonceSlotLifecycleUseCase.recordEvidence(any(RecordSponsorNonceEvidenceCommand.class)))
         .thenReturn(unknownConsumedEvidence(51L, 201L));
     when(nonceSlotLifecycleUseCase.reserve(any()))

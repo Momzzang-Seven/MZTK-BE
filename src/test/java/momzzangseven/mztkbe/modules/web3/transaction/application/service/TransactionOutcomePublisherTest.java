@@ -9,7 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
@@ -114,8 +114,8 @@ class TransactionOutcomePublisherTest {
                 "stale nonce slot transition: expected=BROADCASTED, actual=CONSUMED"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, FROM_ADDRESS))
-        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.CONSUMED, TX_ID, TX_ID)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, FROM_ADDRESS, 7L))
+        .thenReturn(Optional.of(slotView(SponsorNonceSlotStatus.CONSUMED, TX_ID, TX_ID)));
 
     service.markSucceededWithNonceSlotAndPublish(
         TX_ID,
@@ -138,8 +138,8 @@ class TransactionOutcomePublisherTest {
                 "stale nonce slot transition: expected=BROADCASTED, actual=CONSUMED"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, FROM_ADDRESS))
-        .thenReturn(List.of(slotView(SponsorNonceSlotStatus.CONSUMED, 99L, 99L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, FROM_ADDRESS, 7L))
+        .thenReturn(Optional.of(slotView(SponsorNonceSlotStatus.CONSUMED, 99L, 99L)));
 
     assertThatThrownBy(
             () ->

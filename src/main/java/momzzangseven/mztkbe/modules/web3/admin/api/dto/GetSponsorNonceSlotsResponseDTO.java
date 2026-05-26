@@ -6,7 +6,13 @@ import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetSponsorNonceSl
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.SponsorNonceSlotAdminView;
 
 public record GetSponsorNonceSlotsResponseDTO(
-    long chainId, String fromAddress, String serverTimeZone, List<Slot> slots) {
+    long chainId,
+    String fromAddress,
+    String serverTimeZone,
+    int page,
+    int size,
+    boolean hasNext,
+    List<Slot> slots) {
 
   private static final String RUNBOOK_KEY = "SPONSOR_NONCE_REPLACEMENT";
   private static final String SERVER_TIME_ZONE = "Asia/Seoul";
@@ -22,6 +28,9 @@ public record GetSponsorNonceSlotsResponseDTO(
         result.chainId(),
         result.fromAddress(),
         SERVER_TIME_ZONE,
+        result.page(),
+        result.size(),
+        result.hasNext(),
         result.slots().stream().map(slot -> Slot.from(slot, lowestBlockingNonce)).toList());
   }
 

@@ -15,8 +15,11 @@ public class LoadSponsorNonceSlotReviewAdapter implements LoadSponsorNonceSlotRe
   private final ManageNonceSlotLifecycleUseCase manageNonceSlotLifecycleUseCase;
 
   @Override
-  public List<SponsorNonceSlotAdminView> loadSlots(long chainId, String fromAddress) {
-    return manageNonceSlotLifecycleUseCase.loadSlotsForReview(chainId, fromAddress).stream()
+  public List<SponsorNonceSlotAdminView> loadSlots(
+      long chainId, String fromAddress, int page, int size) {
+    return manageNonceSlotLifecycleUseCase
+        .loadSlotsForReview(chainId, fromAddress, page, size)
+        .stream()
         .map(this::toAdminView)
         .toList();
   }

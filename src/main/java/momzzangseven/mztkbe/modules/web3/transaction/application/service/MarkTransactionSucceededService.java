@@ -201,10 +201,9 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
 
   private boolean isSlotConsumedByTransaction(LoadTransactionPort.TransactionSnapshot snapshot) {
     return nonceSlotLifecycleUseCase
-        .loadSlotsForReview(snapshot.chainId(), snapshot.fromAddress())
-        .stream()
-        .filter(slot -> slot.nonce() == snapshot.nonce())
-        .anyMatch(slot -> isConsumedSlotForTransaction(slot, snapshot.transactionId()));
+        .loadSlotForReview(snapshot.chainId(), snapshot.fromAddress(), snapshot.nonce())
+        .filter(slot -> isConsumedSlotForTransaction(slot, snapshot.transactionId()))
+        .isPresent();
   }
 
   private boolean isConsumedSlotForTransaction(SponsorNonceSlotView slot, Long transactionId) {

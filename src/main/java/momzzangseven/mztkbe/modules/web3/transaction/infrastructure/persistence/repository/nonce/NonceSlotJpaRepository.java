@@ -41,6 +41,30 @@ public interface NonceSlotJpaRepository extends JpaRepository<NonceSlotEntity, N
   List<NonceSlotEntity> findByScopeOrderByNonce(
       @Param("chainId") Long chainId, @Param("fromAddress") String fromAddress);
 
+  @Query(
+      """
+      select s
+      from NonceSlotEntity s
+      where s.chainId = :chainId
+        and s.fromAddress = :fromAddress
+      order by s.nonce asc
+      """)
+  List<NonceSlotEntity> findByScopeOrderByNonce(
+      @Param("chainId") Long chainId, @Param("fromAddress") String fromAddress, Pageable pageable);
+
+  @Query(
+      """
+      select s
+      from NonceSlotEntity s
+      where s.chainId = :chainId
+        and s.fromAddress = :fromAddress
+        and s.nonce = :nonce
+      """)
+  Optional<NonceSlotEntity> findByScope(
+      @Param("chainId") Long chainId,
+      @Param("fromAddress") String fromAddress,
+      @Param("nonce") Long nonce);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       """

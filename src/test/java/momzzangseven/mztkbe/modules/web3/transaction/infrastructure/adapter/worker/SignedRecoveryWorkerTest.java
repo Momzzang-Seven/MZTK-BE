@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
@@ -201,8 +202,8 @@ class SignedRecoveryWorkerTest {
                 "stale nonce slot transition: expected=SIGNED, actual=BROADCASTED"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, "0x" + "a".repeat(40)))
-        .thenReturn(List.of(slot(SponsorNonceSlotStatus.BROADCASTED, 1L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, "0x" + "a".repeat(40), 0L))
+        .thenReturn(Optional.of(slot(SponsorNonceSlotStatus.BROADCASTED, 1L)));
 
     worker.processBatch(1);
 
@@ -225,8 +226,8 @@ class SignedRecoveryWorkerTest {
                 "stale nonce slot transition: expected=SIGNED, actual=BROADCASTING"))
         .when(nonceSlotLifecycleUseCase)
         .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
-    when(nonceSlotLifecycleUseCase.loadSlotsForReview(CHAIN_ID, "0x" + "a".repeat(40)))
-        .thenReturn(List.of(slot(SponsorNonceSlotStatus.BROADCASTING, 99L)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, "0x" + "a".repeat(40), 0L))
+        .thenReturn(Optional.of(slot(SponsorNonceSlotStatus.BROADCASTING, 99L)));
 
     worker.processBatch(1);
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
@@ -59,6 +60,23 @@ public class NonceSlotLifecycleService implements ManageNonceSlotLifecycleUseCas
   @Transactional(readOnly = true)
   public boolean verifyUnbroadcastable(VerifyUnbroadcastableAttemptCommand command) {
     return verifyUnbroadcastableAttemptPort.verifyUnbroadcastable(command);
+  }
+
+  @Transactional(readOnly = true)
+  public Optional<SponsorNonceSlotView> loadSlotForReview(
+      long chainId, String fromAddress, long nonce) {
+    requireValidScope(chainId, fromAddress, nonce);
+    return loadSponsorNonceSlotsPort.loadSlotForReview(
+        chainId, EvmAddress.of(fromAddress).value(), nonce);
+  }
+
+  @Transactional(readOnly = true)
+  public List<SponsorNonceSlotView> loadSlotsForReview(
+      long chainId, String fromAddress, int page, int size) {
+    requireValidScope(chainId, fromAddress, 0L);
+    requireValidPage(page, size);
+    return loadSponsorNonceSlotsPort.loadSlotsForReview(
+        chainId, EvmAddress.of(fromAddress).value(), page, size);
   }
 
   @Transactional(readOnly = true)
@@ -237,6 +255,15 @@ public class NonceSlotLifecycleService implements ManageNonceSlotLifecycleUseCas
     EvmAddress.of(fromAddress);
     if (nonce < 0) {
       throw new Web3InvalidInputException("nonce must be >= 0");
+    }
+  }
+
+  private void requireValidPage(int page, int size) {
+    if (page < 0) {
+      throw new Web3InvalidInputException("page must be zero or positive");
+    }
+    if (size <= 0) {
+      throw new Web3InvalidInputException("size must be positive");
     }
   }
 

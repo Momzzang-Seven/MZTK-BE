@@ -215,10 +215,24 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
 
-    Web3ContractPort.PrevalidateResult prevalidateResult =
-        web3ContractPort.prevalidate(
-            new Web3ContractPort.PrevalidateCommand(
-                signer.walletAddress(), item.toAddress(), item.amountWei()));
+    NonceReservation nonceReservation = resolveNonce(item, signer.walletAddress());
+    if (nonceReservation == null) {
+      return;
+    }
+
+    Web3ContractPort.PrevalidateResult prevalidateResult;
+    try {
+      prevalidateResult =
+          web3ContractPort.prevalidate(
+              new Web3ContractPort.PrevalidateCommand(
+                  signer.walletAddress(), item.toAddress(), item.amountWei()));
+    } catch (RuntimeException e) {
+      if (item.nonce() == null || e instanceof Web3InvalidInputException) {
+        dropReservedSlot(
+            item, signer.walletAddress(), nonceReservation, prevalidateExceptionReason(e));
+      }
+      throw e;
+    }
 
     Map<String, Object> prevalidateDetail =
         new PrevalidateAuditDetail(
@@ -229,15 +243,15 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     audit(item.transactionId(), Web3TransactionAuditEventType.PREVALIDATE, null, prevalidateDetail);
 
     if (!prevalidateResult.ok()) {
-      failPrevalidate(
-          item.transactionId(), prevalidateResult.failureReason(), prevalidateResult.retryable());
+      failPrevalidateAfterReservation(
+          item,
+          signer.walletAddress(),
+          nonceReservation,
+          prevalidateResult.failureReason(),
+          prevalidateResult.retryable());
       return;
     }
 
-    NonceReservation nonceReservation = resolveNonce(item, signer.walletAddress());
-    if (nonceReservation == null) {
-      return;
-    }
     long nonce = nonceReservation.nonce();
     Web3ContractPort.SignedTransaction signed;
     try {
@@ -330,6 +344,15 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       auditStateChange(item.transactionId(), Web3TxStatus.SIGNED, Web3TxStatus.PENDING);
       return;
     }
+    if (isBroadcastNonceTooLow(broadcast)) {
+      markBroadcastingSlotOperatorReview(
+          item,
+          signer.walletAddress(),
+          nonceReservation,
+          Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code());
+      retry(item.transactionId(), Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code());
+      return;
+    }
 
     retry(
         item.transactionId(),
@@ -341,6 +364,22 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private boolean isBroadcastAlreadyKnown(Web3ContractPort.BroadcastResult broadcast) {
     return broadcast != null
         && Web3TxFailureReason.BROADCAST_ALREADY_KNOWN.code().equals(broadcast.failureReason());
+  }
+
+  private boolean isBroadcastNonceTooLow(Web3ContractPort.BroadcastResult broadcast) {
+    return broadcast != null
+        && Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code().equals(broadcast.failureReason());
+  }
+
+  private boolean isSlotNotFound(Web3TransactionStateInvalidException e) {
+    return e.getMessage() != null && e.getMessage().contains("nonce slot not found");
+  }
+
+  private boolean isStaleActual(
+      Web3TransactionStateInvalidException e, SponsorNonceSlotStatus actualStatus) {
+    return e.getMessage() != null
+        && e.getMessage().contains("stale nonce slot transition")
+        && e.getMessage().contains("actual=" + actualStatus);
   }
 
   private boolean claimSignedForDirectBroadcast(Long transactionId) {
@@ -364,6 +403,58 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
     updateTransactionPort.scheduleRetry(transactionId, failureReason, null);
+  }
+
+  private void failPrevalidateAfterReservation(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String fromAddress,
+      NonceReservation nonceReservation,
+      String failureReason,
+      boolean retryable) {
+    String reason =
+        failureReason == null || failureReason.isBlank()
+            ? Web3TxFailureReason.PREVALIDATE_REVERT.code()
+            : failureReason;
+    if (!retryable || item.nonce() == null) {
+      dropReservedSlot(item, fromAddress, nonceReservation, reason);
+    }
+    failPrevalidate(item.transactionId(), reason, retryable);
+  }
+
+  private String prevalidateExceptionReason(RuntimeException e) {
+    if (e instanceof Web3InvalidInputException) {
+      return Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code();
+    }
+    return Web3TxFailureReason.RPC_UNAVAILABLE.code();
+  }
+
+  private void dropReservedSlot(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String fromAddress,
+      NonceReservation nonceReservation,
+      String terminalReason) {
+    try {
+      nonceSlotLifecycleUseCase.transition(
+          baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.RESERVED)
+              .toStatus(SponsorNonceSlotStatus.DROPPED)
+              .stateChangedAt(LocalDateTime.now())
+              .releasedAttemptId(nonceReservation.attemptId())
+              .terminalReason(terminalReason)
+              .build());
+    } catch (Web3TransactionStateInvalidException e) {
+      if (isSlotNotFound(e)
+          || isStaleActual(e, SponsorNonceSlotStatus.DROPPED)
+          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)
+          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED_UNKNOWN)
+          || isStaleActual(e, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)) {
+        log.debug(
+            "Skipping reserved slot drop after prevalidate failure for txId={}: {}",
+            item.transactionId(),
+            e.getMessage());
+        return;
+      }
+      throw e;
+    }
   }
 
   private void auditStateChange(Long transactionId, Web3TxStatus from, Web3TxStatus to) {
@@ -415,9 +506,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private NonceReservation resolveExistingNonceReservation(
       LoadTransactionWorkPort.TransactionWorkItem item, String treasuryAddress) {
     SponsorNonceSlotView slot =
-        nonceSlotLifecycleUseCase.loadSlotsForReview(item.chainId(), treasuryAddress).stream()
-            .filter(candidate -> candidate.nonce() == item.nonce())
-            .findFirst()
+        nonceSlotLifecycleUseCase
+            .loadSlotForReview(item.chainId(), treasuryAddress, item.nonce())
             .orElse(null);
 
     if (isActiveReservationOwnedByTransaction(slot, item.transactionId())) {
@@ -456,9 +546,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         return null;
       }
       SponsorNonceSlotView refreshedSlot =
-          nonceSlotLifecycleUseCase.loadSlotsForReview(item.chainId(), treasuryAddress).stream()
-              .filter(candidate -> candidate.nonce() == item.nonce())
-              .findFirst()
+          nonceSlotLifecycleUseCase
+              .loadSlotForReview(item.chainId(), treasuryAddress, item.nonce())
               .orElse(null);
       if (isActiveReservationOwnedByTransaction(refreshedSlot, item.transactionId())) {
         return new NonceReservation(item.nonce(), refreshedSlot.activeAttemptId());
@@ -496,9 +585,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       String treasuryAddress,
       NonceReservation nonceReservation) {
     SponsorNonceSlotView slot =
-        nonceSlotLifecycleUseCase.loadSlotsForReview(item.chainId(), treasuryAddress).stream()
-            .filter(candidate -> candidate.nonce() == nonceReservation.nonce())
-            .findFirst()
+        nonceSlotLifecycleUseCase
+            .loadSlotForReview(item.chainId(), treasuryAddress, nonceReservation.nonce())
             .orElse(null);
     return isActiveReservationOwnedByTransaction(slot, item.transactionId())
         && nonceReservation.attemptId() != null
@@ -544,6 +632,37 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
             .hasTxHash(signed.txHash() != null && !signed.txHash().isBlank())
             .hasSigningEvidence(true)
             .build());
+  }
+
+  private void markBroadcastingSlotOperatorReview(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String fromAddress,
+      NonceReservation nonceReservation,
+      String terminalReason) {
+    try {
+      nonceSlotLifecycleUseCase.transition(
+          baseTransition(item, fromAddress, nonceReservation, SponsorNonceSlotStatus.BROADCASTING)
+              .toStatus(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
+              .stateChangedAt(LocalDateTime.now())
+              .terminalReason(terminalReason)
+              .hasRawTx(true)
+              .hasTxHash(true)
+              .hasSigningEvidence(true)
+              .hasBroadcastEvidence(true)
+              .build());
+    } catch (Web3TransactionStateInvalidException e) {
+      if (isSlotNotFound(e)
+          || isStaleActual(e, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)
+          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED)
+          || isStaleActual(e, SponsorNonceSlotStatus.CONSUMED_UNKNOWN)) {
+        log.debug(
+            "Skipping nonce-too-low operator review transition for txId={}: {}",
+            item.transactionId(),
+            e.getMessage());
+        return;
+      }
+      throw e;
+    }
   }
 
   private RecordSponsorNonceSlotTransitionCommand.RecordSponsorNonceSlotTransitionCommandBuilder

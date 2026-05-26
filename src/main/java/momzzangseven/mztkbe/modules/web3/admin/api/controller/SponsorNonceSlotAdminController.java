@@ -25,10 +25,13 @@ public class SponsorNonceSlotAdminController {
   public ResponseEntity<ApiResponse<GetSponsorNonceSlotsResponseDTO>> getSlots(
       @AuthenticationPrincipal Long operatorId,
       @RequestParam Long chainId,
-      @RequestParam String fromAddress) {
+      @RequestParam String fromAddress,
+      @RequestParam(required = false) Integer page,
+      @RequestParam(required = false) Integer size) {
     GetSponsorNonceSlotsResult result =
         getSponsorNonceSlotsUseCase.execute(
-            new GetSponsorNonceSlotsQuery(requireOperatorId(operatorId), chainId, fromAddress));
+            new GetSponsorNonceSlotsQuery(
+                requireOperatorId(operatorId), chainId, fromAddress, page, size));
     return ResponseEntity.ok(ApiResponse.success(GetSponsorNonceSlotsResponseDTO.from(result)));
   }
 

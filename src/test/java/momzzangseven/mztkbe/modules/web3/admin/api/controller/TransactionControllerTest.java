@@ -231,6 +231,9 @@ class TransactionControllerTest {
             new GetSponsorNonceSlotsResult(
                 84532L,
                 sponsor,
+                0,
+                100,
+                false,
                 List.of(
                     new SponsorNonceSlotAdminView(
                         84532L,
@@ -272,6 +275,9 @@ class TransactionControllerTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.chainId").value(84532))
         .andExpect(jsonPath("$.data.fromAddress").value(sponsor))
+        .andExpect(jsonPath("$.data.page").value(0))
+        .andExpect(jsonPath("$.data.size").value(100))
+        .andExpect(jsonPath("$.data.hasNext").value(false))
         .andExpect(jsonPath("$.data.slots[0].nonce").value(51))
         .andExpect(jsonPath("$.data.slots[0].status").value("OPERATOR_REVIEW_REQUIRED"))
         .andExpect(jsonPath("$.data.slots[0].blocking").value(true))

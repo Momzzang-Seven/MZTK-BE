@@ -5,5 +5,5 @@ import momzzangseven.mztkbe.modules.web3.admin.application.dto.SponsorNonceSlotA
 
 public interface LoadSponsorNonceSlotReviewPort {
 
-  List<SponsorNonceSlotAdminView> loadSlots(long chainId, String fromAddress);
+  List<SponsorNonceSlotAdminView> loadSlots(long chainId, String fromAddress, int page, int size);
 }

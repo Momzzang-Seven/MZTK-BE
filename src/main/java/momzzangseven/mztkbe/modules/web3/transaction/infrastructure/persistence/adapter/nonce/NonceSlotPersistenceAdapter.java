@@ -6,9 +6,11 @@ import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
@@ -44,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class NonceSlotPersistenceAdapter
     implements LoadSponsorNonceSlotsPort,
         ReserveSponsorNonceSlotPort,
@@ -59,9 +62,7 @@ public class NonceSlotPersistenceAdapter
           SponsorNonceSlotStatus.BROADCASTING,
           SponsorNonceSlotStatus.BROADCASTED,
           SponsorNonceSlotStatus.STUCK,
-          SponsorNonceSlotStatus.CONSUMED_UNKNOWN,
           SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
-  private static final int COORDINATION_VISIBLE_SLOT_SCAN_LIMIT = 64;
 
   private final NonceSlotJpaRepository slotRepository;
   private final NonceSlotAttemptJpaRepository attemptRepository;
@@ -77,14 +78,54 @@ public class NonceSlotPersistenceAdapter
       throw new Web3InvalidInputException("chainId must be positive");
     }
     String normalizedAddress = EvmAddress.of(fromAddress).value();
+    int scanLimit = rewardTokenProperties.getWorker().getCoordinationVisibleSlotScanLimit();
     List<NonceSlotEntity> slots =
         slotRepository.findByScopeAndStatusInOrderByNonce(
             chainId,
             normalizedAddress,
             COORDINATION_VISIBLE_STATUSES,
-            PageRequest.of(0, COORDINATION_VISIBLE_SLOT_SCAN_LIMIT));
+            PageRequest.of(0, scanLimit));
+    if (slots.size() >= scanLimit) {
+      log.warn(
+          "sponsor nonce coordination visible slot scan reached limit: chainId={}, fromAddress={}, limit={}",
+          chainId,
+          normalizedAddress,
+          scanLimit);
+    }
     Map<Long, Web3TransactionEntity> activeTransactions = loadActiveTransactions(slots);
     return slots.stream().map(slot -> toDomainSlot(slot, activeTransactions)).toList();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<SponsorNonceSlotView> loadSlotForReview(
+      long chainId, String fromAddress, long nonce) {
+    if (chainId <= 0) {
+      throw new Web3InvalidInputException("chainId must be positive");
+    }
+    String normalizedAddress = EvmAddress.of(fromAddress).value();
+    return slotRepository.findByScope(chainId, normalizedAddress, nonce).map(this::toView);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<SponsorNonceSlotView> loadSlotsForReview(
+      long chainId, String fromAddress, int page, int size) {
+    if (chainId <= 0) {
+      throw new Web3InvalidInputException("chainId must be positive");
+    }
+    if (page < 0) {
+      throw new Web3InvalidInputException("page must be zero or positive");
+    }
+    if (size <= 0) {
+      throw new Web3InvalidInputException("size must be positive");
+    }
+    String normalizedAddress = EvmAddress.of(fromAddress).value();
+    return slotRepository
+        .findByScopeOrderByNonce(chainId, normalizedAddress, PageRequest.of(page, size))
+        .stream()
+        .map(this::toView)
+        .toList();
   }
 
   @Override

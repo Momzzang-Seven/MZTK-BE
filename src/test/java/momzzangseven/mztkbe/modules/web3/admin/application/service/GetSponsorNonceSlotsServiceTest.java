@@ -71,13 +71,18 @@ class GetSponsorNonceSlotsServiceTest {
             0,
             LocalDateTime.parse("2026-05-25T12:00:00"),
             LocalDateTime.parse("2026-05-25T12:00:00"));
-    when(loadSponsorNonceSlotReviewPort.loadSlots(84532L, SPONSOR)).thenReturn(List.of(view));
+    when(loadSponsorNonceSlotReviewPort.loadSlots(84532L, SPONSOR, 0, 100))
+        .thenReturn(List.of(view));
 
     GetSponsorNonceSlotsResult result =
-        service.execute(new GetSponsorNonceSlotsQuery(9L, 84532L, SPONSOR.toUpperCase()));
+        service.execute(
+            new GetSponsorNonceSlotsQuery(9L, 84532L, SPONSOR.toUpperCase(), null, null));
 
     assertThat(result.fromAddress()).isEqualTo(SPONSOR);
+    assertThat(result.page()).isZero();
+    assertThat(result.size()).isEqualTo(100);
+    assertThat(result.hasNext()).isFalse();
     assertThat(result.slots()).containsExactly(view);
-    verify(loadSponsorNonceSlotReviewPort).loadSlots(84532L, SPONSOR);
+    verify(loadSponsorNonceSlotReviewPort).loadSlots(84532L, SPONSOR, 0, 100);
   }
 }

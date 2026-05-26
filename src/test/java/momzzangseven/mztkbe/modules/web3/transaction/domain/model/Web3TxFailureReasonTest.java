@@ -21,6 +21,7 @@ class Web3TxFailureReasonTest {
   void isRetryable_returnsConfiguredValue() {
     assertThat(Web3TxFailureReason.RPC_UNAVAILABLE.isRetryable()).isTrue();
     assertThat(Web3TxFailureReason.BROADCAST_FAILED.isRetryable()).isTrue();
+    assertThat(Web3TxFailureReason.BROADCAST_ALREADY_KNOWN.isRetryable()).isTrue();
     // KMS rotation can leave the key transiently DISABLED; retry lets the next
     // worker tick re-claim once the key is re-enabled instead of permanent fail.
     assertThat(Web3TxFailureReason.KMS_KEY_NOT_ENABLED.isRetryable()).isTrue();
@@ -28,6 +29,7 @@ class Web3TxFailureReasonTest {
     assertThat(Web3TxFailureReason.SPONSOR_NONCE_RPC_DISAGREEMENT.isRetryable()).isTrue();
     assertThat(Web3TxFailureReason.INVALID_SIGNED_TX.isRetryable()).isFalse();
     assertThat(Web3TxFailureReason.RECEIPT_TIMEOUT.isRetryable()).isFalse();
+    assertThat(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.isRetryable()).isFalse();
     assertThat(Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.isRetryable()).isFalse();
     assertThat(Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.isRetryable()).isFalse();
   }

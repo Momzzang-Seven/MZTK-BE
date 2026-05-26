@@ -207,10 +207,9 @@ public class PersistSponsorNonceTransactionStateService
       return false;
     }
     return nonceSlotLifecycleUseCase
-        .loadSlotsForReview(command.chainId(), command.fromAddress())
-        .stream()
-        .filter(slot -> slot.nonce() == command.nonce())
-        .anyMatch(slot -> isStuckSlotForTransaction(slot, command.transactionId()));
+        .loadSlotForReview(command.chainId(), command.fromAddress(), command.nonce())
+        .filter(slot -> isStuckSlotForTransaction(slot, command.transactionId()))
+        .isPresent();
   }
 
   private boolean isSlotBroadcastedByTransaction(SponsorNoncePendingCommand command) {
@@ -218,13 +217,11 @@ public class PersistSponsorNonceTransactionStateService
       return false;
     }
     return nonceSlotLifecycleUseCase
-        .loadSlotsForReview(command.chainId(), command.fromAddress())
-        .stream()
-        .filter(slot -> slot.nonce() == command.nonce())
-        .anyMatch(
+        .loadSlotForReview(command.chainId(), command.fromAddress(), command.nonce())
+        .filter(
             slot ->
-                isBroadcastedSlotForTransaction(
-                    slot, command.transactionId(), command.attemptId()));
+                isBroadcastedSlotForTransaction(slot, command.transactionId(), command.attemptId()))
+        .isPresent();
   }
 
   private boolean isStuckSlotForTransaction(SponsorNonceSlotView slot, Long transactionId) {

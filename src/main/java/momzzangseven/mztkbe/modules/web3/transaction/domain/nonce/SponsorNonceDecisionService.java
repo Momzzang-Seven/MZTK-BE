@@ -105,10 +105,18 @@ public class SponsorNonceDecisionService {
                 SponsorNonceDecision.of(
                     SponsorNonceDecisionType.CONSUME_UNKNOWN_NONCE,
                     slot.nonce(),
-                    slot.hasRetainedExternalEvidence()
-                        ? "LATEST_PASSED_WITH_RETAINED_EXTERNAL_EVIDENCE"
-                        : "LATEST_PASSED_WITH_RPC_SNAPSHOT"))
+                    unknownConsumedReason(slot)))
         .orElse(null);
+  }
+
+  private String unknownConsumedReason(SponsorNonceSlot slot) {
+    if (slot.status() == SponsorNonceSlotStatus.BROADCASTING) {
+      return "BROADCASTING_LATEST_PASSED_WITH_RPC_SNAPSHOT";
+    }
+    if (slot.hasRetainedExternalEvidence()) {
+      return "LATEST_PASSED_WITH_RETAINED_EXTERNAL_EVIDENCE";
+    }
+    return "LATEST_PASSED_WITH_RPC_SNAPSHOT";
   }
 
   private SponsorNonceDecision decideGapRepair(List<SponsorNonceSlot> openSlots) {

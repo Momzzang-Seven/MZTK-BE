@@ -272,10 +272,7 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
       return null;
     }
     return nonceSlotLifecycleUseCase
-        .loadSlotsForReview(command.chainId(), command.fromAddress())
-        .stream()
-        .filter(slot -> Long.valueOf(slot.nonce()).equals(nonce))
-        .findFirst()
+        .loadSlotForReview(command.chainId(), command.fromAddress(), nonce)
         .orElse(null);
   }
 

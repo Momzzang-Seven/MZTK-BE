@@ -235,10 +235,9 @@ public class TransactionOutcomePublisher {
       return false;
     }
     return nonceSlotLifecycleUseCase
-        .loadSlotsForReview(command.chainId(), command.fromAddress())
-        .stream()
-        .filter(slot -> slot.nonce() == command.nonce())
-        .anyMatch(slot -> isConsumedSlotForTransaction(slot, transactionId));
+        .loadSlotForReview(command.chainId(), command.fromAddress(), command.nonce())
+        .filter(slot -> isConsumedSlotForTransaction(slot, transactionId))
+        .isPresent();
   }
 
   private boolean isConsumedSlotForTransaction(SponsorNonceSlotView slot, Long transactionId) {

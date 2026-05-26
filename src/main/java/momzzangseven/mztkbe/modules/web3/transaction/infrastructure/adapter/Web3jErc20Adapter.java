@@ -444,10 +444,13 @@ public class Web3jErc20Adapter implements Web3ContractPort {
     }
     if (normalized.contains("already known")
         || normalized.contains("already imported")
-        || normalized.contains("known transaction")
-        || normalized.contains("nonce too low")
-        || normalized.contains("nonce has already been used")) {
+        || (normalized.contains("known transaction")
+            && !normalized.contains("unknown transaction"))) {
       return Web3TxFailureReason.BROADCAST_ALREADY_KNOWN;
+    }
+    if (normalized.contains("nonce too low")
+        || normalized.contains("nonce has already been used")) {
+      return Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW;
     }
     return Web3TxFailureReason.BROADCAST_FAILED;
   }
@@ -461,6 +464,10 @@ public class Web3jErc20Adapter implements Web3ContractPort {
     if (mainFailureReason == Web3TxFailureReason.BROADCAST_ALREADY_KNOWN
         || subFailureReason == Web3TxFailureReason.BROADCAST_ALREADY_KNOWN) {
       return Web3TxFailureReason.BROADCAST_ALREADY_KNOWN;
+    }
+    if (mainFailureReason == Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW
+        || subFailureReason == Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW) {
+      return Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW;
     }
     if (mainFailureReason == Web3TxFailureReason.BROADCAST_FAILED
         || subFailureReason == Web3TxFailureReason.BROADCAST_FAILED) {
