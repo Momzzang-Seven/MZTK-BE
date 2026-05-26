@@ -296,8 +296,11 @@ public class SponsorNonceCoordinatorService implements CoordinateSponsorNonceUse
 
   private void markOperatorReview(
       SponsorNonceCoordinationCommand command, SponsorNonceSlotView slot, String reason) {
-    if (slot.status() == SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED
-        || !slot.status().canTransitionTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)) {
+    if (slot.status() == SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED) {
+      markActiveTransactionUnconfirmedForSponsorNonceReview(slot);
+      return;
+    }
+    if (!slot.status().canTransitionTo(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)) {
       return;
     }
     nonceSlotLifecycleUseCase.transition(

@@ -107,70 +107,6 @@ END $$;
 
 DO $$
 BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'ck_web3_tx_addresses_lower'
-          AND conrelid = 'web3_transactions'::regclass
-          AND NOT convalidated
-    ) THEN
-        ALTER TABLE web3_transactions VALIDATE CONSTRAINT ck_web3_tx_addresses_lower;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'ck_web3_nonce_state_from_lower'
-          AND conrelid = 'web3_nonce_state'::regclass
-          AND NOT convalidated
-    ) THEN
-        ALTER TABLE web3_nonce_state VALIDATE CONSTRAINT ck_web3_nonce_state_from_lower;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'fk_web3_nonce_slot_attempt_tx_scope'
-          AND conrelid = 'web3_nonce_slot_attempts'::regclass
-          AND NOT convalidated
-    ) THEN
-        ALTER TABLE web3_nonce_slot_attempts
-            VALIDATE CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'fk_web3_nonce_slots_active_tx'
-          AND conrelid = 'web3_nonce_slots'::regclass
-          AND NOT convalidated
-    ) THEN
-        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_active_tx;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'fk_web3_nonce_slots_consumed_tx'
-          AND conrelid = 'web3_nonce_slots'::regclass
-          AND NOT convalidated
-    ) THEN
-        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_consumed_tx;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'fk_web3_nonce_slots_released_tx'
-          AND conrelid = 'web3_nonce_slots'::regclass
-          AND NOT convalidated
-    ) THEN
-        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_released_tx;
-    END IF;
-END $$;
-
-DO $$
-BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'ck_web3_tx_addresses_lower'
     ) THEN
@@ -190,6 +126,29 @@ BEGIN
         ALTER TABLE web3_nonce_state
             ADD CONSTRAINT ck_web3_nonce_state_from_lower
             CHECK (from_address = LOWER(from_address)) NOT VALID;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_web3_tx_addresses_lower'
+          AND conrelid = 'web3_transactions'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_transactions VALIDATE CONSTRAINT ck_web3_tx_addresses_lower;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_web3_nonce_state_from_lower'
+          AND conrelid = 'web3_nonce_state'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_state VALIDATE CONSTRAINT ck_web3_nonce_state_from_lower;
     END IF;
 END $$;
 
@@ -350,5 +309,49 @@ BEGIN
             REFERENCES web3_transactions(id, chain_id, from_address, nonce)
             ON DELETE RESTRICT
             NOT VALID;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_web3_nonce_slot_attempt_tx_scope'
+          AND conrelid = 'web3_nonce_slot_attempts'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_slot_attempts
+            VALIDATE CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_web3_nonce_slots_active_tx'
+          AND conrelid = 'web3_nonce_slots'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_active_tx;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_web3_nonce_slots_consumed_tx'
+          AND conrelid = 'web3_nonce_slots'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_consumed_tx;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_web3_nonce_slots_released_tx'
+          AND conrelid = 'web3_nonce_slots'::regclass
+          AND NOT convalidated
+    ) THEN
+        ALTER TABLE web3_nonce_slots VALIDATE CONSTRAINT fk_web3_nonce_slots_released_tx;
     END IF;
 END $$;

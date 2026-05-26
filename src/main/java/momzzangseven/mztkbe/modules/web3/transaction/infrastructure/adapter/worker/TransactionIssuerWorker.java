@@ -352,8 +352,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
           signer.walletAddress(),
           nonceReservation,
           Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code());
-      updateTransactionPort.scheduleRetry(
-          item.transactionId(), Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code(), null);
+      updateTransactionPort.markUnconfirmedForSponsorNonceReview(
+          item.transactionId(), Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
       return;
     }
 

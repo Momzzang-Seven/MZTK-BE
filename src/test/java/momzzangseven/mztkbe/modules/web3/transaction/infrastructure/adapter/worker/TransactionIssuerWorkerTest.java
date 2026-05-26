@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -846,6 +847,39 @@ class TransactionIssuerWorkerTest {
 
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.BROADCAST_FAILED.code(), retryAt);
+  }
+
+  @Test
+  void processBatch_broadcastNonceTooLow_marksSlotAndTransactionForOperatorReview() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 5L)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    stubExistingNonceSlot(5L, 1L, 1001L);
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
+    stubSignedBroadcastClaim(1L);
+    when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
+        .thenReturn(
+            new Web3ContractPort.BroadcastResult(
+                false, null, Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code(), "main"));
+
+    worker.processBatch(1);
+
+    ArgumentCaptor<RecordSponsorNonceSlotTransitionCommand> transitionCaptor =
+        ArgumentCaptor.forClass(RecordSponsorNonceSlotTransitionCommand.class);
+    verify(nonceSlotLifecycleUseCase, times(2)).transition(transitionCaptor.capture());
+    assertThat(transitionCaptor.getAllValues())
+        .extracting(RecordSponsorNonceSlotTransitionCommand::getToStatus)
+        .containsExactly(
+            SponsorNonceSlotStatus.BROADCASTING, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
+    verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            1L, Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code()), any());
   }
 
   @Test

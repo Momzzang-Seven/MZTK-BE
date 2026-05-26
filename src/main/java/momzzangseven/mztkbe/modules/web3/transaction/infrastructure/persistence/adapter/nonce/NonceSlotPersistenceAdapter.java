@@ -31,6 +31,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceAttemptStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlot;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.SponsorNonceProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotAttemptEntity;
@@ -69,6 +70,7 @@ public class NonceSlotPersistenceAdapter
   private final NonceSlotEvidenceJpaRepository evidenceRepository;
   private final Web3TransactionJpaRepository transactionRepository;
   private final TransactionRewardTokenProperties rewardTokenProperties;
+  private final SponsorNonceProperties sponsorNonceProperties;
   private final Clock appClock;
 
   @Override
@@ -78,7 +80,10 @@ public class NonceSlotPersistenceAdapter
       throw new Web3InvalidInputException("chainId must be positive");
     }
     String normalizedAddress = EvmAddress.of(fromAddress).value();
-    int scanLimit = rewardTokenProperties.getWorker().getCoordinationVisibleSlotScanLimit();
+    int scanLimit =
+        Math.max(
+            rewardTokenProperties.getWorker().getCoordinationVisibleSlotScanLimit(),
+            sponsorNonceProperties.getOpenWindowSize());
     List<NonceSlotEntity> slots =
         slotRepository.findByScopeAndStatusInOrderByNonce(
             chainId,

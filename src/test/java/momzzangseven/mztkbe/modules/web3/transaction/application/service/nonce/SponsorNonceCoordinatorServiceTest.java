@@ -104,12 +104,19 @@ class SponsorNonceCoordinatorServiceTest {
   void execute_whenReviewRequiredSlotExists_blocksIssuanceEvenWithoutCapacityCount() {
     when(loadSponsorNonceSlotsPort.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR))
         .thenReturn(List.of(slot(51L, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED)));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, SPONSOR, 51L))
+        .thenReturn(
+            Optional.of(slotView(51L, SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED, 100L, 10L)));
 
     var result = service.execute(command(51L, 50L, 10L, "intent:sponsor:51:attempt:1"));
 
     assertThat(result.decision().type())
         .isEqualTo(SponsorNonceDecisionType.OPERATOR_REVIEW_REQUIRED);
     verify(nonceSlotLifecycleUseCase, never()).reserve(any());
+    verify(nonceSlotLifecycleUseCase, never()).transition(any());
+    verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            10L, Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code());
   }
 
   @Test

@@ -25,6 +25,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceAttemptStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.SponsorNonceProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotAttemptEntity;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 @ExtendWith(MockitoExtension.class)
 class NonceSlotPersistenceAdapterTest {
@@ -54,13 +56,16 @@ class NonceSlotPersistenceAdapterTest {
   @Mock private NonceSlotEvidenceJpaRepository evidenceRepository;
   @Mock private Web3TransactionJpaRepository transactionRepository;
 
+  private TransactionRewardTokenProperties properties;
+  private SponsorNonceProperties sponsorNonceProperties;
   private NonceSlotPersistenceAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    TransactionRewardTokenProperties properties = new TransactionRewardTokenProperties();
+    properties = new TransactionRewardTokenProperties();
     properties.getWorker().setClaimTtlSeconds(120);
     properties.getWorker().setReceiptTimeoutSeconds(60);
+    sponsorNonceProperties = new SponsorNonceProperties();
     adapter =
         new NonceSlotPersistenceAdapter(
             slotRepository,
@@ -68,6 +73,7 @@ class NonceSlotPersistenceAdapterTest {
             evidenceRepository,
             transactionRepository,
             properties,
+            sponsorNonceProperties,
             FIXED_CLOCK);
   }
 
@@ -402,6 +408,23 @@ class NonceSlotPersistenceAdapterTest {
     assertThat(statusesCaptor.getValue())
         .doesNotContain(SponsorNonceSlotStatus.CONSUMED_UNKNOWN)
         .contains(SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED);
+  }
+
+  @Test
+  void loadOpenOrBlockingSlots_usesAtLeastOpenWindowSizeAsScanLimit() {
+    properties.getWorker().setCoordinationVisibleSlotScanLimit(2);
+    sponsorNonceProperties.setOpenWindowSize(5);
+    when(slotRepository.findByScopeAndStatusInOrderByNonce(
+            anyLong(), any(String.class), any(), any()))
+        .thenReturn(List.of());
+
+    adapter.loadOpenOrBlockingSlots(CHAIN_ID, SPONSOR);
+
+    ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+    verify(slotRepository)
+        .findByScopeAndStatusInOrderByNonce(
+            eq(CHAIN_ID), eq(SPONSOR), any(), pageableCaptor.capture());
+    assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(5);
   }
 
   private Web3TransactionEntity transaction(Long id, long nonce) {

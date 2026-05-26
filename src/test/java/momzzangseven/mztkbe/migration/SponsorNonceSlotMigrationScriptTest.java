@@ -76,5 +76,13 @@ class SponsorNonceSlotMigrationScriptTest {
         .contains("VALIDATE CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope")
         .contains("VALIDATE CONSTRAINT fk_web3_nonce_slots_active_tx")
         .contains("NOT VALID");
+    assertThat(backfillSql.indexOf("ADD CONSTRAINT ck_web3_tx_addresses_lower"))
+        .isLessThan(backfillSql.indexOf("VALIDATE CONSTRAINT ck_web3_tx_addresses_lower"));
+    assertThat(backfillSql.indexOf("ADD CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope"))
+        .isLessThan(
+            backfillSql.indexOf("VALIDATE CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope"));
+    assertThat(backfillSql.indexOf("INSERT INTO web3_nonce_slots"))
+        .isLessThan(
+            backfillSql.indexOf("ADD CONSTRAINT fk_web3_nonce_slot_attempt_tx_scope"));
   }
 }
