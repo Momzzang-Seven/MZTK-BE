@@ -759,8 +759,7 @@ class Web3jErc20AdapterTest {
 
   @Test
   void broadcast_prioritizesAlreadyKnown_overRpcUnavailable() throws Exception {
-    when(mainWeb3j.ethSendRawTransaction("0xabc").send())
-        .thenReturn(sendTxError("already known"));
+    when(mainWeb3j.ethSendRawTransaction("0xabc").send()).thenReturn(sendTxError("already known"));
     when(subWeb3j.ethSendRawTransaction("0xabc").send()).thenThrow(new IOException("sub down"));
 
     Web3ContractPort.BroadcastResult result =

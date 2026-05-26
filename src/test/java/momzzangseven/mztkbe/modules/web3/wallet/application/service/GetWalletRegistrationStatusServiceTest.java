@@ -89,8 +89,7 @@ class GetWalletRegistrationStatusServiceTest {
   void execute_usesSessionErrorMetadataWithoutMutatingExpiredReadableState() {
     WalletRegistrationSession session =
         approvalRequiredSession().markApprovalRetryable("EXPIRED", "sign request expired", NOW);
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
-        .thenReturn(Optional.of(session));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(expiredState()));
 
@@ -142,8 +141,7 @@ class GetWalletRegistrationStatusServiceTest {
             .toBuilder()
             .approvalExpiresAt(NOW.minusSeconds(1))
             .build();
-    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
-        .thenReturn(Optional.of(session));
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID)).thenReturn(Optional.of(session));
     when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
         .thenReturn(Optional.of(expiredState()));
 
