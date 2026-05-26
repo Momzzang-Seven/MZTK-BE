@@ -57,7 +57,7 @@ class RecoverAnswerEscrowServiceTest {
         .willReturn(
             Optional.of(answer(99L, 10L, 20L, AnswerPublicationStatus.FAILED)),
             Optional.of(answer(99L, 10L, 20L, AnswerPublicationStatus.PENDING)));
-    given(loadPostPort.loadPost(10L))
+    given(loadPostPort.loadPostForUpdate(10L))
         .willReturn(
             Optional.of(new LoadPostPort.PostContext(10L, 30L, false, true, "질문 본문", 50L, false)));
     given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
@@ -79,7 +79,7 @@ class RecoverAnswerEscrowServiceTest {
   void recoverAnswerCreate_blocksWhenPostIsNotQuestion() {
     RecoverAnswerEscrowCommand command = new RecoverAnswerEscrowCommand(20L, 10L, 99L);
     given(loadAnswerPort.loadAnswerForUpdate(99L)).willReturn(Optional.of(answer(99L, 10L, 20L)));
-    given(loadPostPort.loadPost(10L))
+    given(loadPostPort.loadPostForUpdate(10L))
         .willReturn(Optional.of(new LoadPostPort.PostContext(10L, 30L, false, false)));
 
     assertThatThrownBy(() -> service.recoverAnswerCreate(command))
@@ -102,7 +102,7 @@ class RecoverAnswerEscrowServiceTest {
   void recoverAnswerCreate_blocksWhenQuestionIsLocked() {
     RecoverAnswerEscrowCommand command = new RecoverAnswerEscrowCommand(20L, 10L, 99L);
     given(loadAnswerPort.loadAnswerForUpdate(99L)).willReturn(Optional.of(answer(99L, 10L, 20L)));
-    given(loadPostPort.loadPost(10L))
+    given(loadPostPort.loadPostForUpdate(10L))
         .willReturn(
             Optional.of(new LoadPostPort.PostContext(10L, 30L, false, true, "질문", 50L, true)));
 
@@ -126,7 +126,7 @@ class RecoverAnswerEscrowServiceTest {
   void recoverAnswerCreate_runsPrecheckBeforeRecovery() {
     RecoverAnswerEscrowCommand command = new RecoverAnswerEscrowCommand(20L, 10L, 99L);
     given(loadAnswerPort.loadAnswerForUpdate(99L)).willReturn(Optional.of(answer(99L, 10L, 20L)));
-    given(loadPostPort.loadPost(10L))
+    given(loadPostPort.loadPostForUpdate(10L))
         .willReturn(
             Optional.of(new LoadPostPort.PostContext(10L, 30L, false, true, "질문 본문", 50L, false)));
     given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
@@ -150,7 +150,7 @@ class RecoverAnswerEscrowServiceTest {
   void recoverAnswerCreate_stopsWhenPrecheckFails() {
     RecoverAnswerEscrowCommand command = new RecoverAnswerEscrowCommand(20L, 10L, 99L);
     given(loadAnswerPort.loadAnswerForUpdate(99L)).willReturn(Optional.of(answer(99L, 10L, 20L)));
-    given(loadPostPort.loadPost(10L))
+    given(loadPostPort.loadPostForUpdate(10L))
         .willReturn(
             Optional.of(new LoadPostPort.PostContext(10L, 30L, false, true, "질문 본문", 50L, false)));
     willThrow(new Web3InvalidInputException("question has active onchain mutation"))

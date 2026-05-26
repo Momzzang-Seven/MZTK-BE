@@ -43,7 +43,7 @@ class RecoverAnswerUpdateServiceTest {
     AnswerUpdateStatePort.AnswerUpdateState state = updateState();
     given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer()));
     given(answerUpdateStatePort.loadLatestRecoverable(100L)).willReturn(Optional.of(state));
-    given(loadPostPort.loadPost(10L))
+    given(loadPostPort.loadPostForUpdate(10L))
         .willReturn(
             Optional.of(
                 new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, false)));
@@ -68,7 +68,7 @@ class RecoverAnswerUpdateServiceTest {
     AnswerUpdateStatePort.AnswerUpdateState state = updateState();
     given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer()));
     given(answerUpdateStatePort.loadLatestRecoverable(100L)).willReturn(Optional.of(state));
-    given(loadPostPort.loadPost(10L))
+    given(loadPostPort.loadPostForUpdate(10L))
         .willReturn(
             Optional.of(
                 new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, false)));
@@ -94,7 +94,7 @@ class RecoverAnswerUpdateServiceTest {
     AnswerUpdateStatePort.AnswerUpdateState state = updateState();
     given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer()));
     given(answerUpdateStatePort.loadLatestRecoverable(100L)).willReturn(Optional.of(state));
-    given(loadPostPort.loadPost(10L))
+    given(loadPostPort.loadPostForUpdate(10L))
         .willReturn(
             Optional.of(
                 new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, false)));
