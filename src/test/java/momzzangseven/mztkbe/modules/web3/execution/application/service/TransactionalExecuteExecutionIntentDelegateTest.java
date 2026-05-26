@@ -361,6 +361,48 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   @Test
+  void executeEip1559_broadcastNonceTooLow_marksIntentNonceStaleWithoutRetryBackoff()
+      throws Exception {
+    ExecutionIntent intent = existingEip1559Intent();
+    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
+        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
+            "0xsigned",
+            "0xhash",
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot(),
+            intent.getUnsignedTxFingerprint());
+    ExecutionTransactionGatewayPort.TransactionRecord created =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            203L, ExecutionTransactionStatus.CREATED, null);
+
+    stubFindAndTrackUpdates(intent);
+    when(eip1559TransactionCodecPort.decodeAndVerify(
+            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
+        .thenReturn(decoded);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.createAndFlush(any())).thenReturn(created);
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(
+                false, null, "BROADCAST_NONCE_TOO_LOW", "main"));
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
+            /* gate */ null);
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(203L);
+    verify(executionTransactionGatewayPort).scheduleRetry(203L, "BROADCAST_NONCE_TOO_LOW", null);
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.NONCE_STALE));
+    verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+    verify(executionActionHandlerPort, never()).afterTransactionSubmitted(any(), any(), any());
+  }
+
+  @Test
   void executeEip7702_throwsNpe_whenGateIsNull() throws Exception {
     ExecutionIntent intent = existingEip7702Intent();
     when(executionIntentPersistencePort.findByPublicId("intent-7702"))

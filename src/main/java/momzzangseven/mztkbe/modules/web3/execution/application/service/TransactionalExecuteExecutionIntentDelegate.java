@@ -472,21 +472,26 @@ public class TransactionalExecuteExecutionIntentDelegate
       return;
     }
 
-    if (sponsorNonceContext != null && isBroadcastNonceTooLow(broadcast)) {
-      executionTransactionGatewayPort.markSponsorNonceBroadcastingOperatorReview(
-          new ExecutionTransactionGatewayPort.SponsorNonceBroadcastingOperatorReviewCommand(
-              transactionId,
-              sponsorNonceContext.chainId(),
-              sponsorNonceContext.fromAddress(),
-              sponsorNonceContext.nonce(),
-              sponsorNonceContext.attemptId(),
-              BROADCAST_NONCE_TOO_LOW,
-              SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED,
-              true,
-              fallbackTxHash != null && !fallbackTxHash.isBlank(),
-              true,
-              true,
-              LocalDateTime.now(appClock)));
+    if (isBroadcastNonceTooLow(broadcast)) {
+      if (sponsorNonceContext != null) {
+        executionTransactionGatewayPort.markSponsorNonceBroadcastingOperatorReview(
+            new ExecutionTransactionGatewayPort.SponsorNonceBroadcastingOperatorReviewCommand(
+                transactionId,
+                sponsorNonceContext.chainId(),
+                sponsorNonceContext.fromAddress(),
+                sponsorNonceContext.nonce(),
+                sponsorNonceContext.attemptId(),
+                BROADCAST_NONCE_TOO_LOW,
+                SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED,
+                true,
+                fallbackTxHash != null && !fallbackTxHash.isBlank(),
+                true,
+                true,
+                LocalDateTime.now(appClock)));
+        return;
+      }
+      executionTransactionGatewayPort.scheduleRetry(transactionId, BROADCAST_NONCE_TOO_LOW, null);
+      markNonceStale(current, ErrorCode.NONCE_STALE_RECREATE_REQUIRED);
       return;
     }
 
@@ -993,7 +998,8 @@ public class TransactionalExecuteExecutionIntentDelegate
                       () ->
                           new Web3InvalidInputException(
                               "executionIntentId not found: " + intent.getPublicId()));
-          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE) {
+          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE
+              && current.getStatus() != ExecutionIntentStatus.SIGNED) {
             return;
           }
           ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(

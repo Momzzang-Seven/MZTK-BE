@@ -281,9 +281,12 @@ public class ExecutionIntent {
         .build();
   }
 
-  /** Marks signable intent as nonce stale to force new attempt generation. */
+  /** Marks signable or signed intent as nonce stale to force new attempt generation. */
   public ExecutionIntent markNonceStale(String errorCode, String errorReason, LocalDateTime now) {
-    requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    if (status != ExecutionIntentStatus.AWAITING_SIGNATURE
+        && status != ExecutionIntentStatus.SIGNED) {
+      throw new IllegalStateException("intent cannot move to NONCE_STALE from " + status);
+    }
     requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.NONCE_STALE)
