@@ -17,6 +17,8 @@ public record WalletRegistrationResponseDTO(
     String lastErrorReason,
     String signRequestUnavailableReason,
     String nextAction,
+    String userMessage,
+    String supportMessageKey,
     RegisterWalletResponseDTO.Web3 web3) {
 
   public static WalletRegistrationResponseDTO from(WalletRegistrationStatusResult result) {
@@ -33,6 +35,8 @@ public record WalletRegistrationResponseDTO(
         result.lastErrorReason(),
         result.signRequestUnavailableReason(),
         result.nextAction().name(),
+        result.userMessage(),
+        result.supportMessageKey(),
         RegisterWalletResponseDTO.Web3.from(result.web3()));
   }
 

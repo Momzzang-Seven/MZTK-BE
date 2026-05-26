@@ -274,6 +274,12 @@ class TransactionControllerTest {
         .andExpect(jsonPath("$.data.fromAddress").value(sponsor))
         .andExpect(jsonPath("$.data.slots[0].nonce").value(51))
         .andExpect(jsonPath("$.data.slots[0].status").value("OPERATOR_REVIEW_REQUIRED"))
+        .andExpect(jsonPath("$.data.slots[0].blocking").value(true))
+        .andExpect(jsonPath("$.data.slots[0].lowestBlockingSlot").value(true))
+        .andExpect(jsonPath("$.data.slots[0].severity").value("BLOCKING"))
+        .andExpect(
+            jsonPath("$.data.slots[0].operatorAction")
+                .value("FOLLOW_SPONSOR_NONCE_REPLACEMENT_RUNBOOK"))
         .andExpect(jsonPath("$.data.slots[0].stuckReason").value("RECEIPT_TIMEOUT_900S"));
 
     verify(getSponsorNonceSlotsUseCase).execute(any(GetSponsorNonceSlotsQuery.class));

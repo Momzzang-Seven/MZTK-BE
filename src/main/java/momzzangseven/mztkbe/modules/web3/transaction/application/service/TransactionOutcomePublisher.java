@@ -144,9 +144,9 @@ public class TransactionOutcomePublisher {
     Web3TransactionStateInvalidException lastStaleException = null;
     for (SponsorNonceSlotStatus fromStatus :
         List.of(
-            SponsorNonceSlotStatus.STUCK,
             SponsorNonceSlotStatus.BROADCASTED,
             SponsorNonceSlotStatus.BROADCASTING,
+            SponsorNonceSlotStatus.STUCK,
             SponsorNonceSlotStatus.OPERATOR_REVIEW_REQUIRED,
             SponsorNonceSlotStatus.CONSUMED_UNKNOWN)) {
       try {

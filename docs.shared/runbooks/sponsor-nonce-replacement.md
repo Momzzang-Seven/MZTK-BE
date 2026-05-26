@@ -11,6 +11,10 @@ This is deliberate: replacement requires a new signed transaction for the same n
 bump policy, superseding the previous attempt, and receipt reconciliation across RPC providers.
 Until that flow is implemented, manual review is safer than automatic replacement.
 
+There is currently no public/admin write API for closing nonce slots. The admin nonce-slot API is
+read-only. Treat this document as an investigation and escalation runbook, not as permission to run
+ad-hoc SQL.
+
 ## Trigger
 
 Use this runbook when admin nonce slot review shows one of these conditions:
@@ -20,6 +24,23 @@ Use this runbook when admin nonce slot review shows one of these conditions:
 - coordinator reason is `REPLACEMENT_REQUIRES_OPERATOR_IMPLEMENTATION`
 - sponsor issuance is blocked by `OPERATOR_REVIEW_REQUIRED`
 
+## Alert sources
+
+Use logs/monitoring to make sure operator-review states do not depend on user reports.
+
+- Wallet registration retry flow emits this warning when a receipt-timeout approval is converted to
+  `SPONSOR_NONCE_BLOCKED`:
+  - log message prefix: `wallet registration sponsor nonce blocked`
+  - fields: `registrationId`, `walletAddress`, `latestExecutionIntentId`, `errorCode`
+- Alert condition:
+  - page or create an incident when the warning appears in production.
+  - group alerts by `walletAddress` and `latestExecutionIntentId`.
+  - if multiple alerts share the same sponsor scope, inspect `GET /admin/web3/nonce-slots`.
+- Future preferred metric:
+  - `wallet_registration_sponsor_nonce_blocked_total`
+  - labels: `chainId`, `status`, `errorCode`
+  - alert on any increase over a short production window.
+
 ## Investigation checklist
 
 1. Confirm the sponsor scope: `chain_id`, `from_address`, and lowest blocking `nonce`.
@@ -28,12 +49,13 @@ Use this runbook when admin nonce slot review shows one of these conditions:
 4. Compare the slot's `active_tx_id`, `active_attempt_id`, `status`, and retained evidence flags.
 5. Do not close a slot as `DROPPED` if any raw transaction, tx hash, signing evidence, broadcast
    evidence, or receipt evidence exists.
+6. Record the investigation result in the incident ticket before requesting any state repair.
 
 ## Resolution paths
 
 ### Receipt exists and belongs to backend transaction
 
-Close the slot as `CONSUMED`.
+Target repair state: `CONSUMED`.
 
 Required evidence:
 
@@ -44,7 +66,7 @@ Required evidence:
 
 ### Chain nonce advanced but backend receipt cannot be proven
 
-Close the slot as `CONSUMED_UNKNOWN`.
+Target repair state: `CONSUMED_UNKNOWN`.
 
 Required evidence:
 
@@ -54,7 +76,7 @@ Required evidence:
 
 ### No chain-reachable evidence exists
 
-Close the slot as `DROPPED`.
+Target repair state: `DROPPED`.
 
 Required evidence:
 
@@ -75,3 +97,31 @@ Do not create a replacement attempt manually unless a dedicated implementation e
 
 Until then, resolve the slot to `CONSUMED`, `CONSUMED_UNKNOWN`, or `DROPPED` based on evidence.
 After the lowest blocking slot is closed, normal sponsor issuance resumes through the coordinator.
+
+## Escalation path
+
+1. Admin/CS confirms the blocking slot in `GET /admin/web3/nonce-slots`.
+2. Admin/CS attaches RPC/explorer evidence and the target repair state to the incident ticket.
+3. Backend maintainer reviews the evidence against this runbook.
+4. If repair is safe, backend maintainer prepares a one-off repair using the same lifecycle
+   invariants as `NonceSlotLifecycleService`.
+5. A second maintainer reviews the repair before execution.
+6. After repair, admin/CS re-runs the nonce-slot read API and confirms sponsor issuance resumes.
+
+## Emergency DB repair guardrails
+
+Direct DB mutation is a last resort only. Do not update only `web3_nonce_slots.status`.
+
+Any emergency repair must satisfy all of these conditions:
+
+- execute in a single database transaction
+- preserve `web3_transactions`, slot, attempt, and evidence consistency
+- insert or reference durable evidence before changing the slot state
+- update consumed/released ids and timestamps together with the status
+- leave an incident ticket with the exact SQL, evidence, reviewer, executor, and execution time
+- never mark `DROPPED` when raw tx, tx hash, signing evidence, broadcast evidence, or receipt
+  evidence exists
+- never create a replacement attempt manually
+
+Preferred long-term fix: add an audited admin recovery command that calls the lifecycle validator
+instead of relying on emergency SQL.
