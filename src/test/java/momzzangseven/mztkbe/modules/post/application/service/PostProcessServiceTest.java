@@ -234,12 +234,14 @@ class PostProcessServiceTest {
     Long postId = 60L;
     Post post = ownedPost(ownerId, postId);
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
 
     postProcessService.deletePost(ownerId, postId);
 
     verify(postPersistencePort).deletePost(post);
+    // MOM-459 delete-path lost-update guard: must lock the posts row, never lock-free loadPost.
+    verify(postPersistencePort).loadPostForUpdate(postId);
+    verify(postPersistencePort, never()).loadPost(anyLong());
     verifyNoInteractions(questionLifecycleExecutionPort);
     ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
     verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -250,12 +252,14 @@ class PostProcessServiceTest {
   @Test
   @DisplayName("delete throws when post is missing")
   void deletePostThrowsWhenNotFound() {
-    when(postPersistencePort.loadPost(999L)).thenReturn(Optional.empty());
+    when(postPersistencePort.loadPostForUpdate(999L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> postProcessService.deletePost(1L, 999L))
         .isInstanceOf(PostNotFoundException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
+    // MOM-459 delete-path lost-update guard.
+    verify(postPersistencePort, never()).loadPost(anyLong());
     verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
@@ -264,13 +268,14 @@ class PostProcessServiceTest {
   void deletePostThrowsWhenUnauthorized() {
     Long postId = 61L;
     Post post = ownedPost(5L, postId);
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
 
     assertThatThrownBy(() -> postProcessService.deletePost(6L, postId))
         .isInstanceOf(PostUnauthorizedException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
+    // MOM-459 delete-path lost-update guard.
+    verify(postPersistencePort, never()).loadPost(anyLong());
     verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
@@ -323,14 +328,15 @@ class PostProcessServiceTest {
     Long postId = 71L;
     Post post = questionPost(ownerId, postId);
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(2L);
 
     assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
         .isInstanceOf(PostInvalidInputException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
+    // MOM-459 delete-path lost-update guard.
+    verify(postPersistencePort, never()).loadPost(anyLong());
     verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
@@ -535,8 +541,7 @@ class PostProcessServiceTest {
     Long postId = 73L;
     Post post = questionPost(ownerId, postId);
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.prepareQuestionDelete(postId, ownerId, "질문 내용", 50L))
         .thenReturn(Optional.of(org.mockito.Mockito.mock(QuestionExecutionWriteView.class)));
@@ -545,6 +550,9 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort, never()).deletePost(post);
     verify(questionLifecycleExecutionPort).prepareQuestionDelete(postId, ownerId, "질문 내용", 50L);
+    // MOM-459: TX 1 locks the posts row; web3 path then defers to confirm worker (no TX 2).
+    verify(postPersistencePort, times(1)).loadPostForUpdate(postId);
+    verify(postPersistencePort, never()).loadPost(anyLong());
     verifyNoInteractions(eventPublisher);
   }
 
@@ -555,8 +563,7 @@ class PostProcessServiceTest {
     Long postId = 75L;
     Post post = questionPost(ownerId, postId);
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.prepareQuestionDelete(postId, ownerId, "질문 내용", 50L))
         .thenReturn(Optional.empty());
@@ -565,6 +572,39 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort).deletePost(post);
     verify(questionLifecycleExecutionPort).prepareQuestionDelete(postId, ownerId, "질문 내용", 50L);
+    verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+    // MOM-459: BOTH prepareLocalDelete (TX 1) and deletePostLocally (TX 2) must lock the row.
+    verify(postPersistencePort, times(2)).loadPostForUpdate(postId);
+    verify(postPersistencePort, never()).loadPost(anyLong());
+  }
+
+  @Test
+  @DisplayName("MOM-459: FAILED QUESTION delete locks the posts row in prepareLocalDelete branch")
+  void deleteFailedQuestionLocksPostsRowInPrepareLocalDelete() {
+    Long ownerId = 7L;
+    Long postId = 78L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
+    // managesQuestionCreateLifecycle()==false short-circuits
+    // validateQuestionDeletePublicationAllowed
+    // before it asks for projection/intent evidence — keeping this test focused on the lock path.
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(false);
+
+    postProcessService.deletePost(ownerId, postId);
+
+    // failed-question branch deletes inside TX 1 (no separate TX 2 / no web3 prepare),
+    // so loadPostForUpdate is invoked exactly once and prepareQuestionDelete never.
+    verify(postPersistencePort, times(1)).loadPostForUpdate(postId);
+    verify(postPersistencePort, never()).loadPost(anyLong());
+    verify(postPersistencePort).deletePost(post);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareQuestionDelete(
+            anyLong(), anyLong(), org.mockito.ArgumentMatchers.anyString(), anyLong());
     verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
   }
 
@@ -692,8 +732,7 @@ class PostProcessServiceTest {
             .publicationStatus(PostPublicationStatus.PENDING)
             .build();
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
 
     assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
         .isInstanceOf(PostPublicationStateException.class)
@@ -713,8 +752,7 @@ class PostProcessServiceTest {
             .publicationStatus(PostPublicationStatus.FAILED)
             .build();
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
 
     postProcessService.deletePost(ownerId, postId);
@@ -736,8 +774,7 @@ class PostProcessServiceTest {
             .publicationStatus(PostPublicationStatus.FAILED)
             .build();
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(new QuestionPublicationEvidence(true, false, false, false, null));
@@ -761,8 +798,7 @@ class PostProcessServiceTest {
             .publicationStatus(PostPublicationStatus.FAILED)
             .build();
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(new QuestionPublicationEvidence(true, true, true, true, "PENDING"));
@@ -787,8 +823,7 @@ class PostProcessServiceTest {
             .publicationStatus(PostPublicationStatus.FAILED)
             .build();
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(new QuestionPublicationEvidence(true, false, true, false, "CREATED"));
@@ -814,8 +849,7 @@ class PostProcessServiceTest {
             .publicationStatus(PostPublicationStatus.FAILED)
             .build();
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(new QuestionPublicationEvidence(true, false, false, true, "EXPIRED"));
@@ -840,8 +874,7 @@ class PostProcessServiceTest {
             .moderationStatus(PostModerationStatus.BLOCKED)
             .build();
 
-    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    lenient().when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
 
     assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
         .isInstanceOf(PostInvalidInputException.class)
@@ -967,18 +1000,24 @@ class PostProcessServiceTest {
 
   @Test
   @DisplayName(
-      "MOM-459: deletePost stays lock-free — whole-row delete cannot lose concurrent updates")
-  void deletePostStaysLockFree() {
+      "MOM-459 follow-up: deletePost locks posts row to prevent lost-update against concurrent mutations")
+  void deletePostLocksPostsRowAgainstConcurrentMutations() {
     Long ownerId = 7L;
     Long deletePostId = 81L;
     Post deleteTarget = ownedPost(ownerId, deletePostId);
 
-    when(postPersistencePort.loadPost(deletePostId)).thenReturn(Optional.of(deleteTarget));
+    // The auto-PESSIMISTIC_WRITE escalation in loadPost was removed (production hot-row stall fix).
+    // To preserve the lost-update guard that the auto-lock implicitly provided for delete, the
+    // delete path now explicitly calls loadPostForUpdate and never the lock-free loadPost. A
+    // regression to lock-free delete would let a concurrent accept-answer / moderation-block /
+    // admin-refund commit be silently SQL-DELETEd on a stale snapshot.
+    when(postPersistencePort.loadPostForUpdate(deletePostId)).thenReturn(Optional.of(deleteTarget));
     when(loadPostAnswerIdsPort.loadAnswerIdsByPostId(deletePostId)).thenReturn(List.of());
 
     postProcessService.deletePost(ownerId, deletePostId);
 
-    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
+    verify(postPersistencePort, never()).loadPost(anyLong());
+    verify(postPersistencePort, atLeastOnce()).loadPostForUpdate(deletePostId);
   }
 
   private Post questionPost(Long ownerId, Long postId) {

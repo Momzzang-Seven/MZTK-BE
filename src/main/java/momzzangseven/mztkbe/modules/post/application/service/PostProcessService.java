@@ -231,7 +231,19 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   }
 
   private DeletePreparation prepareLocalDelete(Long currentUserId, Long postId) {
-    Post post = loadPostOrThrow(postId);
+    // Lock-and-act — every validate below (validateDeletable, isFailedQuestion,
+    // validateQuestionDeletePublicationAllowed, validateOwnerMutationAllowed) is mutable by
+    // concurrent accept-answer / moderation-block / admin-refund / question-update flows that
+    // already acquire loadPostForUpdate. A stale snapshot would silently swallow those mutations
+    // once the SQL DELETE (free / failed-question branches) or the on-chain prepareQuestionDelete
+    // (normal QUESTION branch) runs (MOM-459 delete-path lost-update guard — develop's auto-lock
+    // covered this; this PR's lock-free loadPost would have regressed it).
+    //
+    // Unlike updatePost, delete is not on a hot path, so we skip the Phase 1 lock-free
+    // fail-fast and just lock-and-act. The TX-between race (TX 1 commit -> on-chain prepare ->
+    // TX 2 start) is still open and handled in the follow-up ticket.
+    Post post =
+        postPersistencePort.loadPostForUpdate(postId).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     validateQuestionDeletePublicationAllowed(post, currentUserId);
@@ -254,7 +266,10 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   }
 
   private void deletePostLocally(Long currentUserId, Long postId) {
-    Post post = loadPostOrThrow(postId);
+    // Same lock-and-act rationale as prepareLocalDelete — TX 2 must re-validate every
+    // concurrent-mutable invariant from inside the lock window before issuing DELETE.
+    Post post =
+        postPersistencePort.loadPostForUpdate(postId).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     validateQuestionDeletePublicationAllowed(post, currentUserId);
