@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,9 +16,11 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.GetWalletRegistr
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationNextAction;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationReceiptTimeout;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationStatusResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationSessionPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +42,7 @@ class GetWalletRegistrationStatusServiceTest {
 
   @Mock private LoadWalletRegistrationSessionPort loadSessionPort;
   @Mock private LoadWalletApprovalExecutionStatePort loadExecutionStatePort;
+  @Mock private SaveWalletRegistrationSessionPort saveSessionPort;
 
   private GetWalletRegistrationStatusService service;
 
@@ -46,7 +50,7 @@ class GetWalletRegistrationStatusServiceTest {
   void setUp() {
     service =
         new GetWalletRegistrationStatusService(
-            loadSessionPort, loadExecutionStatePort, FIXED_CLOCK);
+            loadSessionPort, loadExecutionStatePort, saveSessionPort, FIXED_CLOCK);
   }
 
   @Test
@@ -162,6 +166,25 @@ class GetWalletRegistrationStatusServiceTest {
         .isEqualTo(WalletRegistrationNextAction.WAIT_FOR_APPROVAL_TRANSACTION);
   }
 
+  @Test
+  void execute_whenReceiptTimeoutDetected_marksSponsorNonceBlocked() {
+    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+        .thenReturn(Optional.of(approvalPendingOnchainSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(receiptTimeoutState()));
+    when(saveSessionPort.save(any(WalletRegistrationSession.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    WalletRegistrationStatusResult result =
+        service.execute(new GetWalletRegistrationStatusQuery(USER_ID, REGISTRATION_ID));
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.CONTACT_SUPPORT);
+    assertThat(result.lastErrorCode()).isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
+    assertThat(result.supportMessageKey()).isEqualTo("WALLET_APPROVAL_OPERATOR_REVIEW");
+    verify(saveSessionPort).save(any(WalletRegistrationSession.class));
+  }
+
   private static WalletRegistrationSession approvalRequiredSession() {
     return WalletRegistrationSession.create(
             REGISTRATION_ID, USER_ID, "0x" + "a".repeat(40), "nonce-1", NOW.plusMinutes(30), NOW)
@@ -170,6 +193,13 @@ class GetWalletRegistrationStatusServiceTest {
 
   private static WalletRegistrationSession expiredApprovalRequiredSession() {
     return approvalRequiredSession().toBuilder().approvalExpiresAt(NOW.minusSeconds(1)).build();
+  }
+
+  private static WalletRegistrationSession approvalPendingOnchainSession() {
+    return approvalRequiredSession()
+        .markApprovalSigned(INTENT_ID, 10L, "0x" + "b".repeat(64), "SIGNED", NOW.minusSeconds(2))
+        .markApprovalPendingOnchain(
+            INTENT_ID, 10L, "0x" + "b".repeat(64), "PENDING_ONCHAIN", NOW.minusSeconds(1));
   }
 
   private static WalletApprovalExecutionStateView signableState() {
@@ -192,6 +222,10 @@ class GetWalletRegistrationStatusServiceTest {
 
   private static WalletApprovalExecutionStateView submittedState() {
     return state("SIGNED", "SIGNED", null);
+  }
+
+  private static WalletApprovalExecutionStateView receiptTimeoutState() {
+    return state("PENDING_ONCHAIN", WalletRegistrationReceiptTimeout.TRANSACTION_STATUS, null);
   }
 
   private static WalletApprovalExecutionStateView state(
