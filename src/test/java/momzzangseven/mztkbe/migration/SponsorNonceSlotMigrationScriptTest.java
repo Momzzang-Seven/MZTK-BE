@@ -35,11 +35,21 @@ class SponsorNonceSlotMigrationScriptTest {
         .doesNotContain("-- flyway:executeInTransaction=false")
         .contains("HAVING COUNT(*) > 1")
         .contains("SET from_address = LOWER(from_address)")
+        .contains("DROP TABLE IF EXISTS _mztk_v084_normalized_nonce_state")
+        .contains("CREATE TEMP TABLE _mztk_v084_normalized_nonce_state AS")
+        .contains("DELETE FROM web3_nonce_state")
+        .doesNotContain("deleted_nonce_state AS")
         .doesNotContain("CREATE INDEX CONCURRENTLY");
     assertThat(indexSql)
         .contains("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_sender_nonce");
     assertThat(normalizeSql.indexOf("HAVING COUNT(*) > 1"))
         .isLessThan(normalizeSql.indexOf("SET from_address = LOWER(from_address)"));
+    assertThat(normalizeSql.indexOf("CREATE TEMP TABLE _mztk_v084_normalized_nonce_state"))
+        .isLessThan(normalizeSql.indexOf("DELETE FROM web3_nonce_state"));
+    assertThat(normalizeSql.indexOf("DELETE FROM web3_nonce_state"))
+        .isLessThan(normalizeSql.indexOf("INSERT INTO web3_nonce_state"));
+    assertThat(normalizeSql.indexOf("INSERT INTO web3_nonce_state"))
+        .isLessThan(normalizeSql.lastIndexOf("DROP TABLE _mztk_v084_normalized_nonce_state"));
   }
 
   @Test
