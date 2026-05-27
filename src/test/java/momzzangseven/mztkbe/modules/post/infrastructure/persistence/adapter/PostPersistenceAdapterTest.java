@@ -4,6 +4,8 @@ import static momzzangseven.mztkbe.modules.post.infrastructure.persistence.entit
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -12,6 +14,8 @@ import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +47,7 @@ class PostPersistenceAdapterTest {
   @Mock private PostJpaRepository postJpaRepository;
   @Mock private JPAQueryFactory queryFactory;
   @Mock private JPAQuery<PostEntity> jpaQuery;
+  @Mock private EntityManager entityManager;
 
   @InjectMocks private PostPersistenceAdapter postPersistenceAdapter;
 
@@ -91,19 +96,19 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("loadPost returns empty when missing (write-tx path: findByIdForUpdate)")
+  @DisplayName("loadPost returns empty when missing (no-lock path: findById)")
   void loadPostReturnsEmptyWhenMissing() {
-    // 단위 테스트 환경에서는 Spring 트랜잭션 컨텍스트가 없으므로
-    // isCurrentTransactionReadOnly() == false → findByIdForUpdate 경로 실행
-    when(postJpaRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+    when(postJpaRepository.findById(999L)).thenReturn(Optional.empty());
 
     Optional<Post> result = postPersistenceAdapter.loadPost(999L);
 
     assertThat(result).isEmpty();
+    verify(postJpaRepository).findById(999L);
+    verify(postJpaRepository, never()).findByIdForUpdate(anyLong());
   }
 
   @Test
-  @DisplayName("loadPost maps found entity with empty tags (write-tx path: findByIdForUpdate)")
+  @DisplayName("loadPost maps found entity with empty tags (no-lock path: findById)")
   void loadPostMapsFoundEntity() {
     PostEntity entity =
         PostEntity.builder()
@@ -116,9 +121,7 @@ class PostPersistenceAdapterTest {
             .status(PostStatus.OPEN)
             .build();
 
-    // 단위 테스트 환경에서는 Spring 트랜잭션 컨텍스트가 없으므로
-    // isCurrentTransactionReadOnly() == false → findByIdForUpdate 경로 실행
-    when(postJpaRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(entity));
+    when(postJpaRepository.findById(10L)).thenReturn(Optional.of(entity));
 
     Optional<Post> result = postPersistenceAdapter.loadPost(10L);
 
@@ -126,6 +129,8 @@ class PostPersistenceAdapterTest {
     assertThat(result.orElseThrow().getId()).isEqualTo(10L);
     assertThat(result.orElseThrow().getType()).isEqualTo(PostType.QUESTION);
     assertThat(result.orElseThrow().getTags()).isEmpty();
+    verify(postJpaRepository).findById(10L);
+    verify(postJpaRepository, never()).findByIdForUpdate(anyLong());
   }
 
   @Test
@@ -142,7 +147,7 @@ class PostPersistenceAdapterTest {
             .status(PostStatus.RESOLVED)
             .build();
 
-    when(postJpaRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(entity));
+    when(postJpaRepository.findById(11L)).thenReturn(Optional.of(entity));
 
     assertThatThrownBy(() -> postPersistenceAdapter.loadPost(11L))
         .isInstanceOf(IllegalArgumentException.class)
@@ -150,7 +155,19 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("loadPostForUpdate delegates to repository lock query")
+  @DisplayName("loadPost never acquires PESSIMISTIC_WRITE — MOM-459 regression guard")
+  void loadPostNeverAcquiresLock() {
+    when(postJpaRepository.findById(any())).thenReturn(Optional.empty());
+
+    postPersistenceAdapter.loadPost(42L);
+
+    verify(postJpaRepository).findById(42L);
+    verify(postJpaRepository, never()).findByIdForUpdate(anyLong());
+  }
+
+  @Test
+  @DisplayName(
+      "loadPostForUpdate delegates to repository lock query and forces refresh against L1 cache")
   void loadPostForUpdateDelegates() {
     PostEntity entity =
         PostEntity.builder()
@@ -169,6 +186,9 @@ class PostPersistenceAdapterTest {
 
     assertThat(result).isPresent();
     verify(postJpaRepository).findByIdForUpdate(15L);
+    // MOM-459: forcing a refresh after the locked find is the bug-fix invariant. Removing it
+    // means Hibernate returns a cached Phase 1 instance and the lost-update guard is a no-op.
+    verify(entityManager).refresh(entity, LockModeType.PESSIMISTIC_WRITE);
   }
 
   @Test

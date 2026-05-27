@@ -14,31 +14,33 @@ class WalletRegistrationStatusResultTest {
   private static final String INTENT_ID = "intent-1";
 
   @Test
-  void from_whenPendingOnchainTransactionUnconfirmedAndTtlValid_exposesRetryApproval() {
+  void from_whenPendingOnchainTransactionUnconfirmed_keepsPendingUntilSessionIsMarkedBlocked() {
     WalletRegistrationStatusResult result =
         WalletRegistrationStatusResult.from(
             pendingOnchainSession(NOW.plusMinutes(30)),
             state("PENDING_ONCHAIN", "UNCONFIRMED", 10L),
             NOW);
 
-    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_RETRYABLE);
-    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.RETRY_APPROVAL);
-    assertThat(result.lastErrorCode()).isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
-    assertThat(result.lastErrorReason()).isEqualTo(WalletRegistrationReceiptTimeout.ERROR_REASON);
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN);
+    assertThat(result.nextAction())
+        .isEqualTo(WalletRegistrationNextAction.WAIT_FOR_APPROVAL_TRANSACTION);
+    assertThat(result.lastErrorCode()).isNull();
+    assertThat(result.lastErrorReason()).isNull();
     assertThat(result.transaction().transactionStatus()).isEqualTo("UNCONFIRMED");
   }
 
   @Test
-  void from_whenPendingOnchainTransactionUnconfirmedAndTtlElapsed_exposesFailedNone() {
+  void from_whenPendingOnchainTransactionUnconfirmedAndTtlElapsed_keepsPendingOnchain() {
     WalletRegistrationStatusResult result =
         WalletRegistrationStatusResult.from(
             pendingOnchainSession(NOW.minusSeconds(1)),
             state("PENDING_ONCHAIN", "UNCONFIRMED", 10L),
             NOW);
 
-    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_FAILED);
-    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.NONE);
-    assertThat(result.lastErrorCode()).isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN);
+    assertThat(result.nextAction())
+        .isEqualTo(WalletRegistrationNextAction.WAIT_FOR_APPROVAL_TRANSACTION);
+    assertThat(result.lastErrorCode()).isNull();
   }
 
   @Test

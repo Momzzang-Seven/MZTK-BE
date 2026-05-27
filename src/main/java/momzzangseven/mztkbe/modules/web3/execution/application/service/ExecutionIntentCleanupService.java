@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentCleanupProtectionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
@@ -32,6 +33,7 @@ public class ExecutionIntentCleanupService {
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final ExecutionIntentCleanupProtectionPort executionIntentCleanupProtectionPort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
+  private final ExecutionTransactionGatewayPort executionTransactionGatewayPort;
   private final LoadExecutionCleanupPolicyPort loadExecutionCleanupPolicyPort;
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
@@ -90,6 +92,11 @@ public class ExecutionIntentCleanupService {
       if (!intent.getStatus().isSignable()) {
         continue;
       }
+      ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+          executionTransactionGatewayPort,
+          intent.getSubmittedTxId(),
+          ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
+          expiredNow);
       releaseReservedSponsorExposure(intent);
       ExecutionIntent expired =
           intent.expire(

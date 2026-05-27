@@ -11,11 +11,13 @@ import momzzangseven.mztkbe.modules.account.application.port.out.DeleteUserAccou
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadManagedUserAccountStatusesPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
+import momzzangseven.mztkbe.modules.account.domain.event.UserAccountInvalidatedEvent;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.repository.UserAccountJpaRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,7 @@ public class UserAccountPersistenceAdapter
         LoadManagedUserAccountStatusesPort {
 
   private final UserAccountJpaRepository userAccountJpaRepository;
+  private final ApplicationEventPublisher eventPublisher;
 
   // ========== LoadUserAccountPort ==========
 
@@ -124,6 +127,7 @@ public class UserAccountPersistenceAdapter
 
     UserAccountEntity saved = userAccountJpaRepository.save(entity);
     log.debug("Account saved with id: {}", saved.getId());
+    eventPublisher.publishEvent(new UserAccountInvalidatedEvent(saved.getUserId()));
     return toDomain(saved);
   }
 
@@ -134,6 +138,7 @@ public class UserAccountPersistenceAdapter
   public void deleteByUserId(Long userId) {
     log.debug("Hard-deleting account for userId: {}", userId);
     userAccountJpaRepository.deleteByUserId(userId);
+    eventPublisher.publishEvent(new UserAccountInvalidatedEvent(userId));
   }
 
   @Override
@@ -141,6 +146,9 @@ public class UserAccountPersistenceAdapter
   public void deleteByUserIdIn(List<Long> userIds) {
     log.debug("Hard-deleting accounts for {} users", userIds.size());
     userAccountJpaRepository.deleteByUserIdIn(userIds);
+    for (Long userId : userIds) {
+      eventPublisher.publishEvent(new UserAccountInvalidatedEvent(userId));
+    }
   }
 
   @Override

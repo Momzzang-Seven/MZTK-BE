@@ -100,12 +100,41 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
   private UpdatePreparation prepareLocalUpdate(
       Long currentUserId, Long postId, UpdatePostCommand command) {
-    Post post = loadPostOrThrow(postId);
+    // Phase 1 — lock-free fail-fast against the current snapshot. The active-answer
+    // pre-count rejects the common "edit on already-answered question" case without
+    // ever acquiring the row lock. It is NOT trusted for the actual merge decision
+    // (a concurrent answer insert can race past us here — answers table is not gated
+    // by the posts row lock); Phase 2 re-counts under the lock for that.
+    //
+    // Trade-off acknowledgement (MOM-459): the publication-state fail-fast at L1 can produce a
+    // transient false-negative if a reconciler commits PENDING→VISIBLE *after* this read. The
+    // window is bounded by reconciler cadence and the client retry succeeds on the next attempt;
+    // we preserve the fail-fast to keep BLOCKED/PENDING/FAILED rejections off the locking path.
+    Post snapshot = loadPostOrThrow(postId);
+    snapshot.validateOwnership(currentUserId);
+    postVisibilityPolicy.validateOwnerMutationAllowed(snapshot);
+    validateQuestionUpdatePublicationAllowed(snapshot);
+    snapshot.validateEditable(countActiveAnswers(snapshot));
+    validatePostImagesIfPresent(currentUserId, postId, snapshot.getType(), command.imageIds());
+
+    // Phase 2 — acquire the posts row lock and re-validate every concurrent-mutable
+    // invariant from inside the lock window before merging. JPA save() rewrites every
+    // mapped column from the in-memory Post, so the source must be the freshly locked
+    // row — otherwise an admin/sync mutation committed between Phase 1 and Phase 2
+    // would be silently reverted (MOM-459 lost-update guard).
+    //
+    // The lock alone is necessary but not sufficient — Hibernate's JPQL find returns the cached
+    // Phase 1 entity when one is in the persistence context, so loadPostForUpdate's adapter must
+    // also force a refresh from DB. We re-count answers here too: that only narrows the window
+    // between Phase 2's recount and savePost (answers table is not gated by the posts row lock),
+    // it does not eliminate it. A truly atomic answer-vs-edit guard would require either a
+    // posts.@Version optimistic check or a coarser lock on the answers table.
+    Post post =
+        postPersistencePort.loadPostForUpdate(postId).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     validateQuestionUpdatePublicationAllowed(post);
     long activeAnswerCount = countActiveAnswers(post);
-    validatePostImagesIfPresent(currentUserId, postId, post.getType(), command.imageIds());
 
     boolean contentChanged =
         command.content() != null && !command.content().equals(post.getContent());
@@ -128,6 +157,9 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     }
 
     // Delegate image sync to the output port; run only when imageIds is explicitly provided.
+    // Phase 1 validates images using snapshot.getType() and this delegate uses post.getType();
+    // we rely on PostType being row-immutable to keep the two references in sync. If PostType
+    // ever becomes mutable, both sites must consult the same source-of-truth.
     if (command.imageIds() != null) {
       updatePostImagesPort.updateImages(currentUserId, postId, post.getType(), command.imageIds());
     }
@@ -199,7 +231,19 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   }
 
   private DeletePreparation prepareLocalDelete(Long currentUserId, Long postId) {
-    Post post = loadPostOrThrow(postId);
+    // Lock-and-act — every validate below (validateDeletable, isFailedQuestion,
+    // validateQuestionDeletePublicationAllowed, validateOwnerMutationAllowed) is mutable by
+    // concurrent accept-answer / moderation-block / admin-refund / question-update flows that
+    // already acquire loadPostForUpdate. A stale snapshot would silently swallow those mutations
+    // once the SQL DELETE (free / failed-question branches) or the on-chain prepareQuestionDelete
+    // (normal QUESTION branch) runs (MOM-459 delete-path lost-update guard — develop's auto-lock
+    // covered this; this PR's lock-free loadPost would have regressed it).
+    //
+    // Unlike updatePost, delete is not on a hot path, so we skip the Phase 1 lock-free
+    // fail-fast and just lock-and-act. The TX-between race (TX 1 commit -> on-chain prepare ->
+    // TX 2 start) is still open and handled in the follow-up ticket.
+    Post post =
+        postPersistencePort.loadPostForUpdate(postId).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     validateQuestionDeletePublicationAllowed(post, currentUserId);
@@ -222,7 +266,10 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   }
 
   private void deletePostLocally(Long currentUserId, Long postId) {
-    Post post = loadPostOrThrow(postId);
+    // Same lock-and-act rationale as prepareLocalDelete — TX 2 must re-validate every
+    // concurrent-mutable invariant from inside the lock window before issuing DELETE.
+    Post post =
+        postPersistencePort.loadPostForUpdate(postId).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     validateQuestionDeletePublicationAllowed(post, currentUserId);
@@ -298,6 +345,11 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     validatePostImagesPort.validateAttachableImages(userId, postId, postType, imageIds);
   }
 
+  // The null fallback is a *testability* accommodation: @InjectMocks unit tests run without a
+  // Spring container and therefore never call setTransactionManager. In production, Spring always
+  // invokes the @Autowired setter, so the fallback is dead code. If you refactor the setter or
+  // the @Autowired wiring, you must either keep the field non-null or convert this class (and
+  // the other services using this pattern) to constructor injection — see MOM-459 follow-up.
   private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
     if (transactionOperations == null) {
       return supplier.get();

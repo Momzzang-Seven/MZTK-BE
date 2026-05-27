@@ -22,6 +22,7 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
                     "101",
                     1L,
                     2L,
+                    11155111L,
                     "0x" + "a".repeat(40),
                     "0x" + "b".repeat(40),
                     BigInteger.ZERO,
@@ -83,6 +84,20 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
   }
 
   @Test
+  void constructor_rejectsNullChainId() {
+    assertThatThrownBy(() -> itemWithChainId(null))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("chainId must be positive");
+  }
+
+  @Test
+  void constructor_rejectsNonPositiveChainId() {
+    assertThatThrownBy(() -> itemWithChainId(0L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("chainId must be positive");
+  }
+
+  @Test
   void constructor_rejectsNullFromAddress() {
     assertThatThrownBy(
             () ->
@@ -93,6 +108,7 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
                     "101",
                     1L,
                     2L,
+                    11155111L,
                     null,
                     "0x" + "b".repeat(40),
                     BigInteger.ONE,
@@ -116,6 +132,7 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
                     "101",
                     1L,
                     2L,
+                    11155111L,
                     " ",
                     "0x" + "b".repeat(40),
                     BigInteger.ONE,
@@ -139,6 +156,7 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
                     "101",
                     1L,
                     2L,
+                    11155111L,
                     "0x" + "a".repeat(40),
                     null,
                     BigInteger.ONE,
@@ -162,6 +180,7 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
                     "101",
                     1L,
                     2L,
+                    11155111L,
                     "0x" + "a".repeat(40),
                     " ",
                     BigInteger.ONE,
@@ -185,6 +204,7 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
                     "101",
                     1L,
                     2L,
+                    11155111L,
                     "0x" + "a".repeat(40),
                     "0x" + "b".repeat(40),
                     null,
@@ -208,6 +228,7 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
                     "101",
                     1L,
                     2L,
+                    11155111L,
                     "0x" + "a".repeat(40),
                     "0x" + "b".repeat(40),
                     BigInteger.valueOf(-1),
@@ -231,6 +252,7 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
                     "101",
                     1L,
                     2L,
+                    11155111L,
                     "0x" + "a".repeat(40),
                     "0x" + "b".repeat(40),
                     BigInteger.ONE,
@@ -255,6 +277,26 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
         referenceId,
         1L,
         2L,
+        11155111L,
+        "0x" + "a".repeat(40),
+        "0x" + "b".repeat(40),
+        BigInteger.ONE,
+        0L,
+        "0x" + "c".repeat(64),
+        "0xdeadbeef",
+        null,
+        LocalDateTime.now());
+  }
+
+  private LoadTransactionWorkPort.TransactionWorkItem itemWithChainId(Long chainId) {
+    return new LoadTransactionWorkPort.TransactionWorkItem(
+        1L,
+        "idem-1",
+        Web3ReferenceType.LEVEL_UP_REWARD,
+        "101",
+        1L,
+        2L,
+        chainId,
         "0x" + "a".repeat(40),
         "0x" + "b".repeat(40),
         BigInteger.ONE,

@@ -4,12 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.ManageExecutionTransactionUseCase;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadPendingNoncePort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.TransferTransactionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorChainNoncePort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -25,9 +25,10 @@ class ExecutionTransactionServiceConfigTest {
               () -> mock(TransferTransactionPersistencePort.class))
           .withBean(UpdateTransactionPort.class, () -> mock(UpdateTransactionPort.class))
           .withBean(RecordTransactionAuditPort.class, () -> mock(RecordTransactionAuditPort.class))
-          .withBean(ReserveNoncePort.class, () -> mock(ReserveNoncePort.class))
-          .withBean(LoadPendingNoncePort.class, () -> mock(LoadPendingNoncePort.class))
-          .withBean(Web3ContractPort.class, () -> mock(Web3ContractPort.class));
+          .withBean(Web3ContractPort.class, () -> mock(Web3ContractPort.class))
+          .withBean(LoadSponsorChainNoncePort.class, () -> mock(LoadSponsorChainNoncePort.class))
+          .withBean(
+              CoordinateSponsorNonceUseCase.class, () -> mock(CoordinateSponsorNonceUseCase.class));
 
   @Test
   @DisplayName("any execution enabled면 execution transaction use case bean을 등록한다")

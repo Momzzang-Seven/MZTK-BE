@@ -17,6 +17,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class GetExecutionSponsorWalletAddressServiceTest {
 
+  private static final String MIXED_CASE_SPONSOR_ADDRESS =
+      "0xABCDEFabcdefABCDEFabcdefABCDEFabcdefABCD";
+  private static final String NORMALIZED_SPONSOR_ADDRESS =
+      "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+
   @Mock private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
 
   private GetExecutionSponsorWalletAddressService service;
@@ -29,11 +34,10 @@ class GetExecutionSponsorWalletAddressServiceTest {
   @Test
   void getSponsorAddress_returnsAddress_whenWalletPresent() {
     TreasuryWalletInfo walletInfo =
-        new TreasuryWalletInfo(
-            "sponsor-alias", "kms-key-id", "0xd799CD2B5258eDC2157beC7E2CD069f31f2678c2", true);
+        new TreasuryWalletInfo("sponsor-alias", "kms-key-id", MIXED_CASE_SPONSOR_ADDRESS, true);
     when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo));
 
-    assertThat(service.execute()).isEqualTo("0xd799cd2b5258edc2157bec7e2cd069f31f2678c2");
+    assertThat(service.execute()).isEqualTo(NORMALIZED_SPONSOR_ADDRESS);
   }
 
   @Test
@@ -60,10 +64,9 @@ class GetExecutionSponsorWalletAddressServiceTest {
     // [M-122] SRP — 본 service 는 단순 lookup. active 검증은 SponsorWalletPreflight 의 책임이며,
     // 이 service 는 admin console 등 비-서명 경로를 위해 inactive 라도 address 를 반환해야 한다.
     TreasuryWalletInfo inactive =
-        new TreasuryWalletInfo(
-            "sponsor-alias", "kms-key-id", "0xd799CD2B5258eDC2157beC7E2CD069f31f2678c2", false);
+        new TreasuryWalletInfo("sponsor-alias", "kms-key-id", MIXED_CASE_SPONSOR_ADDRESS, false);
     when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.of(inactive));
 
-    assertThat(service.execute()).isEqualTo("0xd799cd2b5258edc2157bec7e2cd069f31f2678c2");
+    assertThat(service.execute()).isEqualTo(NORMALIZED_SPONSOR_ADDRESS);
   }
 }

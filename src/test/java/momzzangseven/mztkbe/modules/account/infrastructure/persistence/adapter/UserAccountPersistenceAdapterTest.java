@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.account.domain.event.UserAccountInvalidatedEvent;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,12 +31,13 @@ import org.springframework.data.domain.PageRequest;
 class UserAccountPersistenceAdapterTest {
 
   @Mock private UserAccountJpaRepository userAccountJpaRepository;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   private UserAccountPersistenceAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new UserAccountPersistenceAdapter(userAccountJpaRepository);
+    adapter = new UserAccountPersistenceAdapter(userAccountJpaRepository, eventPublisher);
   }
 
   // ============================================================
@@ -308,6 +311,45 @@ class UserAccountPersistenceAdapterTest {
       adapter.deleteByUserIdIn(ids);
 
       verify(userAccountJpaRepository).deleteByUserIdIn(ids);
+    }
+  }
+
+  // ============================================================
+  // Cache invalidation event publication
+  // ============================================================
+
+  @Nested
+  @DisplayName("cache invalidation events")
+  class CacheInvalidationEvents {
+
+    @Test
+    @DisplayName("save publishes UserAccountInvalidatedEvent with saved userId")
+    void savePublishesEvent() {
+      UserAccount newAccount = UserAccount.createLocal(10L, "$2a$hash");
+      UserAccountEntity saved = activeLocalEntity(100L, 10L);
+      when(userAccountJpaRepository.save(any())).thenReturn(saved);
+
+      adapter.save(newAccount);
+
+      verify(eventPublisher).publishEvent(new UserAccountInvalidatedEvent(10L));
+    }
+
+    @Test
+    @DisplayName("deleteByUserId publishes UserAccountInvalidatedEvent")
+    void deleteByUserIdPublishesEvent() {
+      adapter.deleteByUserId(7L);
+
+      verify(eventPublisher).publishEvent(new UserAccountInvalidatedEvent(7L));
+    }
+
+    @Test
+    @DisplayName("deleteByUserIdIn publishes one event per userId")
+    void deleteByUserIdInPublishesEventPerId() {
+      adapter.deleteByUserIdIn(List.of(1L, 2L, 3L));
+
+      verify(eventPublisher).publishEvent(new UserAccountInvalidatedEvent(1L));
+      verify(eventPublisher).publishEvent(new UserAccountInvalidatedEvent(2L));
+      verify(eventPublisher).publishEvent(new UserAccountInvalidatedEvent(3L));
     }
   }
 

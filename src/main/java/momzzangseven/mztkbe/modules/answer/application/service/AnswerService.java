@@ -427,7 +427,12 @@ public class AnswerService
     if (answerUpdateStatePort.hasBlockingUpdate(answer.getId())) {
       throw new AnswerPublicationStateException(ErrorCode.ANSWER_UPDATE_ONCHAIN_IN_PROGRESS);
     }
-    LoadPostPort.PostContext post = loadPost(answer.getPostId());
+    // Lock-and-act: see loadPostForUpdate Javadoc. We must observe the post under a row lock
+    // because (a) validatePostWritable / answerLocked are mutable by concurrent moderate-block /
+    // accept-answer flows, and (b) post.content / post.reward feed the escrow payload hash a few
+    // lines below — a stale snapshot would let an on-chain prepare run with content/reward that no
+    // longer match the off-chain row, producing payload divergence.
+    LoadPostPort.PostContext post = loadPostForUpdate(answer.getPostId());
     validatePostWritable(post);
     // Only content changes affect the escrow payload hash. Image-only updates stay local and
     // therefore return web3 = null.
@@ -551,7 +556,10 @@ public class AnswerService
     if (answerUpdateStatePort.hasBlockingUpdate(answer.getId())) {
       throw new AnswerPublicationStateException(ErrorCode.ANSWER_UPDATE_ONCHAIN_IN_PROGRESS);
     }
-    LoadPostPort.PostContext post = loadPost(answer.getPostId());
+    // Lock-and-act: same rationale as prepareLocalUpdate. The answer delete payload still hashes
+    // post.content / post.reward when escrow-delete is required, and validatePostWritable must
+    // observe a fresh (post-mutation-committed) snapshot.
+    LoadPostPort.PostContext post = loadPostForUpdate(answer.getPostId());
     validatePostWritable(post);
 
     answer.validateDeletable(command.userId(), post.answerLocked());
@@ -619,6 +627,21 @@ public class AnswerService
 
   private LoadPostPort.PostContext loadPost(Long postId) {
     return loadPostPort.loadPost(postId).orElseThrow(AnswerPostNotFoundException::new);
+  }
+
+  /**
+   * Loads the post under a pessimistic row lock for use inside answer write-path TX 1
+   * (prepareLocalUpdate / prepareLocalDelete). Lock-and-act: every {@code validatePostWritable} /
+   * {@code answerLocked} / payload-input field (post.content, post.reward, post.writerId) read here
+   * must reflect a snapshot the concurrent post-mutators ({@code PostProcessService.updatePost
+   * Phase 2}, {@code ModeratePostService.block}, {@code AcceptAnswerService}, {@code
+   * PostProcessService.deletePost}) cannot slip past — they all acquire {@code loadPostForUpdate},
+   * so this caller queues behind them and observes their committed state (MOM-459 answer write-path
+   * lost-update guard — develop's auto-PESSIMISTIC_WRITE covered this; the lock-removal commit on
+   * this PR would have regressed it).
+   */
+  private LoadPostPort.PostContext loadPostForUpdate(Long postId) {
+    return loadPostPort.loadPostForUpdate(postId).orElseThrow(AnswerPostNotFoundException::new);
   }
 
   private Answer loadAnswer(Long answerId) {

@@ -74,6 +74,9 @@ public class Web3TransactionEntity {
   @Column(name = "nonce")
   private Long nonce;
 
+  @Column(name = "chain_id", nullable = false)
+  private Long chainId;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "tx_type", nullable = false, length = 20)
   private Web3TxType txType;
@@ -132,6 +135,9 @@ public class Web3TransactionEntity {
     }
     if (txType == null) {
       txType = Web3TxType.EIP1559;
+    }
+    if (chainId == null) {
+      throw new IllegalStateException("chainId is required");
     }
     if (createdAt == null) {
       createdAt = now;

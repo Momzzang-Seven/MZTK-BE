@@ -185,6 +185,9 @@ web3:
     main: ${WEB3_RPC_MAIN}
     sub: ${WEB3_RPC_SUB}
 
+  sponsor-nonce:
+    open-window-size: ${WEB3_SPONSOR_NONCE_OPEN_WINDOW_SIZE}
+
   explorer:
     base-url: ${WEB3_EXPLORER_BASE_URL}
     api-url: ${WEB3_EXPLORER_API_URL}
@@ -375,7 +378,7 @@ marketplace:
 
 location:
   verification:
-    radius-meters: 5.0 # Location verification radius; 5m
+    radius-meters: 10.0 # Location verification radius; 10m
 
 cloud:
   aws:

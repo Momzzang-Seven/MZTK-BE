@@ -21,6 +21,7 @@ public interface LoadTransactionWorkPort {
       String referenceId,
       Long fromUserId,
       Long toUserId,
+      Long chainId,
       String fromAddress,
       String toAddress,
       BigInteger amountWei,
@@ -36,6 +37,7 @@ public interface LoadTransactionWorkPort {
           idempotencyKey,
           referenceType,
           referenceId,
+          chainId,
           fromAddress,
           toAddress,
           amountWei,
@@ -47,6 +49,7 @@ public interface LoadTransactionWorkPort {
         String idempotencyKey,
         Web3ReferenceType referenceType,
         String referenceId,
+        Long chainId,
         String fromAddress,
         String toAddress,
         BigInteger amountWei,
@@ -62,6 +65,9 @@ public interface LoadTransactionWorkPort {
       }
       if (referenceId == null || referenceId.isBlank()) {
         throw new Web3InvalidInputException("referenceId is required");
+      }
+      if (chainId == null || chainId <= 0) {
+        throw new Web3InvalidInputException("chainId must be positive");
       }
       if (fromAddress == null || fromAddress.isBlank()) {
         throw new Web3InvalidInputException("fromAddress is required");

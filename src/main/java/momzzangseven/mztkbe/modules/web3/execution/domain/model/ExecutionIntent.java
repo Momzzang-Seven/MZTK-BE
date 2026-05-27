@@ -184,6 +184,24 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Binds a created transaction while sponsor signing is still pending. */
+  public ExecutionIntent bindSubmittedTransaction(Long nextSubmittedTxId, LocalDateTime now) {
+    requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    requireSubmittedTxId(nextSubmittedTxId);
+    requireNow(now);
+    return toBuilder().submittedTxId(nextSubmittedTxId).updatedAt(now).build();
+  }
+
+  /** Binds a created transaction and the nonce-fixed EIP-1559 snapshot before signing. */
+  public ExecutionIntent bindSubmittedTransactionAndUnsignedSnapshot(
+      Long nextSubmittedTxId,
+      UnsignedTxSnapshot nextUnsignedTxSnapshot,
+      String nextUnsignedTxFingerprint,
+      LocalDateTime now) {
+    return rebindUnsignedTxSnapshot(nextUnsignedTxSnapshot, nextUnsignedTxFingerprint)
+        .bindSubmittedTransaction(nextSubmittedTxId, now);
+  }
+
   /** Rebinds the stored EIP-1559 snapshot when the nonce is fixed at execution time. */
   public ExecutionIntent rebindUnsignedTxSnapshot(
       UnsignedTxSnapshot nextUnsignedTxSnapshot, String nextUnsignedTxFingerprint) {
@@ -263,9 +281,12 @@ public class ExecutionIntent {
         .build();
   }
 
-  /** Marks signable intent as nonce stale to force new attempt generation. */
+  /** Marks signable or signed intent as nonce stale to force new attempt generation. */
   public ExecutionIntent markNonceStale(String errorCode, String errorReason, LocalDateTime now) {
-    requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    if (status != ExecutionIntentStatus.AWAITING_SIGNATURE
+        && status != ExecutionIntentStatus.SIGNED) {
+      throw new IllegalStateException("intent cannot move to NONCE_STALE from " + status);
+    }
     requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.NONCE_STALE)

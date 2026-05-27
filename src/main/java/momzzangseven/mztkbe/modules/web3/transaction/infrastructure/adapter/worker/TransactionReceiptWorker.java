@@ -6,10 +6,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -25,19 +25,20 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Trans
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-@Slf4j
-@Component
-@ConditionalOnAnyExecutionEnabled
 /**
  * Worker that polls on-chain receipts for pending transactions.
  *
  * <p>It maps receipt outcomes to transaction status transitions and publishes execution intent
  * outcome events through {@link TransactionOutcomePublisher}.
  */
+@Component
+@ConditionalOnAnyExecutionEnabled
 public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
   private final TransactionOutcomePublisher transactionOutcomePublisher;
+  private final PersistSponsorNonceTransactionStateUseCase
+      persistSponsorNonceTransactionStateUseCase;
   private final Clock appClock;
 
   private final String workerId = "receipt-" + UUID.randomUUID().toString().substring(0, 8);
@@ -48,6 +49,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       RecordTransactionAuditPort recordTransactionAuditPort,
       Web3ContractPort web3ContractPort,
       TransactionOutcomePublisher transactionOutcomePublisher,
+      PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
       Clock appClock) {
@@ -59,10 +61,11 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
         retryStrategy);
     this.web3ContractPort = web3ContractPort;
     this.transactionOutcomePublisher = transactionOutcomePublisher;
+    this.persistSponsorNonceTransactionStateUseCase = persistSponsorNonceTransactionStateUseCase;
     this.appClock = appClock;
   }
 
-  @Scheduled(fixedDelay = 1000L)
+  @Scheduled(fixedDelayString = "${web3.transaction.receipt.fixed-delay:1000}")
   public void run() {
     processBatch(20);
   }
@@ -83,11 +86,8 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
   private void processItem(LoadTransactionWorkPort.TransactionWorkItem item) {
     String txHash = item.txHash();
     if (txHash == null || txHash.isBlank()) {
-      updateTransactionPort.updateStatus(
-          item.transactionId(),
-          Web3TxStatus.UNCONFIRMED,
-          txHash,
-          Web3TxFailureReason.RECEIPT_TIMEOUT.code());
+      String timeoutReason = Web3TxFailureReason.RECEIPT_TIMEOUT.code() + "_MISSING_TX_HASH";
+      markUnconfirmed(item, txHash, timeoutReason);
       auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
       return;
     }
@@ -95,7 +95,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     int timeoutSeconds = rewardTokenProperties.getWorker().getReceiptTimeoutSeconds();
     long elapsedSeconds = elapsedSeconds(item);
     if (timeoutSeconds <= 0 || elapsedSeconds >= timeoutSeconds) {
-      timeout(item.transactionId(), txHash, timeoutSeconds);
+      timeout(item, txHash, timeoutSeconds);
       return;
     }
 
@@ -104,17 +104,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
     if (receipt.found()) {
       if (Boolean.TRUE.equals(receipt.success())) {
-        transactionOutcomePublisher.markSucceededAndPublish(
-            item.transactionId(),
-            item.idempotencyKey(),
-            item.referenceType(),
-            item.referenceId(),
-            item.fromUserId(),
-            item.toUserId(),
-            txHash);
-        auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
-      } else {
-        transactionOutcomePublisher.markFailedOnchainAndPublish(
+        transactionOutcomePublisher.markSucceededWithNonceSlotAndPublish(
             item.transactionId(),
             item.idempotencyKey(),
             item.referenceType(),
@@ -122,7 +112,19 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
             item.fromUserId(),
             item.toUserId(),
             txHash,
-            "RECEIPT_STATUS_0");
+            nonceReceiptCommand(item, "RECEIPT_STATUS_1"));
+        auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
+      } else {
+        transactionOutcomePublisher.markFailedOnchainWithNonceSlotAndPublish(
+            item.transactionId(),
+            item.idempotencyKey(),
+            item.referenceType(),
+            item.referenceId(),
+            item.fromUserId(),
+            item.toUserId(),
+            txHash,
+            "RECEIPT_STATUS_0",
+            nonceReceiptCommand(item, "RECEIPT_STATUS_0"));
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.FAILED_ONCHAIN);
       }
       return;
@@ -157,11 +159,37 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     return Math.max(0, Duration.between(baseline, LocalDateTime.now(appClock)).getSeconds());
   }
 
-  private void timeout(Long transactionId, String txHash, int timeoutSeconds) {
+  private void timeout(
+      LoadTransactionWorkPort.TransactionWorkItem item, String txHash, int timeoutSeconds) {
     String timeoutReason = Web3TxFailureReason.RECEIPT_TIMEOUT.code() + "_" + timeoutSeconds + "S";
-    updateTransactionPort.updateStatus(
-        transactionId, Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
-    auditStateChange(transactionId, Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
+    markUnconfirmed(item, txHash, timeoutReason);
+    auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
+  }
+
+  private void markUnconfirmed(
+      LoadTransactionWorkPort.TransactionWorkItem item, String txHash, String timeoutReason) {
+    persistSponsorNonceTransactionStateUseCase.markUnconfirmed(
+        new PersistSponsorNonceTransactionStateUseCase.SponsorNonceUnconfirmedCommand(
+            item.transactionId(),
+            item.chainId(),
+            item.fromAddress(),
+            item.nonce(),
+            txHash,
+            timeoutReason,
+            LocalDateTime.now(appClock)));
+  }
+
+  private TransactionOutcomePublisher.SponsorNonceReceiptCommand nonceReceiptCommand(
+      LoadTransactionWorkPort.TransactionWorkItem item, String consumedReason) {
+    if (item.nonce() == null) {
+      return null;
+    }
+    return new TransactionOutcomePublisher.SponsorNonceReceiptCommand(
+        item.chainId(),
+        item.fromAddress(),
+        item.nonce(),
+        consumedReason,
+        LocalDateTime.now(appClock));
   }
 
   private void auditReceiptPoll(
@@ -192,5 +220,16 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
   @Override
   protected List<Class<? extends Throwable>> nonRetryableExceptions() {
     return List.of(Web3InvalidInputException.class, Web3TransactionStateInvalidException.class);
+  }
+
+  @Override
+  protected String permanentFailureReason(Throwable throwable, String defaultFailureReason) {
+    if (throwable instanceof Web3TransactionStateInvalidException) {
+      return Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code();
+    }
+    if (throwable instanceof Web3InvalidInputException) {
+      return Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code();
+    }
+    return super.permanentFailureReason(throwable, defaultFailureReason);
   }
 }

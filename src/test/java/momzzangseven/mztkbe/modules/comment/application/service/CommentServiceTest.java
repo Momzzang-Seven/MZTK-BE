@@ -109,6 +109,36 @@ class CommentServiceTest {
   }
 
   @Test
+  @DisplayName(
+      "createComment() on a FREE post invokes the lock-free LoadPostPort.loadPostVisibilityContext"
+          + " only — MOM-459 contract")
+  void createComment_freePost_usesLockFreeVisibilityLookupOnly() {
+    CreateCommentCommand command = new CreateCommentCommand(100L, 200L, null, "hello");
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+    given(saveCommentPort.saveComment(any(Comment.class)))
+        .willAnswer(
+            invocation -> {
+              Comment input = invocation.getArgument(0);
+              return Comment.builder()
+                  .id(11L)
+                  .postId(input.getPostId())
+                  .writerId(input.getWriterId())
+                  .parentId(input.getParentId())
+                  .content(input.getContent())
+                  .isDeleted(input.isDeleted())
+                  .createdAt(input.getCreatedAt())
+                  .updatedAt(input.getUpdatedAt())
+                  .build();
+            });
+
+    commentService.createComment(command);
+
+    verify(loadPostPort).loadPostVisibilityContext(100L);
+    verifyNoInteractions(loadAnswerPort);
+  }
+
+  @Test
   @DisplayName("createComment() creates answer comment using answerId target")
   void createComment_answerTarget_createsCommentWithAnswerId() {
     CreateCommentCommand command =
