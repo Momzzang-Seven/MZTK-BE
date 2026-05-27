@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.port.in;
 
 import java.util.List;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ListTreasuryWalletsQuery;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 
 /**
  * Cross-module entry point for the admin "list every treasury wallet" view.
@@ -16,9 +16,9 @@ import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus
 public interface ListTreasuryWalletsUseCase {
 
   /**
-   * @param statusFilter when {@code null}, every wallet is returned; otherwise only wallets in the
-   *     given lifecycle state
+   * @param query carries the optional lifecycle status filter already parsed from the raw HTTP
+   *     query string by the api layer
    * @return wallets ordered by {@code createdAt} DESC (newest first); never {@code null}
    */
-  List<TreasuryWalletView> execute(TreasuryWalletStatus statusFilter);
+  List<TreasuryWalletView> execute(ListTreasuryWalletsQuery query);
 }

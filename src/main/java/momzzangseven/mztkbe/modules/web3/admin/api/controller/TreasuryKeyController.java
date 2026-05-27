@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.ListTreasuryWalletsRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyResponseDTO;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
@@ -17,16 +18,15 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTre
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ListTreasuryWalletsUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -61,8 +61,8 @@ public class TreasuryKeyController {
    */
   @GetMapping
   public ResponseEntity<ApiResponse<List<TreasuryWalletView>>> list(
-      @RequestParam(required = false) TreasuryWalletStatus status) {
-    List<TreasuryWalletView> views = listTreasuryWalletsUseCase.execute(status);
+      @ModelAttribute ListTreasuryWalletsRequestDTO request) {
+    List<TreasuryWalletView> views = listTreasuryWalletsUseCase.execute(request.toQuery());
     return ResponseEntity.ok(ApiResponse.success(views));
   }
 

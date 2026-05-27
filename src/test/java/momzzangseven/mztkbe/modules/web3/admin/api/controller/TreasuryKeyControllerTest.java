@@ -17,6 +17,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ListTreasuryWalletsQuery;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
@@ -160,7 +161,7 @@ class TreasuryKeyControllerTest {
   @DisplayName("GET /admin/web3/treasury-keys — ADMIN 성공: 전체 목록")
   void list_success_returnsAllViews() throws Exception {
     String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
-    given(listTreasuryWalletsUseCase.execute(null))
+    given(listTreasuryWalletsUseCase.execute(new ListTreasuryWalletsQuery(null)))
         .willReturn(
             List.of(
                 new TreasuryWalletView(
@@ -194,9 +195,11 @@ class TreasuryKeyControllerTest {
   }
 
   @Test
-  @DisplayName("GET /admin/web3/treasury-keys?status=ACTIVE — 필터를 UseCase에 그대로 전달")
-  void list_withStatusFilter_passesEnumToUseCase() throws Exception {
-    given(listTreasuryWalletsUseCase.execute(TreasuryWalletStatus.ACTIVE))
+  @DisplayName("GET /admin/web3/treasury-keys?status=ACTIVE — 필터를 Query 로 변환해 UseCase 에 전달")
+  void list_withStatusFilter_passesQueryToUseCase() throws Exception {
+    given(
+            listTreasuryWalletsUseCase.execute(
+                new ListTreasuryWalletsQuery(TreasuryWalletStatus.ACTIVE)))
         .willReturn(
             List.of(
                 new TreasuryWalletView(
@@ -217,7 +220,8 @@ class TreasuryKeyControllerTest {
   }
 
   @Test
-  @DisplayName("GET /admin/web3/treasury-keys?status=INVALID — 400 (enum 바인딩 실패)")
+  @DisplayName(
+      "GET /admin/web3/treasury-keys?status=INVALID — 400 (Query 파싱 시 IllegalArgumentException)")
   void list_invalidStatusEnum_returns400() throws Exception {
     mockMvc
         .perform(get("/admin/web3/treasury-keys?status=BOGUS").with(adminPrincipal(9L)))

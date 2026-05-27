@@ -3,10 +3,10 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ListTreasuryWalletsQuery;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ListTreasuryWalletsUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,8 +28,8 @@ public class ListTreasuryWalletsService implements ListTreasuryWalletsUseCase {
 
   @Override
   @Transactional(readOnly = true)
-  public List<TreasuryWalletView> execute(TreasuryWalletStatus statusFilter) {
-    return loadTreasuryWalletPort.loadAll(Optional.ofNullable(statusFilter)).stream()
+  public List<TreasuryWalletView> execute(ListTreasuryWalletsQuery query) {
+    return loadTreasuryWalletPort.loadAll(Optional.ofNullable(query.statusFilter())).stream()
         .map(TreasuryWalletView::from)
         .toList();
   }
