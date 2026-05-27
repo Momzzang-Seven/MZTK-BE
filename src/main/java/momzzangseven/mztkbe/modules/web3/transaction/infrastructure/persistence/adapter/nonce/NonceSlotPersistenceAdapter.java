@@ -11,6 +11,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.web3.SponsorNonceSlotTransitionConflictException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
@@ -211,7 +212,7 @@ public class NonceSlotPersistenceAdapter
   }
 
   @Override
-  @Transactional
+  @Transactional(noRollbackFor = SponsorNonceSlotTransitionConflictException.class)
   public SponsorNonceSlotView recordTransition(RecordSponsorNonceSlotTransitionCommand command) {
     String normalizedAddress = EvmAddress.of(command.getFromAddress()).value();
     NonceSlotEntity slot =
@@ -219,7 +220,7 @@ public class NonceSlotPersistenceAdapter
             .findByScopeForUpdate(command.getChainId(), normalizedAddress, command.getNonce())
             .orElseThrow(
                 () ->
-                    new Web3TransactionStateInvalidException(
+                    new SponsorNonceSlotTransitionConflictException(
                         "nonce slot not found: chainId="
                             + command.getChainId()
                             + ", fromAddress="
@@ -227,7 +228,7 @@ public class NonceSlotPersistenceAdapter
                             + ", nonce="
                             + command.getNonce()));
     if (slot.getStatus() != command.getFromStatus()) {
-      throw new Web3TransactionStateInvalidException(
+      throw new SponsorNonceSlotTransitionConflictException(
           "stale nonce slot transition: expected="
               + command.getFromStatus()
               + ", actual="
