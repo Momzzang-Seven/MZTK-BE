@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
@@ -14,7 +15,9 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableTreasur
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ListTreasuryWalletsUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -36,6 +40,7 @@ public class TreasuryKeyController {
 
   private final ProvisionTreasuryKeyUseCase provisionTreasuryKeyUseCase;
   private final LoadTreasuryWalletUseCase loadTreasuryWalletUseCase;
+  private final ListTreasuryWalletsUseCase listTreasuryWalletsUseCase;
   private final DisableTreasuryWalletUseCase disableTreasuryWalletUseCase;
   private final ArchiveTreasuryWalletUseCase archiveTreasuryWalletUseCase;
 
@@ -46,6 +51,19 @@ public class TreasuryKeyController {
     ProvisionTreasuryKeyResult result =
         provisionTreasuryKeyUseCase.execute(request.toCommand(requireOperatorId(operatorId)));
     return ResponseEntity.ok(ApiResponse.success(ProvisionTreasuryKeyResponseDTO.from(result)));
+  }
+
+  /**
+   * List every treasury wallet, optionally filtered by lifecycle status. No {@code @AdminOnly}
+   * audit on this path: it is a plain read that operators may hit repeatedly while inspecting the
+   * keyring, so one audit row per call would just dilute {@code admin_action_audits}. The mutating
+   * provision / disable / archive endpoints still record audit rows.
+   */
+  @GetMapping
+  public ResponseEntity<ApiResponse<List<TreasuryWalletView>>> list(
+      @RequestParam(required = false) TreasuryWalletStatus status) {
+    List<TreasuryWalletView> views = listTreasuryWalletsUseCase.execute(status);
+    return ResponseEntity.ok(ApiResponse.success(views));
   }
 
   @GetMapping("/{walletAlias}")
