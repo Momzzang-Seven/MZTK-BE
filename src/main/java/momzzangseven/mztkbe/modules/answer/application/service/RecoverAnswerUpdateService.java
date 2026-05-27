@@ -107,8 +107,15 @@ public class RecoverAnswerUpdateService implements RecoverAnswerUpdateUseCase {
                 () ->
                     new AnswerPublicationStateException(
                         ErrorCode.ANSWER_UPDATE_RECOVERY_UNAVAILABLE));
+    // Lock-and-act: the recovered answer-update intent re-hashes post.content / post.reward into
+    // the escrow payload (prepareAnswerUpdate downstream). A stale snapshot here lets a concurrent
+    // PostProcessService.updatePost Phase 2 commit between the snapshot and the on-chain prepare,
+    // producing an intent whose hash diverges from the off-chain post (MOM-459 answer write-path
+    // lost-update guard).
     LoadPostPort.PostContext post =
-        loadPostPort.loadPost(command.postId()).orElseThrow(AnswerPostNotFoundException::new);
+        loadPostPort
+            .loadPostForUpdate(command.postId())
+            .orElseThrow(AnswerPostNotFoundException::new);
     int activeAnswerCount =
         Math.toIntExact(countAnswersPort.countOnchainBlockingAnswers(command.postId()));
     return new UpdateRecoveryPreparation(

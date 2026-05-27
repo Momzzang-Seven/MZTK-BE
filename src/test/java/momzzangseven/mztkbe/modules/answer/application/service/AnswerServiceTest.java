@@ -308,7 +308,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
       given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
@@ -341,7 +341,7 @@ class AnswerServiceTest {
       AnswerExecutionWriteView web3 = answerWeb3("intent-update");
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.UPDATE))
           .willReturn(true);
       given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
@@ -382,7 +382,7 @@ class AnswerServiceTest {
       AnswerExecutionWriteView web3 = answerWeb3("intent-update");
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.UPDATE))
           .willReturn(true);
       given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
@@ -419,7 +419,7 @@ class AnswerServiceTest {
               500L, 100L, 3L, "update-token", null, "updated", false);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.UPDATE))
           .willReturn(true);
       given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
@@ -452,7 +452,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
 
       answerService.execute(command);
 
@@ -471,7 +471,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
       given(
               answerLifecycleExecutionPort.recoverAnswerUpdate(
@@ -494,7 +494,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(answerLifecycleExecutionPort.hasActiveAnswerIntent(100L)).willReturn(true);
 
       assertThatThrownBy(() -> answerService.execute(command))
@@ -514,7 +514,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
       given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
@@ -539,7 +539,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerDelete(
@@ -563,7 +563,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(101L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerDelete(
@@ -585,7 +585,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.DELETE))
           .willReturn(true);
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
@@ -878,7 +878,7 @@ class AnswerServiceTest {
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerUnauthorizedException.class);
@@ -892,7 +892,7 @@ class AnswerServiceTest {
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, true, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotUpdateAnswerOnSolvedPostException.class);
@@ -908,7 +908,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotUpdateAnswerOnSolvedPostException.class);
@@ -923,7 +923,7 @@ class AnswerServiceTest {
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
       willThrow(new RuntimeException("sync failed"))
           .given(updateAnswerImagesPort)
           .updateImages(20L, 100L, List.of(1L));
@@ -971,7 +971,7 @@ class AnswerServiceTest {
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerUnauthorizedException.class);
@@ -985,7 +985,7 @@ class AnswerServiceTest {
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, true, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class);
@@ -1002,7 +1002,7 @@ class AnswerServiceTest {
           new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(loadPostPort.loadPostForUpdate(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class);
