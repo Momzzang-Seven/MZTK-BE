@@ -50,6 +50,7 @@ class SponsorNonceSlotMigrationScriptTest {
 
     assertThat(normalizeSql).doesNotContain("CREATE INDEX CONCURRENTLY");
     assertThat(indexSql)
+        .startsWith("-- flyway:executeInTransaction=false")
         .contains("CREATE INDEX CONCURRENTLY")
         .contains("DROP INDEX CONCURRENTLY IF EXISTS")
         .doesNotContain("DO $$")

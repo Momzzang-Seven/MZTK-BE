@@ -1,3 +1,5 @@
+-- flyway:executeInTransaction=false
+
 -- MOM-458: create sponsor nonce lookup indexes outside a transaction.
 
 DROP INDEX CONCURRENTLY IF EXISTS idx_web3_tx_sender_nonce;
