@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.SponsorNonceSlotTransitionConflictException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
@@ -51,7 +52,7 @@ public class NonceSlotLifecycleService implements ManageNonceSlotLifecycleUseCas
     return recordSponsorNonceEvidencePort.record(command);
   }
 
-  @Transactional
+  @Transactional(noRollbackFor = SponsorNonceSlotTransitionConflictException.class)
   public SponsorNonceSlotView transition(RecordSponsorNonceSlotTransitionCommand command) {
     validateTransition(command);
     return recordSponsorNonceSlotTransitionPort.recordTransition(command);

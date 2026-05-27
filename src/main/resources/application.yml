@@ -276,7 +276,7 @@ web3:
 
       # 안전장치는 yml 상수 유지(운영 중 급변할 값 아니면)
       max-gas-limit: 500000
-      max-max-fee-gwei: 60
+      max-max-fee-gwei: 12
       max-priority-fee-gwei: 2
       max-transfer-amount-eth: 5000
       per-tx-cap-eth: 0.05
