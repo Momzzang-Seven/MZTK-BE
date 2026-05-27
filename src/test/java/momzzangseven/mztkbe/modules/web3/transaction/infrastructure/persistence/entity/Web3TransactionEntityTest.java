@@ -21,6 +21,7 @@ class Web3TransactionEntityTest {
             .fromAddress("0x" + "1".repeat(40))
             .toAddress("0x" + "2".repeat(40))
             .amountWei(java.math.BigInteger.TEN)
+            .chainId(11155111L)
             .build();
 
     ReflectionTestUtils.invokeMethod(entity, "onCreate");
@@ -41,6 +42,7 @@ class Web3TransactionEntityTest {
             .fromAddress("0x" + "1".repeat(40))
             .toAddress("0x" + "2".repeat(40))
             .amountWei(java.math.BigInteger.ONE)
+            .chainId(11155111L)
             .status(Web3TxStatus.CREATED)
             .txType(Web3TxType.EIP1559)
             .createdAt(LocalDateTime.now().minusMinutes(1))

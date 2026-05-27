@@ -15,6 +15,7 @@ public record ExecutionTransactionRecordCommand(
     String fromAddress,
     String toAddress,
     BigInteger amountWei,
+    Long chainId,
     Long nonce,
     TransactionStatus status,
     TransactionType txType,

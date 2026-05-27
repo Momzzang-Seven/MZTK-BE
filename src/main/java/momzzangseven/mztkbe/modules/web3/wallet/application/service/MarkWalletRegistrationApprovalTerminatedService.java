@@ -77,13 +77,7 @@ public class MarkWalletRegistrationApprovalTerminatedService
 
   private WalletRegistrationSession receiptTimeout(
       WalletRegistrationSession session, LocalDateTime now) {
-    if (WalletRegistrationReceiptTimeout.approvalTtlRemains(session, now)) {
-      return session.markApprovalRetryable(
-          WalletRegistrationReceiptTimeout.ERROR_CODE,
-          WalletRegistrationReceiptTimeout.ERROR_REASON,
-          now);
-    }
-    return session.markApprovalFailed(
+    return session.markSponsorNonceBlocked(
         WalletRegistrationReceiptTimeout.ERROR_CODE,
         WalletRegistrationReceiptTimeout.ERROR_REASON,
         now);

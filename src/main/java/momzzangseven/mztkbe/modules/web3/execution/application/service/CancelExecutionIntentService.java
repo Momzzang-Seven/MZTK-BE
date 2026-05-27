@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
@@ -22,6 +23,7 @@ public class CancelExecutionIntentService implements CancelExecutionIntentUseCas
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
+  private final ExecutionTransactionGatewayPort executionTransactionGatewayPort;
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
   private final Clock appClock;
 
@@ -37,6 +39,11 @@ public class CancelExecutionIntentService implements CancelExecutionIntentUseCas
   }
 
   private boolean cancel(ExecutionIntent intent, CancelExecutionIntentCommand command) {
+    ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+        executionTransactionGatewayPort,
+        intent.getSubmittedTxId(),
+        command.resolvedErrorCode(),
+        appClock);
     releaseReservedSponsorExposure(intent);
     ExecutionIntent canceled =
         executionIntentPersistencePort.update(

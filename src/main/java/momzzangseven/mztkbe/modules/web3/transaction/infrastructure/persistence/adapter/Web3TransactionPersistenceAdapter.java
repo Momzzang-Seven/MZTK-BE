@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SaveTr
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,6 +26,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
 
   private final Web3TransactionJpaRepository repository;
   private final Clock appClock;
+  private final Web3CoreProperties web3CoreProperties;
 
   /** Creates or reuses a level-up reward transaction intent row by reference/idempotency key. */
   @Override
@@ -121,6 +123,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
         .fromAddress(transaction.getFromAddress())
         .toAddress(transaction.getToAddress())
         .amountWei(transaction.getAmountWei())
+        .chainId(web3CoreProperties.getChainId())
         .nonce(transaction.getNonce())
         .status(transaction.getStatus())
         .txHash(transaction.getTxHash())

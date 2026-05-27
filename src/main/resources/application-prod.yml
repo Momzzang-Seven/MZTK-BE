@@ -33,6 +33,8 @@ spring:
     validate-on-migrate: true  # Flyway가 스키마 검증
     clean-disabled: true  # Prod에서 clean 금지
     baseline-version: 0
+    placeholders:
+      web3ChainId: ${WEB3_CHAIN_ID}
 
 info:
   app:

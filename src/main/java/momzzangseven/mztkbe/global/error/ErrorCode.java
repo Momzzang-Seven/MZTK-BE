@@ -203,6 +203,8 @@ public enum ErrorCode {
   WEB3_KMS_SIGN_FAILED("WEB3_017", "KMS sign operation failed", HttpStatus.INTERNAL_SERVER_ERROR),
   WEB3_KMS_KEY_DESCRIBE_FAILED(
       "WEB3_018", "KMS DescribeKey operation failed", HttpStatus.INTERNAL_SERVER_ERROR),
+  WEB3_SPONSOR_NONCE_UNAVAILABLE(
+      "WEB3_019", "Sponsor nonce is temporarily unavailable", HttpStatus.SERVICE_UNAVAILABLE),
 
   // ========================================
   // Treasury Errors (TREASURY_xxx)

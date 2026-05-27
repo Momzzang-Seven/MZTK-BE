@@ -156,6 +156,8 @@ class WalletRegistrationControllerTest {
         null,
         null,
         WalletRegistrationNextAction.SIGN_APPROVAL,
+        "지갑에서 승인 요청에 서명해 주세요.",
+        "WALLET_APPROVAL_SIGN_REQUEST",
         web3);
   }
 
@@ -173,6 +175,8 @@ class WalletRegistrationControllerTest {
         null,
         "EIP7702_DEADLINE_TOO_CLOSE",
         WalletRegistrationNextAction.RETRY_APPROVAL,
+        "승인 요청을 다시 준비해야 합니다. 잠시 후 다시 시도해 주세요.",
+        "WALLET_APPROVAL_SIGN_REQUEST_UNAVAILABLE",
         deadlineTooCloseWeb3View());
   }
 

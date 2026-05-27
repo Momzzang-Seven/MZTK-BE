@@ -38,6 +38,7 @@ public class WalletRegistrationSessionPersistenceAdapter
           WalletRegistrationStatus.APPROVAL_SIGNED,
           WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
           WalletRegistrationStatus.APPROVAL_RETRYABLE,
+          WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED,
           WalletRegistrationStatus.FINALIZATION_FAILED,
           WalletRegistrationStatus.LOCAL_CONFLICT);
   private static final String RECEIPT_TIMEOUT_ERROR_CODE = "RECEIPT_TIMEOUT";
@@ -47,6 +48,7 @@ public class WalletRegistrationSessionPersistenceAdapter
           WalletRegistrationStatus.APPROVAL_SIGNED,
           WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
           WalletRegistrationStatus.APPROVAL_RETRYABLE,
+          WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED,
           WalletRegistrationStatus.FINALIZATION_FAILED,
           WalletRegistrationStatus.LOCAL_CONFLICT);
   private static final EnumSet<WalletRegistrationStatus> AUTHORITATIVE_NEWER_STATUSES =
@@ -55,6 +57,7 @@ public class WalletRegistrationSessionPersistenceAdapter
           WalletRegistrationStatus.APPROVAL_SIGNED,
           WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
           WalletRegistrationStatus.APPROVAL_RETRYABLE,
+          WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED,
           WalletRegistrationStatus.FINALIZATION_FAILED,
           WalletRegistrationStatus.LOCAL_CONFLICT,
           WalletRegistrationStatus.REGISTERED);

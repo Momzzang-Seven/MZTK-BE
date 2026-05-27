@@ -11,19 +11,23 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTr
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionSummaryResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorChainNonceSnapshotResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.ManageExecutionTransactionUseCase;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadPendingNoncePort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.CoordinateSponsorNonceUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.TransferTransactionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.nonce.LoadSponsorChainNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
@@ -33,9 +37,9 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   private final TransferTransactionPersistencePort transferTransactionPersistencePort;
   private final UpdateTransactionPort updateTransactionPort;
   private final RecordTransactionAuditPort recordTransactionAuditPort;
-  private final ReserveNoncePort reserveNoncePort;
-  private final LoadPendingNoncePort loadPendingNoncePort;
   private final Web3ContractPort web3ContractPort;
+  private final LoadSponsorChainNoncePort loadSponsorChainNoncePort;
+  private final CoordinateSponsorNonceUseCase coordinateSponsorNonceUseCase;
 
   @Override
   @Transactional(readOnly = true)
@@ -90,6 +94,7 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
                 .fromAddress(command.fromAddress())
                 .toAddress(command.toAddress())
                 .amountWei(command.amountWei())
+                .chainId(command.chainId())
                 .nonce(command.nonce())
                 .status(Web3TxStatus.valueOf(command.status().name()))
                 .txType(Web3TxType.valueOf(command.txType().name()))
@@ -118,18 +123,31 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   }
 
   @Override
-  public long reserveNextNonce(String fromAddress) {
-    return reserveNoncePort.reserveNextNonce(fromAddress);
+  public boolean claimSignedForBroadcast(
+      Long transactionId, String workerId, LocalDateTime processingUntil) {
+    return updateTransactionPort.claimForProcessing(
+        transactionId, Web3TxStatus.SIGNED, workerId, processingUntil);
   }
 
   @Override
-  public boolean releaseReservedNonce(String fromAddress, long reservedNonce) {
-    return reserveNoncePort.releaseNonce(fromAddress, reservedNonce);
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
+  public SponsorChainNonceSnapshotResult loadSponsorNonceSnapshot(
+      long chainId, String fromAddress) {
+    LoadSponsorChainNoncePort.SponsorChainNonceSnapshot snapshot =
+        loadSponsorChainNoncePort.loadSnapshot(chainId, fromAddress);
+    return new SponsorChainNonceSnapshotResult(
+        snapshot.chainPendingNonce(),
+        snapshot.chainLatestNonce(),
+        snapshot.mainPendingNonce(),
+        snapshot.subPendingNonce(),
+        snapshot.mainLatestNonce(),
+        snapshot.subLatestNonce());
   }
 
   @Override
-  public long loadPendingNonce(String fromAddress) {
-    return loadPendingNoncePort.loadPendingNonce(fromAddress);
+  public SponsorNonceCoordinationResult coordinateSponsorNonce(
+      SponsorNonceCoordinationCommand command) {
+    return coordinateSponsorNonceUseCase.execute(command);
   }
 
   @Override
@@ -143,6 +161,7 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   }
 
   @Override
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
   public ExecutionTransactionBroadcastResult broadcast(String rawTx) {
     Web3ContractPort.BroadcastResult result =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(rawTx));
@@ -154,6 +173,9 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
     return new ExecutionTransactionRecordResult(
         transaction.getId(),
         TransactionStatus.valueOf(transaction.getStatus().name()),
-        transaction.getTxHash());
+        transaction.getTxHash(),
+        transaction.getChainId(),
+        transaction.getFromAddress(),
+        transaction.getNonce());
   }
 }

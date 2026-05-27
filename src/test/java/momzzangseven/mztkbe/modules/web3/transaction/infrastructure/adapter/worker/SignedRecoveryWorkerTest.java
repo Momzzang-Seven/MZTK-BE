@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -11,10 +12,18 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
+import java.util.Optional;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.RecordSponsorNonceSlotTransitionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceSlotView;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.nonce.ManageNonceSlotLifecycleUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -22,6 +31,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3Co
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,12 +44,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class SignedRecoveryWorkerTest {
 
   private static final String DEFAULT_REASON = Web3TxFailureReason.BROADCAST_FAILED.code();
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-05-24T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+  private static final long CHAIN_ID = 84532L;
 
   @Mock private LoadTransactionWorkPort loadTransactionWorkPort;
   @Mock private UpdateTransactionPort updateTransactionPort;
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
-  @Mock private MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase;
+  @Mock private ManageNonceSlotLifecycleUseCase nonceSlotLifecycleUseCase;
+
+  @Mock
+  private PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase;
+
   @Mock private RetryStrategy retryStrategy;
 
   private SignedRecoveryWorker worker;
@@ -54,9 +71,11 @@ class SignedRecoveryWorkerTest {
             updateTransactionPort,
             recordTransactionAuditPort,
             web3ContractPort,
-            markExecutionIntentPendingOnchainUseCase,
+            nonceSlotLifecycleUseCase,
+            persistSponsorNonceTransactionStateUseCase,
             properties,
-            retryStrategy);
+            retryStrategy,
+            FIXED_CLOCK);
   }
 
   @Test
@@ -67,32 +86,35 @@ class SignedRecoveryWorkerTest {
 
     worker.processBatch(1);
 
-    verifyNoInteractions(updateTransactionPort, web3ContractPort, recordTransactionAuditPort);
+    verifyNoInteractions(
+        updateTransactionPort,
+        web3ContractPort,
+        recordTransactionAuditPort,
+        nonceSlotLifecycleUseCase,
+        persistSponsorNonceTransactionStateUseCase);
   }
 
   @Test
-  void processBatch_signedRawTxMissing_schedulesInvalidSignedTx() {
+  void processBatch_signedRawTxMissing_marksInvalidSignedTxOperatorReview() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(null, "0x" + "a".repeat(64))));
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.INVALID_SIGNED_TX.code(), null);
+    verifyInvalidSignedOperatorReview();
     verifyNoInteractions(web3ContractPort);
   }
 
   @Test
-  void processBatch_signedRawTxBlank_schedulesInvalidSignedTx() {
+  void processBatch_signedRawTxBlank_marksInvalidSignedTxOperatorReview() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(" ", "0x" + "a".repeat(64))));
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.INVALID_SIGNED_TX.code(), null);
+    verifyInvalidSignedOperatorReview();
     verifyNoInteractions(web3ContractPort);
   }
 
@@ -107,8 +129,23 @@ class SignedRecoveryWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).markPending(1L, "0x" + "b".repeat(64));
-    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markPending(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce() == 0L
+                        && command.attemptId() == null
+                        && command.txHash().equals("0x" + "b".repeat(64))));
+    verify(nonceSlotLifecycleUseCase)
+        .transition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.getFromStatus() == SponsorNonceSlotStatus.SIGNED
+                        && command.getToStatus() == SponsorNonceSlotStatus.BROADCASTING
+                        && command.getActiveTxId().equals(1L)));
     verify(recordTransactionAuditPort, times(2))
         .record(any(RecordTransactionAuditPort.AuditCommand.class));
     verify(updateTransactionPort, never()).scheduleRetry(eq(1L), eq(DEFAULT_REASON), any());
@@ -125,8 +162,11 @@ class SignedRecoveryWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).markPending(1L, existingHash);
-    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markPending(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L) && command.txHash().equals(existingHash)));
   }
 
   @Test
@@ -140,8 +180,78 @@ class SignedRecoveryWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).markPending(1L, existingHash);
-    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markPending(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L) && command.txHash().equals(existingHash)));
+  }
+
+  @Test
+  void processBatch_slotAlreadyBroadcasted_marksPendingWithoutRebroadcasting() {
+    String existingHash = "0x" + "a".repeat(64);
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item("0xdeadbeef", existingHash)));
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=SIGNED, actual=BROADCASTED"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, "0x" + "a".repeat(40), 0L))
+        .thenReturn(Optional.of(slot(SponsorNonceSlotStatus.BROADCASTED, 1L)));
+
+    worker.processBatch(1);
+
+    verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markPendingWithoutSlotTransition(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L) && command.txHash().equals(existingHash)));
+    verify(updateTransactionPort, never()).scheduleRetry(eq(1L), anyString(), any());
+  }
+
+  @Test
+  void processBatch_staleBroadcastingSlotOwnedByAnotherTx_stopsWithoutBroadcasting() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item("0xdeadbeef", "0x" + "a".repeat(64))));
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=SIGNED, actual=BROADCASTING"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+    when(nonceSlotLifecycleUseCase.loadSlotForReview(CHAIN_ID, "0x" + "a".repeat(40), 0L))
+        .thenReturn(Optional.of(slot(SponsorNonceSlotStatus.BROADCASTING, 99L)));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code());
+    verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
+    verifyNoInteractions(persistSponsorNonceTransactionStateUseCase);
+  }
+
+  @Test
+  void processBatch_staleNonceSlotBeforeBroadcast_stopsWithoutBroadcasting() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item("0xdeadbeef", "0x" + "a".repeat(64))));
+    doThrow(
+            new Web3TransactionStateInvalidException(
+                "stale nonce slot transition: expected=SIGNED, actual=DROPPED"))
+        .when(nonceSlotLifecycleUseCase)
+        .transition(any(RecordSponsorNonceSlotTransitionCommand.class));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort)
+        .markUnconfirmedForSponsorNonceReview(
+            1L, Web3TxFailureReason.SPONSOR_NONCE_STALE_RESERVATION.code());
+    verify(web3ContractPort, never()).broadcast(any(Web3ContractPort.BroadcastCommand.class));
+    verifyNoInteractions(persistSponsorNonceTransactionStateUseCase);
   }
 
   @Test
@@ -177,6 +287,66 @@ class SignedRecoveryWorkerTest {
   }
 
   @Test
+  void processBatch_broadcastNonceTooLow_marksOperatorReviewAtomically() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item("0xdeadbeef", "0x" + "a".repeat(64))));
+    when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
+        .thenReturn(
+            new Web3ContractPort.BroadcastResult(
+                false, null, Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code(), "rpc-a"));
+
+    worker.processBatch(1);
+
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markBroadcastingOperatorReview(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce() == 0L
+                        && command
+                            .slotTerminalReason()
+                            .equals(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code())
+                        && command
+                            .transactionFailureReason()
+                            .equals(
+                                Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED.code())
+                        && command.hasBroadcastEvidence()));
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code()), any());
+  }
+
+  @Test
+  void processBatch_broadcastNonceTooLowWithoutNonce_marksOperatorReviewWithoutSlotTransition() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item("0xdeadbeef", "0x" + "a".repeat(64), null)));
+    when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
+        .thenReturn(
+            new Web3ContractPort.BroadcastResult(
+                false, null, Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code(), "rpc-a"));
+
+    worker.processBatch(1);
+
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markBroadcastingOperatorReview(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.nonce() == null
+                        && command
+                            .transactionFailureReason()
+                            .equals(
+                                Web3TxFailureReason.SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED
+                                    .code())));
+    verify(nonceSlotLifecycleUseCase, never()).transition(any());
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code()), any());
+  }
+
+  @Test
   void processBatch_exceptionAndShouldNotRetry_failsPermanently() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
@@ -187,7 +357,8 @@ class SignedRecoveryWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).scheduleRetry(1L, DEFAULT_REASON, null);
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code(), null);
   }
 
   @Test
@@ -208,6 +379,11 @@ class SignedRecoveryWorkerTest {
   }
 
   private LoadTransactionWorkPort.TransactionWorkItem item(String signedRawTx, String txHash) {
+    return item(signedRawTx, txHash, 0L);
+  }
+
+  private LoadTransactionWorkPort.TransactionWorkItem item(
+      String signedRawTx, String txHash, Long nonce) {
     return new LoadTransactionWorkPort.TransactionWorkItem(
         1L,
         "idem-1",
@@ -215,13 +391,66 @@ class SignedRecoveryWorkerTest {
         "101",
         1L,
         2L,
+        CHAIN_ID,
         "0x" + "a".repeat(40),
         "0x" + "b".repeat(40),
         BigInteger.ONE,
-        0L,
+        nonce,
         txHash,
         signedRawTx,
         null,
         LocalDateTime.now());
+  }
+
+  private SponsorNonceSlotView slot(SponsorNonceSlotStatus status, Long activeTxId) {
+    LocalDateTime now = LocalDateTime.now(FIXED_CLOCK);
+    return new SponsorNonceSlotView(
+        CHAIN_ID,
+        "0x" + "a".repeat(40),
+        0L,
+        status,
+        1,
+        null,
+        activeTxId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        0,
+        now,
+        now);
+  }
+
+  private void verifyInvalidSignedOperatorReview() {
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markSignedOperatorReview(
+            org.mockito.ArgumentMatchers.argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce() == 0L
+                        && command
+                            .slotTerminalReason()
+                            .equals(Web3TxFailureReason.INVALID_SIGNED_TX.code())
+                        && command
+                            .transactionFailureReason()
+                            .equals(Web3TxFailureReason.INVALID_SIGNED_TX.code())));
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.INVALID_SIGNED_TX.code()), any());
   }
 }

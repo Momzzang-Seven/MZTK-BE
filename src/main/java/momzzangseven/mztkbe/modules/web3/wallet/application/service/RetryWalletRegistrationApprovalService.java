@@ -46,6 +46,7 @@ public class RetryWalletRegistrationApprovalService
 
   private final LockWalletRegistrationSessionPort lockSessionPort;
   private final SaveWalletRegistrationSessionPort saveSessionPort;
+  private final WalletRegistrationReceiptTimeoutMarker receiptTimeoutMarker;
   private final LoadWalletApprovalExecutionStatePort loadExecutionStatePort;
   private final LoadWalletApprovalCapabilityPort loadWalletApprovalCapabilityPort;
   private final LoadWalletApprovalTtlPolicyPort loadWalletApprovalTtlPolicyPort;
@@ -105,29 +106,19 @@ public class RetryWalletRegistrationApprovalService
       WalletRegistrationSession session,
       Optional<WalletApprovalExecutionStateView> currentState,
       LocalDateTime now) {
-    if (session.getStatus() != WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
+    if (!canMarkSponsorNonceBlocked(session)
         || currentState.filter(WalletRegistrationReceiptTimeout::isCurrent).isEmpty()) {
       return Optional.empty();
     }
 
-    WalletRegistrationSession updated =
-        WalletRegistrationReceiptTimeout.approvalTtlRemains(session, now)
-            ? session.markApprovalRetryable(
-                WalletRegistrationReceiptTimeout.ERROR_CODE,
-                WalletRegistrationReceiptTimeout.ERROR_REASON,
-                now)
-            : session.markApprovalFailed(
-                WalletRegistrationReceiptTimeout.ERROR_CODE,
-                WalletRegistrationReceiptTimeout.ERROR_REASON,
-                now);
-    WalletRegistrationSession saved = saveSessionPort.save(updated);
-    if (saved.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED) {
-      return Optional.of(
-          RetryApprovalPreparation.reusable(
-              WalletRegistrationStatusResult.from(saved, currentState.orElse(null), now)));
-    }
-    validateApprovalAvailable();
-    return Optional.of(RetryApprovalPreparation.forCreation(saved));
+    WalletRegistrationSession saved = receiptTimeoutMarker.markSponsorNonceBlocked(session, now);
+    return Optional.of(
+        RetryApprovalPreparation.reusable(
+            WalletRegistrationStatusResult.from(saved, currentState.orElse(null), now)));
+  }
+
+  private boolean canMarkSponsorNonceBlocked(WalletRegistrationSession session) {
+    return !session.isTerminal() && !session.getStatus().isConfirmedButNotFinalized();
   }
 
   private WalletRegistrationSession backfillReceiptTimeoutExecutionIntentIfNeeded(

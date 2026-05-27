@@ -124,6 +124,7 @@ class WalletRegistrationFinalizationProcessor {
             || session.getStatus() == WalletRegistrationStatus.APPROVAL_SIGNED
             || session.getStatus() == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
             || session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || session.getStatus() == WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED
             || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED
             || session.getStatus().isConfirmedButNotFinalized());
   }
@@ -144,7 +145,8 @@ class WalletRegistrationFinalizationProcessor {
 
   private boolean isReceiptTimeoutLateSuccess(WalletRegistrationSession session) {
     return (session.getStatus() == WalletRegistrationStatus.APPROVAL_RETRYABLE
-            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED)
+            || session.getStatus() == WalletRegistrationStatus.APPROVAL_FAILED
+            || session.getStatus() == WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED)
         && WalletRegistrationReceiptTimeout.isRecordedOn(session);
   }
 

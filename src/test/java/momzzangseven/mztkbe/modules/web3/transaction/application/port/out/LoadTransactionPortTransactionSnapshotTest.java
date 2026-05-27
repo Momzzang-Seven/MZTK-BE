@@ -21,6 +21,9 @@ class LoadTransactionPortTransactionSnapshotTest {
                     "101",
                     1L,
                     2L,
+                    84532L,
+                    "0x" + "a".repeat(40),
+                    0L,
                     Web3TxStatus.PENDING,
                     "0x" + "a".repeat(64),
                     null))
@@ -38,6 +41,9 @@ class LoadTransactionPortTransactionSnapshotTest {
                     "101",
                     1L,
                     2L,
+                    84532L,
+                    "0x" + "a".repeat(40),
+                    0L,
                     Web3TxStatus.CREATED,
                     null,
                     null))
@@ -52,6 +58,9 @@ class LoadTransactionPortTransactionSnapshotTest {
                     "101",
                     1L,
                     2L,
+                    84532L,
+                    "0x" + "a".repeat(40),
+                    0L,
                     Web3TxStatus.CREATED,
                     " ",
                     null))
@@ -118,6 +127,9 @@ class LoadTransactionPortTransactionSnapshotTest {
                     "101",
                     1L,
                     2L,
+                    84532L,
+                    "0x" + "a".repeat(40),
+                    0L,
                     null,
                     null,
                     null))
@@ -136,6 +148,9 @@ class LoadTransactionPortTransactionSnapshotTest {
                     "101",
                     1L,
                     2L,
+                    84532L,
+                    "0x" + "a".repeat(40),
+                    0L,
                     Web3TxStatus.PENDING,
                     "0x1234",
                     null))
@@ -155,6 +170,9 @@ class LoadTransactionPortTransactionSnapshotTest {
         referenceId,
         1L,
         2L,
+        84532L,
+        "0x" + "a".repeat(40),
+        0L,
         Web3TxStatus.CREATED,
         null,
         null);

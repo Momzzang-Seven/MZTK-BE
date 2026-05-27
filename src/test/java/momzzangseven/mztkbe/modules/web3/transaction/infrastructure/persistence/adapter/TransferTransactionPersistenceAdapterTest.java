@@ -46,6 +46,7 @@ class TransferTransactionPersistenceAdapterTest {
             .fromAddress("0x" + "a".repeat(40))
             .toAddress("0x" + "b".repeat(40))
             .amountWei(BigInteger.TEN)
+            .chainId(11155111L)
             .txType(Web3TxType.EIP7702)
             .status(Web3TxStatus.CREATED)
             .build();
@@ -70,6 +71,7 @@ class TransferTransactionPersistenceAdapterTest {
             .fromAddress("0x" + "a".repeat(40))
             .toAddress("0x" + "b".repeat(40))
             .amountWei(BigInteger.ONE)
+            .chainId(11155111L)
             .nonce(3L)
             .txType(Web3TxType.EIP7702)
             .status(Web3TxStatus.CREATED)
@@ -83,6 +85,7 @@ class TransferTransactionPersistenceAdapterTest {
         ArgumentCaptor.forClass(Web3TransactionEntity.class);
     verify(repository).saveAndFlush(captor.capture());
     assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("idem-22");
+    assertThat(captor.getValue().getChainId()).isEqualTo(11155111L);
     assertThat(created.getIdempotencyKey()).isEqualTo("idem-22");
   }
 }

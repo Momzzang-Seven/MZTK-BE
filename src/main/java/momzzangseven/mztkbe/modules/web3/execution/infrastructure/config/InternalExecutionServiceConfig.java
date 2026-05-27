@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInte
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
@@ -25,12 +26,10 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.GetIntern
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunInternalExecutionBatchService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteInternalExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.InternalExecutionSignerPreflight;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.SponsorNonceProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
 @ConditionalOnProperty(prefix = "web3.execution.internal", name = "enabled", havingValue = "true")
@@ -59,6 +58,8 @@ public class InternalExecutionServiceConfig {
           List<ExecutionActionHandlerPort> executionActionHandlerPorts,
           PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
           RunAfterCommitPort runAfterCommitPort,
+          RunExecutionTransactionPort runExecutionTransactionPort,
+          SponsorNonceProperties sponsorNonceProperties,
           Clock appClock) {
     return new TransactionalExecuteInternalExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -69,6 +70,8 @@ public class InternalExecutionServiceConfig {
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
         runAfterCommitPort,
+        runExecutionTransactionPort,
+        sponsorNonceProperties.getOpenWindowSize(),
         appClock);
   }
 
@@ -84,13 +87,9 @@ public class InternalExecutionServiceConfig {
   ExecuteInternalExecutionIntentUseCase executeInternalExecutionIntentUseCase(
       TransactionalExecuteInternalExecutionIntentDelegate delegate,
       InternalExecutionSignerPreflight internalExecutionSignerPreflight,
-      ExecutionIntentPersistencePort executionIntentPersistencePort,
-      PlatformTransactionManager transactionManager) {
-    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+      ExecutionIntentPersistencePort executionIntentPersistencePort) {
     ExecuteTransactionalInternalExecutionIntentDelegatePort txWrappedDelegate =
-        (command, signerGates) ->
-            transactionTemplate.execute(status -> delegate.execute(command, signerGates));
+        (command, signerGates) -> delegate.execute(command, signerGates);
     return new ExecuteInternalExecutionIntentService(
         txWrappedDelegate, internalExecutionSignerPreflight, executionIntentPersistencePort);
   }

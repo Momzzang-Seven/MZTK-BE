@@ -20,12 +20,49 @@ public interface LoadTransactionPort {
       String referenceId,
       Long fromUserId,
       Long toUserId,
+      Long chainId,
+      String fromAddress,
+      Long nonce,
       Web3TxStatus status,
       String txHash,
       String failureReason) {
 
+    public TransactionSnapshot(
+        Long transactionId,
+        String idempotencyKey,
+        Web3ReferenceType referenceType,
+        String referenceId,
+        Long fromUserId,
+        Long toUserId,
+        Web3TxStatus status,
+        String txHash,
+        String failureReason) {
+      this(
+          transactionId,
+          idempotencyKey,
+          referenceType,
+          referenceId,
+          fromUserId,
+          toUserId,
+          null,
+          null,
+          null,
+          status,
+          txHash,
+          failureReason);
+    }
+
     public TransactionSnapshot {
-      validate(transactionId, idempotencyKey, referenceType, referenceId, status, txHash);
+      validate(
+          transactionId,
+          idempotencyKey,
+          referenceType,
+          referenceId,
+          chainId,
+          fromAddress,
+          nonce,
+          status,
+          txHash);
     }
 
     private static void validate(
@@ -33,6 +70,9 @@ public interface LoadTransactionPort {
         String idempotencyKey,
         Web3ReferenceType referenceType,
         String referenceId,
+        Long chainId,
+        String fromAddress,
+        Long nonce,
         Web3TxStatus status,
         String txHash) {
       if (transactionId == null || transactionId <= 0) {
@@ -46,6 +86,15 @@ public interface LoadTransactionPort {
       }
       if (referenceId == null || referenceId.isBlank()) {
         throw new Web3InvalidInputException("referenceId is required");
+      }
+      if (chainId != null && chainId <= 0) {
+        throw new Web3InvalidInputException("chainId must be positive");
+      }
+      if (fromAddress != null && fromAddress.isBlank()) {
+        throw new Web3InvalidInputException("fromAddress must not be blank");
+      }
+      if (nonce != null && nonce < 0) {
+        throw new Web3InvalidInputException("nonce must be >= 0");
       }
       if (status == null) {
         throw new Web3InvalidInputException("status is required");

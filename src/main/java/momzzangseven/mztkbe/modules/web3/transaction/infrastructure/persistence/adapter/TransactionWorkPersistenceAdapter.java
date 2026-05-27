@@ -43,21 +43,21 @@ public class TransactionWorkPersistenceAdapter
           .map(code -> "'" + code + "'")
           .collect(Collectors.joining(","));
 
-  private static final String CLAIM_BY_STATUS_SQL =
+  private static final String CLAIM_BY_STATUS_SQL_TEMPLATE =
       """
-      SELECT id
-      FROM web3_transactions
-      WHERE status = :status
-        AND (processing_until IS NULL OR processing_until < :now)
+      SELECT t.id
+      FROM web3_transactions t
+      WHERE t.status = :status
+        AND (t.processing_until IS NULL OR t.processing_until < :now)
         AND (
-            failure_reason IS NULL
-            OR failure_reason NOT IN (%s)
+            t.failure_reason IS NULL
+            OR t.failure_reason NOT IN (%s)
         )
-      ORDER BY id
+        %s
+      ORDER BY t.id
       LIMIT :limit
       FOR UPDATE SKIP LOCKED
-      """
-          .formatted(NON_RETRYABLE_FAILURE_REASON_SQL);
+      """;
 
   private final EntityManager entityManager;
   private final Web3TransactionJpaRepository repository;
@@ -183,6 +183,17 @@ public class TransactionWorkPersistenceAdapter
 
   @Override
   @Transactional
+  public void markUnconfirmedForSponsorNonceReview(Long transactionId, String failureReason) {
+    Web3TransactionEntity entity = load(transactionId);
+    Web3Transaction transaction = toDomain(entity);
+    LocalDateTime now = LocalDateTime.now(appClock);
+    transaction.markUnconfirmedForSponsorNonceReview(failureReason, now);
+    apply(entity, transaction);
+    entity.setUpdatedAt(now);
+  }
+
+  @Override
+  @Transactional
   public void scheduleRetry(
       Long transactionId, String failureReason, LocalDateTime processingUntil) {
     Web3TransactionEntity entity = load(transactionId);
@@ -190,6 +201,41 @@ public class TransactionWorkPersistenceAdapter
     transaction.scheduleRetry(failureReason, processingUntil);
     apply(entity, transaction);
     entity.setUpdatedAt(LocalDateTime.now(appClock));
+  }
+
+  @Override
+  @Transactional
+  public boolean claimForProcessing(
+      Long transactionId, Web3TxStatus status, String workerId, LocalDateTime processingUntil) {
+    if (transactionId == null || transactionId <= 0) {
+      throw new Web3InvalidInputException("transactionId must be positive");
+    }
+    if (status == null) {
+      throw new Web3InvalidInputException("status is required");
+    }
+    if (workerId == null || workerId.isBlank()) {
+      throw new Web3InvalidInputException("workerId is required");
+    }
+    if (processingUntil == null) {
+      throw new Web3InvalidInputException("processingUntil is required");
+    }
+
+    LocalDateTime now = LocalDateTime.now(appClock);
+    int updated =
+        entityManager
+            .createQuery(
+                "update Web3TransactionEntity t set t.processingBy = :workerId,"
+                    + " t.processingUntil = :processingUntil, t.updatedAt = :updatedAt"
+                    + " where t.id = :transactionId and t.status = :status"
+                    + " and (t.processingUntil is null or t.processingUntil < :now)")
+            .setParameter("workerId", workerId)
+            .setParameter("processingUntil", processingUntil)
+            .setParameter("updatedAt", now)
+            .setParameter("transactionId", transactionId)
+            .setParameter("status", status)
+            .setParameter("now", now)
+            .executeUpdate();
+    return updated == 1;
   }
 
   @Override
@@ -220,6 +266,9 @@ public class TransactionWorkPersistenceAdapter
                     entity.getReferenceId(),
                     entity.getFromUserId(),
                     entity.getToUserId(),
+                    entity.getChainId(),
+                    entity.getFromAddress(),
+                    entity.getNonce(),
                     entity.getStatus(),
                     entity.getTxHash(),
                     entity.getFailureReason()));
@@ -242,6 +291,9 @@ public class TransactionWorkPersistenceAdapter
                     entity.getReferenceId(),
                     entity.getFromUserId(),
                     entity.getToUserId(),
+                    entity.getChainId(),
+                    entity.getFromAddress(),
+                    entity.getNonce(),
                     entity.getStatus(),
                     entity.getTxHash(),
                     entity.getFailureReason()))
@@ -256,6 +308,7 @@ public class TransactionWorkPersistenceAdapter
         entity.getReferenceId(),
         entity.getFromUserId(),
         entity.getToUserId(),
+        entity.getChainId(),
         entity.getFromAddress(),
         entity.getToAddress(),
         entity.getAmountWei(),
@@ -313,10 +366,58 @@ public class TransactionWorkPersistenceAdapter
   @SuppressWarnings("unchecked")
   private List<Number> selectClaimableIds(Web3TxStatus status, int limit, LocalDateTime now) {
     return entityManager
-        .createNativeQuery(CLAIM_BY_STATUS_SQL)
+        .createNativeQuery(claimByStatusSql(status))
         .setParameter("status", status.name())
         .setParameter("now", now)
         .setParameter("limit", limit)
         .getResultList();
+  }
+
+  private String claimByStatusSql(Web3TxStatus status) {
+    return CLAIM_BY_STATUS_SQL_TEMPLATE.formatted(
+        NON_RETRYABLE_FAILURE_REASON_SQL, nonceSlotPredicate(status));
+  }
+
+  private String nonceSlotPredicate(Web3TxStatus status) {
+    return switch (status) {
+      case CREATED ->
+          """
+          AND t.tx_type = 'EIP1559'
+          AND t.reference_type = 'LEVEL_UP_REWARD'
+          """;
+      case SIGNED ->
+          """
+          AND (
+              NOT EXISTS (
+                  SELECT 1
+                  FROM web3_nonce_slots ns_any
+                  WHERE ns_any.active_tx_id = t.id
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM web3_nonce_slots ns
+                  WHERE ns.active_tx_id = t.id
+                    AND ns.status IN ('SIGNED', 'BROADCASTING')
+              )
+          )
+          """;
+      case PENDING ->
+          """
+          AND (
+              NOT EXISTS (
+                  SELECT 1
+                  FROM web3_nonce_slots ns_any
+                  WHERE ns_any.active_tx_id = t.id
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM web3_nonce_slots ns
+                  WHERE ns.active_tx_id = t.id
+                    AND ns.status IN ('BROADCASTED', 'BROADCASTING')
+              )
+          )
+          """;
+      default -> "";
+    };
   }
 }

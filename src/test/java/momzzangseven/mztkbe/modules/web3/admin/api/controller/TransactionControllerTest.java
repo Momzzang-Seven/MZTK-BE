@@ -5,13 +5,20 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetSponsorNonceSlotsQuery;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetSponsorNonceSlotsResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarkTransactionSucceededResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.SponsorNonceSlotAdminView;
+import momzzangseven.mztkbe.modules.web3.admin.application.port.in.GetSponsorNonceSlotsUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,6 +58,7 @@ class TransactionControllerTest {
       txSignedRecoveryWorker;
 
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private GetSponsorNonceSlotsUseCase getSponsorNonceSlotsUseCase;
 
   @Test
   @DisplayName("POST /admin/web3/transactions/{txId}/mark-succeeded 성공")
@@ -212,6 +220,102 @@ class TransactionControllerTest {
         .andExpect(status().isUnauthorized());
 
     verifyNoInteractions(markTransactionSucceededUseCase);
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/nonce-slots 성공")
+  void getNonceSlots_success() throws Exception {
+    String sponsor = "0x" + "a".repeat(40);
+    given(getSponsorNonceSlotsUseCase.execute(any(GetSponsorNonceSlotsQuery.class)))
+        .willReturn(
+            new GetSponsorNonceSlotsResult(
+                84532L,
+                sponsor,
+                0,
+                100,
+                false,
+                List.of(
+                    new SponsorNonceSlotAdminView(
+                        84532L,
+                        sponsor,
+                        51L,
+                        "OPERATOR_REVIEW_REQUIRED",
+                        2,
+                        100L,
+                        200L,
+                        "0x" + "b".repeat(64),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "RECEIPT_TIMEOUT_900S",
+                        null,
+                        null,
+                        0,
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        LocalDateTime.parse("2026-05-25T12:00:00"),
+                        LocalDateTime.parse("2026-05-25T12:00:00")))));
+
+    mockMvc
+        .perform(
+            get("/admin/web3/nonce-slots")
+                .with(adminPrincipal(9L))
+                .param("chainId", "84532")
+                .param("fromAddress", sponsor.toUpperCase()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.chainId").value(84532))
+        .andExpect(jsonPath("$.data.fromAddress").value(sponsor))
+        .andExpect(jsonPath("$.data.page").value(0))
+        .andExpect(jsonPath("$.data.size").value(100))
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.slots[0].nonce").value(51))
+        .andExpect(jsonPath("$.data.slots[0].status").value("OPERATOR_REVIEW_REQUIRED"))
+        .andExpect(jsonPath("$.data.slots[0].blocking").value(true))
+        .andExpect(jsonPath("$.data.slots[0].lowestBlockingSlot").value(true))
+        .andExpect(jsonPath("$.data.slots[0].severity").value("BLOCKING"))
+        .andExpect(
+            jsonPath("$.data.slots[0].operatorAction")
+                .value("FOLLOW_SPONSOR_NONCE_REPLACEMENT_RUNBOOK"))
+        .andExpect(jsonPath("$.data.slots[0].stuckReason").value("RECEIPT_TIMEOUT_900S"));
+
+    verify(getSponsorNonceSlotsUseCase).execute(any(GetSponsorNonceSlotsQuery.class));
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/nonce-slots USER 권한이면 403")
+  void getNonceSlots_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(
+            get("/admin/web3/nonce-slots")
+                .with(userPrincipal(1L))
+                .param("chainId", "84532")
+                .param("fromAddress", "0x" + "a".repeat(40)))
+        .andExpect(status().isForbidden());
+
+    verifyNoInteractions(getSponsorNonceSlotsUseCase);
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/nonce-slots 인증 없으면 401")
+  void getNonceSlots_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(
+            get("/admin/web3/nonce-slots")
+                .param("chainId", "84532")
+                .param("fromAddress", "0x" + "a".repeat(40)))
+        .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(getSponsorNonceSlotsUseCase);
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(

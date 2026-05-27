@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevel
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +43,9 @@ class Web3TransactionPersistenceAdapterTest {
 
   @BeforeEach
   void setUp() {
-    adapter = new Web3TransactionPersistenceAdapter(repository, FIXED_CLOCK);
+    Web3CoreProperties web3CoreProperties = new Web3CoreProperties();
+    web3CoreProperties.setChainId(11155111L);
+    adapter = new Web3TransactionPersistenceAdapter(repository, FIXED_CLOCK, web3CoreProperties);
   }
 
   @Test
@@ -84,7 +87,9 @@ class Web3TransactionPersistenceAdapterTest {
 
     assertThat(tx.getCreatedAt()).isEqualTo(FIXED_NOW);
     assertThat(tx.getUpdatedAt()).isEqualTo(FIXED_NOW);
-    verify(repository).saveAndFlush(any(Web3TransactionEntity.class));
+    verify(repository)
+        .saveAndFlush(
+            org.mockito.ArgumentMatchers.argThat(entity -> entity.getChainId() == 11155111L));
   }
 
   private CreateLevelUpRewardTxIntentCommand validCommand() {
@@ -108,6 +113,7 @@ class Web3TransactionPersistenceAdapterTest {
         .fromAddress("0x" + "a".repeat(40))
         .toAddress("0x" + "b".repeat(40))
         .amountWei(BigInteger.TEN)
+        .chainId(11155111L)
         .txType(Web3TxType.EIP1559)
         .status(status)
         .build();
