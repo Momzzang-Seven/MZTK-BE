@@ -103,6 +103,14 @@ python3 <skill>/scripts/make_charts.py chart_config.json
 생성된다. 팔레트에 없는 자원이 병목이면 §3 메트릭으로
 차트를 직접 정의해도 된다 — 스키마는 동일하다.
 
+> **⚠️ `charts/` 정리 시 절대 와일드카드로 전부 지우지 말 것.** 한 날짜 폴더의 `charts/`
+> 는 같은 날짜의 다른 회차 유형(BP/Load/Endurance/Spike) 산출물을 함께 보관한다.
+> 재생성 전에 정리한다면 **본 회차 prefix 로 좁힌다** — 예: `rm -f charts/load_*.svg`,
+> `rm -f charts/breakpoint_*.svg`. `rm *.svg` / `xargs rm -f` 는 다른 회차의 차트까지
+> 날리고, 그 회차의 RESULT 문서 임베드 링크가 깨진다. 실제로 한 번 발생한 사고다.
+> 더 안전한 방법은 정리하지 않고 그냥 덮어쓰는 것이다(`make_charts.py` 는 동일 파일명을
+> 덮어쓴다). 만에 하나 지운다면 **본인이 만든 파일만** 지운다.
+
 ### Step 6 — 차트 육안 검증
 
 각 SVG 를 PNG 로 변환해 실제로 본다:
