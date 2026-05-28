@@ -94,8 +94,13 @@ python3 <skill>/scripts/probe_metrics.py --start <START> --end <END> \
 `leak_endurance`, 쓰기·외부연동이면 `ext_latency` / `ext_errors` / `async_queue` 를
 더한다(선택 기준은 `references` §5). 고른 정의를 `chart_config.json` 의 `charts` 배열에
 복사하고, probe 결과로 `ymax`/`yticks` 를, 인프라 상수로 `title` 빈칸(SLO·-Xmx·pool max)을
-채운다. `clock0`·`stage_vu`·`xticks` 는 k6 stage 와 START 로부터 계산한다 — xticks 는
-라벨이 겹치지 않게 4 index 이상 띄운다(스키마 전체는 `references` §4). 그다음:
+채운다. **`step` 은 native scrape 에 맞춰 앱 메트릭(`mztk-be`)은 `5`(초)로 설정한다** —
+60s 는 cliff·freeze 를 한 버킷에 뭉개므로 5s 로 그려야 onset 이 선명하다(RDS `rds-cloudwatch`
+는 native 60s 라 5s 로 그려도 계단식·거의 평탄). `clock0`·`stage_vu`·`xticks` 는 k6 stage 와
+START 로부터 계산하되 **index 1칸 = `step`초** 다(step=5 면 2분 ramp=24 index). xticks 는 라벨이
+겹치지 않게 띄운다 — step=5 면 ≥24 index(=2분), step=60 이면 ≥4 index(스키마 전체는 `references` §4).
+**포화 회차는 actuator scrape 가 black-out(`up=0`) 될 수 있으니 `up{job="mztk-be"}` 를 함께 확인** —
+black-out 구간은 5s 든 60s 든 데이터가 없다(server 시계열 공백 = 회복 아님). 그다음:
 ```bash
 python3 <skill>/scripts/make_charts.py chart_config.json
 ```
