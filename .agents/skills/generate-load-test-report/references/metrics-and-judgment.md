@@ -103,12 +103,12 @@ server 히스토그램을 1순위로 본다 — k6 client 측정엔 맥북↔EC2
 |---|---|
 | `prometheus` | Prometheus 호스트. 기본 `http://localhost:9090` |
 | `start`/`end` | §2 측정 구간 (ISO8601) |
-| `step` | 60(초) 기본 |
+| `step` | **native scrape 간격에 맞춘다.** `mztk-be` 앱 메트릭은 native **5(초)** 이므로 `step: 5` 로 그려야 12× 미세한 onset·cliff·freeze 가 보인다(60s 는 분 단위 사건만, 짧은 cliff 를 한 버킷에 뭉갠다). `rds-cloudwatch` 는 CloudWatch native 60s 라 5s 로 그려도 stale-carry-forward 계단(거의 평탄해 무방). 한 config 의 모든 차트가 같은 step 을 공유 — 앱·RDS 를 한 config 에 섞으면 step=5 로 통일하고 RDS 가 계단식이 됨을 감수하거나, RDS 만 별 config(step 60)로 분리한다. `make_charts.py` 의 clock 라벨은 step-aware(`tsec = clock0 + i*step`)라 step 만 바꾸면 시각 라벨이 자동 정합. |
 | `outdir` | `phaseN/results/{YYYY.MM.DD}/charts` 절대경로 — 회차 날짜 폴더 아래 `charts/` |
 | `name` | 파일 접두사. 출력은 `<name>_<chart.file>.svg` (보통 테스트 유형) |
-| `clock0` | `[START 의 시, 분]`. 예 00:50:32 → `[0,50]` |
-| `stage_vu` | k6 stage 를 포인트 index 로. `[start_i, start_vu, end_i, end_vu]` 구간 나열. index = START 부터 분 |
-| `xticks` | 눈금 찍을 포인트 index. **서로 4 index 이상 띄운다** — 가까우면 시각+VU 라벨이 겹친다 |
+| `clock0` | `[START 의 시, 분]`. 예 00:50:32 → `[0,50]` (초는 버림 — 라벨은 HH:MM) |
+| `stage_vu` | k6 stage 를 포인트 index 로. `[start_i, start_vu, end_i, end_vu]` 구간 나열. **index 1칸 = `step`초** (step=5 면 1 index=5s, 2분 ramp=24 index; step=60 이면 1 index=1분). |
+| `xticks` | 눈금 찍을 포인트 index. **라벨이 겹치지 않게 띄운다** — step=60 이면 ≥4 index, **step=5 면 ≥24 index(=2분)** 권장. |
 | `charts` | 차트 정의 배열 (아래) |
 
 ### 차트 한 개 (`charts` 배열 원소)
