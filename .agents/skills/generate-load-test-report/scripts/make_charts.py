@@ -112,8 +112,10 @@ def line_chart(filename, title, ylabel, series, npoints,
         xx = px(i)
         s.append(f'<line x1="{xx:.1f}" y1="{mt}" x2="{xx:.1f}" '
                  f'y2="{mt+ph}" stroke="#dfe2e6" stroke-dasharray="3 3"/>')
-        hh, mm = divmod(bm + i, 60)
-        clock = f"{bh+hh}:{mm:02d}"
+        # step-aware clock: index i spans STEP seconds (5s app / 60s RDS, etc.).
+        # for step=60 this equals the legacy index=minute math (backward compatible).
+        tsec = (bh * 3600 + bm * 60) + i * STEP
+        clock = f"{tsec // 3600}:{(tsec % 3600) // 60:02d}"
         anchor = ("start" if ti == 0
                   else "end" if ti == len(xticks) - 1 else "middle")
         for j, txt in enumerate((clock, f"{int(round(vu_at(i)))} VU")):
@@ -152,10 +154,13 @@ def line_chart(filename, title, ylabel, series, npoints,
             s.append(f'<polyline points="{d}" fill="none" '
                      f'stroke="{sr["color"]}" stroke-width="2.2" '
                      f'stroke-linejoin="round"/>')
-        for i, v in enumerate(sr["data"]):
-            if v is not None:
-                s.append(f'<circle cx="{px(i):.1f}" cy="{py(v):.1f}" r="2.4" '
-                         f'fill="{sr["color"]}"/>')
+        # per-point markers only when sparse; dense high-res charts (5s step,
+        # 80+ points) would turn into an unreadable dotted band — line only.
+        if npoints <= 80:
+            for i, v in enumerate(sr["data"]):
+                if v is not None:
+                    s.append(f'<circle cx="{px(i):.1f}" cy="{py(v):.1f}" r="2.4" '
+                             f'fill="{sr["color"]}"/>')
 
     if annotations:
         for idx, val, txt in annotations:
