@@ -1,12 +1,14 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.port.out;
 
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 
 /**
  * Read-side persistence port for the {@link TreasuryWallet} aggregate.
  *
- * <p>Two read variants are exposed:
+ * <p>Three read variants are exposed:
  *
  * <ul>
  *   <li>{@link #loadByAlias} — lock-free read for read-only paths (state inspection, signability
@@ -15,6 +17,8 @@ import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
  *       write-path callers that must serialize concurrent provision attempts on the same alias.
  *       Returns empty when the row does not exist; the caller relies on the {@code wallet_alias}
  *       UNIQUE constraint to resolve fresh-INSERT races (MOM-444 §4.0.1).
+ *   <li>{@link #loadAll} — bulk read for admin listing; orders by {@code createdAt} DESC and
+ *       optionally filters by lifecycle status.
  * </ul>
  */
 public interface LoadTreasuryWalletPort {
@@ -36,4 +40,12 @@ public interface LoadTreasuryWalletPort {
    * a programming error (the lock would be released immediately upon connection return).
    */
   Optional<TreasuryWallet> loadByAliasForUpdate(String walletAlias);
+
+  /**
+   * Return every wallet, optionally filtered by lifecycle status, ordered by {@code createdAt}
+   * DESC. Unpaged because the row count is operationally small (a handful of aliases). When {@code
+   * statusFilter} is empty every wallet is returned; otherwise only rows matching the given {@link
+   * TreasuryWalletStatus} are included.
+   */
+  List<TreasuryWallet> loadAll(Optional<TreasuryWalletStatus> statusFilter);
 }

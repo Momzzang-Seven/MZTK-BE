@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.adapter;
 
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,15 @@ public class TreasuryWalletPersistenceAdapter
     return repository
         .findByWalletAliasForUpdate(walletAlias)
         .map(TreasuryWalletPersistenceAdapter::toDomain);
+  }
+
+  @Override
+  public List<TreasuryWallet> loadAll(Optional<TreasuryWalletStatus> statusFilter) {
+    List<Web3TreasuryWalletEntity> entities =
+        statusFilter
+            .map(status -> repository.findAllByStatusOrderByCreatedAtDesc(status.name()))
+            .orElseGet(repository::findAllByOrderByCreatedAtDesc);
+    return entities.stream().map(TreasuryWalletPersistenceAdapter::toDomain).toList();
   }
 
   @Override

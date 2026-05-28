@@ -1856,4 +1856,119 @@ class TreasuryKeyLifecycleE2ETest extends E2ETestBase {
       }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // List endpoint — GET /admin/web3/treasury-keys[?status=...]
+  // ---------------------------------------------------------------------------
+
+  @Nested
+  @DisplayName("[E2E-LIST] GET /admin/web3/treasury-keys — 전체/필터 목록 조회")
+  class ListEndpoint {
+
+    private ResponseEntity<String> listAll() {
+      return restTemplate.exchange(
+          baseUrl() + "/admin/web3/treasury-keys",
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(adminToken)),
+          String.class);
+    }
+
+    private ResponseEntity<String> listByStatus(String status) {
+      return restTemplate.exchange(
+          baseUrl() + "/admin/web3/treasury-keys?status=" + status,
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(adminToken)),
+          String.class);
+    }
+
+    private java.util.List<String> aliasesIn(JsonNode dataArray) {
+      java.util.List<String> aliases = new java.util.ArrayList<>();
+      dataArray.forEach(node -> aliases.add(node.at("/walletAlias").asText()));
+      return aliases;
+    }
+
+    @Test
+    @DisplayName("[E2E-LIST-1] 모든 status 값(ACTIVE/DISABLED/ARCHIVED) 필터가 라이프사이클 전이에 따라 정확히 반영된다")
+    void listFilterByEveryStatus_reflectsLifecycle() throws Exception {
+      stubProvisionWithDynamicKeys();
+
+      // 1) REWARD 와 SPONSOR 두 wallet 을 ACTIVE 로 provision.
+      assertThat(provision("REWARD", PRIVATE_KEY_HEX, DERIVED_ADDRESS).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+      assertThat(provision("SPONSOR", PRIVATE_KEY_HEX_2, DERIVED_ADDRESS_2).getStatusCode())
+          .isEqualTo(HttpStatus.OK);
+
+      // 2) 필터 없음 → 두 개 모두 반환, createdAt DESC (나중 provision 한 SPONSOR 가 먼저).
+      JsonNode noFilter = objectMapper.readTree(listAll().getBody()).at("/data");
+      assertThat(noFilter.isArray()).isTrue();
+      assertThat(noFilter.size()).isEqualTo(2);
+      assertThat(aliasesIn(noFilter)).containsExactly(SPONSOR_ALIAS, REWARD_ALIAS);
+      assertThat(noFilter.get(0).at("/status").asText()).isEqualTo("ACTIVE");
+      assertThat(noFilter.get(1).at("/status").asText()).isEqualTo("ACTIVE");
+      // 세부 필드도 함께 응답되는지 확인 (kmsKeyId / walletAddress / role / keyOrigin).
+      assertThat(noFilter.get(0).at("/kmsKeyId").asText()).isNotBlank();
+      assertThat(noFilter.get(0).at("/walletAddress").asText())
+          .isEqualToIgnoringCase(DERIVED_ADDRESS_2);
+      assertThat(noFilter.get(0).at("/role").asText()).isEqualTo("SPONSOR");
+      assertThat(noFilter.get(0).at("/keyOrigin").asText()).isEqualTo("IMPORTED");
+
+      // 3) status=ACTIVE → 두 개 모두 매치.
+      JsonNode active1 = objectMapper.readTree(listByStatus("ACTIVE").getBody()).at("/data");
+      assertThat(aliasesIn(active1)).containsExactlyInAnyOrder(REWARD_ALIAS, SPONSOR_ALIAS);
+
+      // 4) status=DISABLED / ARCHIVED → 아직 전이 전이므로 빈 배열.
+      assertThat(objectMapper.readTree(listByStatus("DISABLED").getBody()).at("/data").size())
+          .isZero();
+      assertThat(objectMapper.readTree(listByStatus("ARCHIVED").getBody()).at("/data").size())
+          .isZero();
+
+      // 5) SPONSOR 만 DISABLED 로 전이.
+      assertThat(disableWallet(SPONSOR_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      JsonNode active2 = objectMapper.readTree(listByStatus("ACTIVE").getBody()).at("/data");
+      assertThat(aliasesIn(active2)).containsExactly(REWARD_ALIAS);
+
+      JsonNode disabled1 = objectMapper.readTree(listByStatus("DISABLED").getBody()).at("/data");
+      assertThat(aliasesIn(disabled1)).containsExactly(SPONSOR_ALIAS);
+      assertThat(disabled1.get(0).at("/disabledAt").isNull()).isFalse();
+
+      // 6) SPONSOR 를 ARCHIVED 로 전이 — 모든 enum 값을 한 번씩 통과하는 시나리오.
+      assertThat(archiveWallet(SPONSOR_ALIAS).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      JsonNode active3 = objectMapper.readTree(listByStatus("ACTIVE").getBody()).at("/data");
+      assertThat(aliasesIn(active3)).containsExactly(REWARD_ALIAS);
+
+      JsonNode disabled2 = objectMapper.readTree(listByStatus("DISABLED").getBody()).at("/data");
+      assertThat(disabled2.size()).isZero();
+
+      JsonNode archived = objectMapper.readTree(listByStatus("ARCHIVED").getBody()).at("/data");
+      assertThat(aliasesIn(archived)).containsExactly(SPONSOR_ALIAS);
+      assertThat(archived.get(0).at("/status").asText()).isEqualTo("ARCHIVED");
+
+      // 7) 필터 없음 — 여전히 두 wallet 모두 보여야 하고 status 가 정확히 섞여 나옴.
+      JsonNode finalAll = objectMapper.readTree(listAll().getBody()).at("/data");
+      assertThat(aliasesIn(finalAll)).containsExactly(SPONSOR_ALIAS, REWARD_ALIAS);
+      assertThat(finalAll.get(0).at("/status").asText()).isEqualTo("ARCHIVED");
+      assertThat(finalAll.get(1).at("/status").asText()).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("[E2E-LIST-2] status 값이 enum 이 아니면 400")
+    void listWithInvalidStatusEnum_returns400() {
+      ResponseEntity<String> res = listByStatus("BOGUS_STATUS");
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @DisplayName("[E2E-LIST-3] Authorization 헤더 없으면 401")
+    void listUnauthenticated_returns401() {
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl() + "/admin/web3/treasury-keys",
+              HttpMethod.GET,
+              new HttpEntity<>(jsonOnlyHeaders()),
+              String.class);
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+  }
 }

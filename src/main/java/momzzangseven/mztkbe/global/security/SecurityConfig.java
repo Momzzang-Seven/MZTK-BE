@@ -265,6 +265,8 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/admin/web3/treasury-keys")
+                    .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/admin/web3/treasury-keys/{walletAlias}")
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(
