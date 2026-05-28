@@ -378,7 +378,7 @@ marketplace:
 
 location:
   verification:
-    radius-meters: 10.0 # Location verification radius; 10m
+    radius-meters: 20.0 # Location verification radius; 10m
 
 cloud:
   aws:

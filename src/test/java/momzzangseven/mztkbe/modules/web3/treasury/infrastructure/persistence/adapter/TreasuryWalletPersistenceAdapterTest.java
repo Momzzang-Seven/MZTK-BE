@@ -235,6 +235,62 @@ class TreasuryWalletPersistenceAdapterTest {
     verify(repository).findByWalletAliasForUpdate(ALIAS);
   }
 
+  // ----- loadAll -----
+
+  @Test
+  @org.junit.jupiter.api.DisplayName("loadAll(empty) — findAllByOrderByCreatedAtDesc 경유 + 도메인 매핑")
+  void loadAll_noFilter_delegatesToFindAllOrderedAndMapsToDomain() {
+    Web3TreasuryWalletEntity newer =
+        Web3TreasuryWalletEntity.builder()
+            .id(2L)
+            .walletAlias("reward-treasury")
+            .treasuryAddress(ADDRESS)
+            .kmsKeyId("kms-newer")
+            .status(TreasuryWalletStatus.ACTIVE.name())
+            .keyOrigin(TreasuryKeyOrigin.IMPORTED.name())
+            .createdAt(LocalDateTime.of(2026, 1, 2, 0, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 2, 0, 0))
+            .build();
+    Web3TreasuryWalletEntity older =
+        Web3TreasuryWalletEntity.builder()
+            .id(1L)
+            .walletAlias("sponsor-treasury")
+            .treasuryAddress(ADDRESS)
+            .kmsKeyId("kms-older")
+            .status(TreasuryWalletStatus.DISABLED.name())
+            .keyOrigin(TreasuryKeyOrigin.IMPORTED.name())
+            .createdAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+            .disabledAt(LocalDateTime.of(2026, 1, 3, 0, 0))
+            .build();
+    when(repository.findAllByOrderByCreatedAtDesc()).thenReturn(java.util.List.of(newer, older));
+
+    java.util.List<TreasuryWallet> result = adapter.loadAll(Optional.empty());
+
+    verify(repository).findAllByOrderByCreatedAtDesc();
+    verify(repository, never()).findAllByStatusOrderByCreatedAtDesc(any());
+    assertThat(result).hasSize(2);
+    assertThat(result.get(0).getId()).isEqualTo(2L);
+    assertThat(result.get(0).getKmsKeyId()).isEqualTo("kms-newer");
+    assertThat(result.get(1).getId()).isEqualTo(1L);
+    assertThat(result.get(1).getStatus()).isEqualTo(TreasuryWalletStatus.DISABLED);
+  }
+
+  @Test
+  @org.junit.jupiter.api.DisplayName(
+      "loadAll(ACTIVE) — findAllByStatusOrderByCreatedAtDesc(\"ACTIVE\") 경유")
+  void loadAll_withStatusFilter_delegatesWithEnumName() {
+    when(repository.findAllByStatusOrderByCreatedAtDesc(TreasuryWalletStatus.ARCHIVED.name()))
+        .thenReturn(java.util.List.of());
+
+    java.util.List<TreasuryWallet> result =
+        adapter.loadAll(Optional.of(TreasuryWalletStatus.ARCHIVED));
+
+    verify(repository).findAllByStatusOrderByCreatedAtDesc("ARCHIVED");
+    verify(repository, never()).findAllByOrderByCreatedAtDesc();
+    assertThat(result).isEmpty();
+  }
+
   // ----- helpers -----
 
   private static TreasuryWallet.TreasuryWalletBuilder validWalletBuilder() {
