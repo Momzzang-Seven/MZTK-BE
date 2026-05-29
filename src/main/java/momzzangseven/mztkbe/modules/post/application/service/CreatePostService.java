@@ -46,7 +46,9 @@ public class CreatePostService implements CreatePostUseCase {
             savedPost.getId(),
             savedPost.getType(),
             LocalDateTime.now(appZoneId)));
-    return new CreatePostResult(savedPost.getId(), false, 0L, "게시글 작성 완료");
+
+    // TODO: grantedXp is hard-coded temporarily. MOM-465 decoupled granting xp logic with business logics due to Hikari connection occupation problem.
+    return new CreatePostResult(savedPost.getId(), false, 30L, "게시글 작성 완료");
   }
 
   private void validatePostImagesIfPresent(CreatePostCommand command) {
