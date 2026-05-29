@@ -248,6 +248,74 @@ class ReservationExecutionCandidateGuardTest {
     assertThat(guard.hasBlockingExecutionForAnyMarketplaceAction(reservation)).isTrue();
   }
 
+  @Test
+  @DisplayName("scheduler 사전 차단용 marketplace resource 검사도 다른 reservation evidence는 제외한다")
+  void hasBlockingExecutionForAnyMarketplaceAction_IgnoresDifferentMarketplaceResourceEvidence() {
+    Reservation reservation = reservation();
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-foreign-resource",
+                    "SIGNED",
+                    "MARKETPLACE_ADMIN_SETTLE",
+                    null,
+                    evidence(999L, 88L, null, null, "0xother", "MARKETPLACE_ADMIN_SETTLE"))));
+
+    assertThat(guard.hasBlockingExecutionForAnyMarketplaceAction(reservation)).isFalse();
+  }
+
+  @Test
+  @DisplayName("확정된 purchase 이력만 있는 경우 scheduler 사전 차단 대상으로 보지 않는다")
+  void hasBlockingExecutionForAnyMarketplaceAction_IgnoresConfirmedPurchaseHistory() {
+    Reservation reservation = reservation();
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-purchase-confirmed",
+                    "CONFIRMED",
+                    "MARKETPLACE_CLASS_PURCHASE",
+                    null,
+                    evidence(77L, 88L, null, null, "0xorder", "MARKETPLACE_CLASS_PURCHASE"))));
+
+    assertThat(guard.hasBlockingExecutionForAnyMarketplaceAction(reservation)).isFalse();
+  }
+
+  @Test
+  @DisplayName("purchase transaction이 SUCCEEDED여도 scheduler 사전 차단 대상으로 보지 않는다")
+  void hasBlockingExecutionForAnyMarketplaceAction_IgnoresSucceededPurchaseTransaction() {
+    Reservation reservation = reservation();
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-purchase-succeeded",
+                    "FAILED_ONCHAIN",
+                    "MARKETPLACE_CLASS_PURCHASE",
+                    "SUCCEEDED",
+                    evidence(77L, 88L, null, null, "0xorder", "MARKETPLACE_CLASS_PURCHASE"))));
+
+    assertThat(guard.hasBlockingExecutionForAnyMarketplaceAction(reservation)).isFalse();
+  }
+
+  @Test
+  @DisplayName("purchase transaction이 UNCONFIRMED여도 scheduler 사전 차단 대상으로 보지 않는다")
+  void hasBlockingExecutionForAnyMarketplaceAction_IgnoresUnconfirmedPurchaseTransaction() {
+    Reservation reservation = reservation();
+    when(loadReservationExecutionCandidatePort.findByReservationResource(77L, "0xorder"))
+        .thenReturn(
+            List.of(
+                candidate(
+                    "intent-purchase-unconfirmed",
+                    "FAILED_ONCHAIN",
+                    "MARKETPLACE_CLASS_PURCHASE",
+                    "UNCONFIRMED",
+                    evidence(77L, 88L, null, null, "0xorder", "MARKETPLACE_CLASS_PURCHASE"))));
+
+    assertThat(guard.hasBlockingExecutionForAnyMarketplaceAction(reservation)).isFalse();
+  }
+
   private Reservation reservation() {
     return Reservation.builder().id(77L).orderKey("0xorder").build();
   }

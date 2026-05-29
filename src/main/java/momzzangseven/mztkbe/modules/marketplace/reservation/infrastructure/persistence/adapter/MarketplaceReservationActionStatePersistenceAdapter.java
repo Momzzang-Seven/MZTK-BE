@@ -65,6 +65,16 @@ public class MarketplaceReservationActionStatePersistenceAdapter
   }
 
   @Override
+  public Optional<MarketplaceReservationActionState> findActiveByReservationIdWithLock(
+      Long reservationId) {
+    return repository
+        .findActiveByReservationIdWithLock(reservationId, PageRequest.of(0, 1))
+        .stream()
+        .findFirst()
+        .map(this::toDomain);
+  }
+
+  @Override
   public Optional<MarketplaceReservationActionState> findByExecutionIntentPublicIdWithLock(
       String executionIntentPublicId) {
     return repository
@@ -99,6 +109,20 @@ public class MarketplaceReservationActionStatePersistenceAdapter
     return repository
         .findLatestByReservationIdAndActionTypeWithLock(
             reservationId, actionType.name(), PageRequest.of(0, 1))
+        .stream()
+        .findFirst()
+        .map(this::toDomain);
+  }
+
+  @Override
+  public Optional<MarketplaceReservationActionState>
+      findLatestByReservationIdAndActionTypeAndRequestSourceWithLock(
+          Long reservationId,
+          ReservationEscrowAction actionType,
+          ReservationActionRequestSource requestSource) {
+    return repository
+        .findLatestByReservationIdAndActionTypeAndRequestSourceWithLock(
+            reservationId, actionType.name(), requestSource.name(), PageRequest.of(0, 1))
         .stream()
         .findFirst()
         .map(this::toDomain);
