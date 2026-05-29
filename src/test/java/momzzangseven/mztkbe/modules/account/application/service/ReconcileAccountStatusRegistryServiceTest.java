@@ -39,6 +39,16 @@ class ReconcileAccountStatusRegistryServiceTest {
   }
 
   @Test
+  @DisplayName("스냅샷이 비어 있어도 replaceAll 을 호출해 denylist 를 비운다")
+  void reconcile_emptySnapshot_stillReplacesAll() {
+    given(loadPort.loadAllNonActive()).willReturn(Map.of());
+
+    service.reconcile();
+
+    verify(updatePort).replaceAll(Map.of());
+  }
+
+  @Test
   @DisplayName("DB 조회가 실패하면 예외를 전파하지 않고 denylist 를 그대로 둔다")
   void reconcile_loadFails_doesNotThrowAndLeavesDenylist() {
     given(loadPort.loadAllNonActive()).willThrow(new RuntimeException("db down"));
