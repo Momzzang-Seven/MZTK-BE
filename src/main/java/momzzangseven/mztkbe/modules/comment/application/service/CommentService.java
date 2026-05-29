@@ -1,11 +1,12 @@
 package momzzangseven.mztkbe.modules.comment.application.service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
@@ -20,20 +21,20 @@ import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
-import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort.WriterSummary;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
+import momzzangseven.mztkbe.modules.comment.domain.event.CommentCreatedEvent;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
 import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -49,8 +50,9 @@ public class CommentService
   private final LoadPostPort loadPostPort;
   private final LoadAnswerPort loadAnswerPort;
   private final DeleteCommentPort deleteCommentPort;
-  private final GrantCommentXpPort grantCommentXpPort;
+  private final ApplicationEventPublisher eventPublisher;
   private final LoadCommentWriterPort loadCommentWriterPort;
+  private final ZoneId appZoneId;
 
   // 1. 생성 (Create)
   @Override
@@ -88,15 +90,11 @@ public class CommentService
 
     Comment savedComment = saveCommentPort.saveComment(newComment);
 
-    try {
-      grantCommentXpPort.grantCreateCommentXp(savedComment.getWriterId(), savedComment.getId());
-    } catch (Exception e) {
-      log.warn(
-          "Comment created but XP grant failed for userId={}, commentId={}",
-          savedComment.getWriterId(),
-          savedComment.getId(),
-          e);
-    }
+    // Publish inside this transaction; the level module grants XP on AFTER_COMMIT so the comment
+    // never holds a second connection while granting XP (see XpGrantEventHandler).
+    eventPublisher.publishEvent(
+        new CommentCreatedEvent(
+            savedComment.getWriterId(), savedComment.getId(), LocalDateTime.now(appZoneId)));
 
     return CommentMutationResult.from(savedComment);
   }
