@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.account.infrastructure.persistence.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.account.domain.event.UserAccountInvalidatedEvent;
+import momzzangseven.mztkbe.modules.account.domain.event.UserAccountStatusChangedEvent;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
@@ -315,23 +317,75 @@ class UserAccountPersistenceAdapterTest {
   }
 
   // ============================================================
-  // Cache invalidation event publication
+  // Status-change event publication (denylist transition guard)
   // ============================================================
 
   @Nested
-  @DisplayName("cache invalidation events")
-  class CacheInvalidationEvents {
+  @DisplayName("status change event publication")
+  class StatusChangeEventPublication {
 
     @Test
-    @DisplayName("save publishes UserAccountInvalidatedEvent with saved userId")
-    void savePublishesEvent() {
+    @DisplayName("save of a NEW account (insert) publishes NO event")
+    void insertPublishesNoEvent() {
       UserAccount newAccount = UserAccount.createLocal(10L, "$2a$hash");
       UserAccountEntity saved = activeLocalEntity(100L, 10L);
       when(userAccountJpaRepository.save(any())).thenReturn(saved);
 
       adapter.save(newAccount);
 
-      verify(eventPublisher).publishEvent(new UserAccountInvalidatedEvent(10L));
+      verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("update with a real status transition publishes UserAccountStatusChangedEvent")
+    void statusTransitionPublishesEvent() {
+      // findById returns the OLD entity (ACTIVE); updateEntityFromDomain mutates it in place,
+      // but previousStatus is captured BEFORE the mutate, so it stays ACTIVE.
+      UserAccountEntity existing = activeLocalEntity(1L, 10L);
+      when(userAccountJpaRepository.findById(1L)).thenReturn(Optional.of(existing));
+      UserAccountEntity savedBlocked =
+          baseEntity(1L, 10L, AuthProvider.LOCAL, null, AccountStatus.BLOCKED);
+      when(userAccountJpaRepository.save(any())).thenReturn(savedBlocked);
+
+      UserAccount domain =
+          UserAccount.builder()
+              .id(1L)
+              .userId(10L)
+              .provider(AuthProvider.LOCAL)
+              .status(AccountStatus.BLOCKED)
+              .createdAt(Instant.now())
+              .updatedAt(Instant.now())
+              .build();
+
+      adapter.save(domain);
+
+      verify(eventPublisher)
+          .publishEvent(new UserAccountStatusChangedEvent(10L, AccountStatus.BLOCKED));
+    }
+
+    @Test
+    @DisplayName("update with no status change publishes NO UserAccountStatusChangedEvent")
+    void noStatusChangeDoesNotPublish() {
+      UserAccountEntity existing = activeLocalEntity(1L, 10L);
+      when(userAccountJpaRepository.findById(1L)).thenReturn(Optional.of(existing));
+      // updateEntityFromDomain mutates existing in place; status stays ACTIVE → same instance.
+      when(userAccountJpaRepository.save(any())).thenReturn(existing);
+
+      UserAccount domain =
+          UserAccount.builder()
+              .id(1L)
+              .userId(10L)
+              .provider(AuthProvider.LOCAL)
+              .passwordHash("new-hash")
+              .lastLoginAt(Instant.now())
+              .status(AccountStatus.ACTIVE)
+              .createdAt(Instant.now())
+              .updatedAt(Instant.now())
+              .build();
+
+      adapter.save(domain);
+
+      verify(eventPublisher, never()).publishEvent(any(UserAccountStatusChangedEvent.class));
     }
 
     @Test

@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.account.application.port.out.LoadNonActiveUs
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.event.UserAccountInvalidatedEvent;
+import momzzangseven.mztkbe.modules.account.domain.event.UserAccountStatusChangedEvent;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
@@ -104,14 +105,25 @@ public class UserAccountPersistenceAdapter
 
   // ========== SaveUserAccountPort ==========
 
+  /**
+   * Persists the given account. On the update branch, the previously persisted status is captured
+   * before {@link #updateEntityFromDomain} overwrites it, and a {@link
+   * UserAccountStatusChangedEvent} is published <strong>only when the status actually
+   * transitions</strong> (e.g. ACTIVE → BLOCKED). The insert branch (new account, always ACTIVE)
+   * and no-op status saves (e.g. {@code updateLastLogin}, refresh-token rotation) publish nothing —
+   * this transition guard avoids spurious denylist churn and the put↔evict clobber race documented
+   * in MOM-464 §5.
+   */
   @Override
   @Transactional
   public UserAccount save(UserAccount userAccount) {
     log.debug("Saving account for userId: {}", userAccount.getUserId());
 
     UserAccountEntity entity;
+    boolean isUpdate = userAccount.getId() != null;
+    AccountStatus previousStatus = null;
 
-    if (userAccount.getId() != null) {
+    if (isUpdate) {
       // If the userAccount domain object has its own id, it means it is not a fresh user account.
       // Update the entity with new values.
       entity =
@@ -121,6 +133,8 @@ public class UserAccountPersistenceAdapter
                   () ->
                       new IllegalArgumentException(
                           "UserAccount not found with ID: " + userAccount.getId()));
+      // Capture the persisted status BEFORE updateEntityFromDomain overwrites it in place.
+      previousStatus = entity.getStatus();
       updateEntityFromDomain(entity, userAccount);
     } else {
       // Make new entity object for given userAccount
@@ -129,7 +143,12 @@ public class UserAccountPersistenceAdapter
 
     UserAccountEntity saved = userAccountJpaRepository.save(entity);
     log.debug("Account saved with id: {}", saved.getId());
-    eventPublisher.publishEvent(new UserAccountInvalidatedEvent(saved.getUserId()));
+
+    // Transition guard: publish ONLY on a real status change of an existing account.
+    if (isUpdate && previousStatus != saved.getStatus()) {
+      eventPublisher.publishEvent(
+          new UserAccountStatusChangedEvent(saved.getUserId(), saved.getStatus()));
+    }
     return toDomain(saved);
   }
 
