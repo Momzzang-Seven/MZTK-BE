@@ -7,11 +7,11 @@ import jakarta.persistence.EntityManagerFactory;
 import java.util.Map;
 import java.util.UUID;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
-import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.UpdateAccountStatusRegistryPort;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
@@ -33,27 +33,35 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
- * [MOM-460] {@code /auth/reissue} 엔드포인트의 실제 HTTP 경로에서 Caffeine 캐시가 동작하는지, 그리고 계정에 write 가 발생하면
- * invalidation 이 이뤄지는지 검증한다.
+ * [MOM-464] {@code /auth/reissue} 엔드포인트의 실제 HTTP 경로 — POST /auth/reissue → {@code
+ * ReissueTokenService.validateRefreshSubject} → {@code CheckAccountStatusUseCase.findStatus} — 가
+ * MOM-464 에서 의도적으로 <b>cold path 로 DB 를 유지</b>함을 검증한다.
  *
- * <p>{@link AuthStatusCacheE2ETest} 는 use case 를 직접 호출해 측정한 반면, 본 테스트는 운영에서 실제로 풀 압박을 만든 진앙 경로 —
- * POST /auth/reissue → {@code ReissueTokenService.validateRefreshSubject} → {@code
- * LoadUserAccountPort.findByUserId} — 가 캐시에 흡수되는지를 입증한다.
+ * <p>MOM-464 는 hot-path predicate(isActive/isDeleted/isBlocked)만 in-memory denylist 로 옮겼다. {@code
+ * findStatus} 는 단순 boolean 이 아니라 정확한 상태값을 반환해야 하고, 무엇보다 user 가 존재하지 않는 경우({@code Optional.empty})와
+ * ACTIVE 를 구분해야 하므로 denylist(absence=ACTIVE)로는 표현할 수 없다. 따라서 findStatus 는 uncached cold path 로 매 호출
+ * DB 를 읽는다.
  *
  * <p>커버하는 contract:
  *
  * <ul>
- *   <li>(1) 같은 userId 에 대한 연속 reissue 에서 두 번째 호출은 UserAccount fetch 가 사라진다 (pure cache hit).
- *   <li>(2) 로그인의 {@code save(updateLastLogin)} 이 발행하는 {@code UserAccountInvalidatedEvent} 가
- *       AFTER_COMMIT 에서 캐시를 evict 한다.
- *   <li>(3) BLOCKED 로 명시적 save 후 reissue 가 403 으로 거부된다 (HTTP 경로의 invalidation 입증).
+ *   <li>(1) 연속 reissue 는 매 호출 UserAccount 를 1회 fetch 한다 — findStatus 는 캐시가 없는 cold path 이므로 hit 이
+ *       없다.
+ *   <li>(2) BLOCKED 로 명시적 save 후 reissue 가 403(USER_006)으로 거부된다 — findStatus 가 DB 를 직접 읽으므로
+ *       invalidate 할 캐시 없이 즉시 관측된다.
  * </ul>
+ *
+ * <p>(과거 MOM-460 의 "login 의 save(updateLastLogin) 이 캐시를 invalidate 한다" 테스트는 findStatus 가 더 이상 캐시되지
+ * 않으므로 (MOM-464 cold path) invalidate 할 대상이 사라져 삭제했다.)
  *
  * <p>측정: Hibernate Statistics 의 {@link UserAccountEntity} entity-scoped fetch count delta. reissue
  * 가 발사하는 다른 SQL (refresh_token UPDATE/INSERT 등) 은 다른 엔티티라 신호를 오염시키지 않으며, 글로벌 스케줄러의 JDBC 트래픽도 entity
  * scope 밖이라 영향이 없다.
+ *
+ * <p>denylist 는 공유 싱글턴 bean 이고 {@code DatabaseCleaner} 가 비우지 않으므로 매 테스트 전 {@link
+ * UpdateAccountStatusRegistryPort#replaceAll(java.util.Map)} 로 비운다 (전원 ACTIVE).
  */
-@DisplayName("[E2E] /auth/reissue Caffeine cache + write invalidation (MOM-460)")
+@DisplayName("[E2E] /auth/reissue findStatus DB cold path (MOM-464)")
 @TestPropertySource(
     properties = {
       "spring.jpa.properties.hibernate.generate_statistics=true",
@@ -67,30 +75,30 @@ class AuthReissueCacheE2ETest extends E2ETestBase {
 
   @Autowired private LoadUserAccountPort loadUserAccountPort;
   @Autowired private SaveUserAccountPort saveUserAccountPort;
-  @Autowired private CheckAccountStatusUseCase checkAccountStatusUseCase;
   @Autowired private EntityManagerFactory entityManagerFactory;
+  @Autowired private UpdateAccountStatusRegistryPort updateAccountStatusRegistryPort;
 
   private Statistics statistics;
 
   @BeforeEach
-  void enableStatistics() {
+  void resetDenylistAndStatistics() {
+    // denylist 는 공유 싱글턴 — DatabaseCleaner 가 비우지 않으므로 매 테스트 전 명시적으로 비운다 (전원 ACTIVE).
+    updateAccountStatusRegistryPort.replaceAll(java.util.Map.of());
     statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
     statistics.setStatisticsEnabled(true);
     statistics.clear();
   }
 
   /**
-   * Pure cache-hit 검증 — reissue1 은 cache miss 라 fetch 가 1회 발생, reissue2 는 cache hit 이라 fetch 가 0회.
+   * findStatus 가 uncached cold path 임을 입증 — 연속 reissue 가 매번 UserAccount 를 1회 fetch 한다.
    *
-   * <p>주의: 이 테스트는 새로 만든 userId 에 대해 cache 가 비어있다는 점에 의존하므로 구조적으로 reissue1=MISS, reissue2=HIT 가
-   * 보장된다. 즉 "로그인이 cache 를 invalidate 하는지" 는 이 테스트로 입증되지 않는다 — 그 contract 는 {@link
-   * #login_invalidatesUserAccountStatusCache()} 가 커버한다. BLOCK save 경로의 invalidation 은 {@link
-   * #reissueAfterAccountBlocked_returns403_provingInvalidation()} 가 커버한다.
+   * <p>MOM-464 에서 reissue 가 거치는 {@code CheckAccountStatusUseCase.findStatus} 는 의도적으로 캐시되지 않는다 (user
+   * 부재 {@code Optional.empty} 와 ACTIVE 를 구분해야 하므로 denylist 로 표현 불가). 따라서 reissue1, reissue2 모두 DB 를
+   * 1회씩 읽으며 — 캐시 hit 으로 인한 fetch 0회는 더 이상 발생하지 않는다.
    */
   @Test
-  @DisplayName(
-      "/auth/reissue 연속 호출 — 2번째는 UserAccount fetch 0회 (pure cache hit; invalidation 검증은 별도 테스트)")
-  void reissueTwice_secondCallSavesOneUserAccountFetch() throws Exception {
+  @DisplayName("/auth/reissue 연속 호출 — 매 호출 UserAccount fetch 1회 (findStatus cold path, 캐시 없음)")
+  void reissue_alwaysReadsDb_noCacheOnColdPath() throws Exception {
     String email = uniqueEmail();
     signup(email, DEFAULT_TEST_PASSWORD, "reissue-cache");
     ResponseEntity<String> login = login(email, DEFAULT_TEST_PASSWORD);
@@ -109,55 +117,18 @@ class AuthReissueCacheE2ETest extends E2ETestBase {
     long secondReissueFetches = afterSecond - afterFirst;
 
     assertThat(firstReissueFetches)
-        .as("1st reissue 는 UserAccount fetch 가 최소 1회 발생해야 함 (cache miss)")
+        .as("1st reissue — findStatus 가 DB 를 1회 fetch (cold path)")
         .isEqualTo(1L);
     assertThat(secondReissueFetches)
         .as(
-            "2nd reissue 는 UserAccount fetch 가 0회여야 함 (cache hit). 1st=%d, 2nd=%d",
+            "2nd reissue — 캐시가 없으므로 다시 DB 를 1회 fetch (cold path, hit 없음). 1st=%d, 2nd=%d",
             firstReissueFetches, secondReissueFetches)
-        .isZero();
-  }
-
-  /**
-   * Login 의 {@code save(updateLastLogin)} 이 {@code UserAccountInvalidatedEvent} 를 발행해 AFTER_COMMIT
-   * 에서 cache 를 evict 하는지를 입증한다.
-   *
-   * <p>흐름: signup → 1차 login → findStatus 로 cache prewarm → 2차 login (save → invalidate) →
-   * findStatus 가 다시 fetch 를 일으켜야 한다. login 자체의 SQL 은 fetch counter 측정 직전에 {@link
-   * Statistics#clear()} 로 격리한다.
-   */
-  @Test
-  @DisplayName(
-      "login 의 save(updateLastLogin) → AFTER_COMMIT 이벤트 → 캐시 evict → 다음 findStatus 가 fetch 1회 발생")
-  void login_invalidatesUserAccountStatusCache() throws Exception {
-    String email = uniqueEmail();
-    signup(email, DEFAULT_TEST_PASSWORD, "login-inv");
-    ResponseEntity<String> firstLogin = login(email, DEFAULT_TEST_PASSWORD);
-    assertThat(firstLogin.getStatusCode().is2xxSuccessful()).isTrue();
-    Long userId = extractUserId(firstLogin);
-
-    // Cache prewarm — 다음 findStatus 가 fetch 를 일으키지 않게 cache 에 항목을 채운다.
-    checkAccountStatusUseCase.findStatus(userId);
-
-    // 2차 login — save(updateLastLogin) → UserAccountInvalidatedEvent → AFTER_COMMIT 에서 evict.
-    ResponseEntity<String> secondLogin = login(email, DEFAULT_TEST_PASSWORD);
-    assertThat(secondLogin.getStatusCode().is2xxSuccessful()).isTrue();
-
-    // login flow 자체가 발사한 fetch 는 측정 신호에서 제거 — 검증 대상은
-    // 'invalidate 되었으므로 다음 findStatus 가 다시 fetch 를 일으킨다' 뿐.
-    statistics.clear();
-    long baseline = userAccountFetchCount();
-    checkAccountStatusUseCase.findStatus(userId);
-    long afterFindStatus = userAccountFetchCount();
-
-    assertThat(afterFindStatus - baseline)
-        .as("login save 가 cache 를 evict 했어야 함 — findStatus 가 다시 DB 를 fetch 해야 한다")
         .isEqualTo(1L);
   }
 
   @Test
-  @DisplayName("/auth/reissue 후 계정 BLOCK write → AFTER_COMMIT 이벤트로 invalidate → 다음 reissue 는 403")
-  void reissueAfterAccountBlocked_returns403_provingInvalidation() throws Exception {
+  @DisplayName("/auth/reissue 후 계정 BLOCK write → findStatus 가 DB 직접 읽어 즉시 403 (캐시 invalidate 불필요)")
+  void reissueAfterBlock_returns403_directDbRead() throws Exception {
     String email = uniqueEmail();
     signup(email, DEFAULT_TEST_PASSWORD, "invalidation-user");
     ResponseEntity<String> login = login(email, DEFAULT_TEST_PASSWORD);
@@ -171,10 +142,11 @@ class AuthReissueCacheE2ETest extends E2ETestBase {
     UserAccount loaded = loadUserAccountPort.findByUserId(userId).orElseThrow();
     saveUserAccountPort.save(loaded.changeManagedStatus(AccountStatus.BLOCKED));
 
+    // findStatus 는 매 reissue 마다 DB 를 직접 읽으므로 invalidate 할 캐시 없이 BLOCKED 를 즉시 관측한다.
     ResponseEntity<String> reissueAfterBlock = reissue(refreshToken2);
 
     assertThat(reissueAfterBlock.getStatusCode())
-        .as("캐시가 invalidate 되지 않았다면 cached ACTIVE 상태로 200 이 반환됨 — 403 이라야 invalidation 입증")
+        .as("findStatus 가 DB 를 직접 읽으므로 BLOCKED 가 즉시 반영 — 403 이어야 함")
         .isEqualTo(HttpStatus.FORBIDDEN);
     JsonNode body = objectMapper.readTree(reissueAfterBlock.getBody());
     assertThat(body.at("/code").asText()).isEqualTo("USER_006");
