@@ -81,7 +81,8 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
 
     publishPostCreatedEvent(command.userId(), savedPost.getId(), savedPost.getType());
 
-    // TODO: grantedXp is hard-coded temporarily. MOM-465 decoupled granting xp logic with business logics due to Hikari connection occupation problem.
+    // TODO: grantedXp is hard-coded temporarily. MOM-465 decoupled granting xp logic with business
+    // logics due to Hikari connection occupation problem.
     return new CreateQuestionPostResult(savedPost.getId(), false, 30L, "게시글 작성 완료", web3);
   }
 

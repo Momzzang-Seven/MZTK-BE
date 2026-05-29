@@ -47,7 +47,8 @@ public class CreatePostService implements CreatePostUseCase {
             savedPost.getType(),
             LocalDateTime.now(appZoneId)));
 
-    // TODO: grantedXp is hard-coded temporarily. MOM-465 decoupled granting xp logic with business logics due to Hikari connection occupation problem.
+    // TODO: grantedXp is hard-coded temporarily. MOM-465 decoupled granting xp logic with business
+    // logics due to Hikari connection occupation problem.
     return new CreatePostResult(savedPost.getId(), false, 30L, "게시글 작성 완료");
   }
 
