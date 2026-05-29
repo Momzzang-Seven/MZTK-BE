@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.account.application.service;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadAccountStatusRegistryPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
@@ -28,7 +27,6 @@ import org.springframework.stereotype.Service;
  * <p>Denylist eviction on invalidation/hard-delete is handled by {@code
  * AccountStatusRegistryEventHandler}; this service no longer listens to events.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CheckAccountStatusService implements CheckAccountStatusUseCase {

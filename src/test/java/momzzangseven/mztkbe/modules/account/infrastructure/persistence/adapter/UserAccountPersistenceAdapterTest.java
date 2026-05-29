@@ -364,6 +364,59 @@ class UserAccountPersistenceAdapterTest {
     }
 
     @Test
+    @DisplayName(
+        "reactivation (BLOCKED → ACTIVE) publishes ACTIVE event — drives denylist evict (re-grant)")
+    void reactivationPublishesActiveEvent() {
+      // findById returns the OLD entity (BLOCKED); previousStatus is captured BEFORE the mutate.
+      UserAccountEntity existing =
+          baseEntity(1L, 10L, AuthProvider.LOCAL, null, AccountStatus.BLOCKED);
+      when(userAccountJpaRepository.findById(1L)).thenReturn(Optional.of(existing));
+      UserAccountEntity savedActive = activeLocalEntity(1L, 10L);
+      when(userAccountJpaRepository.save(any())).thenReturn(savedActive);
+
+      UserAccount domain =
+          UserAccount.builder()
+              .id(1L)
+              .userId(10L)
+              .provider(AuthProvider.LOCAL)
+              .status(AccountStatus.ACTIVE)
+              .createdAt(Instant.now())
+              .updatedAt(Instant.now())
+              .build();
+
+      adapter.save(domain);
+
+      verify(eventPublisher)
+          .publishEvent(new UserAccountStatusChangedEvent(10L, AccountStatus.ACTIVE));
+    }
+
+    @Test
+    @DisplayName("soft-delete (ACTIVE → DELETED) via save publishes DELETED event")
+    void softDeletePublishesDeletedEvent() {
+      // findById returns the OLD entity (ACTIVE); previousStatus is captured BEFORE the mutate.
+      UserAccountEntity existing = activeLocalEntity(1L, 10L);
+      when(userAccountJpaRepository.findById(1L)).thenReturn(Optional.of(existing));
+      UserAccountEntity savedDeleted =
+          baseEntity(1L, 10L, AuthProvider.LOCAL, null, AccountStatus.DELETED);
+      when(userAccountJpaRepository.save(any())).thenReturn(savedDeleted);
+
+      UserAccount domain =
+          UserAccount.builder()
+              .id(1L)
+              .userId(10L)
+              .provider(AuthProvider.LOCAL)
+              .status(AccountStatus.DELETED)
+              .createdAt(Instant.now())
+              .updatedAt(Instant.now())
+              .build();
+
+      adapter.save(domain);
+
+      verify(eventPublisher)
+          .publishEvent(new UserAccountStatusChangedEvent(10L, AccountStatus.DELETED));
+    }
+
+    @Test
     @DisplayName("update with no status change publishes NO UserAccountStatusChangedEvent")
     void noStatusChangeDoesNotPublish() {
       UserAccountEntity existing = activeLocalEntity(1L, 10L);

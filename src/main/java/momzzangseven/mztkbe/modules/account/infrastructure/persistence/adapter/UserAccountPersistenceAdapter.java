@@ -112,7 +112,9 @@ public class UserAccountPersistenceAdapter
    * transitions</strong> (e.g. ACTIVE → BLOCKED). The insert branch (new account, always ACTIVE)
    * and no-op status saves (e.g. {@code updateLastLogin}, refresh-token rotation) publish nothing —
    * this transition guard avoids spurious denylist churn and the put↔evict clobber race documented
-   * in MOM-464 §5.
+   * in MOM-464 §5. The guard trusts {@code userAccountJpaRepository.save(...)} to return the same
+   * mutated managed entity instance (so {@code saved.getStatus()} reflects the new status); a
+   * future change to a detached- or DTO-returning save would break this transition detection.
    */
   @Override
   @Transactional
