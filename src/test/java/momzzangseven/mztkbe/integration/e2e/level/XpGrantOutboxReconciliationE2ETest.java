@@ -65,6 +65,38 @@ class XpGrantOutboxReconciliationE2ETest extends E2ETestBase {
     assertThat(outboxStatus(idempotencyKey)).isEqualTo("DONE");
   }
 
+  @Test
+  @DisplayName("grant 지속 실패 -> 재시도 소진 후 outbox FAILED, ledger 미적립")
+  void exhaustsRetriesAndMarksFailed() {
+    TestUser user = signupAndLogin("xp-outbox-fail-e2e-user");
+    long syntheticPostId = 123456L;
+    String idempotencyKey = "post:create:" + syntheticPostId;
+
+    // occurredAt precedes every XP policy's effective_from (2000-01-01), so GrantXpService throws
+    // "XP policy not found" before any ledger write — a deterministic grant failure.
+    GrantXpCommand command =
+        GrantXpCommand.of(
+            user.userId(),
+            XpType.POST,
+            LocalDateTime.of(1990, 1, 1, 0, 0),
+            idempotencyKey,
+            "post-creation:" + syntheticPostId);
+
+    outboxPort.enqueue(command);
+    assertThat(outboxStatus(idempotencyKey)).isEqualTo("PENDING");
+
+    // maxAttempts=1 -> a single failed attempt exhausts the retry budget and transitions to FAILED.
+    RunXpGrantReconciliationResult result =
+        reconciliationUseCase.run(new RunXpGrantReconciliationCommand(10, 1, 60));
+
+    assertThat(result.failed()).isEqualTo(1);
+    assertThat(result.granted()).isZero();
+    assertThat(countXpLedger(user.userId(), idempotencyKey))
+        .as("실패한 grant 는 ledger 에 적립되면 안 됨")
+        .isZero();
+    assertThat(outboxStatus(idempotencyKey)).isEqualTo("FAILED");
+  }
+
   private String outboxStatus(String idempotencyKey) {
     return jdbcTemplate.queryForObject(
         "SELECT status FROM xp_grant_outbox WHERE idempotency_key = ?",

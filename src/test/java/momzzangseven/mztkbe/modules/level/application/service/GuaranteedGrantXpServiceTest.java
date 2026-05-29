@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.level.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,6 +63,24 @@ class GuaranteedGrantXpServiceTest {
 
     assertThat(result.status()).isEqualTo(GrantXpResult.Status.DEFERRED);
     assertThat(result.grantedXp()).isZero();
+    verify(outboxPort).enqueue(cmd);
+  }
+
+  @Test
+  @DisplayName("grant throws and outbox enqueue also throws -> still DEFERRED, never propagates")
+  void grantAndEnqueueBothFail_returnsDeferredWithoutThrowing() {
+    GrantXpCommand cmd = command();
+    when(grantXpUseCase.execute(cmd)).thenThrow(new IllegalStateException("xp system down"));
+    doThrow(new RuntimeException("outbox down")).when(outboxPort).enqueue(cmd);
+
+    assertThatCode(
+            () -> {
+              GrantXpResult result = service.execute(cmd);
+              assertThat(result.status()).isEqualTo(GrantXpResult.Status.DEFERRED);
+              assertThat(result.grantedXp()).isZero();
+            })
+        .doesNotThrowAnyException();
+
     verify(outboxPort).enqueue(cmd);
   }
 }
