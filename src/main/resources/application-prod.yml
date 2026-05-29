@@ -105,6 +105,15 @@ web3:
         claim-stale-minutes: ${WEB3_MARKETPLACE_ADMIN_RECONCILIATION_CLAIM_STALE_MINUTES:5}
         cron: "${WEB3_MARKETPLACE_ADMIN_RECONCILIATION_CRON:0 */5 * * * *}"
         zone: "${WEB3_MARKETPLACE_ADMIN_RECONCILIATION_ZONE:Asia/Seoul}"
+level:
+  xp-reconciliation:
+    enabled: ${LEVEL_XP_RECONCILIATION_ENABLED:true}
+    cron: "${LEVEL_XP_RECONCILIATION_CRON:0 */5 * * * *}"
+    zone: "${LEVEL_XP_RECONCILIATION_ZONE:Asia/Seoul}"
+    batch-size: ${LEVEL_XP_RECONCILIATION_BATCH_SIZE:100}
+    max-attempts: ${LEVEL_XP_RECONCILIATION_MAX_ATTEMPTS:10}
+    backoff-seconds: ${LEVEL_XP_RECONCILIATION_BACKOFF_SECONDS:60}
+
 mztk:
   admin:
     bootstrap:

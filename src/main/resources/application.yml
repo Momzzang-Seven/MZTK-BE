@@ -133,6 +133,13 @@ level:
     batch-size: 5000
     cron: "0 0 4 * * *"
     zone: Asia/Seoul
+  xp-reconciliation:
+    enabled: false
+    cron: "0 */5 * * * *"
+    zone: "Asia/Seoul"
+    batch-size: 100
+    max-attempts: 10
+    backoff-seconds: 60
 
 management:
   info:
