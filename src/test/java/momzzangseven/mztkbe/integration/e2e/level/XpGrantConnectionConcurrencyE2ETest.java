@@ -63,8 +63,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *
  * <p>The user's {@code user_progress} row is pre-seeded in {@link #setUp()} so the deliberately
  * retained first-grant {@code loadOrCreateUserProgress} {@code REQUIRES_NEW} (which only fires when
- * the row is absent) does not contaminate the measurement; that first-grant case legitimately peaks
- * at 2 and is out of scope here.
+ * the row is absent) does not contaminate the {@code <= 1} measurements. That first-grant peak of 2
+ * is instead exercised on purpose by {@link #firstGrantWithoutUserProgress_peaksAtTwoConnections()}
+ * as a positive control, proving the probe genuinely distinguishes a peak of 2 from a peak of 1 —
+ * so a passing {@code == 1} assertion cannot be a probe that is simply incapable of reporting 2.
  *
  * <p>Each case also asserts the {@code xp_ledger} row is written, so a passing concurrency check
  * can never be a false positive caused by the XP-grant path not running.
@@ -163,6 +165,43 @@ class XpGrantConnectionConcurrencyE2ETest extends E2ETestBase {
         .isEqualTo(1);
   }
 
+  @Test
+  @DisplayName("질문 게시글 생성: 요청 스레드 동시 connection ≤ 1 + POST XP 적립")
+  void questionPostCreation_holdsAtMostOneConnection() throws Exception {
+    probe.reset();
+
+    Long postId = createQuestionPost("conn probe question", "conn probe question content", 50L);
+
+    assertThat(countXpLedger(user.userId(), "POST", "post:create:" + postId))
+        .as("질문글 경로(TransactionTemplate + grant)가 실제로 XP 를 적립했는지(측정 경로 실행 보장)")
+        .isEqualTo(1);
+    assertThat(probe.peakOnRequestThreads())
+        .as("요청 스레드 동시 connection 최대치 [%s]%n%s", probe.diagnostics(), probe.peakStackDump())
+        .isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("[positive control] user_progress 미존재 시 첫 적립은 REQUIRES_NEW 로 peak 2 — 프로브 민감도 입증")
+  void firstGrantWithoutUserProgress_peaksAtTwoConnections() throws Exception {
+    // Remove the pre-seeded row so the measured grant is this user's first-ever grant: the grant
+    // transaction (T2) then opens a nested REQUIRES_NEW connection to insert user_progress while
+    // still holding its own connection — exactly the peak-2 topology the probe must catch. This
+    // proves the == 1 assertions above are real signal, not a probe that can never report 2.
+    jdbcTemplate.update("DELETE FROM user_progress WHERE user_id = ?", user.userId());
+    probe.reset();
+
+    Long postId = createFreePost("conn probe positive control");
+
+    assertThat(countXpLedger(user.userId(), "POST", "post:create:" + postId))
+        .as("first-grant 경로도 정상적으로 XP 를 적립했는지")
+        .isEqualTo(1);
+    assertThat(probe.peakOnRequestThreads())
+        .as(
+            "첫 적립의 user_progress REQUIRES_NEW insert 로 동시 connection 2 [%s]%n%s",
+            probe.diagnostics(), probe.peakStackDump())
+        .isEqualTo(2);
+  }
+
   // ============================================================
   // HTTP helpers
   // ============================================================
@@ -174,6 +213,19 @@ class XpGrantConnectionConcurrencyE2ETest extends E2ETestBase {
             HttpMethod.POST,
             new HttpEntity<>(
                 Map.of("content", content, "imageIds", List.of()),
+                bearerJsonHeaders(user.accessToken())),
+            String.class);
+    assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
+  }
+
+  private Long createQuestionPost(String title, String content, long reward) throws Exception {
+    ResponseEntity<String> res =
+        restTemplate.exchange(
+            baseUrl() + "/posts/question",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("title", title, "content", content, "reward", reward),
                 bearerJsonHeaders(user.accessToken())),
             String.class);
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
