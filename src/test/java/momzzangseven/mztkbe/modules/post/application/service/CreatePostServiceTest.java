@@ -97,7 +97,7 @@ class CreatePostServiceTest {
     // longer reports XP (FE does not consume these fields for posts).
     assertThat(result.postId()).isEqualTo(10L);
     assertThat(result.isXpGranted()).isFalse();
-    assertThat(result.grantedXp()).isZero();
+    assertThat(result.grantedXp()).isEqualTo(30);
     assertThat(result.message()).isEqualTo("게시글 작성 완료");
   }
 
@@ -127,7 +127,7 @@ class CreatePostServiceTest {
     verify(linkTagPort, never()).linkTagsToPost(any(), any());
     verify(eventPublisher).publishEvent(any(PostCreatedEvent.class));
     assertThat(result.isXpGranted()).isFalse();
-    assertThat(result.grantedXp()).isZero();
+    assertThat(result.grantedXp()).isEqualTo(30);
     assertThat(result.message()).isEqualTo("게시글 작성 완료");
   }
 

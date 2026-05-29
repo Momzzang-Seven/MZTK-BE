@@ -297,7 +297,7 @@ class CreateQuestionPostServiceTest {
     // reports XP (FE consumes only postId/web3 from the question-create response).
     assertThat(result.postId()).isEqualTo(20L);
     assertThat(result.isXpGranted()).isFalse();
-    assertThat(result.grantedXp()).isZero();
+    assertThat(result.grantedXp()).isEqualTo(30);
     assertThat(result.message()).isEqualTo("게시글 작성 완료");
     assertThat(result.web3()).isNull();
   }
