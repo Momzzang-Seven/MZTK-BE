@@ -34,7 +34,18 @@ public class GuaranteedGrantXpService implements GuaranteedGrantXpUseCase {
           "Synchronous XP grant failed; enqueueing to outbox for guaranteed retry: key={}",
           command.idempotencyKey(),
           e);
-      outboxPort.enqueue(command);
+      // The guaranteed-delivery contract must never throw back to the caller: a saved
+      // post/comment/verification must not fail the request over XP plumbing. If even the durable
+      // enqueue fails (grant down AND outbox down), the XP is lost — emit a CRITICAL log for manual
+      // reconciliation and still return DEFERRED.
+      try {
+        outboxPort.enqueue(command);
+      } catch (Exception enqueueFailure) {
+        log.error(
+            "CRITICAL: outbox enqueue also failed; XP lost, manual reconciliation needed: key={}",
+            command.idempotencyKey(),
+            enqueueFailure);
+      }
       return GrantXpResult.deferred(command.occurredAt().toLocalDate());
     }
   }

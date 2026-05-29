@@ -21,6 +21,8 @@ public interface XpGrantOutboxJpaRepository extends JpaRepository<XpGrantOutboxE
       @Param("now") LocalDateTime now,
       Pageable pageable);
 
+  // PostgreSQL-only (FOR UPDATE SKIP LOCKED). Exercise this path only in e2eTest against real
+  // Postgres; H2 unit/integration tests must mock XpGrantOutboxPort instead of hitting this query.
   @Query(
       value =
           "SELECT * FROM xp_grant_outbox WHERE id = :id AND status = 'PENDING' "
