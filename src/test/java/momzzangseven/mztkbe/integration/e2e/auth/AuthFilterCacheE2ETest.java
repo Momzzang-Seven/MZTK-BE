@@ -89,7 +89,20 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       // AdminUserRoleManagementE2ETest 와 동일한 admin 설정 — admin 시드/로그인 흐름이 정상 동작하도록.
       // mztk.admin.bootstrap.enabled=false 로 두면 LOCAL_ADMIN 로그인이 AUTH_002 로 실패한다.
       "mztk.admin.recovery.anchor=test-e2e-recovery-anchor",
-      "mztk.admin.seed.seed-count=2"
+      "mztk.admin.seed.seed-count=2",
+      // 시나리오 (4) 는 JVM-global Hikari acquire counter 를 두 요청 사이 delta 로 측정한다.
+      // integration 프로파일에서 fixedDelay 로 도는 백그라운드 스케줄러가 그 사이에 connection 을
+      // 잡으면 counter 가 요청 스레드 밖에서 +1 되어 시나리오 (4) 가 플래키해진다. 이 테스트 클래스는
+      // 어떤 스케줄러도 필요로 하지 않으므로 (denylist 리셋은 E2ETestBase 가 처리), pool 을 건드리는
+      // 근거리 스케줄러를 전부 비활성화한다.
+      //   - TransactionIssuerWorker (@Scheduled fixedDelay 1s, web3.reward-token.enabled 게이트)
+      "web3.reward-token.enabled=false",
+      //   - AccountStatusRegistryReconciliationScheduler (5분 cron, 이 플래그는 reconcile/warmup
+      //     스케줄러만 게이트하고 denylist 이벤트 핸들러는 게이트하지 않으므로 시나리오 (2)/(2-evict) 안전)
+      "account.status-registry.enabled=false",
+      //   - ExternalDisconnectRetryScheduler (@Scheduled fixedDelay, 무조건) 의 발사를 테스트 윈도우
+      //     밖으로 밀어낸다.
+      "withdrawal.external-disconnect.fixed-delay=86400000"
     })
 class AuthFilterCacheE2ETest extends E2ETestBase {
 
