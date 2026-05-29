@@ -113,7 +113,7 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
   }
 
   // ============================================================
-  // Scenario (1) — User filter path: 2nd GET /users/me cache hit
+  // Scenario (1) — denylist hot path (filter 0 fetch on every request)
   // ============================================================
 
   @Test
@@ -137,16 +137,17 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
     assertThat(second.getStatusCode().is2xxSuccessful()).isTrue();
     long secondDelta = userAccountFetchCount() - beforeSecond;
 
-    // /users/me 핸들러는 UserAccountEntity 를 매 요청 동일하게 fetch (GetAuthProviderService 경유).
+    // /users/me 핸들러는 UserAccountEntity 를 매 요청 정확히 1회 fetch (GetAuthProviderService 경유).
     // filter 는 in-memory denylist 조회라 어느 요청에서도 fetch 를 0회 추가한다.
-    // 따라서 filter 의 miss/hit 비대칭이 사라지고, first/second 의 fetch delta 가 동일해야 한다 —
-    // 양 요청 모두 핸들러의 고정 fetch 만 남는다.
-    assertThat(firstDelta).as("1st GET /users/me — 핸들러 fetch, 최소 1회 이상").isGreaterThanOrEqualTo(1L);
+    // 따라서 핸들러의 단일 fetch 만 남아 매 요청 delta == 1 이어야 한다 — filter 가 회귀로 DB read 를
+    // 재도입하면 delta 가 2 가 되어 (여전히 동일하더라도) 절대값 assertion 이 이를 잡아낸다.
     assertThat(firstDelta)
         .as(
-            "denylist hot path: filter 는 매 요청 fetch 0회 → first/second delta 동일 (핸들러 고정 fetch). 1st=%d, 2nd=%d",
-            firstDelta, secondDelta)
-        .isEqualTo(secondDelta);
+            "denylist hot path: filter fetches 0 UserAccountEntity; only /users/me 핸들러의 1회 fetch 남음")
+        .isEqualTo(1L);
+    assertThat(secondDelta)
+        .as("2nd 요청도 동일 — 필터는 매 요청 0 fetch. 1st=%d, 2nd=%d", firstDelta, secondDelta)
+        .isEqualTo(1L);
   }
 
   // ============================================================
@@ -159,10 +160,12 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
     TestUser user = signupAndLogin("filter-cache-block");
     HttpEntity<Void> request = new HttpEntity<>(bearerJsonHeaders(user.accessToken()));
 
-    // 사전 호출 — denylist 는 비어있어(전원 ACTIVE) 200 을 받는다. (선택적, harmless)
+    // 사전 호출 — denylist 는 비어있어(전원 ACTIVE) 200 을 받는다. block 전 "허용됐었다" baseline.
     ResponseEntity<String> ok =
         restTemplate.exchange(baseUrl() + "/users/me", HttpMethod.GET, request, String.class);
-    assertThat(ok.getStatusCode().is2xxSuccessful()).isTrue();
+    assertThat(ok.getStatusCode().is2xxSuccessful())
+        .as("block 직전 prewarm GET — 아직 ACTIVE 라 허용(2xx)됨이 baseline")
+        .isTrue();
 
     // BLOCKED 로 save → UserAccountStatusChangedEvent(BLOCKED) → AFTER_COMMIT 핸들러가 denylist 에 put.
     UserAccount loaded = loadUserAccountPort.findByUserId(user.userId()).orElseThrow();
@@ -182,6 +185,9 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
   @Test
   @DisplayName("GET /admin/dashboard/user-stats 연속 호출 — 2번째는 filter 가 AdminAccountEntity fetch 0회")
   void authenticatedAdminGet_twice_secondCallFilterIssuesNoAdminAccountFetch() throws Exception {
+    // 이 시나리오는 admin 측이 여전히 Caffeine cache 임을 검증 — admin status 캐싱은 의도적으로 MOM-464 범위 밖.
+    // 매 테스트 truncate 후에도 DB ID 는 monotonic 으로 재사용되지 않아, 새 admin user ID 가 cache key
+    // 충돌을 일으키지 않으므로 (DatabaseCleaner 가 Caffeine 을 비우지 않아도) 안전하다.
     AdminCredential admin = seedAdmin();
     String adminToken = adminLogin(admin.loginId(), admin.plaintext());
     HttpEntity<Void> request = new HttpEntity<>(bearerJsonHeaders(adminToken));
@@ -267,7 +273,7 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
 
   /**
    * Spring Boot 가 자동 등록하는 {@code hikaricp.connections.acquire} {@link Timer} 의 count — 즉 HikariCP
-   * 에서 connection 을 가져오려 시도한 횟수 (성공 + 실패). Cache hit 시 0 이 되어야 함을 측정하는 데 사용한다.
+   * 에서 connection 을 가져오려 시도한 횟수 (성공 + 실패). denylist hot path 에서 필터가 0 acquire 함을 측정하는 데 사용한다.
    */
   private long hikariAcquireCount() {
     Timer timer = meterRegistry.find("hikaricp.connections.acquire").timer();
