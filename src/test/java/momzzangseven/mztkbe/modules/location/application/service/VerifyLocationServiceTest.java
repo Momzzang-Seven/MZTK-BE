@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.*;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.error.location.LocationNotFoundException;
@@ -12,6 +13,7 @@ import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationComma
 import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationResult;
 import momzzangseven.mztkbe.modules.location.application.port.out.LoadLocationPort;
 import momzzangseven.mztkbe.modules.location.application.port.out.SaveVerificationPort;
+import momzzangseven.mztkbe.modules.location.domain.event.LocationVerifiedEvent;
 import momzzangseven.mztkbe.modules.location.domain.model.Location;
 import momzzangseven.mztkbe.modules.location.domain.model.LocationVerification;
 import momzzangseven.mztkbe.modules.location.domain.vo.GpsCoordinate;
@@ -21,8 +23,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("VerifyLocationService 단위 테스트")
@@ -30,7 +34,7 @@ class VerifyLocationServiceTest {
 
   @Mock private LoadLocationPort loadLocationPort;
   @Mock private SaveVerificationPort saveVerificationPort;
-  @Mock private XpGrantService xpGrantService;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   private VerifyLocationService service;
   private VerificationRadius verificationRadius;
@@ -43,7 +47,11 @@ class VerifyLocationServiceTest {
 
     service =
         new VerifyLocationService(
-            loadLocationPort, saveVerificationPort, xpGrantService, verificationRadius);
+            loadLocationPort,
+            saveVerificationPort,
+            eventPublisher,
+            verificationRadius,
+            ZoneId.of("Asia/Seoul"));
   }
 
   @Nested
@@ -51,7 +59,7 @@ class VerifyLocationServiceTest {
   class SuccessfulVerificationTest {
 
     @Test
-    @DisplayName("인증 성공 - 경험치 부여")
+    @DisplayName("인증 성공 - LocationVerifiedEvent 발행 및 보상 응답")
     void verifyLocationSuccess() {
       // given
       Long userId = 123L;
@@ -67,7 +75,6 @@ class VerifyLocationServiceTest {
       given(loadLocationPort.findByLocationId(locationId)).willReturn(Optional.of(location));
       given(saveVerificationPort.save(any(LocationVerification.class)))
           .willReturn(successfulVerification);
-      given(xpGrantService.grantXp(any(LocationVerification.class))).willReturn(100); // WORKOUT XP
 
       // when
       VerifyLocationResult result = service.execute(command);
@@ -78,10 +85,18 @@ class VerifyLocationServiceTest {
       assertThat(result.verificationId()).isEqualTo(100L);
       assertThat(result.userId()).isEqualTo(userId);
       assertThat(result.locationId()).isEqualTo(locationId);
+      // XP는 level 모듈이 AFTER_COMMIT 으로 비동기 적립하므로, 응답은 인증 성공 + 표준 보상 값으로 고정.
+      assertThat(result.xpGranted()).isTrue();
+      assertThat(result.grantedXp()).isEqualTo(100);
+
+      ArgumentCaptor<LocationVerifiedEvent> eventCaptor =
+          ArgumentCaptor.forClass(LocationVerifiedEvent.class);
+      verify(eventPublisher).publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue().userId()).isEqualTo(userId);
+      assertThat(eventCaptor.getValue().locationId()).isEqualTo(locationId);
 
       verify(loadLocationPort, times(1)).findByLocationId(locationId);
       verify(saveVerificationPort, times(1)).save(any(LocationVerification.class));
-      verify(xpGrantService, times(1)).grantXp(any(LocationVerification.class));
     }
 
     @Test
@@ -103,7 +118,6 @@ class VerifyLocationServiceTest {
       given(loadLocationPort.findByLocationId(locationId)).willReturn(Optional.of(location));
       given(saveVerificationPort.save(any(LocationVerification.class)))
           .willReturn(successfulVerification);
-      given(xpGrantService.grantXp(any(LocationVerification.class))).willReturn(100);
 
       // when
       VerifyLocationResult result = service.execute(command);
@@ -111,6 +125,7 @@ class VerifyLocationServiceTest {
       // then
       assertThat(result.isVerified()).isTrue();
       assertThat(result.distance()).isEqualTo(0.0);
+      verify(eventPublisher).publishEvent(any(LocationVerifiedEvent.class));
     }
   }
 
@@ -119,7 +134,7 @@ class VerifyLocationServiceTest {
   class FailedVerificationTest {
 
     @Test
-    @DisplayName("인증 실패 - 반경 초과, 경험치 부여 안 함")
+    @DisplayName("인증 실패 - 반경 초과, 이벤트 발행 안 함")
     void verifyLocationFailedDistanceExceeded() {
       // given
       Long userId = 123L;
@@ -142,9 +157,11 @@ class VerifyLocationServiceTest {
       assertThat(result.isVerified()).isFalse();
       assertThat(result.distance()).isEqualTo(47.82);
       assertThat(result.verificationId()).isEqualTo(101L);
+      assertThat(result.xpGranted()).isFalse();
+      assertThat(result.grantedXp()).isZero();
 
-      // 인증 실패 시 경험치 부여 안 함
-      verify(xpGrantService, never()).grantXp(any(LocationVerification.class));
+      // 인증 실패 시 이벤트 발행 안 함
+      verify(eventPublisher, never()).publishEvent(any());
 
       // 인증 기록은 저장됨 (감사 로그)
       verify(saveVerificationPort, times(1)).save(any(LocationVerification.class));
@@ -196,7 +213,7 @@ class VerifyLocationServiceTest {
 
       // 인증 기록 저장 안 함
       verify(saveVerificationPort, never()).save(any(LocationVerification.class));
-      verify(xpGrantService, never()).grantXp(any(LocationVerification.class));
+      verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -222,43 +239,7 @@ class VerifyLocationServiceTest {
 
       // 소유권 검증 실패 시 인증 시도 안 함
       verify(saveVerificationPort, never()).save(any(LocationVerification.class));
-      verify(xpGrantService, never()).grantXp(any(LocationVerification.class));
-    }
-  }
-
-  @Nested
-  @DisplayName("execute() - 경험치 부여 실패 처리")
-  class XpGrantFailureTest {
-
-    @Test
-    @DisplayName("경험치 부여 실패해도 인증 기록은 저장됨 (트랜잭션 롤백 안 함)")
-    void xpGrantFailureDoesNotRollback() {
-      // given
-      Long userId = 123L;
-      Long locationId = 1L;
-      VerifyLocationCommand command =
-          VerifyLocationCommand.of(userId, locationId, 37.4602015, 126.9520124);
-
-      Location location = createMockLocation(userId, locationId, 37.4601908, 126.9519817);
-      LocationVerification successfulVerification =
-          createSuccessfulVerification(userId, locationId, 3.47);
-
-      given(loadLocationPort.findByLocationId(locationId)).willReturn(Optional.of(location));
-      given(saveVerificationPort.save(any(LocationVerification.class)))
-          .willReturn(successfulVerification);
-      given(xpGrantService.grantXp(any(LocationVerification.class)))
-          .willThrow(new RuntimeException("XP grant failed")); // 경험치 부여 실패
-
-      // when
-      VerifyLocationResult result = service.execute(command);
-
-      // then - 예외가 전파되지 않고 정상 응답
-      assertThat(result.isVerified()).isTrue();
-      assertThat(result.verificationId()).isEqualTo(100L);
-
-      // 인증 기록은 저장되었음
-      verify(saveVerificationPort, times(1)).save(any(LocationVerification.class));
-      verify(xpGrantService, times(1)).grantXp(any(LocationVerification.class));
+      verify(eventPublisher, never()).publishEvent(any());
     }
   }
 
@@ -281,7 +262,6 @@ class VerifyLocationServiceTest {
 
       given(loadLocationPort.findByLocationId(locationId)).willReturn(Optional.of(location));
       given(saveVerificationPort.save(any(LocationVerification.class))).willReturn(verification);
-      given(xpGrantService.grantXp(any(LocationVerification.class))).willReturn(100);
 
       // when
       VerifyLocationResult result = service.execute(command);
@@ -313,7 +293,7 @@ class VerifyLocationServiceTest {
       // then
       assertThat(result.isVerified()).isFalse();
       assertThat(result.distance()).isEqualTo(5.01);
-      verify(xpGrantService, never()).grantXp(any(LocationVerification.class));
+      verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -359,7 +339,6 @@ class VerifyLocationServiceTest {
 
       given(loadLocationPort.findByLocationId(locationId)).willReturn(Optional.of(location));
       given(saveVerificationPort.save(any(LocationVerification.class))).willReturn(verification);
-      given(xpGrantService.grantXp(any(LocationVerification.class))).willReturn(100);
 
       // when & then (예외 없음)
       VerifyLocationResult result = service.execute(command);
@@ -388,7 +367,7 @@ class VerifyLocationServiceTest {
 
       // 소유권 실패 시 이후 로직 실행 안 됨
       verify(saveVerificationPort, never()).save(any(LocationVerification.class));
-      verify(xpGrantService, never()).grantXp(any(LocationVerification.class));
+      verify(eventPublisher, never()).publishEvent(any());
     }
   }
 
@@ -410,7 +389,6 @@ class VerifyLocationServiceTest {
 
       given(loadLocationPort.findByLocationId(locationId)).willReturn(Optional.of(location));
       given(saveVerificationPort.save(any(LocationVerification.class))).willReturn(verification);
-      given(xpGrantService.grantXp(any(LocationVerification.class))).willReturn(100);
 
       // when
       service.execute(command);
