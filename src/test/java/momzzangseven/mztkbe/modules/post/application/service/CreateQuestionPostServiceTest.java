@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
@@ -19,6 +20,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.PublishPostDeleted
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.domain.event.PostCreatedEvent;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
@@ -32,18 +34,19 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CreateQuestionPostService unit test")
 class CreateQuestionPostServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
-  @Mock private PostXpService postXpService;
   @Mock private LinkTagPort linkTagPort;
   @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
   @Mock private PublishPostDeletedEventPort publishPostDeletedEventPort;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   private CreateQuestionPostService createQuestionPostService;
 
@@ -52,12 +55,13 @@ class CreateQuestionPostServiceTest {
     createQuestionPostService =
         new CreateQuestionPostService(
             postPersistencePort,
-            postXpService,
             linkTagPort,
             validatePostImagesPort,
             updatePostImagesPort,
             questionLifecycleExecutionPort,
-            publishPostDeletedEventPort);
+            publishPostDeletedEventPort,
+            eventPublisher,
+            ZoneId.of("Asia/Seoul"));
   }
 
   @Test
@@ -247,7 +251,8 @@ class CreateQuestionPostServiceTest {
 
   @Test
   @DisplayName(
-      "creates question post, performs precheck, prepares web3 execution, and preserves XP fields")
+      "creates question post, performs precheck, prepares web3 execution, and publishes"
+          + " PostCreatedEvent")
   void executeSuccessWithQuestionPost() {
     CreatePostCommand command =
         CreatePostCommand.of(
@@ -268,7 +273,6 @@ class CreateQuestionPostServiceTest {
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
     when(questionLifecycleExecutionPort.prepareQuestionCreate(20L, 3L, "질문 내용", 50L))
         .thenReturn(Optional.empty());
-    when(postXpService.grantCreatePostXp(3L, 20L)).thenReturn(20L);
 
     CreateQuestionPostResult result = createQuestionPostService.execute(command);
 
@@ -282,10 +286,19 @@ class CreateQuestionPostServiceTest {
     verify(updatePostImagesPort).updateImages(3L, 20L, PostType.QUESTION, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(20L, List.of("java"));
     verify(questionLifecycleExecutionPort).prepareQuestionCreate(20L, 3L, "질문 내용", 50L);
+
+    ArgumentCaptor<PostCreatedEvent> eventCaptor = ArgumentCaptor.forClass(PostCreatedEvent.class);
+    verify(eventPublisher).publishEvent(eventCaptor.capture());
+    assertThat(eventCaptor.getValue().userId()).isEqualTo(3L);
+    assertThat(eventCaptor.getValue().postId()).isEqualTo(20L);
+    assertThat(eventCaptor.getValue().type()).isEqualTo(PostType.QUESTION);
+
+    // XP is granted asynchronously by the level module on AFTER_COMMIT, so the response no longer
+    // reports XP (FE consumes only postId/web3 from the question-create response).
     assertThat(result.postId()).isEqualTo(20L);
-    assertThat(result.isXpGranted()).isTrue();
-    assertThat(result.grantedXp()).isEqualTo(20L);
-    assertThat(result.message()).contains("+20 XP");
+    assertThat(result.isXpGranted()).isFalse();
+    assertThat(result.grantedXp()).isZero();
+    assertThat(result.message()).isEqualTo("게시글 작성 완료");
     assertThat(result.web3()).isNull();
   }
 
@@ -301,7 +314,7 @@ class CreateQuestionPostServiceTest {
 
     verifyNoInteractions(
         postPersistencePort,
-        postXpService,
+        eventPublisher,
         linkTagPort,
         validatePostImagesPort,
         updatePostImagesPort,

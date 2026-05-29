@@ -1,7 +1,8 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
@@ -10,21 +11,23 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.domain.event.PostCreatedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CreatePostService implements CreatePostUseCase {
 
   private final PostPersistencePort postPersistencePort;
-  private final PostXpService postXpService;
   private final LinkTagPort linkTagPort;
   private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
+  private final ApplicationEventPublisher eventPublisher;
+  private final ZoneId appZoneId;
 
   @Override
   @Transactional
@@ -35,9 +38,15 @@ public class CreatePostService implements CreatePostUseCase {
     command.validate();
     validatePostImagesIfPresent(command);
     Post savedPost = savePost(command);
-    XpGrantResult xpResult = grantCreateXp(command.userId(), savedPost.getId());
-    return new CreatePostResult(
-        savedPost.getId(), xpResult.isXpGranted(), xpResult.grantedXp(), xpResult.message());
+    // Publish inside this transaction; the level module grants XP on AFTER_COMMIT so the post
+    // never holds a second connection while granting XP (see XpGrantEventHandler).
+    eventPublisher.publishEvent(
+        new PostCreatedEvent(
+            command.userId(),
+            savedPost.getId(),
+            savedPost.getType(),
+            LocalDateTime.now(appZoneId)));
+    return new CreatePostResult(savedPost.getId(), false, 0L, "게시글 작성 완료");
   }
 
   private void validatePostImagesIfPresent(CreatePostCommand command) {
@@ -74,23 +83,4 @@ public class CreatePostService implements CreatePostUseCase {
 
     return savedPost;
   }
-
-  private XpGrantResult grantCreateXp(Long userId, Long postId) {
-    Long grantedXp = 0L;
-    boolean isXpGranted = false;
-
-    try {
-      grantedXp = postXpService.grantCreatePostXp(userId, postId);
-      if (grantedXp > 0) {
-        isXpGranted = true;
-      }
-    } catch (Exception e) {
-      log.warn("Post created but XP grant failed for user: {}", userId, e);
-    }
-
-    String message = isXpGranted ? "게시글 작성 완료! (+" + grantedXp + " XP)" : "게시글 작성 완료";
-    return new XpGrantResult(isXpGranted, grantedXp, message);
-  }
-
-  private record XpGrantResult(boolean isXpGranted, Long grantedXp, String message) {}
 }

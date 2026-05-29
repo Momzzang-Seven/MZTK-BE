@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.ZoneId;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
@@ -16,6 +17,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.domain.event.PostCreatedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -26,16 +28,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CreatePostService unit test")
 class CreatePostServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
-  @Mock private PostXpService postXpService;
   @Mock private LinkTagPort linkTagPort;
   @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   private CreatePostService createPostService;
 
@@ -44,15 +47,16 @@ class CreatePostServiceTest {
     createPostService =
         new CreatePostService(
             postPersistencePort,
-            postXpService,
             linkTagPort,
             validatePostImagesPort,
-            updatePostImagesPort);
+            updatePostImagesPort,
+            eventPublisher,
+            ZoneId.of("Asia/Seoul"));
   }
 
   @Test
-  @DisplayName("creates post, syncs images, links tags, and includes granted XP message")
-  void executeSuccessWithTagsAndXpGranted() {
+  @DisplayName("creates post, syncs images, links tags, and publishes PostCreatedEvent")
+  void executeSuccessWithTagsAndEventPublished() {
     CreatePostCommand command =
         CreatePostCommand.of(
             7L, null, "content", PostType.FREE, 0L, List.of(1L, 2L), List.of("java", "spring"));
@@ -70,7 +74,6 @@ class CreatePostServiceTest {
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
-    when(postXpService.grantCreatePostXp(7L, 10L)).thenReturn(30L);
 
     CreatePostResult result = createPostService.execute(command);
 
@@ -83,11 +86,19 @@ class CreatePostServiceTest {
     // Verify image sync is called
     verify(updatePostImagesPort).updateImages(7L, 10L, PostType.FREE, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(10L, List.of("java", "spring"));
-    verify(postXpService).grantCreatePostXp(7L, 10L);
+
+    ArgumentCaptor<PostCreatedEvent> eventCaptor = ArgumentCaptor.forClass(PostCreatedEvent.class);
+    verify(eventPublisher).publishEvent(eventCaptor.capture());
+    assertThat(eventCaptor.getValue().userId()).isEqualTo(7L);
+    assertThat(eventCaptor.getValue().postId()).isEqualTo(10L);
+    assertThat(eventCaptor.getValue().type()).isEqualTo(PostType.FREE);
+
+    // XP is granted asynchronously by the level module on AFTER_COMMIT, so the create response no
+    // longer reports XP (FE does not consume these fields for posts).
     assertThat(result.postId()).isEqualTo(10L);
-    assertThat(result.isXpGranted()).isTrue();
-    assertThat(result.grantedXp()).isEqualTo(30L);
-    assertThat(result.message()).isEqualTo("게시글 작성 완료! (+30 XP)");
+    assertThat(result.isXpGranted()).isFalse();
+    assertThat(result.grantedXp()).isZero();
+    assertThat(result.message()).isEqualTo("게시글 작성 완료");
   }
 
   @Test
@@ -108,13 +119,13 @@ class CreatePostServiceTest {
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
-    when(postXpService.grantCreatePostXp(1L, 11L)).thenReturn(0L);
 
     CreatePostResult result = createPostService.execute(command);
 
     verifyNoInteractions(validatePostImagesPort);
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
     verify(linkTagPort, never()).linkTagsToPost(any(), any());
+    verify(eventPublisher).publishEvent(any(PostCreatedEvent.class));
     assertThat(result.isXpGranted()).isFalse();
     assertThat(result.grantedXp()).isZero();
     assertThat(result.message()).isEqualTo("게시글 작성 완료");
@@ -138,44 +149,13 @@ class CreatePostServiceTest {
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
-    when(postXpService.grantCreatePostXp(2L, 13L)).thenReturn(0L);
 
     createPostService.execute(command);
 
     verifyNoInteractions(validatePostImagesPort);
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
     verify(linkTagPort).linkTagsToPost(13L, List.of("java"));
-  }
-
-  @Test
-  @DisplayName("continues when XP service fails but image sync succeeded")
-  void executeContinuesWhenXpGrantFails() {
-    CreatePostCommand command =
-        CreatePostCommand.of(4L, null, "content", PostType.FREE, 0L, List.of(1L), List.of("java"));
-
-    Post savedPost =
-        Post.builder()
-            .id(12L)
-            .userId(4L)
-            .type(PostType.FREE)
-            .title(null)
-            .content("content")
-            .reward(0L)
-            .status(PostStatus.OPEN)
-            .build();
-
-    when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
-    when(postXpService.grantCreatePostXp(4L, 12L)).thenThrow(new RuntimeException("xp failed"));
-
-    CreatePostResult result = createPostService.execute(command);
-
-    verify(validatePostImagesPort).validateAttachableImages(4L, null, PostType.FREE, List.of(1L));
-    verify(updatePostImagesPort).updateImages(4L, 12L, PostType.FREE, List.of(1L));
-    verify(linkTagPort).linkTagsToPost(12L, List.of("java"));
-    assertThat(result.postId()).isEqualTo(12L);
-    assertThat(result.isXpGranted()).isFalse();
-    assertThat(result.grantedXp()).isZero();
-    assertThat(result.message()).isEqualTo("게시글 작성 완료");
+    verify(eventPublisher).publishEvent(any(PostCreatedEvent.class));
   }
 
   @Test
@@ -188,7 +168,7 @@ class CreatePostServiceTest {
 
     verifyNoInteractions(
         postPersistencePort,
-        postXpService,
+        eventPublisher,
         linkTagPort,
         validatePostImagesPort,
         updatePostImagesPort);
@@ -207,7 +187,7 @@ class CreatePostServiceTest {
 
     verifyNoInteractions(
         postPersistencePort,
-        postXpService,
+        eventPublisher,
         linkTagPort,
         validatePostImagesPort,
         updatePostImagesPort);
@@ -224,7 +204,7 @@ class CreatePostServiceTest {
 
     verifyNoInteractions(
         postPersistencePort,
-        postXpService,
+        eventPublisher,
         linkTagPort,
         validatePostImagesPort,
         updatePostImagesPort);

@@ -1,7 +1,8 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
@@ -15,11 +16,13 @@ import momzzangseven.mztkbe.modules.post.application.port.out.PublishPostDeleted
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.domain.event.PostCreatedEvent;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionOperations;
@@ -31,18 +34,18 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>When Web3 escrow wiring is enabled, the service also performs precheck and returns the newly
  * prepared question lifecycle intent as nullable write payload.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CreateQuestionPostService implements CreateQuestionPostUseCase {
 
   private final PostPersistencePort postPersistencePort;
-  private final PostXpService postXpService;
   private final LinkTagPort linkTagPort;
   private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
   private final PublishPostDeletedEventPort publishPostDeletedEventPort;
+  private final ApplicationEventPublisher eventPublisher;
+  private final ZoneId appZoneId;
   private TransactionOperations transactionOperations;
 
   @Autowired
@@ -76,10 +79,9 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
     }
     bindPreparedCreateIntentIfManaged(managesQuestionCreate, savedPost.getId(), web3);
 
-    XpGrantResult xpResult = grantCreateXp(command.userId(), savedPost.getId());
+    publishPostCreatedEvent(command.userId(), savedPost.getId(), savedPost.getType());
 
-    return new CreateQuestionPostResult(
-        savedPost.getId(), xpResult.isXpGranted(), xpResult.grantedXp(), xpResult.message(), web3);
+    return new CreateQuestionPostResult(savedPost.getId(), false, 0L, "게시글 작성 완료", web3);
   }
 
   private void validateQuestionCommand(CreatePostCommand command) {
@@ -169,21 +171,19 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
     throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT);
   }
 
-  private XpGrantResult grantCreateXp(Long userId, Long postId) {
-    Long grantedXp = 0L;
-    boolean isXpGranted = false;
-
-    try {
-      grantedXp = postXpService.grantCreatePostXp(userId, postId);
-      if (grantedXp > 0) {
-        isXpGranted = true;
-      }
-    } catch (Exception e) {
-      log.warn("Post created but XP grant failed for user: {}", userId, e);
-    }
-
-    String message = isXpGranted ? "게시글 작성 완료! (+" + grantedXp + " XP)" : "게시글 작성 완료";
-    return new XpGrantResult(isXpGranted, grantedXp, message);
+  /**
+   * Publishes the post-created event in its own transaction so the {@code level} module's
+   * AFTER_COMMIT handler fires. Publishing only after the full create-and-bind flow succeeds
+   * preserves the legacy "XP only on successful question creation" behavior and avoids granting XP
+   * for a question that is subsequently cleaned up.
+   */
+  private void publishPostCreatedEvent(Long userId, Long postId, PostType type) {
+    runInTransaction(
+        () -> {
+          eventPublisher.publishEvent(
+              new PostCreatedEvent(userId, postId, type, LocalDateTime.now(appZoneId)));
+          return null;
+        });
   }
 
   private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
@@ -242,6 +242,4 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
           return null;
         });
   }
-
-  private record XpGrantResult(boolean isXpGranted, Long grantedXp, String message) {}
 }
