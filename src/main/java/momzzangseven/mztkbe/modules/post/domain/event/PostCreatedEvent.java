@@ -1,6 +1,19 @@
 package momzzangseven.mztkbe.modules.post.domain.event;
 
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
-/** 게시글이 생성되었음을 알리는 이벤트 (레벨 모듈 등 타 모듈은 이 이벤트를 구독하여 로직을 수행함) */
-public record PostCreatedEvent(Long userId, Long postId, PostType type) {}
+/**
+ * Domain event published when a post is created (other modules such as {@code level} subscribe to
+ * this event to perform their own side effects).
+ *
+ * <p>Carries only the producer's own facts. It intentionally does not reference any {@code
+ * level}-module concept (e.g. {@code XpType} or idempotency keys) so that the post module stays
+ * decoupled from XP rewards.
+ *
+ * @param userId the post author's id
+ * @param postId the persisted post's id
+ * @param type the board type (FREE or QUESTION)
+ * @param occurredAt the moment the post was created, in the application time zone
+ */
+public record PostCreatedEvent(Long userId, Long postId, PostType type, LocalDateTime occurredAt) {}
