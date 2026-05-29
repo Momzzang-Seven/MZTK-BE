@@ -8,7 +8,6 @@ import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
-import momzzangseven.mztkbe.modules.account.application.port.out.UpdateAccountStatusRegistryPort;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
@@ -35,8 +34,8 @@ import org.springframework.test.context.TestPropertySource;
  * <p>REST signup/login 은 회피 — HTTP 경로는 본 검증 대상이 아니고, 자체적으로 다수의 SQL 을 발사해 측정 신호를 흐림. 대신 {@link
  * UserJpaRepository} + {@link SaveUserAccountPort} 로 entity 를 직접 시드한다.
  *
- * <p>denylist 는 공유 싱글턴 bean — {@code DatabaseCleaner} 는 DB 만 비우고 in-memory denylist 는 건드리지 않으므로 매
- * 테스트 전 {@link UpdateAccountStatusRegistryPort#replaceAll(java.util.Map)} 로 비워 전원 ACTIVE 상태에서 시작한다.
+ * <p>denylist 는 공유 싱글턴 bean — {@code DatabaseCleaner} 는 DB 만 비우고 in-memory denylist 는 건드리지 않는다. 매
+ * 테스트 전 denylist 를 비워 전원 ACTIVE 상태에서 시작하는 것은 {@code E2ETestBase} 가 공통으로 처리한다 (MOM-464).
  */
 @DisplayName("[E2E] Auth status denylist 효과 검증 (MOM-464)")
 @TestPropertySource(
@@ -51,14 +50,12 @@ class AuthStatusCacheE2ETest extends E2ETestBase {
   @Autowired private SaveUserAccountPort saveUserAccountPort;
   @Autowired private UserJpaRepository userJpaRepository;
   @Autowired private EntityManagerFactory entityManagerFactory;
-  @Autowired private UpdateAccountStatusRegistryPort updateAccountStatusRegistryPort;
 
   private Statistics statistics;
 
   @BeforeEach
-  void resetDenylistAndStatistics() {
-    // denylist 는 공유 싱글턴 — DatabaseCleaner 가 비우지 않으므로 매 테스트 전 명시적으로 비운다 (전원 ACTIVE).
-    updateAccountStatusRegistryPort.replaceAll(java.util.Map.of());
+  void enableAndResetStatistics() {
+    // denylist 리셋은 E2ETestBase 가 매 테스트 전 공통으로 처리한다 (MOM-464).
     statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
     statistics.setStatisticsEnabled(true);
     statistics.clear();

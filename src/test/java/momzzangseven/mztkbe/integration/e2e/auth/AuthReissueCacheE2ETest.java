@@ -11,7 +11,6 @@ import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
-import momzzangseven.mztkbe.modules.account.application.port.out.UpdateAccountStatusRegistryPort;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
@@ -58,8 +57,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  * 가 발사하는 다른 SQL (refresh_token UPDATE/INSERT 등) 은 다른 엔티티라 신호를 오염시키지 않으며, 글로벌 스케줄러의 JDBC 트래픽도 entity
  * scope 밖이라 영향이 없다.
  *
- * <p>denylist 는 공유 싱글턴 bean 이고 {@code DatabaseCleaner} 가 비우지 않으므로 매 테스트 전 {@link
- * UpdateAccountStatusRegistryPort#replaceAll(java.util.Map)} 로 비운다 (전원 ACTIVE).
+ * <p>denylist 는 공유 싱글턴 bean 이고 {@code DatabaseCleaner} 가 비우지 않으므로 매 테스트 전 비워 전원 ACTIVE 에서 시작한다 — 이
+ * 리셋은 {@code E2ETestBase} 가 공통으로 처리한다 (MOM-464).
  */
 @DisplayName("[E2E] /auth/reissue findStatus DB cold path (MOM-464)")
 @TestPropertySource(
@@ -76,14 +75,12 @@ class AuthReissueCacheE2ETest extends E2ETestBase {
   @Autowired private LoadUserAccountPort loadUserAccountPort;
   @Autowired private SaveUserAccountPort saveUserAccountPort;
   @Autowired private EntityManagerFactory entityManagerFactory;
-  @Autowired private UpdateAccountStatusRegistryPort updateAccountStatusRegistryPort;
 
   private Statistics statistics;
 
   @BeforeEach
-  void resetDenylistAndStatistics() {
-    // denylist 는 공유 싱글턴 — DatabaseCleaner 가 비우지 않으므로 매 테스트 전 명시적으로 비운다 (전원 ACTIVE).
-    updateAccountStatusRegistryPort.replaceAll(java.util.Map.of());
+  void enableAndResetStatistics() {
+    // denylist 리셋은 E2ETestBase 가 매 테스트 전 공통으로 처리한다 (MOM-464).
     statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
     statistics.setStatisticsEnabled(true);
     statistics.clear();

@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.modules.account.application.port.out.UpdateAccountStatusRegistryPort;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -49,6 +51,28 @@ public abstract class E2ETestBase {
   @Autowired protected TestRestTemplate restTemplate;
 
   @Autowired protected ObjectMapper objectMapper;
+
+  /**
+   * Account-status denylist write port. The denylist ({@code InMemoryAccountStatusDenylist}) is a
+   * shared singleton bean that {@link DatabaseCleaner} does NOT reset — it only truncates DB
+   * tables. Because {@code TRUNCATE ... RESTART IDENTITY} recycles userIds across tests while
+   * signup's INSERT branch publishes no status-change event, a stale non-ACTIVE entry from an
+   * earlier test would otherwise be inherited by a recycled userId and silently treat a brand-new
+   * user as BLOCKED/DELETED (MOM-464).
+   */
+  @Autowired protected UpdateAccountStatusRegistryPort updateAccountStatusRegistryPort;
+
+  /**
+   * Clears the in-memory account-status denylist before EVERY e2e test so each test starts with an
+   * empty denylist (= everyone ACTIVE). JUnit 5 runs superclass {@code @BeforeEach} BEFORE subclass
+   * ones, so this base clear runs first and any subclass seeding observes a clean denylist. The
+   * denylist is a shared singleton not reset by {@link DatabaseCleaner}; clearing it per-test
+   * ensures a recycled userId never inherits a prior test's non-ACTIVE status (MOM-464).
+   */
+  @BeforeEach
+  void resetAccountStatusDenylist() {
+    updateAccountStatusRegistryPort.replaceAll(java.util.Map.of());
+  }
 
   @AfterEach
   void cleanDatabaseAfterTest() {

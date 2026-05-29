@@ -13,7 +13,6 @@ import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
-import momzzangseven.mztkbe.modules.account.application.port.out.UpdateAccountStatusRegistryPort;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
@@ -56,6 +55,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>(2) {@link AccountStatus#BLOCKED} 로 직접 save → {@code
  *       UserAccountStatusChangedEvent(BLOCKED)} → AFTER_COMMIT 이 denylist 에 put → 다음 {@code GET
  *       /users/me} 즉시 403 (stale 방어).
+ *   <li>(2-evict) BLOCKED 계정을 다시 {@link AccountStatus#ACTIVE} 로 save (admin 차단 해제 경로 {@code
+ *       changeManagedStatus(ACTIVE)}) → {@code UserAccountStatusChangedEvent(ACTIVE)} →
+ *       AFTER_COMMIT 이 denylist 에서 evict → <b>동일 토큰</b>으로 다음 {@code GET /users/me} 200 (재허용). put
+ *       방향(차단)뿐 아니라 evict 방향(재허용)도 hot path 에 즉시 반영됨을 입증.
  *   <li>(3) admin token 으로 {@code GET /admin/dashboard/user-stats} 연속 호출 시 두 번째는 filter 가 발사하는
  *       {@link AdminAccountEntity} fetch 가 0 회 — admin 측은 MOM-464 범위 밖이라 여전히 Caffeine cache
  *       contract 가 성립함을 확인 (이 시나리오는 변경하지 않는다).
@@ -76,8 +79,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *       entity 라 측정 신호 밖. admin 측은 여전히 Caffeine 이므로 절대값 1/0 assertion 이 그대로 성립.
  * </ul>
  *
- * <p>denylist 는 공유 싱글턴 bean 이고 {@code DatabaseCleaner} 가 비우지 않으므로 매 테스트 전 {@link
- * UpdateAccountStatusRegistryPort#replaceAll(java.util.Map)} 로 비운다 (전원 ACTIVE).
+ * <p>denylist 는 공유 싱글턴 bean 이고 {@code DatabaseCleaner} 가 비우지 않으므로 매 테스트 전 비워 전원 ACTIVE 에서 시작한다 — 이
+ * 리셋은 {@code E2ETestBase} 가 공통으로 처리한다 (MOM-464).
  */
 @DisplayName("[E2E] JwtAuthenticationFilter denylist hot path + invalidation (MOM-464)")
 @TestPropertySource(
@@ -99,14 +102,12 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private MeterRegistry meterRegistry;
-  @Autowired private UpdateAccountStatusRegistryPort updateAccountStatusRegistryPort;
 
   private Statistics statistics;
 
   @BeforeEach
-  void resetDenylistAndStatistics() {
-    // denylist 는 공유 싱글턴 — DatabaseCleaner 가 비우지 않으므로 매 테스트 전 명시적으로 비운다 (전원 ACTIVE).
-    updateAccountStatusRegistryPort.replaceAll(java.util.Map.of());
+  void enableAndResetStatistics() {
+    // denylist 리셋은 E2ETestBase 가 매 테스트 전 공통으로 처리한다 (MOM-464).
     statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
     statistics.setStatisticsEnabled(true);
     statistics.clear();
@@ -176,6 +177,42 @@ class AuthFilterCacheE2ETest extends E2ETestBase {
     assertThat(blocked.getStatusCode())
         .as("denylist 에 BLOCKED 가 전파 안 됐으면 statusOf=ACTIVE 로 200 — 403 이라야 전파 입증")
         .isEqualTo(HttpStatus.FORBIDDEN);
+  }
+
+  // ============================================================
+  // Scenario (2-evict) — Reactivation evicts denylist, surfaces at next request
+  // ============================================================
+
+  @Test
+  @DisplayName("BLOCKED 후 ACTIVE 로 복구 → AFTER_COMMIT denylist evict → 동일 토큰 GET /users/me 200")
+  void reactivationEvictsDenylist_nextGetMeReturns200() {
+    TestUser user = signupAndLogin("filter-cache-reactivate");
+    // BLOCK 과 REACTIVATE 사이에 재로그인하지 않는다 — 발급 시점에 받은 access token 을 TTL 동안 그대로 재사용한다.
+    // 핵심은 denylist evict 가 인증 hot path 에 즉시 반영되는지이지, 토큰 재발급이 아니다 (BLOCKED 계정은 reissue 불가).
+    HttpEntity<Void> request = new HttpEntity<>(bearerJsonHeaders(user.accessToken()));
+
+    // (1) BLOCKED 로 save → UserAccountStatusChangedEvent(BLOCKED) → AFTER_COMMIT denylist put →
+    // 403.
+    UserAccount active = loadUserAccountPort.findByUserId(user.userId()).orElseThrow();
+    saveUserAccountPort.save(active.changeManagedStatus(AccountStatus.BLOCKED));
+
+    ResponseEntity<String> whileBlocked =
+        restTemplate.exchange(baseUrl() + "/users/me", HttpMethod.GET, request, String.class);
+    assertThat(whileBlocked.getStatusCode())
+        .as("BLOCKED 전파됐으면 denylist put 으로 403 — evict 검증의 baseline")
+        .isEqualTo(HttpStatus.FORBIDDEN);
+
+    // (2) ACTIVE 로 복구 → BLOCKED→ACTIVE 는 changeManagedStatus 의 valid managed transition →
+    //     UserAccountStatusChangedEvent(ACTIVE) → AFTER_COMMIT 핸들러가 denylist 에서 evict.
+    UserAccount blocked = loadUserAccountPort.findByUserId(user.userId()).orElseThrow();
+    saveUserAccountPort.save(blocked.changeManagedStatus(AccountStatus.ACTIVE));
+
+    // (3) 동일 토큰으로 다시 호출 — evict 가 hot path 에 반영됐으면 statusOf=ACTIVE 로 200.
+    ResponseEntity<String> afterReactivate =
+        restTemplate.exchange(baseUrl() + "/users/me", HttpMethod.GET, request, String.class);
+    assertThat(afterReactivate.getStatusCode())
+        .as("ACTIVE 복구가 denylist 에서 evict 안 됐으면 stale BLOCKED 로 여전히 403 — 200 이라야 evict 전파 입증")
+        .isEqualTo(HttpStatus.OK);
   }
 
   // ============================================================
