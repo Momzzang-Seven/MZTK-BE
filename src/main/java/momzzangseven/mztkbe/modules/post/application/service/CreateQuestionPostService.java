@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreateQuestionPostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.GrantPostXpPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PublishPostDeletedEventPort;
@@ -37,7 +38,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class CreateQuestionPostService implements CreateQuestionPostUseCase {
 
   private final PostPersistencePort postPersistencePort;
-  private final PostXpService postXpService;
+  private final GrantPostXpPort grantPostXpPort;
   private final LinkTagPort linkTagPort;
   private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
@@ -174,7 +175,7 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
     boolean isXpGranted = false;
 
     try {
-      grantedXp = postXpService.grantCreatePostXp(userId, postId);
+      grantedXp = grantPostXpPort.grantCreatePostXp(userId, postId);
       if (grantedXp > 0) {
         isXpGranted = true;
       }
