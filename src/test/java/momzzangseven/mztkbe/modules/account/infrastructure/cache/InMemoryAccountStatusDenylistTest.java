@@ -37,6 +37,16 @@ class InMemoryAccountStatusDenylistTest {
   }
 
   @Test
+  @DisplayName("put overwrites an existing status so statusOf returns the latest")
+  void put_overwritesExistingStatus_returnsLatest() {
+    denylist.put(1L, AccountStatus.BLOCKED);
+
+    denylist.put(1L, AccountStatus.DELETED);
+
+    assertThat(denylist.statusOf(1L)).isEqualTo(AccountStatus.DELETED);
+  }
+
+  @Test
   @DisplayName("evict removes an entry so statusOf returns ACTIVE again")
   void evict_removesEntry_statusOfReturnsActive() {
     denylist.put(1L, AccountStatus.BLOCKED);
