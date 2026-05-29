@@ -60,13 +60,15 @@ class UserAccountPersistenceAdapterManagedStatusTest {
     persistAccount(20L, AccountStatus.ACTIVE);
     persistAccount(21L, AccountStatus.BLOCKED);
     persistAccount(22L, AccountStatus.DELETED);
+    persistAccount(23L, AccountStatus.UNVERIFIED);
 
     Map<Long, AccountStatus> nonActive = adapter.loadAllNonActive();
 
     assertThat(nonActive)
-        .hasSize(2)
+        .hasSize(3)
         .containsEntry(21L, AccountStatus.BLOCKED)
         .containsEntry(22L, AccountStatus.DELETED)
+        .containsEntry(23L, AccountStatus.UNVERIFIED)
         .doesNotContainKey(20L);
   }
 
