@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.account.application.port.out.DeleteUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadManagedUserAccountStatusesPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.LoadNonActiveUserStatusesPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.event.UserAccountInvalidatedEvent;
@@ -30,7 +31,8 @@ public class UserAccountPersistenceAdapter
     implements LoadUserAccountPort,
         SaveUserAccountPort,
         DeleteUserAccountPort,
-        LoadManagedUserAccountStatusesPort {
+        LoadManagedUserAccountStatusesPort,
+        LoadNonActiveUserStatusesPort {
 
   private final UserAccountJpaRepository userAccountJpaRepository;
   private final ApplicationEventPublisher eventPublisher;
@@ -177,6 +179,20 @@ public class UserAccountPersistenceAdapter
     return statuses.entrySet().stream()
         .filter(entry -> entry.getValue() == statusFilter)
         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+  }
+
+  // ========== LoadNonActiveUserStatusesPort ==========
+
+  @Override
+  @Transactional(readOnly = true)
+  public Map<Long, AccountStatus> loadAllNonActive() {
+    return userAccountJpaRepository
+        .findManagedUserAccountStatusesByStatusNot(AccountStatus.ACTIVE)
+        .stream()
+        .collect(
+            Collectors.toMap(
+                UserAccountJpaRepository.ManagedUserAccountStatusProjection::getUserId,
+                UserAccountJpaRepository.ManagedUserAccountStatusProjection::getStatus));
   }
 
   // ========== Mapping ==========
