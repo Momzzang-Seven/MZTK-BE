@@ -38,7 +38,6 @@ import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsQuery
 import momzzangseven.mztkbe.modules.comment.application.dto.UpdateAnswerCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.UpdateCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
-import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort;
@@ -67,7 +66,6 @@ class CommentServiceTest {
   @Mock private LoadPostPort loadPostPort;
   @Mock private LoadAnswerPort loadAnswerPort;
   @Mock private DeleteCommentPort deleteCommentPort;
-  @Mock private GrantCommentXpPort grantCommentXpPort;
   @Mock private LoadCommentWriterPort loadCommentWriterPort;
 
   @InjectMocks private CommentService commentService;
@@ -105,7 +103,6 @@ class CommentServiceTest {
 
     verify(loadPostPort).loadPostVisibilityContext(100L);
     verify(saveCommentPort).saveComment(any(Comment.class));
-    verify(grantCommentXpPort).grantCreateCommentXp(200L, 1L);
   }
 
   @Test
@@ -193,7 +190,6 @@ class CommentServiceTest {
     verify(loadAnswerPort, never()).loadAnswerCommentContext(300L);
     verify(loadPostPort, never()).loadPostVisibilityContext(any());
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -213,7 +209,6 @@ class CommentServiceTest {
     verify(loadAnswerPort).loadAnswerCommentContextForUpdate(300L);
     verify(loadPostPort).loadPostVisibilityContext(100L);
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -232,7 +227,6 @@ class CommentServiceTest {
     verify(loadAnswerPort).loadAnswerCommentContextForUpdate(300L);
     verify(loadPostPort).loadPostVisibilityContext(100L);
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -246,7 +240,6 @@ class CommentServiceTest {
         .hasMessage(ErrorCode.POST_NOT_FOUND.getMessage());
 
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -260,7 +253,6 @@ class CommentServiceTest {
         .isInstanceOf(BusinessException.class);
 
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -371,7 +363,6 @@ class CommentServiceTest {
     assertThat(result.parentId()).isEqualTo(10L);
     assertThat(result.content()).isEqualTo("reply content");
     verify(loadCommentPort).loadComment(10L);
-    verify(grantCommentXpPort).grantCreateCommentXp(200L, 2L);
   }
 
   @Test
@@ -398,7 +389,6 @@ class CommentServiceTest {
         .isInstanceOf(CommentPostMismatchException.class)
         .hasMessage(ErrorCode.COMMENT_POST_MISMATCH.getMessage());
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -442,7 +432,6 @@ class CommentServiceTest {
     assertThat(result.parentId()).isEqualTo(10L);
     assertThat(result.content()).isEqualTo("answer reply content");
     verify(loadCommentPort).loadComment(10L);
-    verify(grantCommentXpPort).grantCreateCommentXp(200L, 4L);
   }
 
   @Test
@@ -460,7 +449,6 @@ class CommentServiceTest {
         .isInstanceOf(CommentNotFoundException.class)
         .hasMessage(ErrorCode.COMMENT_NOT_FOUND.getMessage());
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -480,7 +468,6 @@ class CommentServiceTest {
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT.getMessage());
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -500,7 +487,6 @@ class CommentServiceTest {
         .isInstanceOf(CommentTargetMismatchException.class)
         .hasMessage(ErrorCode.COMMENT_TARGET_MISMATCH.getMessage());
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -520,7 +506,6 @@ class CommentServiceTest {
         .isInstanceOf(CommentTargetMismatchException.class)
         .hasMessage(ErrorCode.COMMENT_TARGET_MISMATCH.getMessage());
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -547,7 +532,6 @@ class CommentServiceTest {
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT.getMessage());
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
   }
 
   @Test
@@ -575,40 +559,6 @@ class CommentServiceTest {
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.COMMENT_DEPTH_EXCEEDED.getMessage());
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
-    verifyNoInteractions(grantCommentXpPort);
-  }
-
-  @Test
-  @DisplayName("createComment() keeps comment creation successful even when XP grant fails")
-  void createComment_xpGrantFails_returnsSavedComment() {
-    CreateCommentCommand command = new CreateCommentCommand(100L, 200L, null, "hello");
-
-    given(loadPostPort.loadPostVisibilityContext(100L))
-        .willReturn(Optional.of(visiblePostContext(100L)));
-    given(saveCommentPort.saveComment(any(Comment.class)))
-        .willAnswer(
-            invocation -> {
-              Comment input = invocation.getArgument(0);
-              return Comment.builder()
-                  .id(3L)
-                  .postId(input.getPostId())
-                  .writerId(input.getWriterId())
-                  .parentId(input.getParentId())
-                  .content(input.getContent())
-                  .isDeleted(input.isDeleted())
-                  .createdAt(input.getCreatedAt())
-                  .updatedAt(input.getUpdatedAt())
-                  .build();
-            });
-    given(grantCommentXpPort.grantCreateCommentXp(200L, 3L))
-        .willThrow(new IllegalStateException("xp system down"));
-
-    CommentMutationResult result = commentService.createComment(command);
-
-    assertThat(result.id()).isEqualTo(3L);
-    assertThat(result.content()).isEqualTo("hello");
-    verify(saveCommentPort).saveComment(any(Comment.class));
-    verify(grantCommentXpPort).grantCreateCommentXp(200L, 3L);
   }
 
   @Test

@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
@@ -20,7 +19,6 @@ import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
-import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort;
@@ -33,13 +31,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CommentService
-    implements CreateCommentUseCase,
-        GetCommentUseCase,
+    implements GetCommentUseCase,
         GetCommentCursorUseCase,
         UpdateCommentUseCase,
         DeleteCommentUseCase {
@@ -49,11 +45,12 @@ public class CommentService
   private final LoadPostPort loadPostPort;
   private final LoadAnswerPort loadAnswerPort;
   private final DeleteCommentPort deleteCommentPort;
-  private final GrantCommentXpPort grantCommentXpPort;
   private final LoadCommentWriterPort loadCommentWriterPort;
 
-  // 1. 생성 (Create)
-  @Override
+  /**
+   * Persists a comment (T1). XP granting is orchestrated separately by {@code CreateCommentFacade}
+   * so the request never holds two DB connections at once.
+   */
   @Transactional
   public CommentMutationResult createComment(CreateCommentCommand command) {
     LoadAnswerPort.AnswerCommentContext answerContext =
@@ -87,16 +84,6 @@ public class CommentService
                 command.postId(), command.userId(), command.parentId(), command.content());
 
     Comment savedComment = saveCommentPort.saveComment(newComment);
-
-    try {
-      grantCommentXpPort.grantCreateCommentXp(savedComment.getWriterId(), savedComment.getId());
-    } catch (Exception e) {
-      log.warn(
-          "Comment created but XP grant failed for userId={}, commentId={}",
-          savedComment.getWriterId(),
-          savedComment.getId(),
-          e);
-    }
 
     return CommentMutationResult.from(savedComment);
   }

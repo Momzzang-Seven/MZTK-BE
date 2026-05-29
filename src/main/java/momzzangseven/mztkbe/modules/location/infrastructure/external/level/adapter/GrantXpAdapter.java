@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
-import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.in.GuaranteedGrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import momzzangseven.mztkbe.modules.location.application.port.out.GrantXpPort;
 import momzzangseven.mztkbe.modules.location.domain.model.LocationVerification;
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class GrantXpAdapter implements GrantXpPort {
-  private final GrantXpUseCase grantXpUseCase; // Level module's UseCase
+  private final GuaranteedGrantXpUseCase guaranteedGrantXpUseCase; // Level module's UseCase
   private final ZoneId appZoneId;
   private static final DateTimeFormatter YYYYMMDD = DateTimeFormatter.BASIC_ISO_DATE;
 
@@ -52,7 +52,7 @@ public class GrantXpAdapter implements GrantXpPort {
     GrantXpCommand command =
         GrantXpCommand.of(userId, XpType.WORKOUT, occurredAt, idempotencyKey, sourceRef);
 
-    GrantXpResult result = grantXpUseCase.execute(command);
+    GrantXpResult result = guaranteedGrantXpUseCase.execute(command);
 
     if (result.grantedXp() > 0) {
       log.info(
