@@ -94,14 +94,27 @@ python3 <skill>/scripts/probe_metrics.py --start <START> --end <END> \
 `leak_endurance`, 쓰기·외부연동이면 `ext_latency` / `ext_errors` / `async_queue` 를
 더한다(선택 기준은 `references` §5). 고른 정의를 `chart_config.json` 의 `charts` 배열에
 복사하고, probe 결과로 `ymax`/`yticks` 를, 인프라 상수로 `title` 빈칸(SLO·-Xmx·pool max)을
-채운다. `clock0`·`stage_vu`·`xticks` 는 k6 stage 와 START 로부터 계산한다 — xticks 는
-라벨이 겹치지 않게 4 index 이상 띄운다(스키마 전체는 `references` §4). 그다음:
+채운다. **`step` 은 native scrape 에 맞춰 앱 메트릭(`mztk-be`)은 `5`(초)로 설정한다** —
+60s 는 cliff·freeze 를 한 버킷에 뭉개므로 5s 로 그려야 onset 이 선명하다(RDS `rds-cloudwatch`
+는 native 60s 라 5s 로 그려도 계단식·거의 평탄). `clock0`·`stage_vu`·`xticks` 는 k6 stage 와
+START 로부터 계산하되 **index 1칸 = `step`초** 다(step=5 면 2분 ramp=24 index). xticks 는 라벨이
+겹치지 않게 띄운다 — step=5 면 ≥24 index(=2분), step=60 이면 ≥4 index(스키마 전체는 `references` §4).
+**포화 회차는 actuator scrape 가 black-out(`up=0`) 될 수 있으니 `up{job="mztk-be"}` 를 함께 확인** —
+black-out 구간은 5s 든 60s 든 데이터가 없다(server 시계열 공백 = 회복 아님). 그다음:
 ```bash
 python3 <skill>/scripts/make_charts.py chart_config.json
 ```
 차트가 `chart_config.json` 의 `outdir`(= 회차 날짜 폴더 아래 `phaseN/results/{YYYY.MM.DD}/charts/`)에
 생성된다. 팔레트에 없는 자원이 병목이면 §3 메트릭으로
 차트를 직접 정의해도 된다 — 스키마는 동일하다.
+
+> **⚠️ `charts/` 정리 시 절대 와일드카드로 전부 지우지 말 것.** 한 날짜 폴더의 `charts/`
+> 는 같은 날짜의 다른 회차 유형(BP/Load/Endurance/Spike) 산출물을 함께 보관한다.
+> 재생성 전에 정리한다면 **본 회차 prefix 로 좁힌다** — 예: `rm -f charts/load_*.svg`,
+> `rm -f charts/breakpoint_*.svg`. `rm *.svg` / `xargs rm -f` 는 다른 회차의 차트까지
+> 날리고, 그 회차의 RESULT 문서 임베드 링크가 깨진다. 실제로 한 번 발생한 사고다.
+> 더 안전한 방법은 정리하지 않고 그냥 덮어쓰는 것이다(`make_charts.py` 는 동일 파일명을
+> 덮어쓴다). 만에 하나 지운다면 **본인이 만든 파일만** 지운다.
 
 ### Step 6 — 차트 육안 검증
 

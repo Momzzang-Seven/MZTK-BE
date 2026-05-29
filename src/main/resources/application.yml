@@ -149,7 +149,9 @@ management:
   tracing:
     sampling:
       enabled: true
-      probability: 1.0                      # 부하테스트 중 전수 수집 (운영 시 0.1로 낮출 것)
+      # 기본 0.1 (10% 샘플). 부하테스트 중에만 EC2 의 ~/apps/.env 에
+      # TRACING_SAMPLING_PROBABILITY=1.0 을 임시로 추가해 전수 수집한다.
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
   zipkin:
     tracing:
       endpoint: http://host.docker.internal:9411/api/v2/spans
@@ -182,6 +184,9 @@ web3:
   rpc:
     main: ${WEB3_RPC_MAIN}
     sub: ${WEB3_RPC_SUB}
+
+  sponsor-nonce:
+    open-window-size: ${WEB3_SPONSOR_NONCE_OPEN_WINDOW_SIZE}
 
   explorer:
     base-url: ${WEB3_EXPLORER_BASE_URL}
@@ -271,7 +276,7 @@ web3:
 
       # 안전장치는 yml 상수 유지(운영 중 급변할 값 아니면)
       max-gas-limit: 500000
-      max-max-fee-gwei: 60
+      max-max-fee-gwei: 12
       max-priority-fee-gwei: 2
       max-transfer-amount-eth: 5000
       per-tx-cap-eth: 0.05
@@ -373,7 +378,7 @@ marketplace:
 
 location:
   verification:
-    radius-meters: 5.0 # Location verification radius; 5m
+    radius-meters: 20.0 # Location verification radius; 10m
 
 cloud:
   aws:

@@ -14,18 +14,25 @@ public class AnswerPostAdapter implements LoadPostPort {
 
   @Override
   public Optional<PostContext> loadPost(Long postId) {
-    return getPostContextUseCase
-        .getPostContext(postId)
-        .map(
-            post ->
-                new PostContext(
-                    post.postId(),
-                    post.writerId(),
-                    post.solved(),
-                    post.questionPost(),
-                    post.content(),
-                    post.reward(),
-                    post.answerLocked(),
-                    post.publiclyVisible()));
+    return getPostContextUseCase.getPostContext(postId).map(AnswerPostAdapter::toContext);
+  }
+
+  @Override
+  public Optional<PostContext> loadPostForUpdate(Long postId) {
+    return getPostContextUseCase.getPostContextForUpdate(postId).map(AnswerPostAdapter::toContext);
+  }
+
+  private static PostContext toContext(
+      momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase.PostContext
+          post) {
+    return new PostContext(
+        post.postId(),
+        post.writerId(),
+        post.solved(),
+        post.questionPost(),
+        post.content(),
+        post.reward(),
+        post.answerLocked(),
+        post.publiclyVisible());
   }
 }

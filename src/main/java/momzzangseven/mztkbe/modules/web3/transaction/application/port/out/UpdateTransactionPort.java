@@ -16,7 +16,12 @@ public interface UpdateTransactionPort {
 
   void updateStatus(Long transactionId, Web3TxStatus status, String txHash, String failureReason);
 
+  void markUnconfirmedForSponsorNonceReview(Long transactionId, String failureReason);
+
   void scheduleRetry(Long transactionId, String failureReason, LocalDateTime processingUntil);
+
+  boolean claimForProcessing(
+      Long transactionId, Web3TxStatus status, String workerId, LocalDateTime processingUntil);
 
   void clearProcessingLock(Long transactionId);
 }

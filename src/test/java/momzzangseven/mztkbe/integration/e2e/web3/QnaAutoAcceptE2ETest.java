@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.integration.e2e.web3;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.math.BigInteger;
@@ -28,6 +30,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunIntern
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
@@ -69,7 +72,7 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
 
   private static final Instant NOW = Instant.parse("2026-04-17T01:00:00Z");
   private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
-  private static final String SPONSOR_ADDRESS = "0xd799cd2b5258edc2157bec7e2cd069f31f2678c2";
+  private static final String SPONSOR_ADDRESS = "0x" + "a".repeat(40);
   private static final String CALL_TARGET = "0x0000000000000000000000000000000000000002";
 
   @Autowired private JdbcTemplate jdbcTemplate;
@@ -88,12 +91,18 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
   @MockitoBean private ExecutionEip1559SigningPort executionEip1559SigningPort;
   @MockitoBean private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
   @MockitoBean private ExecutionEip7702GatewayPort executionEip7702GatewayPort;
+  @MockitoBean private LoadInternalExecutionSignerWalletPort loadInternalExecutionSignerWalletPort;
   @MockitoBean private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
   @MockitoBean private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
 
   @BeforeEach
   void setUp() {
     org.mockito.BDDMockito.given(loadSponsorTreasuryWalletPort.load())
+        .willReturn(
+            Optional.of(
+                new TreasuryWalletInfo(
+                    "test-sponsor", "alias/test-sponsor", SPONSOR_ADDRESS, true)));
+    org.mockito.BDDMockito.given(loadInternalExecutionSignerWalletPort.load(any()))
         .willReturn(
             Optional.of(
                 new TreasuryWalletInfo(
@@ -106,6 +115,17 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
         .willReturn(BigInteger.valueOf(21L));
     org.mockito.BDDMockito.given(executionEip1559SigningPort.sign(any()))
         .willReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
+    org.mockito.BDDMockito.given(
+            executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .willReturn(true);
+    org.mockito.BDDMockito.given(
+            executionTransactionGatewayPort.loadSponsorNonceSnapshot(anyLong(), anyString()))
+        .willReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(21L, 21L, 21L, 21L, 21L, 21L));
+    org.mockito.BDDMockito.given(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .willReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "ISSUE_NONCE", 21L, "ISSUE_NONCE", true, 1L, 1L));
     org.mockito.BDDMockito.willAnswer(invocation -> draft(invocation.getArgument(0)))
         .given(buildQnaAdminExecutionDraftPort)
         .build(any());

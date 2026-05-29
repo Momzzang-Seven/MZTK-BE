@@ -10,6 +10,9 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTr
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionSummaryResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorChainNonceSnapshotResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.nonce.SponsorNonceCoordinationResult;
 
 public interface ManageExecutionTransactionUseCase {
 
@@ -34,20 +37,12 @@ public interface ManageExecutionTransactionUseCase {
 
   void scheduleRetry(Long transactionId, String failureReason, LocalDateTime processingUntil);
 
-  long reserveNextNonce(String fromAddress);
+  boolean claimSignedForBroadcast(
+      Long transactionId, String workerId, LocalDateTime processingUntil);
 
-  /**
-   * Atomic CAS release of a previously reserved nonce. Returns {@code true} when the cursor was
-   * rolled back from {@code reservedNonce + 1} to {@code reservedNonce}; {@code false} when another
-   * reservation has already advanced the cursor past it (the gap is unrecoverable here — the caller
-   * must surface a {@code NONCE_GAP_DETECTED} alert per PR #150 follow-up F-1).
-   *
-   * <p>Exposed so sibling web3 modules (execution, ...) that reserve a nonce via {@link
-   * #reserveNextNonce(String)} but fail before broadcast can release the cursor without leaking it.
-   */
-  boolean releaseReservedNonce(String fromAddress, long reservedNonce);
+  SponsorChainNonceSnapshotResult loadSponsorNonceSnapshot(long chainId, String fromAddress);
 
-  long loadPendingNonce(String fromAddress);
+  SponsorNonceCoordinationResult coordinateSponsorNonce(SponsorNonceCoordinationCommand command);
 
   void recordAudit(ExecutionTransactionAuditCommand command);
 

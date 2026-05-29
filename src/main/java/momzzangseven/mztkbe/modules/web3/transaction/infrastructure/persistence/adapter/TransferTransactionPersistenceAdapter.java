@@ -45,6 +45,7 @@ public class TransferTransactionPersistenceAdapter implements TransferTransactio
     entity.setFromAddress(transaction.getFromAddress());
     entity.setToAddress(transaction.getToAddress());
     entity.setAmountWei(transaction.getAmountWei());
+    entity.setChainId(transaction.getChainId());
     entity.setNonce(transaction.getNonce());
     entity.setTxType(transaction.getTxType());
     entity.setAuthorityAddress(transaction.getAuthorityAddress());
@@ -75,6 +76,7 @@ public class TransferTransactionPersistenceAdapter implements TransferTransactio
         .fromAddress(entity.getFromAddress())
         .toAddress(entity.getToAddress())
         .amountWei(entity.getAmountWei())
+        .chainId(entity.getChainId())
         .nonce(entity.getNonce())
         .txType(entity.getTxType())
         .authorityAddress(entity.getAuthorityAddress())

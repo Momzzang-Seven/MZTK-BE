@@ -265,6 +265,8 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/admin/web3/treasury-keys")
+                    .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/admin/web3/treasury-keys/{walletAlias}")
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(
@@ -279,6 +281,8 @@ public class SecurityConfig {
                     .requestMatchers(
                         HttpMethod.POST,
                         "/admin/web3/wallet-registrations/replay-confirmed-approval")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/admin/web3/nonce-slots")
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(
                         HttpMethod.GET,

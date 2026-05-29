@@ -95,6 +95,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
             WalletRegistrationStatus.APPROVAL_SIGNED,
             WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
             WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED,
             WalletRegistrationStatus.FINALIZATION_FAILED,
             WalletRegistrationStatus.LOCAL_CONFLICT);
     assertThat(statusesCaptor.getValue()).doesNotContain(WalletRegistrationStatus.APPROVAL_FAILED);
@@ -130,6 +131,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
             WalletRegistrationStatus.APPROVAL_SIGNED,
             WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
             WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED,
             WalletRegistrationStatus.FINALIZATION_FAILED,
             WalletRegistrationStatus.LOCAL_CONFLICT,
             WalletRegistrationStatus.REGISTERED);
@@ -177,6 +179,7 @@ class WalletRegistrationSessionPersistenceAdapterTest {
             WalletRegistrationStatus.APPROVAL_SIGNED,
             WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN,
             WalletRegistrationStatus.APPROVAL_RETRYABLE,
+            WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED,
             WalletRegistrationStatus.FINALIZATION_FAILED,
             WalletRegistrationStatus.LOCAL_CONFLICT);
     assertThat(statusesCaptor.getValue()).doesNotContain(WalletRegistrationStatus.APPROVAL_FAILED);

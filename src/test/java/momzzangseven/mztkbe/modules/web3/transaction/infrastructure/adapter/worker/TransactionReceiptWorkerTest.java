@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.wor
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -16,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PersistSponsorNonceTransactionStateUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -41,12 +43,17 @@ class TransactionReceiptWorkerTest {
       Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
   private static final LocalDateTime FIXED_NOW =
       LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+  private static final long CHAIN_ID = 11155111L;
 
   @Mock private LoadTransactionWorkPort loadTransactionWorkPort;
   @Mock private UpdateTransactionPort updateTransactionPort;
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private TransactionOutcomePublisher transactionOutcomePublisher;
+
+  @Mock
+  private PersistSponsorNonceTransactionStateUseCase persistSponsorNonceTransactionStateUseCase;
+
   @Mock private RetryStrategy retryStrategy;
 
   private TransactionRewardTokenProperties properties;
@@ -66,6 +73,7 @@ class TransactionReceiptWorkerTest {
             recordTransactionAuditPort,
             web3ContractPort,
             transactionOutcomePublisher,
+            persistSponsorNonceTransactionStateUseCase,
             properties,
             retryStrategy,
             FIXED_CLOCK);
@@ -79,7 +87,11 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
+    verifyNoInteractions(
+        updateTransactionPort,
+        web3ContractPort,
+        transactionOutcomePublisher,
+        persistSponsorNonceTransactionStateUseCase);
   }
 
   @Test
@@ -90,10 +102,17 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(
-            1L, Web3TxStatus.UNCONFIRMED, " ", Web3TxFailureReason.RECEIPT_TIMEOUT.code());
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce().equals(0L)
+                        && command.txHash().equals(" ")
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_MISSING_TX_HASH")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -104,10 +123,17 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(
-            1L, Web3TxStatus.UNCONFIRMED, null, Web3TxFailureReason.RECEIPT_TIMEOUT.code());
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce().equals(0L)
+                        && command.txHash() == null
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_MISSING_TX_HASH")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -120,9 +146,14 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_0S");
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.txHash().equals(txHash)
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_0S")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -135,9 +166,14 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_5S");
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.txHash().equals(txHash)
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_5S")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -149,9 +185,14 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .updateStatus(1L, Web3TxStatus.UNCONFIRMED, txHash, "RECEIPT_TIMEOUT_60S");
-    verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
+    verify(persistSponsorNonceTransactionStateUseCase)
+        .markUnconfirmed(
+            argThat(
+                command ->
+                    command.transactionId().equals(1L)
+                        && command.txHash().equals(txHash)
+                        && command.failureReason().equals("RECEIPT_TIMEOUT_60S")));
+    verifyNoInteractions(updateTransactionPort, web3ContractPort, transactionOutcomePublisher);
   }
 
   @Test
@@ -166,8 +207,20 @@ class TransactionReceiptWorkerTest {
     worker.processBatch(1);
 
     verify(transactionOutcomePublisher)
-        .markSucceededAndPublish(
-            1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", 1L, 2L, txHash);
+        .markSucceededWithNonceSlotAndPublish(
+            eq(1L),
+            eq("idem-1"),
+            eq(Web3ReferenceType.LEVEL_UP_REWARD),
+            eq("101"),
+            eq(1L),
+            eq(2L),
+            eq(txHash),
+            argThat(
+                command ->
+                    command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce().equals(0L)
+                        && command.consumedReason().equals("RECEIPT_STATUS_1")));
     verify(updateTransactionPort, never()).scheduleRetry(eq(1L), anyString(), any());
   }
 
@@ -183,15 +236,21 @@ class TransactionReceiptWorkerTest {
     worker.processBatch(1);
 
     verify(transactionOutcomePublisher)
-        .markFailedOnchainAndPublish(
-            1L,
-            "idem-1",
-            Web3ReferenceType.LEVEL_UP_REWARD,
-            "101",
-            1L,
-            2L,
-            txHash,
-            "RECEIPT_STATUS_0");
+        .markFailedOnchainWithNonceSlotAndPublish(
+            eq(1L),
+            eq("idem-1"),
+            eq(Web3ReferenceType.LEVEL_UP_REWARD),
+            eq("101"),
+            eq(1L),
+            eq(2L),
+            eq(txHash),
+            eq("RECEIPT_STATUS_0"),
+            argThat(
+                command ->
+                    command.chainId() == CHAIN_ID
+                        && command.fromAddress().equals("0x" + "a".repeat(40))
+                        && command.nonce().equals(0L)
+                        && command.consumedReason().equals("RECEIPT_STATUS_0")));
   }
 
   @Test
@@ -238,7 +297,8 @@ class TransactionReceiptWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).scheduleRetry(1L, DEFAULT_REASON, null);
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code(), null);
   }
 
   @Test
@@ -267,6 +327,7 @@ class TransactionReceiptWorkerTest {
         "101",
         1L,
         2L,
+        CHAIN_ID,
         "0x" + "a".repeat(40),
         "0x" + "b".repeat(40),
         BigInteger.ONE,

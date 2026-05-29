@@ -104,9 +104,15 @@ public class RecoverAnswerEscrowService implements RecoverAnswerEscrowUseCase {
     if (managedCreate && answer.getPublicationStatus() != AnswerPublicationStatus.FAILED) {
       throw new AnswerPublicationStateException(ErrorCode.ANSWER_CREATE_RECOVERY_UNAVAILABLE);
     }
+    // Lock-and-act: this recovery path re-hashes post.content into the answer-create escrow
+    // payload (precheckAnswerCreate below + recoverAnswerCreate downstream). Without the row lock,
+    // a concurrent PostProcessService.updatePost Phase 2 could commit a new content/reward between
+    // this validate and the on-chain prepare, producing an intent whose hash no longer matches the
+    // off-chain post — making the "recovery" itself a divergence (MOM-459 answer write-path
+    // lost-update guard).
     LoadPostPort.PostContext post =
         loadPostPort
-            .loadPost(command.postId())
+            .loadPostForUpdate(command.postId())
             .orElseThrow(momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException::new);
     validateAnswerablePost(post);
     validatePostWritable(post);

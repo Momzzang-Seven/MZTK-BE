@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.context.ActiveProfiles;
 
 @DataJpaTest
@@ -29,8 +30,9 @@ class UserAccountPersistenceAdapterManagedStatusTest {
   @Test
   @DisplayName("status filter 와 userIds filter 를 함께 지원한다")
   void load_supportsStatusAndUserIdsFilter() {
+    ApplicationEventPublisher noOpPublisher = event -> {};
     UserAccountPersistenceAdapter adapter =
-        new UserAccountPersistenceAdapter(userAccountJpaRepository);
+        new UserAccountPersistenceAdapter(userAccountJpaRepository, noOpPublisher);
 
     persistAccount(10L, AccountStatus.ACTIVE);
     persistAccount(11L, AccountStatus.BLOCKED);

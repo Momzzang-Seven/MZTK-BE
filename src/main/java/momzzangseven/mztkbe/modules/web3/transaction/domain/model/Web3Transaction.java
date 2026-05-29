@@ -224,6 +224,21 @@ public class Web3Transaction {
     clearProcessingLock();
   }
 
+  public void markUnconfirmedForSponsorNonceReview(String reason, LocalDateTime nowForState) {
+    if (nowForState == null) {
+      throw new Web3InvalidInputException(Web3ValidationMessage.NOW_REQUIRED);
+    }
+    if (reason == null || reason.isBlank()) {
+      throw new Web3InvalidInputException("failureReason is required for UNCONFIRMED status");
+    }
+    if (status == Web3TxStatus.SUCCEEDED || status == Web3TxStatus.FAILED_ONCHAIN) {
+      return;
+    }
+    status = Web3TxStatus.UNCONFIRMED;
+    failureReason = reason;
+    clearProcessingLock();
+  }
+
   public void scheduleRetry(String reason, LocalDateTime until) {
     if (status == Web3TxStatus.SUCCEEDED || status == Web3TxStatus.FAILED_ONCHAIN) {
       return;

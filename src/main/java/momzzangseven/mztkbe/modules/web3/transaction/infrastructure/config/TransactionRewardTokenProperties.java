@@ -47,6 +47,9 @@ public class TransactionRewardTokenProperties {
 
     @Min(1)
     private int retryBackoffSeconds;
+
+    @Min(1)
+    private int coordinationVisibleSlotScanLimit = 64;
   }
 
   @Getter

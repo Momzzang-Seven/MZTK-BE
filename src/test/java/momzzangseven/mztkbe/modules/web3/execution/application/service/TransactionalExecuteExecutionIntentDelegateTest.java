@@ -42,6 +42,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
@@ -93,6 +94,13 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private final RunAfterCommitPort runAfterCommitPort = Runnable::run;
+  private final RunExecutionTransactionPort runExecutionTransactionPort =
+      new RunExecutionTransactionPort() {
+        @Override
+        public <T> T requiresNew(java.util.function.Supplier<T> action) {
+          return action.get();
+        }
+      };
   private TransactionalExecuteExecutionIntentDelegate delegate;
 
   @BeforeEach
@@ -109,6 +117,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             List.of(executionActionHandlerPort),
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
+            runExecutionTransactionPort,
+            3,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
@@ -127,6 +137,12 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
         .thenReturn(new ExecutionRetryPolicy(30));
     lenient().when(loadExecutionChainIdPort.loadChainId()).thenReturn(11155111L);
+    lenient()
+        .when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    lenient()
+        .when(executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .thenReturn(true);
   }
 
   private SponsorWalletGate sponsorGate() {
@@ -138,9 +154,12 @@ class TransactionalExecuteExecutionIntentDelegateTest {
 
   private void stubFindAndTrackUpdates(ExecutionIntent initial) {
     AtomicReference<ExecutionIntent> latest = new AtomicReference<>(initial);
+    when(executionIntentPersistencePort.findByPublicId(initial.getPublicId()))
+        .thenAnswer(invocation -> Optional.of(latest.get()));
     when(executionIntentPersistencePort.findByPublicIdForUpdate(initial.getPublicId()))
         .thenAnswer(invocation -> Optional.of(latest.get()));
-    when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
+    lenient()
+        .when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
         .thenAnswer(
             invocation -> {
               ExecutionIntent updated = invocation.getArgument(0);
@@ -156,8 +175,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         new ExecutionTransactionGatewayPort.TransactionRecord(
             99L, ExecutionTransactionStatus.SIGNED, "0xhash");
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
+    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
     when(executionTransactionGatewayPort.findById(99L)).thenReturn(Optional.of(transaction));
 
     ExecuteExecutionIntentResult result =
@@ -237,8 +255,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   @Test
   void executeEip1559_rejectsBlankSignedRawTransaction_asWeb3InvalidInput() throws Exception {
     ExecutionIntent intent = existingEip1559Intent();
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
+    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
 
     assertThatThrownBy(
             () ->
@@ -344,9 +361,51 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   @Test
+  void executeEip1559_broadcastNonceTooLow_marksIntentNonceStaleWithoutRetryBackoff()
+      throws Exception {
+    ExecutionIntent intent = existingEip1559Intent();
+    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
+        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
+            "0xsigned",
+            "0xhash",
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot(),
+            intent.getUnsignedTxFingerprint());
+    ExecutionTransactionGatewayPort.TransactionRecord created =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            203L, ExecutionTransactionStatus.CREATED, null);
+
+    stubFindAndTrackUpdates(intent);
+    when(eip1559TransactionCodecPort.decodeAndVerify(
+            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
+        .thenReturn(decoded);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.createAndFlush(any())).thenReturn(created);
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(
+                false, null, "BROADCAST_NONCE_TOO_LOW", "main"));
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
+            /* gate */ null);
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(203L);
+    verify(executionTransactionGatewayPort).scheduleRetry(203L, "BROADCAST_NONCE_TOO_LOW", null);
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.NONCE_STALE));
+    verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+    verify(executionActionHandlerPort, never()).afterTransactionSubmitted(any(), any(), any());
+  }
+
+  @Test
   void executeEip7702_throwsNpe_whenGateIsNull() throws Exception {
     ExecutionIntent intent = existingEip7702Intent();
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
+    when(executionIntentPersistencePort.findByPublicId("intent-7702"))
         .thenReturn(Optional.of(intent));
 
     assertThatThrownBy(
@@ -364,6 +423,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.minusSeconds(1)).build();
 
+    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
     when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
         .thenReturn(Optional.of(intent));
     when(executionIntentPersistencePort.update(any()))
@@ -378,13 +438,16 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.EXECUTION_INTENT_EXPIRED.getCode());
 
-    verify(executionIntentPersistencePort).update(any());
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.EXPIRED));
   }
 
   @Test
   void execute_marksNonceStale_whenEip7702AuthorityNonceChanged() throws Exception {
     ExecutionIntent intent = existingEip7702Intent();
 
+    when(executionIntentPersistencePort.findByPublicId("intent-7702"))
+        .thenReturn(Optional.of(intent));
     when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
         .thenReturn(Optional.of(intent));
     when(executionEip7702GatewayPort.toAuthorizationTuple(anyLong(), any(), any(), any()))
@@ -415,7 +478,74 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.AUTH_NONCE_MISMATCH.getCode());
 
-    verify(executionIntentPersistencePort).update(any());
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.NONCE_STALE));
+  }
+
+  @Test
+  void executeEip7702_marksNonceStale_whenSubmittedReservedNonceWasConsumed() {
+    ExecutionIntent intent = existingEip7702Intent().toBuilder().submittedTxId(501L).build();
+    ExecutionTransactionGatewayPort.TransactionRecord transaction =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            501L, ExecutionTransactionStatus.CREATED, null, 11155111L, SPONSOR_ADDRESS, 41L);
+
+    stubFindAndTrackUpdates(intent);
+    when(executionTransactionGatewayPort.findById(501L)).thenReturn(Optional.of(transaction));
+    when(executionEip7702GatewayPort.toAuthorizationTuple(anyLong(), any(), any(), any()))
+        .thenReturn(
+            new ExecutionEip7702GatewayPort.AuthorizationTuple(
+                BigInteger.valueOf(11155111L),
+                "0x" + "2".repeat(40),
+                BigInteger.valueOf(12L),
+                BigInteger.ZERO,
+                BigInteger.ONE,
+                BigInteger.TWO));
+    when(executionEip7702GatewayPort.hashCalls(any())).thenReturn("0x" + "9".repeat(64));
+    when(executionEip7702GatewayPort.verifyAuthorizationSigner(
+            anyLong(), any(), any(), any(), any()))
+        .thenReturn(true);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getAuthorityNonce()));
+    when(executionEip7702GatewayPort.verifyExecutionSignature(any(), any(), any(), any(), any()))
+        .thenReturn(true);
+    when(executionEip7702GatewayPort.encodeExecute(any(), any(), any(), any()))
+        .thenReturn("0xexec");
+    when(executionEip7702GatewayPort.estimateGasWithAuthorization(any(), any(), any(), any()))
+        .thenReturn(BigInteger.valueOf(120_000));
+    when(executionEip7702GatewayPort.loadSponsorFeePlan())
+        .thenReturn(
+            new ExecutionEip7702GatewayPort.FeePlan(
+                BigInteger.valueOf(2_000_000_000L), BigInteger.valueOf(50_000_000_000L)));
+    when(executionTransactionGatewayPort.loadSponsorNonceSnapshot(11155111L, SPONSOR_ADDRESS))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(42, 42, 42L, 42L, 42L, 42L));
+    when(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "CONSUME_UNKNOWN_NONCE",
+                41L,
+                "LATEST_PASSED_WITH_RPC_SNAPSHOT",
+                false,
+                null,
+                null));
+    when(executionTransactionGatewayPort.findSponsorNonceSlot(11155111L, SPONSOR_ADDRESS, 41L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionGatewayPort.SponsorNonceSlotRecord(
+                    41L, "CONSUMED_UNKNOWN", null, null)));
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-7702", "0xauth", "0xsubmit", null),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.NONCE_STALE);
+    assertThat(result.transactionId()).isEqualTo(501L);
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.NONCE_STALE));
+    verify(executionTransactionGatewayPort)
+        .coordinateSponsorNonce(argThat(command -> command.transactionId() == null));
+    verify(executionEip7702GatewayPort, never()).signAndEncode(any());
   }
 
   private ExecutionIntent existingEip1559Intent() throws Exception {
@@ -496,12 +626,23 @@ class TransactionalExecuteExecutionIntentDelegateTest {
 
   /**
    * Stub every port call up to {@code executionEip7702GatewayPort.signAndEncode(...)} so each KMS
-   * test only needs to override the sign stub. {@code reserveNextNonce} returns the supplied
-   * sponsor nonce so verification of {@code releaseReservedNonce} can match exactly.
+   * test only needs to override the sign stub. Sponsor nonce reservation now creates the
+   * transaction first, then reserves a slot through the coordinator.
    */
   private void stubEip7702HappyUntilSign(ExecutionIntent intent, long sponsorNonce) {
+    AtomicReference<ExecutionIntent> latest = new AtomicReference<>(intent);
+    when(executionIntentPersistencePort.findByPublicId(intent.getPublicId()))
+        .thenAnswer(invocation -> Optional.of(latest.get()));
     when(executionIntentPersistencePort.findByPublicIdForUpdate(intent.getPublicId()))
-        .thenReturn(Optional.of(intent));
+        .thenAnswer(invocation -> Optional.of(latest.get()));
+    lenient()
+        .when(executionIntentPersistencePort.update(any(ExecutionIntent.class)))
+        .thenAnswer(
+            invocation -> {
+              ExecutionIntent updated = invocation.getArgument(0);
+              latest.set(updated);
+              return updated;
+            });
     when(executionEip7702GatewayPort.toAuthorizationTuple(anyLong(), any(), any(), any()))
         .thenReturn(
             new ExecutionEip7702GatewayPort.AuthorizationTuple(
@@ -527,8 +668,23 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .thenReturn(
             new ExecutionEip7702GatewayPort.FeePlan(
                 BigInteger.valueOf(2_000_000_000L), BigInteger.valueOf(50_000_000_000L)));
-    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(sponsorNonce);
+    when(executionTransactionGatewayPort.createAndFlush(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.TransactionRecord(
+                501L, ExecutionTransactionStatus.CREATED, null));
+    when(executionTransactionGatewayPort.loadSponsorNonceSnapshot(11155111L, SPONSOR_ADDRESS))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceSnapshot(
+                sponsorNonce,
+                sponsorNonce,
+                sponsorNonce,
+                sponsorNonce,
+                sponsorNonce,
+                sponsorNonce));
+    when(executionTransactionGatewayPort.coordinateSponsorNonce(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord(
+                "ISSUE_NONCE", sponsorNonce, "ISSUE_NONCE", true, 9001L, 501L));
   }
 
   private static KmsException terminalAwsKmsCause() {
@@ -545,8 +701,6 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     stubEip7702HappyUntilSign(intent, sponsorNonce);
     when(executionEip7702GatewayPort.signAndEncode(any()))
         .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
 
     assertThatThrownBy(
             () ->
@@ -558,7 +712,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.WEB3_KMS_SIGN_FAILED.getCode());
 
-    verify(executionIntentPersistencePort).update(any());
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.CANCELED));
     verify(publishExecutionIntentTerminatedPort)
         .publish(
             org.mockito.ArgumentMatchers.argThat(
@@ -568,19 +723,26 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                         && event
                             .failureReason()
                             .equals(ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name())));
-    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
+    verify(executionTransactionGatewayPort).createAndFlush(any());
+    verify(executionTransactionGatewayPort)
+        .scheduleRetry(501L, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name(), null);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            argThat(
+                command ->
+                    command.nonce() == sponsorNonce
+                        && command.activeAttemptId().equals(9001L)
+                        && command.toStatus().equals("DROPPED")));
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
 
   @Test
-  void executeEip7702_kmsTerminalError_releasesReservedNonce() {
+  void executeEip7702_kmsTerminalError_dropsReservedNonceSlot() {
     ExecutionIntent intent = existingEip7702Intent();
     long sponsorNonce = 42L;
     stubEip7702HappyUntilSign(intent, sponsorNonce);
     when(executionEip7702GatewayPort.signAndEncode(any()))
         .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
 
     assertThatThrownBy(
             () ->
@@ -590,7 +752,17 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                     sponsorGate()))
         .isInstanceOf(ExecutionIntentTerminalException.class);
 
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
+    verify(executionTransactionGatewayPort)
+        .scheduleRetry(501L, ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name(), null);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            argThat(
+                command ->
+                    command.nonce() == sponsorNonce
+                        && command.toStatus().equals("DROPPED")
+                        && command
+                            .releaseReason()
+                            .equals(ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name())));
   }
 
   @Test
@@ -601,8 +773,6 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     stubEip7702HappyUntilSign(intent, sponsorNonce);
     when(executionEip7702GatewayPort.signAndEncode(any()))
         .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
     SponsorDailyUsage usage = mock(SponsorDailyUsage.class);
     when(usage.release(any())).thenReturn(usage);
     when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(anyLong(), any())).thenReturn(usage);
@@ -628,8 +798,6 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     stubEip7702HappyUntilSign(intent, sponsorNonce);
     when(executionEip7702GatewayPort.signAndEncode(any()))
         .thenThrow(new SignatureRecoveryException("v=27/28 mismatch"));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
 
     assertThatThrownBy(
             () ->
@@ -641,7 +809,17 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.getCode());
 
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
+    verify(executionTransactionGatewayPort)
+        .scheduleRetry(501L, ExecutionFailureReason.SIGNATURE_INVALID.name(), null);
+    verify(executionTransactionGatewayPort)
+        .transitionSponsorNonceSlot(
+            argThat(
+                command ->
+                    command.nonce() == sponsorNonce
+                        && command.toStatus().equals("DROPPED")
+                        && command
+                            .releaseReason()
+                            .equals(ExecutionFailureReason.SIGNATURE_INVALID.name())));
     verify(publishExecutionIntentTerminatedPort)
         .publish(
             org.mockito.ArgumentMatchers.argThat(
@@ -670,8 +848,12 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                     sponsorGate()))
         .isInstanceOf(KmsSignFailedException.class);
 
-    // No cancel/intent state-change update should have been issued.
-    verify(executionIntentPersistencePort, never()).update(any());
+    verify(executionIntentPersistencePort)
+        .update(
+            argThat(
+                updated ->
+                    updated.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE
+                        && Long.valueOf(501L).equals(updated.getSubmittedTxId())));
   }
 
   @Test
@@ -711,7 +893,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   @Test
-  void executeEip7702_kmsTransientError_callsReleaseReservedNonce() {
+  void executeEip7702_kmsTransientError_doesNotDropOrReleaseReservedNonce() {
     ExecutionIntent intent = existingEip7702Intent();
     long sponsorNonce = 42L;
     stubEip7702HappyUntilSign(intent, sponsorNonce);
@@ -726,7 +908,73 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                     sponsorGate()))
         .isInstanceOf(KmsSignFailedException.class);
 
-    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
+    verify(executionTransactionGatewayPort, never())
+        .transitionSponsorNonceSlot(
+            any(ExecutionTransactionGatewayPort.SponsorNonceSlotTransitionCommand.class));
+  }
+
+  @Test
+  void executeEip7702_whenSignedClaimLost_skipsDirectBroadcastAndBroadcastingTransition() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 99L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenReturn(new ExecutionEip7702GatewayPort.SignedPayload("0x04signed", "0xexpectedhash"));
+    when(executionTransactionGatewayPort.claimSignedForBroadcast(any(), any(), any()))
+        .thenReturn(false);
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-7702", "0xauth", "0xsubmit", null),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(501L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
+    verify(executionTransactionGatewayPort).claimSignedForBroadcast(eq(501L), any(), any());
+    verify(executionTransactionGatewayPort, never()).broadcast(any());
+    verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+    verify(executionTransactionGatewayPort, never())
+        .transitionSponsorNonceSlot(argThat(command -> "BROADCASTING".equals(command.toStatus())));
+  }
+
+  @Test
+  void executeEip7702_broadcastNonceTooLow_marksSponsorNonceOperatorReview() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 99L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenReturn(new ExecutionEip7702GatewayPort.SignedPayload("0x04signed", "0xexpectedhash"));
+    when(executionTransactionGatewayPort.broadcast("0x04signed"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(
+                false, null, "BROADCAST_NONCE_TOO_LOW", "main"));
+    stubFindAndTrackUpdates(intent);
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-7702", "0xauth", "0xsubmit", null),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(501L);
+    verify(executionTransactionGatewayPort)
+        .markSponsorNonceBroadcastingOperatorReview(
+            argThat(
+                command ->
+                    command.transactionId().equals(501L)
+                        && command.chainId() == 11155111L
+                        && command.fromAddress().equals(SPONSOR_ADDRESS)
+                        && command.nonce() == sponsorNonce
+                        && command.attemptId().equals(9001L)
+                        && command.slotTerminalReason().equals("BROADCAST_NONCE_TOO_LOW")
+                        && command
+                            .transactionFailureReason()
+                            .equals("SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED")
+                        && command.hasBroadcastEvidence()));
+    verify(executionTransactionGatewayPort, never()).scheduleRetry(any(), any(), any());
+    verify(executionTransactionGatewayPort, never()).markPending(any(), any());
+    verify(executionActionHandlerPort, never()).afterTransactionSubmitted(any(), any(), any());
   }
 
   @Test
@@ -761,8 +1009,6 @@ class TransactionalExecuteExecutionIntentDelegateTest {
     assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
     assertThat(result.txHash()).isEqualTo("0xexpectedhash");
     verify(executionTransactionGatewayPort).markPending(501L, "0xchainhash");
-    // Happy path must NOT release the nonce — it is consumed.
-    verify(executionTransactionGatewayPort, never()).releaseReservedNonce(any(), anyLong());
     // Sponsor exposure: reservedCost moves from reserved → consumed via release().consume() chain.
     verify(usage).release(reservedCost);
     verify(usage).consume(reservedCost);
@@ -791,6 +1037,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             List.of(firstHandler, secondHandler),
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
+            runExecutionTransactionPort,
+            3,
             FIXED_CLOCK);
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder()
@@ -798,7 +1046,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             .resourceType(ExecutionResourceType.QUESTION)
             .actionType(ExecutionActionType.QNA_ANSWER_ACCEPT)
             .build();
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-qna-accept"))
+    when(executionIntentPersistencePort.findByPublicId("intent-qna-accept"))
         .thenReturn(Optional.of(intent));
     when(firstHandler.supports(ExecutionActionType.QNA_ANSWER_ACCEPT)).thenReturn(true);
     when(secondHandler.supports(ExecutionActionType.QNA_ANSWER_ACCEPT)).thenReturn(true);
@@ -838,6 +1086,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             List.of(handler),
             publishExecutionIntentTerminatedPort,
             runAfterCommitPort,
+            runExecutionTransactionPort,
+            3,
             FIXED_CLOCK);
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder()
@@ -845,7 +1095,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             .resourceType(ExecutionResourceType.QUESTION)
             .actionType(ExecutionActionType.QNA_ANSWER_ACCEPT)
             .build();
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-legacy-qna"))
+    when(executionIntentPersistencePort.findByPublicId("intent-legacy-qna"))
         .thenReturn(Optional.of(intent));
     when(handler.supports(ExecutionActionType.QNA_ANSWER_ACCEPT)).thenReturn(true);
     when(handler.supports(intent)).thenReturn(false);

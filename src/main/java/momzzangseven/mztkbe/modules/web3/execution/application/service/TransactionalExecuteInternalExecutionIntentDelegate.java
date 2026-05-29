@@ -3,12 +3,15 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
@@ -24,6 +27,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -38,16 +42,12 @@ import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorC
 /**
  * Transactional inner stage of internal execution intent processing.
  *
- * <p>Owns the FOR UPDATE intent claim, nonce reservation, sign, broadcast, and persistence steps
- * that must execute atomically. The sponsor-wallet preflight (load + active + structural + KMS
- * DescribeKey verify) is run by the orchestrator OUTSIDE the transactional boundary; the
- * pre-validated {@link SponsorWalletGate} enters here as a parameter so external KMS latency never
- * pins a JDBC connection while a row lock is held.
+ * <p>Owns the FOR UPDATE intent claim, nonce reservation, signed persistence, and broadcast outcome
+ * persistence. Sponsor-wallet preflight and the KMS signing call run outside the DB transaction so
+ * external latency never pins a JDBC connection while an intent or sponsor nonce row is locked.
  *
- * <p>This class is registered as a plain bean. The transactional boundary is applied by the {@code
- * TransactionTemplate(REQUIRES_NEW)} wrapper inside {@code InternalExecutionServiceConfig}; the
- * orchestrator references the wrapper via {@link
- * ExecuteTransactionalInternalExecutionIntentDelegatePort}.
+ * <p>This class is registered as a plain bean. Each stateful DB phase explicitly enters {@link
+ * RunExecutionTransactionPort#requiresNew(java.util.function.Supplier)}.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -55,6 +55,10 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
     implements ExecuteTransactionalInternalExecutionIntentDelegatePort {
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
+  private static final String BROADCAST_ALREADY_KNOWN = "BROADCAST_ALREADY_KNOWN";
+  private static final String BROADCAST_NONCE_TOO_LOW = "BROADCAST_NONCE_TOO_LOW";
+  private static final String SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED =
+      "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED";
   private static final String INTERNAL_ISSUER_INVALID_INTENT = "INTERNAL_ISSUER_INVALID_INTENT";
   private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
       "sponsor kms sign failed (terminal)";
@@ -68,97 +72,23 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
   private final RunAfterCommitPort runAfterCommitPort;
+  private final RunExecutionTransactionPort transactionPort;
+  private final int sponsorNonceOpenWindowSize;
   private final Clock appClock;
 
   @Override
   public ExecuteInternalExecutionIntentResult execute(
       ExecuteInternalExecutionIntentCommand command, InternalExecutionSignerGates signerGates) {
-    ExecutionIntent intent =
-        executionIntentPersistencePort
-            .claimNextInternalExecutableForUpdate(command.actionTypes())
-            .orElse(null);
-    if (intent == null) {
-      return ExecuteInternalExecutionIntentResult.notFound();
+    InternalSigningPreparation preparation =
+        transactionPort.requiresNew(() -> prepareInternalSigning(command, signerGates));
+    if (preparation.result() != null) {
+      return preparation.result();
     }
 
-    ExecutionActionHandlerPort actionHandler = findActionHandler(intent).orElse(null);
-    if (actionHandler == null) {
-      return quarantineInvalidIntent(
-          intent,
-          null,
-          null,
-          INTERNAL_ISSUER_INVALID_INTENT,
-          "no execution action handler for actionType=" + intent.getActionType());
-    }
-
-    ExecutionActionPlan actionPlan;
-    try {
-      actionPlan = actionHandler.buildActionPlan(intent);
-      actionHandler.beforeExecute(intent, actionPlan);
-    } catch (IllegalStateException | Web3InvalidInputException e) {
-      return quarantineInvalidIntent(
-          intent, actionHandler, null, INTERNAL_ISSUER_INVALID_INTENT, e.getMessage());
-    }
-
-    LocalDateTime now = LocalDateTime.now(appClock);
-    if (!intent.getExpiresAt().isAfter(now)) {
-      ExecutionIntent expired =
-          executionIntentPersistencePort.update(
-              intent.expire(
-                  ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
-                  ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
-                  now));
-      publishTerminated(
-          expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
-      return new ExecuteInternalExecutionIntentResult(
-          true, false, expired.getPublicId(), expired.getStatus(), null, null, null);
-    }
-
-    if (intent.getMode() != ExecutionMode.EIP1559) {
-      return quarantineInvalidIntent(
-          intent,
-          actionHandler,
-          actionPlan,
-          INTERNAL_ISSUER_INVALID_INTENT,
-          "internal issuer supports only EIP1559");
-    }
-    if (!intent.getStatus().isSignable()) {
-      return new ExecuteInternalExecutionIntentResult(
-          true,
-          false,
-          intent.getPublicId(),
-          intent.getStatus(),
-          intent.getSubmittedTxId(),
-          null,
-          null);
-    }
-    if (intent.getUnsignedTxSnapshot() == null || intent.getUnsignedTxFingerprint() == null) {
-      return quarantineInvalidIntent(
-          intent,
-          actionHandler,
-          actionPlan,
-          INTERNAL_ISSUER_INVALID_INTENT,
-          "internal executable intent requires unsigned tx snapshot");
-    }
-
-    // The signer wallet was preflighted outside the TX boundary; signer + walletInfo are
-    // pre-validated for the claimed action type.
-    SponsorWalletGate gate = signerGates.gateFor(intent.getActionType());
-    TreasuryWalletInfo walletInfo = gate.walletInfo();
-    String expectedSigner = walletInfo.walletAddress();
-    TreasurySigner signer = gate.signer();
-
-    if (!expectedSigner.equalsIgnoreCase(intent.getUnsignedTxSnapshot().fromAddress())) {
-      return quarantineInvalidIntent(
-          intent,
-          actionHandler,
-          actionPlan,
-          INTERNAL_ISSUER_INVALID_INTENT,
-          "internal intent signer does not match expected action signer");
-    }
-
-    long reservedNonce = executionTransactionGatewayPort.reserveNextNonce(expectedSigner);
-    ExecutionIntent signableIntent = rebindReservedNonce(intent, reservedNonce);
+    ExecutionIntent signableIntent = preparation.intent();
+    ExecutionTransactionGatewayPort.TransactionRecord created = preparation.transaction();
+    SponsorNonceContext sponsorNonce = preparation.sponsorNonce();
+    ExecutionIntent intent = signableIntent;
 
     ExecutionEip1559SigningPort.SignedTransaction signedTransaction;
     try {
@@ -173,26 +103,25 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                   signableIntent.getUnsignedTxSnapshot().data(),
                   signableIntent.getUnsignedTxSnapshot().maxPriorityFeePerGas(),
                   signableIntent.getUnsignedTxSnapshot().maxFeePerGas(),
-                  signer));
+                  preparation.signer()));
     } catch (KmsSignFailedException e) {
       log.warn(
           "internal sponsor KMS sign failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
-      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
       if (KmsClientErrorClassifier.isTerminal(e)) {
-        return quarantineInvalidIntent(
-            intent,
-            actionHandler,
-            actionPlan,
+        return failInternalSigningAndQuarantine(
+            intent.getPublicId(),
+            preparation.actionHandler(),
+            preparation.actionPlan(),
+            sponsorNonce,
+            ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name(),
+            ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL,
             ErrorCode.WEB3_KMS_SIGN_FAILED.name(),
-            SPONSOR_KMS_SIGN_FAILED_TERMINAL,
-            ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL);
+            SPONSOR_KMS_SIGN_FAILED_TERMINAL);
       }
-      // Transient: leave intent in AWAITING_SIGNATURE so the next cron tick re-claims it via
-      // claimNextInternalExecutableForUpdate. Do NOT cancel and do NOT publish the terminated
-      // event — the QnA escrow refund cascade (afterExecutionTerminated → escrow refund) must not
-      // fire on a recoverable AWS hiccup.
+      // Transient: leave the intent in AWAITING_SIGNATURE with the reserved transaction bound.
+      // The next cron tick re-claims and resumes the same CREATED transaction/nonce.
       return ExecuteInternalExecutionIntentResult.transientRetry(
           intent.getPublicId(), intent.getStatus());
     } catch (SignatureRecoveryException e) {
@@ -200,18 +129,209 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           "internal sponsor signature recovery failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
-      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
-      return quarantineInvalidIntent(
-          intent,
+      return failInternalSigningAndQuarantine(
+          intent.getPublicId(),
+          preparation.actionHandler(),
+          preparation.actionPlan(),
+          sponsorNonce,
+          ExecutionFailureReason.SIGNATURE_INVALID.name(),
+          ExecutionFailureReason.SIGNATURE_INVALID,
+          ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.name(),
+          SPONSOR_SIGNATURE_INVALID);
+    } catch (Web3InvalidInputException e) {
+      return failInternalSigningAndQuarantine(
+          intent.getPublicId(),
+          preparation.actionHandler(),
+          preparation.actionPlan(),
+          sponsorNonce,
+          "PREVALIDATE_INVALID_COMMAND",
+          null,
+          INTERNAL_ISSUER_INVALID_INTENT,
+          e.getMessage());
+    }
+
+    InternalSignedSubmission signedSubmission =
+        persistInternalSignedIntent(intent.getPublicId(), sponsorNonce, signedTransaction);
+    ExecutionIntent signedIntent = signedSubmission.intent();
+    if (!signedSubmission.signedNow()) {
+      return new ExecuteInternalExecutionIntentResult(
+          true,
+          false,
+          signedIntent.getPublicId(),
+          signedIntent.getStatus(),
+          signedIntent.getSubmittedTxId(),
+          created.status(),
+          created.txHash());
+    }
+    if (signedIntent.getStatus() != ExecutionIntentStatus.SIGNED) {
+      return new ExecuteInternalExecutionIntentResult(
+          true,
+          false,
+          signedIntent.getPublicId(),
+          signedIntent.getStatus(),
+          signedIntent.getSubmittedTxId(),
+          created.status(),
+          created.txHash());
+    }
+    scheduleBroadcastAfterCommit(
+        signedIntent,
+        created.transactionId(),
+        signedTransaction.rawTransaction(),
+        signedTransaction.txHash(),
+        preparation.actionHandler(),
+        preparation.actionPlan(),
+        sponsorNonce);
+    return new ExecuteInternalExecutionIntentResult(
+        true,
+        false,
+        intent.getPublicId(),
+        ExecutionIntentStatus.SIGNED,
+        created.transactionId(),
+        ExecutionTransactionStatus.SIGNED,
+        signedTransaction.txHash());
+  }
+
+  private InternalSigningPreparation prepareInternalSigning(
+      ExecuteInternalExecutionIntentCommand command, InternalExecutionSignerGates signerGates) {
+    ExecutionIntent intent =
+        executionIntentPersistencePort
+            .claimNextInternalExecutableForUpdate(command.actionTypes())
+            .orElse(null);
+    if (intent == null) {
+      return InternalSigningPreparation.completed(ExecuteInternalExecutionIntentResult.notFound());
+    }
+
+    ExecutionActionHandlerPort actionHandler = findActionHandler(intent).orElse(null);
+    if (actionHandler == null) {
+      return InternalSigningPreparation.completed(
+          quarantineInvalidIntent(
+              intent,
+              null,
+              null,
+              INTERNAL_ISSUER_INVALID_INTENT,
+              "no execution action handler for actionType=" + intent.getActionType()));
+    }
+
+    ExecutionActionPlan actionPlan;
+    try {
+      actionPlan = actionHandler.buildActionPlan(intent);
+      actionHandler.beforeExecute(intent, actionPlan);
+    } catch (IllegalStateException | Web3InvalidInputException e) {
+      return InternalSigningPreparation.completed(
+          quarantineInvalidIntent(
+              intent, actionHandler, null, INTERNAL_ISSUER_INVALID_INTENT, e.getMessage()));
+    }
+
+    LocalDateTime now = LocalDateTime.now(appClock);
+    if (!intent.getExpiresAt().isAfter(now)) {
+      ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+          executionTransactionGatewayPort,
+          intent.getSubmittedTxId(),
+          ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
+          now);
+      ExecutionIntent expired =
+          executionIntentPersistencePort.update(
+              intent.expire(
+                  ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
+                  ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
+                  now));
+      publishTerminated(
+          expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
+      return InternalSigningPreparation.completed(
+          new ExecuteInternalExecutionIntentResult(
+              true, false, expired.getPublicId(), expired.getStatus(), null, null, null));
+    }
+
+    if (intent.getMode() != ExecutionMode.EIP1559) {
+      return InternalSigningPreparation.completed(
+          quarantineInvalidIntent(
+              intent,
+              actionHandler,
+              actionPlan,
+              INTERNAL_ISSUER_INVALID_INTENT,
+              "internal issuer supports only EIP1559"));
+    }
+    if (!intent.getStatus().isSignable()) {
+      return InternalSigningPreparation.completed(
+          new ExecuteInternalExecutionIntentResult(
+              true,
+              false,
+              intent.getPublicId(),
+              intent.getStatus(),
+              intent.getSubmittedTxId(),
+              null,
+              null));
+    }
+    if (intent.getUnsignedTxSnapshot() == null || intent.getUnsignedTxFingerprint() == null) {
+      return InternalSigningPreparation.completed(
+          quarantineInvalidIntent(
+              intent,
+              actionHandler,
+              actionPlan,
+              INTERNAL_ISSUER_INVALID_INTENT,
+              "internal executable intent requires unsigned tx snapshot"));
+    }
+
+    // The signer wallet was preflighted outside the TX boundary; signer + walletInfo are
+    // pre-validated for the claimed action type.
+    SponsorWalletGate gate = signerGates.gateFor(intent.getActionType());
+    TreasuryWalletInfo walletInfo = gate.walletInfo();
+    String expectedSigner = walletInfo.walletAddress();
+    TreasurySigner signer = gate.signer();
+
+    if (!expectedSigner.equalsIgnoreCase(intent.getUnsignedTxSnapshot().fromAddress())) {
+      return InternalSigningPreparation.completed(
+          quarantineInvalidIntent(
+              intent,
+              actionHandler,
+              actionPlan,
+              INTERNAL_ISSUER_INVALID_INTENT,
+              "internal intent signer does not match expected action signer"));
+    }
+
+    if (intent.getSubmittedTxId() != null) {
+      ExecutionTransactionGatewayPort.TransactionRecord submittedTransaction =
+          loadTransaction(intent.getSubmittedTxId());
+      if (!canResumeInternalSigning(intent, submittedTransaction, expectedSigner)) {
+        return InternalSigningPreparation.completed(
+            new ExecuteInternalExecutionIntentResult(
+                true,
+                false,
+                intent.getPublicId(),
+                intent.getStatus(),
+                submittedTransaction.transactionId(),
+                submittedTransaction.status(),
+                submittedTransaction.txHash()));
+      }
+      Optional<SponsorNonceContext> sponsorNonce = resumeInternalSubmission(submittedTransaction);
+      if (sponsorNonce.isEmpty()) {
+        return InternalSigningPreparation.completed(
+            markInternalNonceStale(
+                intent,
+                actionHandler,
+                actionPlan,
+                submittedTransaction,
+                ErrorCode.NONCE_STALE_RECREATE_REQUIRED));
+      }
+      ExecutionIntent signableIntent = rebindReservedNonce(intent, sponsorNonce.get().nonce());
+      if (signableIntent.getUnsignedTxSnapshot().expectedNonce()
+              != intent.getUnsignedTxSnapshot().expectedNonce()
+          || !signableIntent.getUnsignedTxFingerprint().equals(intent.getUnsignedTxFingerprint())) {
+        signableIntent =
+            executionIntentPersistencePort.update(
+                intent.bindSubmittedTransactionAndUnsignedSnapshot(
+                    submittedTransaction.transactionId(),
+                    signableIntent.getUnsignedTxSnapshot(),
+                    signableIntent.getUnsignedTxFingerprint(),
+                    LocalDateTime.now(appClock)));
+      }
+      return InternalSigningPreparation.ready(
+          signableIntent,
+          submittedTransaction,
+          sponsorNonce.get(),
           actionHandler,
           actionPlan,
-          ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.name(),
-          SPONSOR_SIGNATURE_INVALID,
-          ExecutionFailureReason.SIGNATURE_INVALID);
-    } catch (Web3InvalidInputException e) {
-      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
-      return quarantineInvalidIntent(
-          intent, actionHandler, actionPlan, INTERNAL_ISSUER_INVALID_INTENT, e.getMessage());
+          signer);
     }
 
     ExecutionTransactionGatewayPort.TransactionRecord created =
@@ -223,44 +343,29 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                 intent.getRequesterUserId(),
                 intent.getCounterpartyUserId(),
                 expectedSigner,
-                signableIntent.getUnsignedTxSnapshot().toAddress(),
+                intent.getUnsignedTxSnapshot().toAddress(),
                 actionPlan.amountWei(),
-                signableIntent.getUnsignedTxSnapshot().expectedNonce(),
+                intent.getUnsignedTxSnapshot().chainId(),
+                null,
                 ExecutionTransactionStatus.CREATED,
                 ExecutionTransactionType.EIP1559,
                 null,
                 null,
                 null,
                 null));
-
-    executionTransactionGatewayPort.markSigned(
-        created.transactionId(),
-        signableIntent.getUnsignedTxSnapshot().expectedNonce(),
-        signedTransaction.rawTransaction(),
-        signedTransaction.txHash());
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.SIGN,
-        null,
-        java.util.Map.of("mode", intent.getMode().name(), "internal", true));
-    ExecutionIntent signedIntent =
+    SponsorNonceContext sponsorNonce =
+        reserveSponsorNonce(
+            created.transactionId(), expectedSigner, intent.getUnsignedTxSnapshot().chainId());
+    ExecutionIntent signableIntent = rebindReservedNonce(intent, sponsorNonce.nonce());
+    ExecutionIntent boundIntent =
         executionIntentPersistencePort.update(
-            signableIntent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    scheduleBroadcastAfterCommit(
-        signedIntent,
-        created.transactionId(),
-        signedTransaction.rawTransaction(),
-        signedTransaction.txHash(),
-        actionHandler,
-        actionPlan);
-    return new ExecuteInternalExecutionIntentResult(
-        true,
-        false,
-        intent.getPublicId(),
-        ExecutionIntentStatus.SIGNED,
-        created.transactionId(),
-        ExecutionTransactionStatus.SIGNED,
-        signedTransaction.txHash());
+            intent.bindSubmittedTransactionAndUnsignedSnapshot(
+                created.transactionId(),
+                signableIntent.getUnsignedTxSnapshot(),
+                signableIntent.getUnsignedTxFingerprint(),
+                LocalDateTime.now(appClock)));
+    return InternalSigningPreparation.ready(
+        boundIntent, created, sponsorNonce, actionHandler, actionPlan, signer);
   }
 
   private void scheduleBroadcastAfterCommit(
@@ -269,9 +374,14 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       String rawTx,
       String fallbackTxHash,
       ExecutionActionHandlerPort actionHandler,
-      ExecutionActionPlan actionPlan) {
+      ExecutionActionPlan actionPlan,
+      SponsorNonceContext sponsorNonceContext) {
     runAfterCommitPort.runAfterCommitWithoutTransaction(
         () -> {
+          if (!claimSignedForDirectBroadcast(transactionId, "internal-broadcast-")) {
+            return;
+          }
+          markSponsorSlotBroadcasting(sponsorNonceContext, fallbackTxHash);
           ExecutionTransactionGatewayPort.BroadcastResult broadcast =
               executionTransactionGatewayPort.broadcast(rawTx);
           runAfterCommitPort.runAfterCommit(
@@ -282,8 +392,25 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
                       fallbackTxHash,
                       broadcast,
                       actionHandler,
-                      actionPlan));
+                      actionPlan,
+                      sponsorNonceContext));
         });
+  }
+
+  private boolean claimSignedForDirectBroadcast(Long transactionId, String workerPrefix) {
+    String workerId = workerPrefix + transactionId;
+    LocalDateTime processingUntil =
+        LocalDateTime.now(appClock)
+            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds());
+    boolean claimed =
+        executionTransactionGatewayPort.claimSignedForBroadcast(
+            transactionId, workerId, processingUntil);
+    if (!claimed) {
+      log.info(
+          "Skipping direct internal execution broadcast because signed tx is already claimed or moved: txId={}",
+          transactionId);
+    }
+    return claimed;
   }
 
   private void persistBroadcastOutcome(
@@ -292,7 +419,28 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       String fallbackTxHash,
       ExecutionTransactionGatewayPort.BroadcastResult broadcast,
       ExecutionActionHandlerPort actionHandler,
-      ExecutionActionPlan actionPlan) {
+      ExecutionActionPlan actionPlan,
+      SponsorNonceContext sponsorNonceContext) {
+    transactionPort.requiresNew(
+        () ->
+            persistBroadcastOutcomeInTransaction(
+                executionIntentId,
+                transactionId,
+                fallbackTxHash,
+                broadcast,
+                actionHandler,
+                actionPlan,
+                sponsorNonceContext));
+  }
+
+  private void persistBroadcastOutcomeInTransaction(
+      String executionIntentId,
+      Long transactionId,
+      String fallbackTxHash,
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan,
+      SponsorNonceContext sponsorNonceContext) {
     audit(
         transactionId,
         ExecutionAuditEventType.BROADCAST,
@@ -311,12 +459,13 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       return;
     }
 
-    if (broadcast.success()) {
+    if (broadcast.success() || isBroadcastAlreadyKnown(broadcast)) {
       String txHash =
           broadcast.txHash() == null || broadcast.txHash().isBlank()
               ? fallbackTxHash
               : broadcast.txHash();
       executionTransactionGatewayPort.markPending(transactionId, txHash);
+      markSponsorSlotBroadcasted(sponsorNonceContext);
       ExecutionIntent pendingIntent =
           executionIntentPersistencePort.update(
               current.markPendingOnchain(transactionId, LocalDateTime.now(appClock)));
@@ -326,6 +475,24 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           pendingIntent,
           actionPlan,
           ExecutionTransactionStatus.PENDING);
+      return;
+    }
+
+    if (isBroadcastNonceTooLow(broadcast)) {
+      executionTransactionGatewayPort.markSponsorNonceBroadcastingOperatorReview(
+          new ExecutionTransactionGatewayPort.SponsorNonceBroadcastingOperatorReviewCommand(
+              transactionId,
+              sponsorNonceContext.chainId(),
+              sponsorNonceContext.fromAddress(),
+              sponsorNonceContext.nonce(),
+              sponsorNonceContext.attemptId(),
+              BROADCAST_NONCE_TOO_LOW,
+              SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED,
+              true,
+              fallbackTxHash != null && !fallbackTxHash.isBlank(),
+              true,
+              true,
+              LocalDateTime.now(appClock)));
       return;
     }
 
@@ -340,6 +507,343 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     ExecutionActionHookRunner.afterTransactionSubmitted(
         runAfterCommitPort, actionHandler, current, actionPlan, ExecutionTransactionStatus.SIGNED);
+  }
+
+  private boolean isBroadcastAlreadyKnown(
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
+    return broadcast != null && BROADCAST_ALREADY_KNOWN.equals(broadcast.failureReason());
+  }
+
+  private boolean isBroadcastNonceTooLow(
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
+    return broadcast != null && BROADCAST_NONCE_TOO_LOW.equals(broadcast.failureReason());
+  }
+
+  private ExecutionTransactionGatewayPort.TransactionRecord loadTransaction(Long transactionId) {
+    return executionTransactionGatewayPort
+        .findById(transactionId)
+        .orElseThrow(
+            () -> new Web3InvalidInputException("transaction not found: " + transactionId));
+  }
+
+  private boolean canResumeInternalSigning(
+      ExecutionIntent intent,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      String expectedSigner) {
+    return intent.getMode() == ExecutionMode.EIP1559
+        && intent.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE
+        && transaction.status() == ExecutionTransactionStatus.CREATED
+        && transaction.chainId() != null
+        && transaction.nonce() != null
+        && transaction.fromAddress() != null
+        && transaction.fromAddress().equalsIgnoreCase(expectedSigner);
+  }
+
+  private Optional<SponsorNonceContext> resumeInternalSubmission(
+      ExecutionTransactionGatewayPort.TransactionRecord transaction) {
+    ExecutionTransactionGatewayPort.SponsorNonceSnapshot snapshot =
+        executionTransactionGatewayPort.loadSponsorNonceSnapshot(
+            transaction.chainId(), transaction.fromAddress());
+    ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord reconciliation =
+        executionTransactionGatewayPort.coordinateSponsorNonce(
+            new ExecutionTransactionGatewayPort.CoordinateSponsorNonceCommand(
+                transaction.chainId(),
+                transaction.fromAddress(),
+                snapshot.chainPendingNonce(),
+                snapshot.chainLatestNonce(),
+                snapshot.mainPendingNonce(),
+                snapshot.subPendingNonce(),
+                snapshot.mainLatestNonce(),
+                snapshot.subLatestNonce(),
+                sponsorNonceOpenWindowSize,
+                null,
+                null,
+                LocalDateTime.now(appClock)));
+    if (isRpcDisagreement(reconciliation)) {
+      throwSponsorNonceUnavailable(reconciliation);
+    }
+
+    Optional<ExecutionTransactionGatewayPort.SponsorNonceSlotRecord> slot =
+        executionTransactionGatewayPort.findSponsorNonceSlot(
+            transaction.chainId(), transaction.fromAddress(), transaction.nonce());
+    if (snapshot.chainLatestNonce() > transaction.nonce()) {
+      log.warn(
+          "submitted sponsor nonce was consumed before internal resume: txId={}, nonce={}, "
+              + "chainLatest={}",
+          transaction.transactionId(),
+          transaction.nonce(),
+          snapshot.chainLatestNonce());
+      return Optional.empty();
+    }
+    if (slot.isPresent() && isReservedSlotOwnedByTransaction(slot.get(), transaction)) {
+      return Optional.of(
+          new SponsorNonceContext(
+              transaction.chainId(),
+              transaction.fromAddress(),
+              transaction.nonce(),
+              slot.get().activeAttemptId(),
+              transaction.transactionId()));
+    }
+
+    log.warn(
+        "submitted internal sponsor nonce slot is no longer reusable: txId={}, nonce={}, "
+            + "slotStatus={}, slotActiveTxId={}",
+        transaction.transactionId(),
+        transaction.nonce(),
+        slot.map(ExecutionTransactionGatewayPort.SponsorNonceSlotRecord::status).orElse(null),
+        slot.map(ExecutionTransactionGatewayPort.SponsorNonceSlotRecord::activeTxId).orElse(null));
+    return Optional.empty();
+  }
+
+  private InternalSignedSubmission persistInternalSignedIntent(
+      String executionIntentId,
+      SponsorNonceContext sponsorNonce,
+      ExecutionEip1559SigningPort.SignedTransaction signedTransaction) {
+    return transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(executionIntentId)
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + executionIntentId));
+          if (current.getStatus() == ExecutionIntentStatus.SIGNED) {
+            return new InternalSignedSubmission(current, false);
+          }
+          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE
+              || !sponsorNonce.transactionId().equals(current.getSubmittedTxId())) {
+            throw new Web3InvalidInputException("internal execution intent signing state changed");
+          }
+          executionTransactionGatewayPort.markSigned(
+              sponsorNonce.transactionId(),
+              sponsorNonce.nonce(),
+              signedTransaction.rawTransaction(),
+              signedTransaction.txHash());
+          markSponsorSlotSigned(sponsorNonce, signedTransaction.txHash());
+          audit(
+              sponsorNonce.transactionId(),
+              ExecutionAuditEventType.SIGN,
+              null,
+              java.util.Map.of("mode", current.getMode().name(), "internal", true));
+          ExecutionIntent signedIntent =
+              executionIntentPersistencePort.update(
+                  current.markSigned(sponsorNonce.transactionId(), LocalDateTime.now(appClock)));
+          return new InternalSignedSubmission(signedIntent, true);
+        });
+  }
+
+  private ExecuteInternalExecutionIntentResult failInternalSigningAndQuarantine(
+      String executionIntentId,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan,
+      SponsorNonceContext sponsorNonce,
+      String transactionFailureReason,
+      ExecutionFailureReason eventReason,
+      String errorCode,
+      String failureReason) {
+    return transactionPort.requiresNew(
+        () -> {
+          ExecutionIntent current =
+              executionIntentPersistencePort
+                  .findByPublicIdForUpdate(executionIntentId)
+                  .orElseThrow(
+                      () ->
+                          new Web3InvalidInputException(
+                              "executionIntentId not found: " + executionIntentId));
+          if (current.getStatus() != ExecutionIntentStatus.AWAITING_SIGNATURE
+              || !sponsorNonce.transactionId().equals(current.getSubmittedTxId())) {
+            return new ExecuteInternalExecutionIntentResult(
+                true,
+                false,
+                current.getPublicId(),
+                current.getStatus(),
+                current.getSubmittedTxId(),
+                null,
+                null);
+          }
+          markCreatedTransactionTerminal(sponsorNonce.transactionId(), transactionFailureReason);
+          dropSponsorReservedSlot(sponsorNonce, transactionFailureReason);
+          return quarantineInvalidIntent(
+              current, actionHandler, actionPlan, errorCode, failureReason, eventReason);
+        });
+  }
+
+  private SponsorNonceContext reserveSponsorNonce(
+      Long transactionId, String sponsorAddress, long chainId) {
+    ExecutionTransactionGatewayPort.SponsorNonceSnapshot snapshot =
+        executionTransactionGatewayPort.loadSponsorNonceSnapshot(chainId, sponsorAddress);
+    ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination =
+        executionTransactionGatewayPort.coordinateSponsorNonce(
+            new ExecutionTransactionGatewayPort.CoordinateSponsorNonceCommand(
+                chainId,
+                sponsorAddress,
+                snapshot.chainPendingNonce(),
+                snapshot.chainLatestNonce(),
+                snapshot.mainPendingNonce(),
+                snapshot.subPendingNonce(),
+                snapshot.mainLatestNonce(),
+                snapshot.subLatestNonce(),
+                sponsorNonceOpenWindowSize,
+                transactionId,
+                null,
+                LocalDateTime.now(appClock)));
+    if (!coordination.reserved() || coordination.nonce() == null) {
+      throwSponsorNonceUnavailable(coordination);
+    }
+    return new SponsorNonceContext(
+        chainId, sponsorAddress, coordination.nonce(), coordination.attemptId(), transactionId);
+  }
+
+  private void throwSponsorNonceUnavailable(
+      ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination) {
+    boolean retryable =
+        "WAIT_FOR_OPEN_WINDOW".equals(coordination.decisionType())
+            || "WAIT_FOR_IN_FLIGHT_SLOT".equals(coordination.decisionType())
+            || "WAIT_FOR_IN_FLIGHT_REPLACEMENT".equals(coordination.decisionType())
+            || "RPC_DISAGREEMENT".equals(coordination.decisionType());
+    throw new Web3TransferException(
+        ErrorCode.WEB3_SPONSOR_NONCE_UNAVAILABLE,
+        "internal sponsor nonce unavailable: decision="
+            + coordination.decisionType()
+            + ", reason="
+            + coordination.reason(),
+        retryable);
+  }
+
+  private boolean isRpcDisagreement(
+      ExecutionTransactionGatewayPort.SponsorNonceCoordinationRecord coordination) {
+    return coordination != null && "RPC_DISAGREEMENT".equals(coordination.decisionType());
+  }
+
+  private boolean isReservedSlotOwnedByTransaction(
+      ExecutionTransactionGatewayPort.SponsorNonceSlotRecord slot,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction) {
+    return "RESERVED".equals(slot.status())
+        && slot.activeAttemptId() != null
+        && transaction.transactionId() != null
+        && transaction.transactionId().equals(slot.activeTxId());
+  }
+
+  private void markSponsorSlotSigned(SponsorNonceContext context, String txHash) {
+    transitionSponsorSlot(
+        context,
+        "RESERVED",
+        "SIGNED",
+        null,
+        null,
+        null,
+        null,
+        0,
+        true,
+        txHash != null && !txHash.isBlank(),
+        true,
+        false);
+  }
+
+  private void markSponsorSlotBroadcasting(SponsorNonceContext context, String txHash) {
+    transitionSponsorSlot(
+        context,
+        "SIGNED",
+        "BROADCASTING",
+        null,
+        "internal-broadcast-" + context.transactionId(),
+        UUID.randomUUID().toString(),
+        LocalDateTime.now(appClock)
+            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()),
+        1,
+        true,
+        txHash != null && !txHash.isBlank(),
+        true,
+        false);
+  }
+
+  private void markSponsorSlotBroadcasted(SponsorNonceContext context) {
+    transitionSponsorSlot(
+        context, "BROADCASTING", "BROADCASTED", null, null, null, null, 0, true, true, true, true);
+  }
+
+  private void dropSponsorReservedSlot(SponsorNonceContext context, String releaseReason) {
+    transitionSponsorSlot(
+        context,
+        "RESERVED",
+        "DROPPED",
+        releaseReason,
+        null,
+        null,
+        null,
+        0,
+        false,
+        false,
+        false,
+        false);
+  }
+
+  private void markCreatedTransactionTerminal(Long transactionId, String failureReason) {
+    executionTransactionGatewayPort.scheduleRetry(transactionId, failureReason, null);
+  }
+
+  private void transitionSponsorSlot(
+      SponsorNonceContext context,
+      String fromStatus,
+      String toStatus,
+      String releaseReason,
+      String broadcastClaimOwner,
+      String broadcastClaimToken,
+      LocalDateTime broadcastClaimExpiresAt,
+      int broadcastAttemptCount,
+      boolean hasRawTx,
+      boolean hasTxHash,
+      boolean hasSigningEvidence,
+      boolean hasBroadcastEvidence) {
+    executionTransactionGatewayPort.transitionSponsorNonceSlot(
+        new ExecutionTransactionGatewayPort.SponsorNonceSlotTransitionCommand(
+            context.chainId(),
+            context.fromAddress(),
+            context.nonce(),
+            fromStatus,
+            toStatus,
+            context.attemptId(),
+            context.transactionId(),
+            "DROPPED".equals(toStatus) ? context.attemptId() : null,
+            "DROPPED".equals(toStatus) ? context.transactionId() : null,
+            LocalDateTime.now(appClock),
+            releaseReason,
+            null,
+            broadcastClaimOwner,
+            broadcastClaimToken,
+            broadcastClaimExpiresAt,
+            broadcastAttemptCount,
+            hasRawTx,
+            hasTxHash,
+            hasSigningEvidence,
+            hasBroadcastEvidence,
+            false));
+  }
+
+  private ExecuteInternalExecutionIntentResult markInternalNonceStale(
+      ExecutionIntent intent,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      ErrorCode errorCode) {
+    LocalDateTime now = LocalDateTime.now(appClock);
+    ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+        executionTransactionGatewayPort, intent.getSubmittedTxId(), errorCode.name(), now);
+    ExecutionIntent staleIntent =
+        executionIntentPersistencePort.update(
+            intent.markNonceStale(errorCode.name(), errorCode.getMessage(), now));
+    if (actionHandler != null && actionPlan != null) {
+      publishTerminated(staleIntent, ExecutionIntentStatus.NONCE_STALE, errorCode.name());
+    }
+    return new ExecuteInternalExecutionIntentResult(
+        true,
+        false,
+        staleIntent.getPublicId(),
+        staleIntent.getStatus(),
+        transaction.transactionId(),
+        transaction.status(),
+        transaction.txHash());
   }
 
   private ExecutionIntent rebindReservedNonce(ExecutionIntent intent, long reservedNonce) {
@@ -401,6 +905,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       String failureReason,
       ExecutionFailureReason eventReason) {
     LocalDateTime now = LocalDateTime.now(appClock);
+    ExecutionReservedTransactionCleanupSupport.cleanupCreatedSubmittedTransaction(
+        executionTransactionGatewayPort, intent.getSubmittedTxId(), errorCode, now);
     ExecutionIntent canceled =
         executionIntentPersistencePort.update(
             intent.cancel(
@@ -412,7 +918,8 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       publishTerminated(canceled, ExecutionIntentStatus.CANCELED, publishedReason);
     }
     log.error(
-        "internal execution issuer quarantined invalid intent: executionIntentId={}, actionType={}, errorCode={}, reason={}",
+        "internal execution issuer quarantined invalid intent: "
+            + "executionIntentId={}, actionType={}, errorCode={}, reason={}",
         canceled.getPublicId(),
         canceled.getActionType(),
         errorCode,
@@ -437,22 +944,33 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
         new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 
-  /**
-   * Releases the reserved nonce on {@code web3_nonce_state} and logs {@code NONCE_GAP_DETECTED}
-   * with a fixed prefix when the CAS misses (another reservation advanced the cursor between
-   * reserve and release). The single log shape concentrates the PR #150 follow-up F-1 surface (a
-   * future {@code web3_nonce_gap_incidents} recorder) at one address.
-   */
-  private void releaseAndLogIfGap(String fromAddress, long reservedNonce, String intentPublicId) {
-    boolean released =
-        executionTransactionGatewayPort.releaseReservedNonce(fromAddress, reservedNonce);
-    if (!released) {
-      log.error(
-          "NONCE_GAP_DETECTED: intentId={}, fromAddress={}, abandonedNonce={} "
-              + "— another reservation advanced the cursor before release",
-          intentPublicId,
-          fromAddress,
-          reservedNonce);
+  private record InternalSigningPreparation(
+      ExecutionIntent intent,
+      ExecutionTransactionGatewayPort.TransactionRecord transaction,
+      SponsorNonceContext sponsorNonce,
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionActionPlan actionPlan,
+      TreasurySigner signer,
+      ExecuteInternalExecutionIntentResult result) {
+
+    static InternalSigningPreparation ready(
+        ExecutionIntent intent,
+        ExecutionTransactionGatewayPort.TransactionRecord transaction,
+        SponsorNonceContext sponsorNonce,
+        ExecutionActionHandlerPort actionHandler,
+        ExecutionActionPlan actionPlan,
+        TreasurySigner signer) {
+      return new InternalSigningPreparation(
+          intent, transaction, sponsorNonce, actionHandler, actionPlan, signer, null);
+    }
+
+    static InternalSigningPreparation completed(ExecuteInternalExecutionIntentResult result) {
+      return new InternalSigningPreparation(null, null, null, null, null, null, result);
     }
   }
+
+  private record InternalSignedSubmission(ExecutionIntent intent, boolean signedNow) {}
+
+  private record SponsorNonceContext(
+      long chainId, String fromAddress, long nonce, Long attemptId, Long transactionId) {}
 }

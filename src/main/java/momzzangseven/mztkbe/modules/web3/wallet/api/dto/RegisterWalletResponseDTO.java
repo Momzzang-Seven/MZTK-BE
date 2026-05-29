@@ -11,6 +11,8 @@ public record RegisterWalletResponseDTO(
     String walletAddress,
     Instant registeredAt,
     String nextAction,
+    String userMessage,
+    String supportMessageKey,
     Web3 web3) {
 
   public static RegisterWalletResponseDTO from(RegisterWalletResult result) {
@@ -21,6 +23,8 @@ public record RegisterWalletResponseDTO(
         result.walletAddress(),
         result.registeredAt(),
         result.nextAction().name(),
+        result.userMessage(),
+        result.supportMessageKey(),
         Web3.from(result.web3()));
   }
 

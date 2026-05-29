@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTr
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
@@ -51,7 +52,7 @@ abstract class AbstractWeb3Worker {
       } catch (Exception e) {
         log.warn("{} worker failed for txId={}", workerTag(), item.transactionId(), e);
         if (!retryStrategy.shouldRetry(e, nonRetryableExceptions())) {
-          failPermanently(item.transactionId(), defaultFailureReason);
+          failPermanently(item.transactionId(), permanentFailureReason(e, defaultFailureReason));
           continue;
         }
         retry(item.transactionId(), defaultFailureReason, item);
@@ -61,6 +62,12 @@ abstract class AbstractWeb3Worker {
 
   protected List<Class<? extends Throwable>> nonRetryableExceptions() {
     return List.of();
+  }
+
+  protected String permanentFailureReason(Throwable throwable, String defaultFailureReason) {
+    return isRetryableFailureReason(defaultFailureReason)
+        ? Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code()
+        : defaultFailureReason;
   }
 
   protected void retry(Long transactionId, String failureReason) {
@@ -74,7 +81,23 @@ abstract class AbstractWeb3Worker {
   }
 
   protected void failPermanently(Long transactionId, String failureReason) {
-    updateTransactionPort.scheduleRetry(transactionId, failureReason, null);
+    String terminalReason =
+        isRetryableFailureReason(failureReason)
+            ? Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code()
+            : failureReason;
+    updateTransactionPort.scheduleRetry(transactionId, terminalReason, null);
+  }
+
+  private boolean isRetryableFailureReason(String failureReason) {
+    if (failureReason == null || failureReason.isBlank()) {
+      return true;
+    }
+    for (Web3TxFailureReason reason : Web3TxFailureReason.values()) {
+      if (reason.code().equals(failureReason)) {
+        return reason.isRetryable();
+      }
+    }
+    return false;
   }
 
   protected void audit(

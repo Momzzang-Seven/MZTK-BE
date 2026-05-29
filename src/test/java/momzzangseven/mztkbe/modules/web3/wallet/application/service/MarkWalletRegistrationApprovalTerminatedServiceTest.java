@@ -77,7 +77,7 @@ class MarkWalletRegistrationApprovalTerminatedServiceTest {
   }
 
   @Test
-  void execute_whenReceiptTimeoutAndSessionTtlRemains_marksRetryable() {
+  void execute_whenReceiptTimeoutAndSessionTtlRemains_marksSponsorNonceBlocked() {
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(signedSession()));
 
@@ -88,7 +88,7 @@ class MarkWalletRegistrationApprovalTerminatedServiceTest {
         ArgumentCaptor.forClass(WalletRegistrationSession.class);
     verify(saveSessionPort).save(captor.capture());
     assertThat(captor.getValue().getStatus())
-        .isEqualTo(WalletRegistrationStatus.APPROVAL_RETRYABLE);
+        .isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
     assertThat(captor.getValue().getLastErrorCode())
         .isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
     assertThat(captor.getValue().getLastErrorReason())
@@ -96,7 +96,7 @@ class MarkWalletRegistrationApprovalTerminatedServiceTest {
   }
 
   @Test
-  void execute_whenReceiptTimeoutAndSessionTtlElapsed_marksApprovalFailed() {
+  void execute_whenReceiptTimeoutAndSessionTtlElapsed_marksSponsorNonceBlocked() {
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(expiredTtlSignedSession()));
 
@@ -106,7 +106,8 @@ class MarkWalletRegistrationApprovalTerminatedServiceTest {
     ArgumentCaptor<WalletRegistrationSession> captor =
         ArgumentCaptor.forClass(WalletRegistrationSession.class);
     verify(saveSessionPort).save(captor.capture());
-    assertThat(captor.getValue().getStatus()).isEqualTo(WalletRegistrationStatus.APPROVAL_FAILED);
+    assertThat(captor.getValue().getStatus())
+        .isEqualTo(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED);
     assertThat(captor.getValue().getLastErrorCode())
         .isEqualTo(WalletRegistrationReceiptTimeout.ERROR_CODE);
     assertThat(captor.getValue().getLastErrorReason())

@@ -758,6 +758,32 @@ class Web3jErc20AdapterTest {
   }
 
   @Test
+  void broadcast_prioritizesAlreadyKnown_overRpcUnavailable() throws Exception {
+    when(mainWeb3j.ethSendRawTransaction("0xabc").send()).thenReturn(sendTxError("already known"));
+    when(subWeb3j.ethSendRawTransaction("0xabc").send()).thenThrow(new IOException("sub down"));
+
+    Web3ContractPort.BroadcastResult result =
+        adapter.broadcast(new Web3ContractPort.BroadcastCommand("0xabc"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.failureReason())
+        .isEqualTo(Web3TxFailureReason.BROADCAST_ALREADY_KNOWN.code());
+  }
+
+  @Test
+  void broadcast_classifiesNonceTooLowSeparatelyFromAlreadyKnown() throws Exception {
+    when(mainWeb3j.ethSendRawTransaction("0xabc").send()).thenReturn(sendTxError("nonce too low"));
+    when(subWeb3j.ethSendRawTransaction("0xabc").send()).thenThrow(new IOException("sub down"));
+
+    Web3ContractPort.BroadcastResult result =
+        adapter.broadcast(new Web3ContractPort.BroadcastCommand("0xabc"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.failureReason())
+        .isEqualTo(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW.code());
+  }
+
+  @Test
   void broadcast_returnsRpcUnavailable_whenBothRpcsThrow() throws Exception {
     when(mainWeb3j.ethSendRawTransaction("0xabc").send()).thenThrow(new IOException("main down"));
     when(subWeb3j.ethSendRawTransaction("0xabc").send()).thenThrow(new IOException("sub down"));
@@ -877,6 +903,10 @@ class Web3jErc20AdapterTest {
     assertThat(Web3jErc20Adapter.classifyBroadcastFailureMessage("not enough funds"))
         .isEqualTo(Web3TxFailureReason.TREASURY_ETH_BELOW_CRITICAL);
     assertThat(Web3jErc20Adapter.classifyBroadcastFailureMessage("nonce too low"))
+        .isEqualTo(Web3TxFailureReason.BROADCAST_NONCE_TOO_LOW);
+    assertThat(Web3jErc20Adapter.classifyBroadcastFailureMessage("already known"))
+        .isEqualTo(Web3TxFailureReason.BROADCAST_ALREADY_KNOWN);
+    assertThat(Web3jErc20Adapter.classifyBroadcastFailureMessage("unknown transaction"))
         .isEqualTo(Web3TxFailureReason.BROADCAST_FAILED);
     assertThat(Web3jErc20Adapter.classifyBroadcastFailureMessage(" "))
         .isEqualTo(Web3TxFailureReason.BROADCAST_FAILED);

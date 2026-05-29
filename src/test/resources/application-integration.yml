@@ -35,6 +35,8 @@ spring:
     clean-disabled: false
     locations:
       - classpath:db/migration
+    placeholders:
+      web3ChainId: 1337
 
   jpa:
     defer-datasource-initialization: false

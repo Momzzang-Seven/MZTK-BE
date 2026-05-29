@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -181,6 +182,19 @@ class LikePostServiceTest {
     assertThatThrownBy(() -> likePostService.unlike(LikePostCommand.forPost(10L, 7L)))
         .isInstanceOf(PostInvalidInputException.class);
     verify(postLikePersistencePort, never()).delete(PostLikeTargetType.POST, 10L, 7L);
+  }
+
+  @Test
+  @DisplayName("MOM-459 regression: like/unlike never request locked post load")
+  void likeUnlikeNeverAcquirePostLock() {
+    LikePostCommand likeCmd = LikePostCommand.forPost(10L, 7L);
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.of(post(10L)));
+    when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(1L);
+
+    likePostService.like(likeCmd);
+    likePostService.unlike(likeCmd);
+
+    verify(postPersistencePort, never()).loadPostForUpdate(anyLong());
   }
 
   private Post post(Long postId) {

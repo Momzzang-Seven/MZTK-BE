@@ -32,6 +32,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSpon
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionHookTransactionPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
@@ -52,6 +53,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecut
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.SponsorNonceProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -258,6 +260,8 @@ public class ExecutionIntentServiceConfig {
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
       RunAfterCommitPort runAfterCommitPort,
+      RunExecutionTransactionPort runExecutionTransactionPort,
+      SponsorNonceProperties sponsorNonceProperties,
       Clock appClock) {
     return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -270,6 +274,8 @@ public class ExecutionIntentServiceConfig {
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
         runAfterCommitPort,
+        runExecutionTransactionPort,
+        sponsorNonceProperties.getOpenWindowSize(),
         appClock);
   }
 
@@ -310,9 +316,15 @@ public class ExecutionIntentServiceConfig {
   MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunAfterCommitPort runAfterCommitPort,
       Clock appClock) {
     return new MarkExecutionIntentPendingOnchainService(
-        executionIntentPersistencePort, sponsorDailyUsagePersistencePort, appClock);
+        executionIntentPersistencePort,
+        sponsorDailyUsagePersistencePort,
+        executionActionHandlerPorts,
+        runAfterCommitPort,
+        appClock);
   }
 
   @Bean
@@ -351,6 +363,19 @@ public class ExecutionIntentServiceConfig {
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
     transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     return action -> transactionTemplate.executeWithoutResult(status -> action.run());
+  }
+
+  @Bean
+  RunExecutionTransactionPort runExecutionTransactionPort(
+      PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    return new RunExecutionTransactionPort() {
+      @Override
+      public <T> T requiresNew(java.util.function.Supplier<T> action) {
+        return transactionTemplate.execute(status -> action.get());
+      }
+    };
   }
 
   @Bean

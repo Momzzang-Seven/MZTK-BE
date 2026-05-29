@@ -290,6 +290,23 @@ public class WalletRegistrationSession {
         .build();
   }
 
+  /** Records sponsor nonce recovery state that requires operator support before user retry. */
+  public WalletRegistrationSession markSponsorNonceBlocked(
+      String errorCode, String errorReason, LocalDateTime now) {
+    if (isTerminal() || status.isConfirmedButNotFinalized()) {
+      throw new IllegalStateException("session cannot become sponsor-nonce-blocked from " + status);
+    }
+    requireNow(now);
+
+    return toBuilder()
+        .status(WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED)
+        .lastErrorCode(errorCode)
+        .lastErrorReason(errorReason)
+        .receiptTimeoutExecutionIntentIds(rememberReceiptTimeoutIntent(errorCode))
+        .updatedAt(now)
+        .build();
+  }
+
   /** Expires only pre-submission sessions. */
   public WalletRegistrationSession expire(String errorCode, String errorReason, LocalDateTime now) {
     if (!status.isPreSubmissionExpirable()) {
@@ -429,7 +446,8 @@ public class WalletRegistrationSession {
 
   private boolean isReceiptTimeoutLateSuccessStatus() {
     return (status == WalletRegistrationStatus.APPROVAL_RETRYABLE
-            || status == WalletRegistrationStatus.APPROVAL_FAILED)
+            || status == WalletRegistrationStatus.APPROVAL_FAILED
+            || status == WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED)
         && RECEIPT_TIMEOUT.equals(lastErrorCode);
   }
 
@@ -439,6 +457,7 @@ public class WalletRegistrationSession {
             || status == WalletRegistrationStatus.APPROVAL_SIGNED
             || status == WalletRegistrationStatus.APPROVAL_PENDING_ONCHAIN
             || status == WalletRegistrationStatus.APPROVAL_RETRYABLE
+            || status == WalletRegistrationStatus.SPONSOR_NONCE_BLOCKED
             || status == WalletRegistrationStatus.APPROVAL_FAILED
             || status.isConfirmedButNotFinalized());
   }
