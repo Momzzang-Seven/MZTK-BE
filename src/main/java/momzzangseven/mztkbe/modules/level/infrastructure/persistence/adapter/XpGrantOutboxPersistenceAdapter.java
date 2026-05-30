@@ -45,8 +45,8 @@ public class XpGrantOutboxPersistenceAdapter implements XpGrantOutboxPort {
 
   @Override
   @Transactional
-  public Optional<PendingXpGrant> claimForProcessing(Long id) {
-    return repository.findByIdForUpdateSkipLocked(id).map(XpGrantOutboxEntity::toPending);
+  public Optional<PendingXpGrant> claimForProcessing(Long id, LocalDateTime now) {
+    return repository.findByIdForUpdateSkipLocked(id, now).map(XpGrantOutboxEntity::toPending);
   }
 
   @Override
@@ -58,8 +58,12 @@ public class XpGrantOutboxPersistenceAdapter implements XpGrantOutboxPort {
   @Override
   @Transactional
   public void recordFailure(Long id, int maxAttempts, int backoffSeconds, String error) {
+    // Re-lock the row (blocking FOR UPDATE) and act only while it is still PENDING: process() has
+    // already released its lock, so another worker may have driven the row to a terminal DONE in
+    // between. A PENDING-guarded locked read returns empty in that case, so a late failure can
+    // never overwrite a terminal state.
     repository
-        .findById(id)
+        .findPendingByIdForUpdate(id)
         .ifPresent(
             row -> row.recordFailure(maxAttempts, backoffSeconds, error, LocalDateTime.now()));
   }

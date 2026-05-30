@@ -108,9 +108,14 @@ public class XpGrantOutboxEntity {
 
   /**
    * Records a failed attempt: increments the counter and either schedules a linear-backoff retry or
-   * marks the row FAILED once the retry budget is exhausted.
+   * marks the row FAILED once the retry budget is exhausted. No-op on a non-PENDING row so a late
+   * failure can never revert a terminal DONE/FAILED state (callers must also re-lock under FOR
+   * UPDATE to make the read-modify-write atomic).
    */
   public void recordFailure(int maxAttempts, int backoffSeconds, String error, LocalDateTime now) {
+    if (this.status != XpGrantOutboxStatus.PENDING) {
+      return;
+    }
     this.attemptCount += 1;
     this.lastError = error;
     if (this.attemptCount >= maxAttempts) {

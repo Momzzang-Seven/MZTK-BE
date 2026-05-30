@@ -20,10 +20,13 @@ public interface XpGrantOutboxPort {
   List<PendingXpGrant> findDueBatch(LocalDateTime now, int limit);
 
   /**
-   * Locks a single PENDING row for processing using {@code FOR UPDATE SKIP LOCKED}, returning empty
-   * if it is already taken or no longer PENDING. Must run inside the caller's transaction.
+   * Locks a single PENDING row whose retry time has arrived ({@code next_attempt_at <= now}) for
+   * processing using {@code FOR UPDATE SKIP LOCKED}, returning empty if it is already taken, no
+   * longer PENDING, or not yet due. The due-time recheck stops a stale due-batch from re-claiming a
+   * row whose backoff was pushed forward by an earlier failure. Must run inside the caller's
+   * transaction.
    */
-  Optional<PendingXpGrant> claimForProcessing(Long id);
+  Optional<PendingXpGrant> claimForProcessing(Long id, LocalDateTime now);
 
   /** Marks a row DONE (terminal success). Joins the caller's transaction. */
   void markDone(Long id);

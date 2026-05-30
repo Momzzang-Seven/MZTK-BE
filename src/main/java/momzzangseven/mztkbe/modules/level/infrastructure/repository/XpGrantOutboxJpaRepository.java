@@ -23,10 +23,21 @@ public interface XpGrantOutboxJpaRepository extends JpaRepository<XpGrantOutboxE
 
   // PostgreSQL-only (FOR UPDATE SKIP LOCKED). Exercise this path only in e2eTest against real
   // Postgres; H2 unit/integration tests must mock XpGrantOutboxPort instead of hitting this query.
+  // Rechecks next_attempt_at so a stale due-batch cannot re-claim a row whose backoff has been
+  // pushed into the future by an earlier failed attempt.
   @Query(
       value =
           "SELECT * FROM xp_grant_outbox WHERE id = :id AND status = 'PENDING' "
-              + "FOR UPDATE SKIP LOCKED",
+              + "AND next_attempt_at <= :now FOR UPDATE SKIP LOCKED",
       nativeQuery = true)
-  Optional<XpGrantOutboxEntity> findByIdForUpdateSkipLocked(@Param("id") Long id);
+  Optional<XpGrantOutboxEntity> findByIdForUpdateSkipLocked(
+      @Param("id") Long id, @Param("now") LocalDateTime now);
+
+  // PostgreSQL-only (FOR UPDATE, blocking — NOT SKIP LOCKED). Used by recordFailure to re-lock the
+  // row and observe any terminal state another worker committed; returns empty once the row is no
+  // longer PENDING so a late failure can never overwrite a DONE/FAILED terminal state.
+  @Query(
+      value = "SELECT * FROM xp_grant_outbox WHERE id = :id AND status = 'PENDING' FOR UPDATE",
+      nativeQuery = true)
+  Optional<XpGrantOutboxEntity> findPendingByIdForUpdate(@Param("id") Long id);
 }

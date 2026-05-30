@@ -80,6 +80,19 @@ class XpGrantOutboxEntityTest {
   }
 
   @Test
+  @DisplayName("recordFailure on a DONE row is a no-op (terminal state never reverts)")
+  void recordFailureOnDone_isNoOp() {
+    XpGrantOutboxEntity entity = XpGrantOutboxEntity.pendingFrom(postCommand(), ENQUEUED_AT);
+    entity.markDone();
+
+    entity.recordFailure(1, 60, "late failure after success", LocalDateTime.of(2026, 5, 29, 13, 0));
+
+    assertThat(entity.getStatus()).isEqualTo(XpGrantOutboxStatus.DONE);
+    assertThat(entity.getAttemptCount()).isZero();
+    assertThat(entity.getLastError()).isNull();
+  }
+
+  @Test
   @DisplayName("markDone moves to DONE and clears the last error")
   void markDone_clearsErrorAndCompletes() {
     XpGrantOutboxEntity entity = XpGrantOutboxEntity.pendingFrom(postCommand(), ENQUEUED_AT);

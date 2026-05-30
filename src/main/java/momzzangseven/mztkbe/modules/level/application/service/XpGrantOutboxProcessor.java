@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.level.application.service;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +32,7 @@ public class XpGrantOutboxProcessor {
    */
   @Transactional
   public boolean process(Long outboxId) {
-    Optional<PendingXpGrant> claimed = outboxPort.claimForProcessing(outboxId);
+    Optional<PendingXpGrant> claimed = outboxPort.claimForProcessing(outboxId, LocalDateTime.now());
     if (claimed.isEmpty()) {
       return false;
     }
