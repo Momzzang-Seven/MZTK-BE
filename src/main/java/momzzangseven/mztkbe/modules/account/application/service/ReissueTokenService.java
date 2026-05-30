@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.user.UserBlockedException;
+import momzzangseven.mztkbe.global.error.user.UserUnverifiedException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenManager;
@@ -67,12 +68,17 @@ public class ReissueTokenService implements ReissueTokenUseCase {
       }
       return;
     }
+    // Reject ALL non-ACTIVE statuses so refresh-token reissue matches the auth hot path
+    // (JwtAuthenticationFilter denies anything that is not ACTIVE). An exhaustive switch with no
+    // default means a future AccountStatus value is a compile error here, not a silent bypass.
     AccountStatus value = status.get();
-    if (value == AccountStatus.DELETED) {
-      throw new UserWithdrawnException();
-    }
-    if (value == AccountStatus.BLOCKED) {
-      throw new UserBlockedException();
+    switch (value) {
+      case ACTIVE -> {
+        // proceed with reissue
+      }
+      case DELETED -> throw new UserWithdrawnException();
+      case BLOCKED -> throw new UserBlockedException();
+      case UNVERIFIED -> throw new UserUnverifiedException();
     }
   }
 }
