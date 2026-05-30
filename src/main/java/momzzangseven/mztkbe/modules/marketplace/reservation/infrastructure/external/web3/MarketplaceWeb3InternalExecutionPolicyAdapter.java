@@ -5,12 +5,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Mark
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadMarketplaceWeb3InternalExecutionPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.InternalExecutionIssuerPolicyView;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetInternalExecutionIssuerPolicyUseCase;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnBean(GetInternalExecutionIssuerPolicyUseCase.class)
+@ConditionalOnProperty(prefix = "web3.execution.internal", name = "enabled", havingValue = "true")
 public class MarketplaceWeb3InternalExecutionPolicyAdapter
     implements LoadMarketplaceWeb3InternalExecutionPolicyPort {
 
