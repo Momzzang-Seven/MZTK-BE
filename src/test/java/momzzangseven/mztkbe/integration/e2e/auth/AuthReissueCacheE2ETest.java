@@ -28,6 +28,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -75,6 +76,7 @@ class AuthReissueCacheE2ETest extends E2ETestBase {
   @Autowired private LoadUserAccountPort loadUserAccountPort;
   @Autowired private SaveUserAccountPort saveUserAccountPort;
   @Autowired private EntityManagerFactory entityManagerFactory;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   private Statistics statistics;
 
@@ -147,6 +149,48 @@ class AuthReissueCacheE2ETest extends E2ETestBase {
         .isEqualTo(HttpStatus.FORBIDDEN);
     JsonNode body = objectMapper.readTree(reissueAfterBlock.getBody());
     assertThat(body.at("/code").asText()).isEqualTo("USER_006");
+  }
+
+  /**
+   * UNVERIFIED 계정의 reissue 가 hot path 와 동일하게 거부됨을 검증 (리뷰 N3 회귀 가드).
+   *
+   * <p>리뷰 이전 {@code validateRefreshSubject} 는 {@code {DELETED, BLOCKED}} 만 거부하고 UNVERIFIED 는 통과시켜,
+   * hot-path 필터(비-ACTIVE 전부 차단)와 불일치했다. 현재는 {@code AccountStatus} 전수 switch(default 없음)로 비-ACTIVE
+   * 전부를 거부한다 — UNVERIFIED → {@code UserUnverifiedException} → {@code USER_007}(403).
+   *
+   * <p>{@code changeManagedStatus} 는 ACTIVE/BLOCKED 전이만 허용하므로(UNVERIFIED 거부) UNVERIFIED 상태는 JDBC 로
+   * 직접 주입한다. reissue 의 {@code findStatus} 는 cold path 로 DB 를 직접 읽으므로 denylist 와 무관하게 이 상태를 관측한다.
+   */
+  @Test
+  @DisplayName("/auth/reissue UNVERIFIED 계정 → findStatus 가 DB 읽어 403 (USER_007, hot path 와 정합)")
+  void reissueByUnverifiedUser_returns403_userUnverified() throws Exception {
+    String email = uniqueEmail();
+    signup(email, DEFAULT_TEST_PASSWORD, "unverified-user");
+    ResponseEntity<String> login = login(email, DEFAULT_TEST_PASSWORD);
+    String refreshToken1 = extractRefreshToken(login);
+    Long userId = extractUserId(login);
+
+    ResponseEntity<String> reissue1 = reissue(refreshToken1);
+    assertThat(reissue1.getStatusCode().is2xxSuccessful())
+        .as("ACTIVE 상태에서의 첫 reissue 는 정상 — UNVERIFIED 전환 전 baseline")
+        .isTrue();
+    String refreshToken2 = extractRefreshToken(reissue1);
+
+    // changeManagedStatus 는 UNVERIFIED 전이를 허용하지 않으므로 DB 에 직접 기록한다.
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE users_account SET status = 'UNVERIFIED' WHERE user_id = ?", userId);
+    assertThat(updated).as("UNVERIFIED 로 전환된 계정이 정확히 1건이어야 함").isEqualTo(1);
+
+    ResponseEntity<String> reissueAfterUnverify = reissue(refreshToken2);
+
+    assertThat(reissueAfterUnverify.getStatusCode())
+        .as("findStatus 가 DB 의 UNVERIFIED 를 읽어 reissue 를 거부 — 403 이어야 함 (hot path 와 정합)")
+        .isEqualTo(HttpStatus.FORBIDDEN);
+    JsonNode body = objectMapper.readTree(reissueAfterUnverify.getBody());
+    assertThat(body.at("/code").asText())
+        .as("UNVERIFIED reissue 거부의 에러코드는 USER_007 이어야 함")
+        .isEqualTo("USER_007");
   }
 
   // ============================================================
