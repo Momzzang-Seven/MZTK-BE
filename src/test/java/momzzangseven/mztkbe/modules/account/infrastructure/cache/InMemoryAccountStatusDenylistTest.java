@@ -113,4 +113,26 @@ class InMemoryAccountStatusDenylistTest {
     assertThat(denylist.statusOf(1L)).isEqualTo(AccountStatus.BLOCKED);
     assertThat(denylist.statusOf(2L)).isEqualTo(AccountStatus.DELETED);
   }
+
+  @Test
+  @DisplayName("isReady is false before the first replaceAll (no DB load yet)")
+  void isReady_falseBeforeReplaceAll() {
+    assertThat(denylist.isReady()).isFalse();
+  }
+
+  @Test
+  @DisplayName("isReady becomes true after a successful replaceAll")
+  void isReady_trueAfterReplaceAll() {
+    denylist.replaceAll(Map.of(1L, AccountStatus.BLOCKED));
+
+    assertThat(denylist.isReady()).isTrue();
+  }
+
+  @Test
+  @DisplayName("isReady becomes true even when the loaded snapshot is empty")
+  void isReady_trueAfterEmptyReplaceAll() {
+    denylist.replaceAll(Map.of());
+
+    assertThat(denylist.isReady()).isTrue();
+  }
 }

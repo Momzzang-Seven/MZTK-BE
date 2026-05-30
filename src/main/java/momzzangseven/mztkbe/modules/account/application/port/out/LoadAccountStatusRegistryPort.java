@@ -18,4 +18,17 @@ public interface LoadAccountStatusRegistryPort {
    * @return the tracked non-ACTIVE {@link AccountStatus}, or {@link AccountStatus#ACTIVE} if absent
    */
   AccountStatus statusOf(Long userId);
+
+  /**
+   * Returns whether the registry has been successfully loaded from the DB at least once.
+   *
+   * <p>This is a readiness flag, not an emptiness check: a successful load of zero non-ACTIVE users
+   * is a valid ready state. It is {@code false} only before the first successful {@code replaceAll}
+   * swap. The warm-up runner uses this to decide whether the denylist is safe to serve traffic
+   * (fail-closed boot when it never becomes ready).
+   *
+   * @return {@code true} once at least one DB load has populated the registry, otherwise {@code
+   *     false}
+   */
+  boolean isReady();
 }

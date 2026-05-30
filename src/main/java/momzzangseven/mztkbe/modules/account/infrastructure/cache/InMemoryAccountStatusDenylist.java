@@ -31,6 +31,7 @@ public class InMemoryAccountStatusDenylist
     implements LoadAccountStatusRegistryPort, UpdateAccountStatusRegistryPort {
 
   private volatile ConcurrentHashMap<Long, AccountStatus> map = new ConcurrentHashMap<>();
+  private volatile boolean ready = false;
 
   @Override
   public AccountStatus statusOf(Long userId) {
@@ -55,5 +56,13 @@ public class InMemoryAccountStatusDenylist
     // Build a brand-new map and publish it with a single atomic reference swap;
     // never putAll/removeIf on the live map (would expose a half-built state to readers).
     this.map = snapshot == null ? new ConcurrentHashMap<>() : new ConcurrentHashMap<>(snapshot);
+    // Mark ready only after the map reference is swapped. An empty snapshot is still a valid
+    // ready state ("loaded from DB at least once"), so readiness is independent of map size.
+    this.ready = true;
+  }
+
+  @Override
+  public boolean isReady() {
+    return ready;
   }
 }

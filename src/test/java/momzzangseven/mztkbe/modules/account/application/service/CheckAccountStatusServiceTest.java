@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.account.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -41,7 +42,9 @@ class CheckAccountStatusServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new CheckAccountStatusService(loadAccountStatusRegistryPort, loadUserAccountPort);
+    // registryEnabled = true: hot-path predicates read the in-memory denylist.
+    service =
+        new CheckAccountStatusService(loadAccountStatusRegistryPort, loadUserAccountPort, true);
   }
 
   @Nested
@@ -96,6 +99,53 @@ class CheckAccountStatusServiceTest {
       assertThat(service.isActive(999L)).isTrue();
       assertThat(service.isDeleted(999L)).isFalse();
       assertThat(service.isBlocked(999L)).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("predicate — DB fallback (registryEnabled=false)")
+  class DbFallbackPredicates {
+
+    private CheckAccountStatusService dbService;
+
+    @BeforeEach
+    void setUp() {
+      // registryEnabled = false: predicates must read the DB, never the (empty) denylist.
+      dbService =
+          new CheckAccountStatusService(loadAccountStatusRegistryPort, loadUserAccountPort, false);
+    }
+
+    @Test
+    @DisplayName("BLOCKED 사용자: denylist 가 비어도 DB 경로로 isBlocked=true")
+    void blockedViaDb_evenWhenDenylistEmpty() {
+      when(loadUserAccountPort.findByUserId(2L))
+          .thenReturn(Optional.of(accountWith(AccountStatus.BLOCKED)));
+
+      assertThat(dbService.isBlocked(2L)).isTrue();
+      assertThat(dbService.isActive(2L)).isFalse();
+      assertThat(dbService.isDeleted(2L)).isFalse();
+      // The denylist must not be consulted on the DB fallback path.
+      verifyNoInteractions(loadAccountStatusRegistryPort);
+    }
+
+    @Test
+    @DisplayName("DELETED 사용자: DB 경로로 isDeleted=true")
+    void deletedViaDb() {
+      when(loadUserAccountPort.findByUserId(3L))
+          .thenReturn(Optional.of(accountWith(AccountStatus.DELETED)));
+
+      assertThat(dbService.isDeleted(3L)).isTrue();
+      assertThat(dbService.isActive(3L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("미존재 사용자: orElse(ACTIVE) 로 isActive=true (부재 = ACTIVE)")
+    void absentUserMapsToActive() {
+      when(loadUserAccountPort.findByUserId(99L)).thenReturn(Optional.empty());
+
+      assertThat(dbService.isActive(99L)).isTrue();
+      assertThat(dbService.isBlocked(99L)).isFalse();
+      assertThat(dbService.isDeleted(99L)).isFalse();
     }
   }
 
