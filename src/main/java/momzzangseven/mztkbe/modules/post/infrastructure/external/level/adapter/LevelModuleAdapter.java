@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
-import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.in.GuaranteedGrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import momzzangseven.mztkbe.modules.post.application.port.out.GrantPostXpPort;
 import org.springframework.stereotype.Component;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class LevelModuleAdapter implements GrantPostXpPort {
 
-  private final GrantXpUseCase grantXpUseCase;
+  private final GuaranteedGrantXpUseCase guaranteedGrantXpUseCase;
   private final ZoneId appZoneId;
 
   @Override
@@ -33,7 +33,7 @@ public class LevelModuleAdapter implements GrantPostXpPort {
     GrantXpCommand command =
         GrantXpCommand.of(userId, XpType.POST, occurredAt, idempotencyKey, sourceRef);
 
-    GrantXpResult result = grantXpUseCase.execute(command);
+    GrantXpResult result = guaranteedGrantXpUseCase.execute(command);
 
     if (result.grantedXp() > 0) {
       log.info("XP granted for Post Creation: userId={}, xp={}", userId, result.grantedXp());

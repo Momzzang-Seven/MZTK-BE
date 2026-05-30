@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreateQuestionPostResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.GrantPostXpPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PublishPostDeletedEventPort;
@@ -38,7 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CreateQuestionPostServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
-  @Mock private PostXpService postXpService;
+  @Mock private GrantPostXpPort grantPostXpPort;
   @Mock private LinkTagPort linkTagPort;
   @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
@@ -52,7 +53,7 @@ class CreateQuestionPostServiceTest {
     createQuestionPostService =
         new CreateQuestionPostService(
             postPersistencePort,
-            postXpService,
+            grantPostXpPort,
             linkTagPort,
             validatePostImagesPort,
             updatePostImagesPort,
@@ -268,7 +269,7 @@ class CreateQuestionPostServiceTest {
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
     when(questionLifecycleExecutionPort.prepareQuestionCreate(20L, 3L, "질문 내용", 50L))
         .thenReturn(Optional.empty());
-    when(postXpService.grantCreatePostXp(3L, 20L)).thenReturn(20L);
+    when(grantPostXpPort.grantCreatePostXp(3L, 20L)).thenReturn(20L);
 
     CreateQuestionPostResult result = createQuestionPostService.execute(command);
 
@@ -301,7 +302,7 @@ class CreateQuestionPostServiceTest {
 
     verifyNoInteractions(
         postPersistencePort,
-        postXpService,
+        grantPostXpPort,
         linkTagPort,
         validatePostImagesPort,
         updatePostImagesPort,

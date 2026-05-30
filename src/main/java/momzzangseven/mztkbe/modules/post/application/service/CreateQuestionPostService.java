@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
@@ -9,6 +8,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreateQuestionPostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.GrantPostXpPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PublishPostDeletedEventPort;
@@ -31,13 +31,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>When Web3 escrow wiring is enabled, the service also performs precheck and returns the newly
  * prepared question lifecycle intent as nullable write payload.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CreateQuestionPostService implements CreateQuestionPostUseCase {
 
   private final PostPersistencePort postPersistencePort;
-  private final PostXpService postXpService;
+  private final GrantPostXpPort grantPostXpPort;
   private final LinkTagPort linkTagPort;
   private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
@@ -170,20 +169,10 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
   }
 
   private XpGrantResult grantCreateXp(Long userId, Long postId) {
-    Long grantedXp = 0L;
-    boolean isXpGranted = false;
-
-    try {
-      grantedXp = postXpService.grantCreatePostXp(userId, postId);
-      if (grantedXp > 0) {
-        isXpGranted = true;
-      }
-    } catch (Exception e) {
-      log.warn("Post created but XP grant failed for user: {}", userId, e);
-    }
-
+    Long grantedXp = grantPostXpPort.grantCreatePostXp(userId, postId);
+    boolean isXpGranted = grantedXp != null && grantedXp > 0;
     String message = isXpGranted ? "게시글 작성 완료! (+" + grantedXp + " XP)" : "게시글 작성 완료";
-    return new XpGrantResult(isXpGranted, grantedXp, message);
+    return new XpGrantResult(isXpGranted, grantedXp == null ? 0L : grantedXp, message);
   }
 
   private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {

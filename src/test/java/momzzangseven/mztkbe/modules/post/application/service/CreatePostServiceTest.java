@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
-import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
@@ -28,11 +27,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("CreatePostService unit test")
+@DisplayName("CreatePostService unit test (T1 saver)")
 class CreatePostServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
-  @Mock private PostXpService postXpService;
   @Mock private LinkTagPort linkTagPort;
   @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
@@ -43,16 +41,12 @@ class CreatePostServiceTest {
   void setUp() {
     createPostService =
         new CreatePostService(
-            postPersistencePort,
-            postXpService,
-            linkTagPort,
-            validatePostImagesPort,
-            updatePostImagesPort);
+            postPersistencePort, linkTagPort, validatePostImagesPort, updatePostImagesPort);
   }
 
   @Test
-  @DisplayName("creates post, syncs images, links tags, and includes granted XP message")
-  void executeSuccessWithTagsAndXpGranted() {
+  @DisplayName("saves post, syncs images, links tags, and returns the new post id")
+  void createFreePostSyncsImagesAndTags() {
     CreatePostCommand command =
         CreatePostCommand.of(
             7L, null, "content", PostType.FREE, 0L, List.of(1L, 2L), List.of("java", "spring"));
@@ -70,9 +64,8 @@ class CreatePostServiceTest {
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
-    when(postXpService.grantCreatePostXp(7L, 10L)).thenReturn(30L);
 
-    CreatePostResult result = createPostService.execute(command);
+    Long postId = createPostService.createFreePost(command);
 
     ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
     verify(postPersistencePort).savePost(postCaptor.capture());
@@ -80,19 +73,14 @@ class CreatePostServiceTest {
 
     verify(validatePostImagesPort)
         .validateAttachableImages(7L, null, PostType.FREE, List.of(1L, 2L));
-    // Verify image sync is called
     verify(updatePostImagesPort).updateImages(7L, 10L, PostType.FREE, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(10L, List.of("java", "spring"));
-    verify(postXpService).grantCreatePostXp(7L, 10L);
-    assertThat(result.postId()).isEqualTo(10L);
-    assertThat(result.isXpGranted()).isTrue();
-    assertThat(result.grantedXp()).isEqualTo(30L);
-    assertThat(result.message()).isEqualTo("게시글 작성 완료! (+30 XP)");
+    assertThat(postId).isEqualTo(10L);
   }
 
   @Test
-  @DisplayName("returns plain success message when tags are empty and image sync is skipped")
-  void executeSuccessWithoutTagsAndNoXpGrant() {
+  @DisplayName("skips image sync and tag link when both are empty")
+  void createFreePostWithoutTagsSkipsOrchestration() {
     CreatePostCommand command =
         CreatePostCommand.of(1L, null, "content", PostType.FREE, 0L, null, List.of());
 
@@ -108,21 +96,18 @@ class CreatePostServiceTest {
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
-    when(postXpService.grantCreatePostXp(1L, 11L)).thenReturn(0L);
 
-    CreatePostResult result = createPostService.execute(command);
+    Long postId = createPostService.createFreePost(command);
 
     verifyNoInteractions(validatePostImagesPort);
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
     verify(linkTagPort, never()).linkTagsToPost(any(), any());
-    assertThat(result.isXpGranted()).isFalse();
-    assertThat(result.grantedXp()).isZero();
-    assertThat(result.message()).isEqualTo("게시글 작성 완료");
+    assertThat(postId).isEqualTo(11L);
   }
 
   @Test
   @DisplayName("empty imageIds skips image sync but still links tags")
-  void executeSuccessWithEmptyImageIdsSkipsImageSync() {
+  void createFreePostWithEmptyImageIdsSkipsImageSync() {
     CreatePostCommand command =
         CreatePostCommand.of(2L, null, "content", PostType.FREE, 0L, List.of(), List.of("java"));
 
@@ -138,9 +123,8 @@ class CreatePostServiceTest {
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
-    when(postXpService.grantCreatePostXp(2L, 13L)).thenReturn(0L);
 
-    createPostService.execute(command);
+    createPostService.createFreePost(command);
 
     verifyNoInteractions(validatePostImagesPort);
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
@@ -148,85 +132,29 @@ class CreatePostServiceTest {
   }
 
   @Test
-  @DisplayName("continues when XP service fails but image sync succeeded")
-  void executeContinuesWhenXpGrantFails() {
-    CreatePostCommand command =
-        CreatePostCommand.of(4L, null, "content", PostType.FREE, 0L, List.of(1L), List.of("java"));
-
-    Post savedPost =
-        Post.builder()
-            .id(12L)
-            .userId(4L)
-            .type(PostType.FREE)
-            .title(null)
-            .content("content")
-            .reward(0L)
-            .status(PostStatus.OPEN)
-            .build();
-
-    when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
-    when(postXpService.grantCreatePostXp(4L, 12L)).thenThrow(new RuntimeException("xp failed"));
-
-    CreatePostResult result = createPostService.execute(command);
-
-    verify(validatePostImagesPort).validateAttachableImages(4L, null, PostType.FREE, List.of(1L));
-    verify(updatePostImagesPort).updateImages(4L, 12L, PostType.FREE, List.of(1L));
-    verify(linkTagPort).linkTagsToPost(12L, List.of("java"));
-    assertThat(result.postId()).isEqualTo(12L);
-    assertThat(result.isXpGranted()).isFalse();
-    assertThat(result.grantedXp()).isZero();
-    assertThat(result.message()).isEqualTo("게시글 작성 완료");
-  }
-
-  @Test
   @DisplayName("rejects invalid command before persistence")
-  void executeRejectsInvalidCommand() {
+  void createFreePostRejectsInvalidCommand() {
     CreatePostCommand command = CreatePostCommand.of(1L, null, " ", PostType.FREE, 0L, null, null);
 
-    assertThatThrownBy(() -> createPostService.execute(command))
+    assertThatThrownBy(() -> createPostService.createFreePost(command))
         .isInstanceOf(PostInvalidInputException.class);
 
     verifyNoInteractions(
-        postPersistencePort,
-        postXpService,
-        linkTagPort,
-        validatePostImagesPort,
-        updatePostImagesPort);
+        postPersistencePort, linkTagPort, validatePostImagesPort, updatePostImagesPort);
   }
 
   @Test
-  @DisplayName("rejects question command because free-create service keeps legacy contract only")
-  void executeRejectsQuestionCommand() {
+  @DisplayName("rejects question command because free-create service keeps free posts only")
+  void createFreePostRejectsQuestionCommand() {
     CreatePostCommand command =
         CreatePostCommand.of(
             3L, "질문 제목", "질문 내용", PostType.QUESTION, 50L, List.of(1L, 2L), List.of("java"));
 
-    assertThatThrownBy(() -> createPostService.execute(command))
+    assertThatThrownBy(() -> createPostService.createFreePost(command))
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("free posts only");
 
     verifyNoInteractions(
-        postPersistencePort,
-        postXpService,
-        linkTagPort,
-        validatePostImagesPort,
-        updatePostImagesPort);
-  }
-
-  @Test
-  @DisplayName("question post with zero reward is blocked by command validation")
-  void executeRejectsQuestionWithZeroReward() {
-    CreatePostCommand command =
-        CreatePostCommand.of(2L, "title", "content", PostType.QUESTION, 0L, null, null);
-
-    assertThatThrownBy(() -> createPostService.execute(command))
-        .isInstanceOf(PostInvalidInputException.class);
-
-    verifyNoInteractions(
-        postPersistencePort,
-        postXpService,
-        linkTagPort,
-        validatePostImagesPort,
-        updatePostImagesPort);
+        postPersistencePort, linkTagPort, validatePostImagesPort, updatePostImagesPort);
   }
 }

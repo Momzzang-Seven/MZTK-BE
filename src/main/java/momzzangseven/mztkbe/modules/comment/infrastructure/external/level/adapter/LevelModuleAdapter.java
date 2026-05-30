@@ -7,22 +7,19 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
-import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.in.GuaranteedGrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Component("commentLevelModuleAdapter")
 @RequiredArgsConstructor
 public class LevelModuleAdapter implements GrantCommentXpPort {
 
-  private final GrantXpUseCase grantXpUseCase;
+  private final GuaranteedGrantXpUseCase guaranteedGrantXpUseCase;
   private final ZoneId appZoneId;
 
   @Override
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Long grantCreateCommentXp(Long userId, Long commentId) {
     LocalDateTime occurredAt = LocalDateTime.now(appZoneId);
     String idempotencyKey = "comment:create:" + commentId;
@@ -33,7 +30,7 @@ public class LevelModuleAdapter implements GrantCommentXpPort {
     GrantXpCommand command =
         GrantXpCommand.of(userId, XpType.COMMENT, occurredAt, idempotencyKey, sourceRef);
 
-    GrantXpResult result = grantXpUseCase.execute(command);
+    GrantXpResult result = guaranteedGrantXpUseCase.execute(command);
 
     if (result.grantedXp() > 0) {
       log.info("XP granted for Comment Creation: userId={}, xp={}", userId, result.grantedXp());

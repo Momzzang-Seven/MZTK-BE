@@ -19,7 +19,17 @@ public record GrantXpResult(
   public enum Status {
     GRANTED,
     ALREADY_GRANTED,
-    DAILY_CAP_REACHED
+    DAILY_CAP_REACHED,
+    /** Synchronous grant failed and was enqueued to the outbox for guaranteed retry. */
+    DEFERRED
+  }
+
+  /**
+   * The synchronous grant failed and was handed to the outbox; no XP is reflected in the immediate
+   * response, but a reconciler will retry the (idempotent) grant.
+   */
+  public static GrantXpResult deferred(LocalDate earnedOn) {
+    return new GrantXpResult(Status.DEFERRED, 0, 0, 0, 0, earnedOn);
   }
 
   public static GrantXpResult granted(
