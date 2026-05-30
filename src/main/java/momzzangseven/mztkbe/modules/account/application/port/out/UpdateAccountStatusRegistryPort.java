@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.account.application.port.out;
 
 import java.util.Map;
+import java.util.function.Supplier;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 
 /**
@@ -34,8 +35,18 @@ public interface UpdateAccountStatusRegistryPort {
    * are dropped; entries present are installed. Used by reconcile/warmup to rebuild the denylist
    * from the authoritative DB state.
    *
-   * @param snapshot the new full denylist contents (userId → non-ACTIVE status); a {@code null}
-   *     snapshot is treated as empty
+   * <p>The {@code snapshotLoader} is invoked <strong>while the registry holds its write
+   * lock</strong> so that loading the snapshot (a DB read) and swapping it in are atomic with
+   * respect to the incremental {@link #put} / {@link #evict} mutations. This closes the reconcile
+   * race where an event landing between "snapshot read" and "swap" would be clobbered by a stale
+   * snapshot: any concurrent put/evict either is visible to the load or is applied after the swap,
+   * never lost.
+   *
+   * <p>A loader returning {@code null} is treated as an empty snapshot. If the loader throws, the
+   * exception propagates, the existing denylist is left untouched, and readiness is not changed.
+   *
+   * @param snapshotLoader supplies the new full denylist contents (userId → non-ACTIVE status),
+   *     invoked under the registry lock; a {@code null} result is treated as empty
    */
-  void replaceAll(Map<Long, AccountStatus> snapshot);
+  void replaceAll(Supplier<Map<Long, AccountStatus>> snapshotLoader);
 }

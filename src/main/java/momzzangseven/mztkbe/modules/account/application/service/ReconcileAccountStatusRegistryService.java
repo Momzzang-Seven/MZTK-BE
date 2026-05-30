@@ -1,22 +1,25 @@
 package momzzangseven.mztkbe.modules.account.application.service;
 
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.account.application.port.in.ReconcileAccountStatusRegistryUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadNonActiveUserStatusesPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.UpdateAccountStatusRegistryPort;
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import org.springframework.stereotype.Service;
 
 /**
  * Rebuilds the entire in-memory denylist from the DB snapshot of non-ACTIVE users (warmup +
  * periodic reconcile).
  *
- * <p>The DB read happens inside {@link LoadNonActiveUserStatusesPort#loadAllNonActive()}, which is
- * already {@code @Transactional(readOnly = true)} on the adapter, so this method is not itself
- * {@code @Transactional} (no double-wrapping). On failure it logs and leaves the denylist unchanged
- * so a transient error never crashes startup or the scheduler — the next reconcile retries.
+ * <p>The DB read ({@link LoadNonActiveUserStatusesPort#loadAllNonActive()}) is passed to {@link
+ * UpdateAccountStatusRegistryPort#replaceAll} as a supplier so it executes <em>inside</em> the
+ * registry write lock, making the load+swap atomic against incremental put/evict events (no
+ * reconcile clobber). {@code loadAllNonActive()} is already {@code @Transactional(readOnly = true)}
+ * on the adapter, so this method is not itself {@code @Transactional} (no double-wrapping).
+ *
+ * <p>On failure it logs and leaves the denylist unchanged so a transient error never crashes the
+ * scheduler — the next reconcile retries. (The warm-up runner, by contrast, treats a persistent
+ * not-ready state as a boot failure.)
  */
 @Slf4j
 @Service
@@ -30,9 +33,10 @@ public class ReconcileAccountStatusRegistryService
   @Override
   public void reconcile() {
     try {
-      Map<Long, AccountStatus> snapshot = loadPort.loadAllNonActive();
-      updatePort.replaceAll(snapshot);
-      log.info("Account status denylist reconciled: nonActive={}", snapshot.size());
+      // Pass the loader (not an eagerly-loaded snapshot) so the DB read runs under the registry
+      // lock, serialized with put/evict.
+      updatePort.replaceAll(loadPort::loadAllNonActive);
+      log.info("Account status denylist reconciled from DB snapshot");
     } catch (Exception e) {
       log.error(
           "Account status denylist reconcile failed — denylist left unchanged "

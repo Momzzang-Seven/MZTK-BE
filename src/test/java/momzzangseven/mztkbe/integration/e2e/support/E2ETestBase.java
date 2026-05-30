@@ -71,7 +71,7 @@ public abstract class E2ETestBase {
    */
   @BeforeEach
   void resetAccountStatusDenylist() {
-    updateAccountStatusRegistryPort.replaceAll(java.util.Map.of());
+    updateAccountStatusRegistryPort.replaceAll(java.util.Map::of);
   }
 
   @AfterEach
