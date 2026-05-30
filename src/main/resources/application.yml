@@ -76,6 +76,14 @@ google:
     revoke-uri: https://oauth2.googleapis.com/revoke
 
 
+# 계정상태 denylist (negative cache) — 인증 hot path 0 connection
+account:
+  status-registry:
+    enabled: true # warmup + scheduler @ConditionalOnProperty (matchIfMissing=true)
+    reconcile:
+      cron: "0 */5 * * * *" # 기본 5분 주기 (멀티 인스턴스 시 단축 고려)
+      zone: Asia/Seoul
+
 # 튜닝/정책값은 yml 상수로 유지
 withdrawal:
   external-disconnect:
@@ -133,6 +141,13 @@ level:
     batch-size: 5000
     cron: "0 0 4 * * *"
     zone: Asia/Seoul
+  xp-reconciliation:
+    enabled: false
+    cron: "0 */5 * * * *"
+    zone: "Asia/Seoul"
+    batch-size: 100
+    max-attempts: 10
+    backoff-seconds: 60
 
 management:
   info:
@@ -340,6 +355,14 @@ web3:
     admin:
       enabled: ${WEB3_MARKETPLACE_ADMIN_ENABLED}
       fail-fast: ${WEB3_MARKETPLACE_ADMIN_FAIL_FAST}
+      auto-settle:
+        enabled: ${WEB3_MARKETPLACE_ADMIN_AUTO_SETTLE_ENABLED:false}
+        batch-size: ${WEB3_MARKETPLACE_ADMIN_AUTO_SETTLE_BATCH_SIZE:50}
+        scan-size: ${WEB3_MARKETPLACE_ADMIN_AUTO_SETTLE_SCAN_SIZE:150}
+        max-scan-pages-per-batch: ${WEB3_MARKETPLACE_ADMIN_AUTO_SETTLE_MAX_SCAN_PAGES_PER_BATCH:5}
+        max-batches-per-run: ${WEB3_MARKETPLACE_ADMIN_AUTO_SETTLE_MAX_BATCHES_PER_RUN:20}
+        cron: "${WEB3_MARKETPLACE_ADMIN_AUTO_SETTLE_CRON:0 23 * * * *}"
+        zone: "${WEB3_MARKETPLACE_ADMIN_AUTO_SETTLE_ZONE:Asia/Seoul}"
       recovery:
         enabled: ${WEB3_MARKETPLACE_ADMIN_RECOVERY_ENABLED}
         batch-size: ${WEB3_MARKETPLACE_ADMIN_RECOVERY_BATCH_SIZE}

@@ -50,6 +50,41 @@ class UserAccountPersistenceAdapterManagedStatusTest {
     assertThat(selectedBlocked).containsOnlyKeys(11L);
   }
 
+  @Test
+  @DisplayName("loadAllNonActive 는 ACTIVE 가 아닌 모든 계정을 userId→status 로 반환한다")
+  void loadAllNonActive_returnsEveryNonActiveAccount() {
+    ApplicationEventPublisher noOpPublisher = event -> {};
+    UserAccountPersistenceAdapter adapter =
+        new UserAccountPersistenceAdapter(userAccountJpaRepository, noOpPublisher);
+
+    persistAccount(20L, AccountStatus.ACTIVE);
+    persistAccount(21L, AccountStatus.BLOCKED);
+    persistAccount(22L, AccountStatus.DELETED);
+    persistAccount(23L, AccountStatus.UNVERIFIED);
+
+    Map<Long, AccountStatus> nonActive = adapter.loadAllNonActive();
+
+    assertThat(nonActive)
+        .hasSize(3)
+        .containsEntry(21L, AccountStatus.BLOCKED)
+        .containsEntry(22L, AccountStatus.DELETED)
+        .containsEntry(23L, AccountStatus.UNVERIFIED)
+        .doesNotContainKey(20L);
+  }
+
+  @Test
+  @DisplayName("loadAllNonActive 는 비활성 계정이 없으면 빈 맵을 반환한다")
+  void loadAllNonActive_returnsEmptyMapWhenNone() {
+    ApplicationEventPublisher noOpPublisher = event -> {};
+    UserAccountPersistenceAdapter adapter =
+        new UserAccountPersistenceAdapter(userAccountJpaRepository, noOpPublisher);
+
+    persistAccount(30L, AccountStatus.ACTIVE);
+    persistAccount(31L, AccountStatus.ACTIVE);
+
+    assertThat(adapter.loadAllNonActive()).isEmpty();
+  }
+
   private void persistAccount(Long userId, AccountStatus status) {
     em.persist(
         UserAccountEntity.builder()

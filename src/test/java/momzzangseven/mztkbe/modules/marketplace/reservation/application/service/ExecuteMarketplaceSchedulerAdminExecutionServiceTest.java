@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
@@ -70,9 +71,73 @@ class ExecuteMarketplaceSchedulerAdminExecutionServiceTest {
                 2L, MarketplaceAdminSettleReasonCode.BUYER_CONFIRMATION_TIMEOUT, "run-2"));
 
     assertThat(result.skipped()).isTrue();
+    assertThat(result.skipCode()).isEqualTo("INVALID_LOCAL_STATUS");
     assertThat(result.skipReason()).isEqualTo("INVALID_LOCAL_STATUS");
     assertNoAdminOnlyAnnotation(ExecuteMarketplaceSchedulerAdminSettlementUseCase.class);
     assertNoAdminOnlyAnnotation(ExecuteMarketplaceSchedulerAdminSettlementService.class);
+  }
+
+  @Test
+  void schedulerSettlementMapsStableValidationCodeToSkippedResult() {
+    ExecuteMarketplaceSchedulerAdminSettlementService service =
+        new ExecuteMarketplaceSchedulerAdminSettlementService(orchestrator);
+    given(
+            orchestrator.executeSchedulerSettlement(
+                "run-stale", MarketplaceAdminSettleReasonCode.BUYER_CONFIRMATION_TIMEOUT, 5L))
+        .willThrow(
+            new StableCodeStateException(
+                "PREPARED_SNAPSHOT_MISMATCH", "admin prepared snapshot changed before bind"));
+
+    var result =
+        service.execute(
+            new ExecuteMarketplaceSchedulerAdminSettlementCommand(
+                5L, MarketplaceAdminSettleReasonCode.BUYER_CONFIRMATION_TIMEOUT, "run-stale"));
+
+    assertThat(result.skipped()).isTrue();
+    assertThat(result.skipCode()).isEqualTo("PREPARED_SNAPSHOT_MISMATCH");
+    assertThat(result.skipReason()).isEqualTo("admin prepared snapshot changed before bind");
+  }
+
+  @Test
+  void schedulerSettlementRethrowsNonValidationStateException() {
+    ExecuteMarketplaceSchedulerAdminSettlementService service =
+        new ExecuteMarketplaceSchedulerAdminSettlementService(orchestrator);
+    given(
+            orchestrator.executeSchedulerSettlement(
+                "run-3", MarketplaceAdminSettleReasonCode.BUYER_CONFIRMATION_TIMEOUT, 3L))
+        .willThrow(
+            new MarketplaceReservationStateException(
+                ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+                "marketplace reservation escrow projection is required"));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteMarketplaceSchedulerAdminSettlementCommand(
+                        3L, MarketplaceAdminSettleReasonCode.BUYER_CONFIRMATION_TIMEOUT, "run-3")))
+        .isInstanceOf(MarketplaceReservationStateException.class)
+        .hasMessageContaining("marketplace reservation escrow projection is required");
+  }
+
+  @Test
+  void schedulerRefundRethrowsNonValidationStateException() {
+    ExecuteMarketplaceSchedulerAdminRefundService service =
+        new ExecuteMarketplaceSchedulerAdminRefundService(orchestrator);
+    given(
+            orchestrator.executeSchedulerRefund(
+                "run-4", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 4L))
+        .willThrow(
+            new MarketplaceReservationStateException(
+                ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS,
+                "marketplace reservation escrow projection is required"));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteMarketplaceSchedulerAdminRefundCommand(
+                        4L, MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, "run-4")))
+        .isInstanceOf(MarketplaceReservationStateException.class)
+        .hasMessageContaining("marketplace reservation escrow projection is required");
   }
 
   private static void assertNoAdminOnlyAnnotation(Class<?> type) {
@@ -95,5 +160,20 @@ class ExecuteMarketplaceSchedulerAdminExecutionServiceTest {
         2000L,
         "/admin/web3/marketplace/reservations/1/refund-review",
         false);
+  }
+
+  private static final class StableCodeStateException extends MarketplaceReservationStateException {
+
+    private final String stableCode;
+
+    private StableCodeStateException(String stableCode, String message) {
+      super(ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS, message);
+      this.stableCode = stableCode;
+    }
+
+    @Override
+    public String stableCode() {
+      return stableCode;
+    }
   }
 }

@@ -81,6 +81,8 @@ public enum ErrorCode {
       HttpStatus.CONFLICT // 409
       ),
 
+  USER_UNVERIFIED("USER_007", "User account is not verified", HttpStatus.FORBIDDEN),
+
   // ========================================
   // Level Errors (LEVEL_xxx)
   // ========================================

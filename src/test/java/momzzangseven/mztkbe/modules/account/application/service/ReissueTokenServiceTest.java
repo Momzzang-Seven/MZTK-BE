@@ -13,6 +13,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
 import momzzangseven.mztkbe.global.error.user.UserBlockedException;
+import momzzangseven.mztkbe.global.error.user.UserUnverifiedException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenManager;
@@ -126,6 +127,27 @@ class ReissueTokenServiceTest {
 
     assertThatThrownBy(() -> reissueTokenService.execute(command))
         .isInstanceOf(UserBlockedException.class);
+
+    verify(validator).validateJwtFormat(incomingRefreshToken);
+    verify(validator, never())
+        .inspectSecurityFlaw(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
+    verify(refreshTokenManager, never())
+        .rotateTokens(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  @DisplayName("execute() rejects unverified user")
+  void execute_unverifiedUser_throwsUserUnverifiedException() {
+    String incomingRefreshToken = "refresh-token-12345";
+    ReissueTokenCommand command = new ReissueTokenCommand(incomingRefreshToken);
+
+    given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(7L);
+    given(checkAccountStatusUseCase.findStatus(7L))
+        .willReturn(Optional.of(AccountStatus.UNVERIFIED));
+
+    assertThatThrownBy(() -> reissueTokenService.execute(command))
+        .isInstanceOf(UserUnverifiedException.class);
 
     verify(validator).validateJwtFormat(incomingRefreshToken);
     verify(validator, never())

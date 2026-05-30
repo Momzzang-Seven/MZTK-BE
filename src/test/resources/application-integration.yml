@@ -65,6 +65,19 @@ answer:
     reconciliation:
       initial-delay-ms: 86400000
 
+# 계정상태 denylist (MOM-464). registry 자체는 enabled=true 로 두어 인증 hot path 가 denylist 를
+# 경유함(= prod 와 동일 의미)을 검증하되, 5분 cron reconcile 은 E2E 스위트 전역에서 발사되지 않도록
+# 사실상 도달 불가한 값(2/29)으로 민다. 단일 JVM·순차로 도는 E2E 는 컨텍스트 캐시(maxSize=8)를
+# 끊임없이 evict/재생성하는데, 5분 경계마다 살아있는 캐시 컨텍스트(최대 8개)가 동시에 reconcile
+# DB-read burst + 동일 lock 점유를 일으키면 작은 Hikari 풀이 굶주리고 teardown 이 지연되어 churn
+# 중 일시적으로 signup 이 반쯤 죽은 Tomcat 커넥터의 맨 404(body=null)로 표면화됐다. warmup 1회는
+# 컨텍스트 기동 시(측정 전)에 끝나므로 denylist 는 정상 적재된다. cron 발사에 의존하는 테스트는 없다.
+account:
+  status-registry:
+    reconcile:
+      cron: "0 0 0 29 2 ?"
+      zone: Asia/Seoul
+
 # MZTK Web3 default values for E2E tests
 web3:
   chain-id: 1337

@@ -1,80 +1,88 @@
 package momzzangseven.mztkbe.modules.account.application.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import java.time.Duration;
 import java.util.Optional;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
+import momzzangseven.mztkbe.modules.account.application.port.out.LoadAccountStatusRegistryPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
-import momzzangseven.mztkbe.modules.account.domain.event.UserAccountInvalidatedEvent;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Caches account status by {@code userId} so the JWT filter and reissue path don't take a HikariCP
- * connection per request. Follows the inline-Caffeine pattern of {@code DescribeKmsKeyService} —
- * cache invariant lives entirely in this class.
+ * Resolves account status for the auth layer over two distinct paths (MOM-464).
  *
- * <p>Invalidation is driven by {@link UserAccountInvalidatedEvent} via {@code AFTER_COMMIT}, so a
- * rolled-back write leaves the cache untouched (mirrors {@code
- * [[feedback_treasury_save_first_ordering]]}).
+ * <p><strong>Hot path</strong> — the predicate methods ({@link #isActive}, {@link #isDeleted},
+ * {@link #isBlocked}) resolve the effective status through {@link #resolveStatus}, whose routing
+ * depends on {@code account.status-registry.enabled}:
  *
- * <p>Stale window upper bound = {@link #CACHE_TTL} (60s) for changes published by other instances;
- * for changes from this instance the window is approximately the listener's invoke latency.
+ * <ul>
+ *   <li><strong>enabled=true</strong> (default): read the in-memory denylist via {@link
+ *       LoadAccountStatusRegistryPort}, acquiring <strong>zero HikariCP connections</strong>. Only
+ *       non-ACTIVE users are tracked, so an absent userId is interpreted as ACTIVE (absence =
+ *       ACTIVE) — the deliberate negative-cache model. The warm-up runner fails boot if the
+ *       denylist never loads, so the hot path never reads an empty (fail-open) denylist.
+ *   <li><strong>enabled=false</strong>: fall back to the original pre-MOM-464 behavior and read the
+ *       DB via {@link LoadUserAccountPort}. A missing account maps to ACTIVE, mirroring the
+ *       denylist's absence=ACTIVE semantics. Never read the (intentionally unpopulated) denylist
+ *       while disabled.
+ * </ul>
+ *
+ * <p><strong>Cold path</strong> — {@link #findStatus} always stays on the DB via {@link
+ * LoadUserAccountPort} because the reissue flow must distinguish {@code Optional.empty()} (user
+ * absent) from a real status, which the denylist's absence=ACTIVE semantics cannot express. Reissue
+ * is low-frequency, so a single connection there is harmless.
+ *
+ * <p>Denylist eviction on invalidation/hard-delete is handled by {@code
+ * AccountStatusRegistryEventHandler}; this service no longer listens to events.
  */
-@Slf4j
 @Service
 public class CheckAccountStatusService implements CheckAccountStatusUseCase {
 
-  private static final Duration CACHE_TTL = Duration.ofSeconds(60);
-  private static final long CACHE_MAXIMUM_SIZE = 10_000L;
-
+  private final LoadAccountStatusRegistryPort loadAccountStatusRegistryPort;
   private final LoadUserAccountPort loadUserAccountPort;
-  private final Cache<Long, Optional<AccountStatus>> statusCache;
+  private final boolean registryEnabled;
 
-  public CheckAccountStatusService(LoadUserAccountPort loadUserAccountPort) {
+  public CheckAccountStatusService(
+      LoadAccountStatusRegistryPort loadAccountStatusRegistryPort,
+      LoadUserAccountPort loadUserAccountPort,
+      @Value("${account.status-registry.enabled:true}") boolean registryEnabled) {
+    this.loadAccountStatusRegistryPort = loadAccountStatusRegistryPort;
     this.loadUserAccountPort = loadUserAccountPort;
-    this.statusCache =
-        Caffeine.newBuilder().expireAfterWrite(CACHE_TTL).maximumSize(CACHE_MAXIMUM_SIZE).build();
+    this.registryEnabled = registryEnabled;
   }
 
   @Override
   public boolean isActive(Long userId) {
-    return findStatus(userId).map(s -> s == AccountStatus.ACTIVE).orElse(false);
+    return resolveStatus(userId) == AccountStatus.ACTIVE;
   }
 
   @Override
   public boolean isDeleted(Long userId) {
-    return findStatus(userId).map(s -> s == AccountStatus.DELETED).orElse(false);
+    return resolveStatus(userId) == AccountStatus.DELETED;
   }
 
   @Override
   public boolean isBlocked(Long userId) {
-    return findStatus(userId).map(s -> s == AccountStatus.BLOCKED).orElse(false);
+    return resolveStatus(userId) == AccountStatus.BLOCKED;
   }
 
   @Override
   public Optional<AccountStatus> findStatus(Long userId) {
-    return statusCache.get(
-        userId, id -> loadUserAccountPort.findByUserId(id).map(UserAccount::getStatus));
+    return loadUserAccountPort.findByUserId(userId).map(UserAccount::getStatus);
   }
 
   /**
-   * Drops the cached entry for {@code userId} once the publishing write transaction commits. Kept
-   * non-transactional ({@link Propagation#NOT_SUPPORTED}) so the listener never takes a HikariCP
-   * connection just to invalidate an in-memory entry — defense in depth in case a class-level
-   * {@code @Transactional} is ever re-introduced.
+   * Resolves the effective {@link AccountStatus} for the auth hot path, routing to the in-memory
+   * denylist when the registry is enabled, or to the DB (absence = ACTIVE) when it is disabled.
    */
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-  @Transactional(propagation = Propagation.NOT_SUPPORTED)
-  public void onUserAccountInvalidated(UserAccountInvalidatedEvent event) {
-    statusCache.invalidate(event.userId());
-    log.debug("UserAccount status cache invalidated: userId={}", event.userId());
+  private AccountStatus resolveStatus(Long userId) {
+    if (registryEnabled) {
+      return loadAccountStatusRegistryPort.statusOf(userId);
+    }
+    return loadUserAccountPort
+        .findByUserId(userId)
+        .map(UserAccount::getStatus)
+        .orElse(AccountStatus.ACTIVE);
   }
 }

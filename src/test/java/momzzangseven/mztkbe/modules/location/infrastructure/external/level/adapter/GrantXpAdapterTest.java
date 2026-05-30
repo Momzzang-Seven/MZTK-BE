@@ -10,7 +10,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
-import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.in.GuaranteedGrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import momzzangseven.mztkbe.modules.location.domain.model.LocationVerification;
 import momzzangseven.mztkbe.modules.location.domain.vo.GpsCoordinate;
@@ -24,20 +24,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class GrantXpAdapterTest {
 
-  @Mock private GrantXpUseCase grantXpUseCase;
+  @Mock private GuaranteedGrantXpUseCase guaranteedGrantXpUseCase;
 
   private GrantXpAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new GrantXpAdapter(grantXpUseCase, ZoneId.of("Asia/Seoul"));
+    adapter = new GrantXpAdapter(guaranteedGrantXpUseCase, ZoneId.of("Asia/Seoul"));
   }
 
   @Test
   void grantLocationVerificationXp_shouldBuildWorkoutCommandAndReturnGrantedXp() {
     LocationVerification verification =
         verification(1L, 10L, Instant.parse("2026-02-28T01:00:00Z"));
-    when(grantXpUseCase.execute(any()))
+    when(guaranteedGrantXpUseCase.execute(any()))
         .thenReturn(GrantXpResult.granted(30, 3, 1, java.time.LocalDate.of(2026, 2, 28)));
 
     int granted = adapter.grantLocationVerificationXp(verification);
@@ -45,7 +45,7 @@ class GrantXpAdapterTest {
     assertThat(granted).isEqualTo(30);
 
     ArgumentCaptor<GrantXpCommand> captor = ArgumentCaptor.forClass(GrantXpCommand.class);
-    verify(grantXpUseCase).execute(captor.capture());
+    verify(guaranteedGrantXpUseCase).execute(captor.capture());
 
     GrantXpCommand command = captor.getValue();
     String expectedDay =
@@ -62,7 +62,7 @@ class GrantXpAdapterTest {
   void grantLocationVerificationXp_shouldReturnZeroWhenNotGranted() {
     LocationVerification verification =
         verification(1L, 10L, Instant.parse("2026-02-28T01:00:00Z"));
-    when(grantXpUseCase.execute(any()))
+    when(guaranteedGrantXpUseCase.execute(any()))
         .thenReturn(GrantXpResult.dailyCapReached(1, 1, java.time.LocalDate.of(2026, 2, 28)));
 
     int granted = adapter.grantLocationVerificationXp(verification);

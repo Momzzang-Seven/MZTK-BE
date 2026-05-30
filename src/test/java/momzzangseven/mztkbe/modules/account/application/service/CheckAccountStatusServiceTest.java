@@ -3,12 +3,13 @@ package momzzangseven.mztkbe.modules.account.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.account.application.port.out.LoadAccountStatusRegistryPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
-import momzzangseven.mztkbe.modules.account.domain.event.UserAccountInvalidatedEvent;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
@@ -21,121 +22,39 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * Verifies the Caffeine cache contract added by [MOM-460] auth pool isolation: cache miss delegates
- * to the port, cache hit suppresses repeat reads (including the cross-method case where the JWT
- * filter calls {@code isActive} then {@code isDeleted}/{@code isBlocked} for the same user), and
- * {@link UserAccountInvalidatedEvent} drops the entry.
+ * Verifies the MOM-464 denylist contract: the hot-path predicates ({@code isActive/isDeleted/
+ * isBlocked}) read the in-memory denylist via {@link LoadAccountStatusRegistryPort} with zero DB
+ * access, while {@code findStatus} stays on {@link LoadUserAccountPort} (DB) for the reissue cold
+ * path.
  *
- * <p>TTL-based eviction is intentionally not unit-tested — it would require an injectable Caffeine
- * Ticker. The constant is verified by reading the source (mirrors the policy chosen for {@code
- * DescribeKmsKeyServiceTest}).
+ * <p>Absence = ACTIVE: the registry port returns {@link AccountStatus#ACTIVE} for any user not in
+ * the denylist, so the predicates report an unknown user as active. That semantics is encoded by
+ * the port, not this service — these tests drive {@code statusOf} return values directly.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("CheckAccountStatusService 단위 테스트 (Caffeine 캐시)")
+@DisplayName("CheckAccountStatusService 단위 테스트 (denylist)")
 class CheckAccountStatusServiceTest {
 
+  @Mock private LoadAccountStatusRegistryPort loadAccountStatusRegistryPort;
   @Mock private LoadUserAccountPort loadUserAccountPort;
 
   private CheckAccountStatusService service;
 
   @BeforeEach
   void setUp() {
-    service = new CheckAccountStatusService(loadUserAccountPort);
+    // registryEnabled = true: hot-path predicates read the in-memory denylist.
+    service =
+        new CheckAccountStatusService(loadAccountStatusRegistryPort, loadUserAccountPort, true);
   }
 
   @Nested
-  @DisplayName("cache miss → 포트 위임")
-  class CacheMiss {
+  @DisplayName("predicate — denylist 조회 (hot path, 0 DB)")
+  class Predicates {
 
     @Test
-    @DisplayName("첫 isActive 호출은 포트를 1회 호출")
-    void firstIsActiveDelegatesToPort() {
-      when(loadUserAccountPort.findByUserId(10L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.ACTIVE)));
-
-      assertThat(service.isActive(10L)).isTrue();
-      verify(loadUserAccountPort, times(1)).findByUserId(10L);
-    }
-
-    @Test
-    @DisplayName("DB 미존재 시 모든 상태 메소드는 false")
-    void absentUserReturnsFalseForAllMethods() {
-      when(loadUserAccountPort.findByUserId(99L)).thenReturn(Optional.empty());
-
-      assertThat(service.isActive(99L)).isFalse();
-      assertThat(service.isDeleted(99L)).isFalse();
-      assertThat(service.isBlocked(99L)).isFalse();
-    }
-  }
-
-  @Nested
-  @DisplayName("cache hit → 포트 미호출")
-  class CacheHit {
-
-    @Test
-    @DisplayName("두 번째 isActive 호출은 포트를 호출하지 않음")
-    void secondIsActiveDoesNotCallPort() {
-      when(loadUserAccountPort.findByUserId(10L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.ACTIVE)));
-
-      service.isActive(10L);
-      service.isActive(10L);
-
-      verify(loadUserAccountPort, times(1)).findByUserId(10L);
-    }
-
-    @Test
-    @DisplayName("isActive 이후 동일 userId 의 isDeleted/isBlocked 는 포트 호출 없음 (3 메소드 1 DB)")
-    void crossMethodHitForSameUserId() {
-      when(loadUserAccountPort.findByUserId(20L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.BLOCKED)));
-
-      assertThat(service.isActive(20L)).isFalse();
-      assertThat(service.isDeleted(20L)).isFalse();
-      assertThat(service.isBlocked(20L)).isTrue();
-
-      verify(loadUserAccountPort, times(1)).findByUserId(20L);
-    }
-
-    @Test
-    @DisplayName("absent (Optional.empty) 도 캐시됨 — 음수 캐시")
-    void absentValueIsAlsoCached() {
-      when(loadUserAccountPort.findByUserId(99L)).thenReturn(Optional.empty());
-
-      service.isActive(99L);
-      service.isActive(99L);
-      service.isDeleted(99L);
-
-      verify(loadUserAccountPort, times(1)).findByUserId(99L);
-    }
-
-    @Test
-    @DisplayName("서로 다른 userId 는 독립 캐싱")
-    void differentUserIdsCachedIndependently() {
-      when(loadUserAccountPort.findByUserId(1L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.ACTIVE)));
-      when(loadUserAccountPort.findByUserId(2L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.DELETED)));
-
-      service.isActive(1L);
-      service.isActive(2L);
-      service.isActive(1L);
-      service.isActive(2L);
-
-      verify(loadUserAccountPort, times(1)).findByUserId(1L);
-      verify(loadUserAccountPort, times(1)).findByUserId(2L);
-    }
-  }
-
-  @Nested
-  @DisplayName("상태 매핑")
-  class StatusMapping {
-
-    @Test
-    @DisplayName("ACTIVE 상태: isActive=true / isDeleted=false / isBlocked=false")
-    void activeStatusMapping() {
-      when(loadUserAccountPort.findByUserId(1L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.ACTIVE)));
+    @DisplayName("statusOf=ACTIVE: isActive=true / isDeleted=false / isBlocked=false")
+    void activeMapping() {
+      when(loadAccountStatusRegistryPort.statusOf(1L)).thenReturn(AccountStatus.ACTIVE);
 
       assertThat(service.isActive(1L)).isTrue();
       assertThat(service.isDeleted(1L)).isFalse();
@@ -143,50 +62,103 @@ class CheckAccountStatusServiceTest {
     }
 
     @Test
-    @DisplayName("DELETED 상태: isDeleted=true")
-    void deletedStatusMapping() {
-      when(loadUserAccountPort.findByUserId(2L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.DELETED)));
+    @DisplayName("statusOf=BLOCKED: isBlocked=true / isActive=false / isDeleted=false")
+    void blockedMapping() {
+      when(loadAccountStatusRegistryPort.statusOf(2L)).thenReturn(AccountStatus.BLOCKED);
 
+      assertThat(service.isBlocked(2L)).isTrue();
       assertThat(service.isActive(2L)).isFalse();
-      assertThat(service.isDeleted(2L)).isTrue();
-      assertThat(service.isBlocked(2L)).isFalse();
+      assertThat(service.isDeleted(2L)).isFalse();
     }
 
     @Test
-    @DisplayName("BLOCKED 상태: isBlocked=true")
-    void blockedStatusMapping() {
-      when(loadUserAccountPort.findByUserId(3L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.BLOCKED)));
+    @DisplayName("statusOf=DELETED: isDeleted=true / isActive=false")
+    void deletedMapping() {
+      when(loadAccountStatusRegistryPort.statusOf(3L)).thenReturn(AccountStatus.DELETED);
 
+      assertThat(service.isDeleted(3L)).isTrue();
       assertThat(service.isActive(3L)).isFalse();
-      assertThat(service.isDeleted(3L)).isFalse();
-      assertThat(service.isBlocked(3L)).isTrue();
     }
 
     @Test
-    @DisplayName("UNVERIFIED 상태: 세 메소드 모두 false")
-    void unverifiedStatusMapping() {
-      when(loadUserAccountPort.findByUserId(4L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.UNVERIFIED)));
+    @DisplayName("statusOf=UNVERIFIED: 세 메소드 모두 false")
+    void unverifiedMapping() {
+      when(loadAccountStatusRegistryPort.statusOf(4L)).thenReturn(AccountStatus.UNVERIFIED);
 
       assertThat(service.isActive(4L)).isFalse();
       assertThat(service.isDeleted(4L)).isFalse();
       assertThat(service.isBlocked(4L)).isFalse();
     }
+
+    @Test
+    @DisplayName("부재 = ACTIVE: denylist 에 없는 userId 는 port 가 ACTIVE 반환 → isActive=true")
+    void absenceMeansActive() {
+      // The port encodes absence=ACTIVE; for an unknown user it returns ACTIVE.
+      when(loadAccountStatusRegistryPort.statusOf(999L)).thenReturn(AccountStatus.ACTIVE);
+
+      assertThat(service.isActive(999L)).isTrue();
+      assertThat(service.isDeleted(999L)).isFalse();
+      assertThat(service.isBlocked(999L)).isFalse();
+    }
   }
 
   @Nested
-  @DisplayName("findStatus — raw AccountStatus 노출 (ReissueTokenService 가 사용)")
+  @DisplayName("predicate — DB fallback (registryEnabled=false)")
+  class DbFallbackPredicates {
+
+    private CheckAccountStatusService dbService;
+
+    @BeforeEach
+    void setUp() {
+      // registryEnabled = false: predicates must read the DB, never the (empty) denylist.
+      dbService =
+          new CheckAccountStatusService(loadAccountStatusRegistryPort, loadUserAccountPort, false);
+    }
+
+    @Test
+    @DisplayName("BLOCKED 사용자: denylist 가 비어도 DB 경로로 isBlocked=true")
+    void blockedViaDb_evenWhenDenylistEmpty() {
+      when(loadUserAccountPort.findByUserId(2L))
+          .thenReturn(Optional.of(accountWith(AccountStatus.BLOCKED)));
+
+      assertThat(dbService.isBlocked(2L)).isTrue();
+      assertThat(dbService.isActive(2L)).isFalse();
+      assertThat(dbService.isDeleted(2L)).isFalse();
+      // The denylist must not be consulted on the DB fallback path.
+      verifyNoInteractions(loadAccountStatusRegistryPort);
+    }
+
+    @Test
+    @DisplayName("DELETED 사용자: DB 경로로 isDeleted=true")
+    void deletedViaDb() {
+      when(loadUserAccountPort.findByUserId(3L))
+          .thenReturn(Optional.of(accountWith(AccountStatus.DELETED)));
+
+      assertThat(dbService.isDeleted(3L)).isTrue();
+      assertThat(dbService.isActive(3L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("미존재 사용자: orElse(ACTIVE) 로 isActive=true (부재 = ACTIVE)")
+    void absentUserMapsToActive() {
+      when(loadUserAccountPort.findByUserId(99L)).thenReturn(Optional.empty());
+
+      assertThat(dbService.isActive(99L)).isTrue();
+      assertThat(dbService.isBlocked(99L)).isFalse();
+      assertThat(dbService.isDeleted(99L)).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("findStatus — DB 조회 (cold path, ReissueTokenService 가 사용)")
   class FindStatus {
 
     @Test
-    @DisplayName("findStatus 는 캐시 항목을 동일하게 공유 — isActive 이후 호출 시 포트 미호출")
-    void findStatusSharesCacheWithBooleanMethods() {
+    @DisplayName("존재하는 사용자: Optional.of(status) 반환")
+    void presentUserReturnsStatus() {
       when(loadUserAccountPort.findByUserId(30L))
           .thenReturn(Optional.of(accountWith(AccountStatus.BLOCKED)));
 
-      service.isActive(30L);
       Optional<AccountStatus> status = service.findStatus(30L);
 
       assertThat(status).contains(AccountStatus.BLOCKED);
@@ -194,8 +166,8 @@ class CheckAccountStatusServiceTest {
     }
 
     @Test
-    @DisplayName("findStatus 가 absent userId 도 캐시 — 두 번째 호출은 포트 미호출")
-    void findStatusCachesEmpty() {
+    @DisplayName("미존재 사용자: Optional.empty 반환, 캐싱 없이 매 호출 포트 위임")
+    void absentUserReturnsEmptyAndIsNotCached() {
       when(loadUserAccountPort.findByUserId(99L)).thenReturn(Optional.empty());
 
       Optional<AccountStatus> first = service.findStatus(99L);
@@ -203,38 +175,8 @@ class CheckAccountStatusServiceTest {
 
       assertThat(first).isEmpty();
       assertThat(second).isEmpty();
-      verify(loadUserAccountPort, times(1)).findByUserId(99L);
-    }
-  }
-
-  @Nested
-  @DisplayName("invalidation 이벤트 수신 → 다음 호출에서 포트 재호출")
-  class Invalidation {
-
-    @Test
-    @DisplayName("UserAccountInvalidatedEvent 수신 후 다음 호출은 포트 재호출")
-    void invalidatedEventDropsCachedEntry() {
-      when(loadUserAccountPort.findByUserId(10L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.ACTIVE)));
-
-      service.isActive(10L);
-      service.onUserAccountInvalidated(new UserAccountInvalidatedEvent(10L));
-      service.isActive(10L);
-
-      verify(loadUserAccountPort, times(2)).findByUserId(10L);
-    }
-
-    @Test
-    @DisplayName("다른 userId 에 대한 이벤트는 영향 없음")
-    void invalidationForOtherUserIdDoesNotEvict() {
-      when(loadUserAccountPort.findByUserId(10L))
-          .thenReturn(Optional.of(accountWith(AccountStatus.ACTIVE)));
-
-      service.isActive(10L);
-      service.onUserAccountInvalidated(new UserAccountInvalidatedEvent(99L));
-      service.isActive(10L);
-
-      verify(loadUserAccountPort, times(1)).findByUserId(10L);
+      // No caching — the port is hit on every call (cold path).
+      verify(loadUserAccountPort, times(2)).findByUserId(99L);
     }
   }
 
