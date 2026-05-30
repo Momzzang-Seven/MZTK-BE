@@ -210,6 +210,99 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
       @Param("maxDate") LocalDate maxDate,
       org.springframework.data.domain.Pageable pageable);
 
+  @Query(
+      value =
+          """
+          SELECT
+              r.id AS reservationId,
+              r.order_key AS orderKey,
+              r.reservation_date AS reservationDate,
+              r.reservation_time AS reservationTime,
+              r.duration_minutes AS durationMinutes,
+              r.contract_deadline_at AS contractDeadlineAt
+          FROM class_reservations r
+          JOIN marketplace_reservation_escrows e ON e.reservation_id = r.id
+          WHERE r.status = 'APPROVED'
+            AND r.escrow_flow = 'USER_EIP7702'
+            AND r.escrow_status = 'LOCKED'
+            AND r.current_execution_intent_public_id IS NULL
+            AND r.order_key IS NOT NULL
+            AND e.escrow_flow = 'USER_EIP7702'
+            AND e.escrow_status = 'LOCKED'
+            AND e.order_key IS NOT NULL
+            AND e.order_key = r.order_key
+            AND (r.contract_deadline_at IS NULL OR r.contract_deadline_at > :now)
+            AND (
+                r.reservation_date < :settleCutoffDate
+                OR (r.reservation_date = :settleCutoffDate AND r.reservation_time <= :settleCutoffTime)
+            )
+            AND (
+                :cursorDate IS NULL
+                OR r.reservation_date > :cursorDate
+                OR (r.reservation_date = :cursorDate AND r.reservation_time > :cursorTime)
+                OR (
+                    r.reservation_date = :cursorDate
+                    AND r.reservation_time = :cursorTime
+                    AND r.id > :cursorId
+                )
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM marketplace_reservation_action_states a
+              WHERE a.reservation_id = r.id
+                AND a.status IN ('PREPARING', 'INTENT_BOUND')
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM marketplace_reservation_action_states a
+              WHERE a.reservation_id = r.id
+                AND a.action_type = 'ADMIN_SETTLE'
+                AND a.request_source = 'SCHEDULER'
+                AND a.status = 'PREPARATION_FAILED'
+                AND COALESCE(a.retryable, FALSE) = FALSE
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM marketplace_reservation_action_states newer
+                  WHERE newer.reservation_id = a.reservation_id
+                    AND newer.action_type = 'ADMIN_SETTLE'
+                    AND newer.request_source = 'SCHEDULER'
+                    AND (
+                      newer.attempt_no > a.attempt_no
+                      OR (
+                        newer.attempt_no = a.attempt_no
+                        AND newer.id > a.id
+                      )
+                    )
+                )
+            )
+          ORDER BY r.reservation_date ASC, r.reservation_time ASC, r.id ASC
+          LIMIT :scanSize
+          """,
+      nativeQuery = true)
+  List<MarketplaceWeb3AutoSettleCandidateProjection> findMarketplaceWeb3AutoSettleCandidates(
+      @Param("now") LocalDateTime now,
+      @Param("settleCutoffDate") LocalDate settleCutoffDate,
+      @Param("settleCutoffTime") LocalTime settleCutoffTime,
+      @Param("cursorDate") LocalDate cursorDate,
+      @Param("cursorTime") LocalTime cursorTime,
+      @Param("cursorId") Long cursorId,
+      @Param("scanSize") int scanSize);
+
+  interface MarketplaceWeb3AutoSettleCandidateProjection {
+
+    Long getReservationId();
+
+    String getOrderKey();
+
+    LocalDate getReservationDate();
+
+    LocalTime getReservationTime();
+
+    int getDurationMinutes();
+
+    LocalDateTime getContractDeadlineAt();
+  }
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       "SELECT r FROM ReservationEntity r "

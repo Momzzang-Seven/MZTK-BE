@@ -76,10 +76,18 @@ final class ReservationExecutionCandidateGuard {
     if (reservation == null) {
       return false;
     }
-    return executionCandidates(reservation)
+    return hasBlockingExecutionForMarketplaceResource(
+        reservation.getId(), reservation.getOrderKey());
+  }
+
+  boolean hasBlockingExecutionForMarketplaceResource(Long reservationId, String orderKey) {
+    if (reservationId == null) {
+      return false;
+    }
+    return executionCandidates(reservationId, orderKey)
         .filter(candidate -> MARKETPLACE_ACTION_CODES.contains(candidate.actionType()))
-        .filter(candidate -> matchesReservationEvidence(reservation, candidate))
-        .anyMatch(this::isBlockingExecutionCandidate);
+        .filter(candidate -> matchesMarketplaceResourceEvidence(reservationId, orderKey, candidate))
+        .anyMatch(this::isBlockingMarketplaceExecutionCandidate);
   }
 
   boolean hasBlockingExecutionForAction(
@@ -94,9 +102,13 @@ final class ReservationExecutionCandidateGuard {
   }
 
   private Stream<ReservationExecutionCandidateView> executionCandidates(Reservation reservation) {
+    return executionCandidates(reservation.getId(), reservation.getOrderKey());
+  }
+
+  private Stream<ReservationExecutionCandidateView> executionCandidates(
+      Long reservationId, String orderKey) {
     List<ReservationExecutionCandidateView> candidates =
-        loadReservationExecutionCandidatePort.findByReservationResource(
-            reservation.getId(), reservation.getOrderKey());
+        loadReservationExecutionCandidatePort.findByReservationResource(reservationId, orderKey);
     return candidates == null ? Stream.empty() : candidates.stream();
   }
 
@@ -118,17 +130,24 @@ final class ReservationExecutionCandidateGuard {
 
   private boolean matchesReservationEvidence(
       Reservation reservation, ReservationExecutionCandidateView candidate) {
+    return reservation != null
+        && matchesMarketplaceResourceEvidence(
+            reservation.getId(), reservation.getOrderKey(), candidate);
+  }
+
+  private boolean matchesMarketplaceResourceEvidence(
+      Long reservationId, String orderKey, ReservationExecutionCandidateView candidate) {
     if (!candidate.payloadEvidenceValid() || candidate.payloadEvidence() == null) {
       return true;
     }
     ReservationExecutionCandidateView.PayloadEvidence evidence = candidate.payloadEvidence();
     if (evidence.reservationId() != null
-        && !Objects.equals(reservation.getId(), evidence.reservationId())) {
+        && !Objects.equals(reservationId, evidence.reservationId())) {
       return false;
     }
     if (evidence.orderKey() != null
-        && reservation.getOrderKey() != null
-        && !Objects.equals(reservation.getOrderKey(), evidence.orderKey())) {
+        && orderKey != null
+        && !Objects.equals(orderKey, evidence.orderKey())) {
       return false;
     }
     if (evidence.actionType() != null
@@ -143,6 +162,24 @@ final class ReservationExecutionCandidateGuard {
         || isAwaitingSignature(candidate.status())
         || STATUS_SIGNED.equals(candidate.status())
         || STATUS_PENDING_ONCHAIN.equals(candidate.status())
+        || TRANSACTION_SUCCEEDED.equals(candidate.transactionStatus())
+        || TRANSACTION_UNCONFIRMED.equals(candidate.transactionStatus());
+  }
+
+  private boolean isBlockingMarketplaceExecutionCandidate(
+      ReservationExecutionCandidateView candidate) {
+    if (candidate == null) {
+      return false;
+    }
+    if (isAwaitingSignature(candidate.status())
+        || STATUS_SIGNED.equals(candidate.status())
+        || STATUS_PENDING_ONCHAIN.equals(candidate.status())) {
+      return true;
+    }
+    if ("MARKETPLACE_CLASS_PURCHASE".equals(candidate.actionType())) {
+      return false;
+    }
+    return STATUS_CONFIRMED.equals(candidate.status())
         || TRANSACTION_SUCCEEDED.equals(candidate.transactionStatus())
         || TRANSACTION_UNCONFIRMED.equals(candidate.transactionStatus());
   }

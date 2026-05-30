@@ -38,6 +38,15 @@ public interface MarketplaceReservationActionStateJpaRepository
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       "SELECT a FROM MarketplaceReservationActionStateEntity a "
+          + "WHERE a.reservationId = :reservationId "
+          + "AND a.status IN ('PREPARING', 'INTENT_BOUND') "
+          + "ORDER BY a.attemptNo DESC, a.id DESC")
+  List<MarketplaceReservationActionStateEntity> findActiveByReservationIdWithLock(
+      @Param("reservationId") Long reservationId, Pageable pageable);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "SELECT a FROM MarketplaceReservationActionStateEntity a "
           + "WHERE a.executionIntentPublicId = :executionIntentPublicId")
   Optional<MarketplaceReservationActionStateEntity> findByExecutionIntentPublicIdWithLock(
       @Param("executionIntentPublicId") String executionIntentPublicId);
@@ -70,6 +79,20 @@ public interface MarketplaceReservationActionStateJpaRepository
       @Param("reservationId") Long reservationId,
       @Param("actionType") String actionType,
       Pageable pageable);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "SELECT a FROM MarketplaceReservationActionStateEntity a "
+          + "WHERE a.reservationId = :reservationId "
+          + "AND a.actionType = :actionType "
+          + "AND a.requestSource = :requestSource "
+          + "ORDER BY a.attemptNo DESC, a.id DESC")
+  List<MarketplaceReservationActionStateEntity>
+      findLatestByReservationIdAndActionTypeAndRequestSourceWithLock(
+          @Param("reservationId") Long reservationId,
+          @Param("actionType") String actionType,
+          @Param("requestSource") String requestSource,
+          Pageable pageable);
 
   @Query(
       value =

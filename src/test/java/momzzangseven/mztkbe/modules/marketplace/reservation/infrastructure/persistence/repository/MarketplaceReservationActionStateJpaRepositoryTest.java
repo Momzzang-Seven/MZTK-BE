@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -116,6 +117,26 @@ class MarketplaceReservationActionStateJpaRepositoryTest {
             "intent-repair-failed");
   }
 
+  @Test
+  @DisplayName("latest action-state lookup은 request source 범위 안에서만 최신 attempt를 찾는다")
+  void findLatestByReservationIdAndActionTypeAndRequestSourceWithLockScopesLatestBySource() {
+    saveScopedLatestLookupState(1L, 101L, "ADMIN_SETTLE", "MANUAL_ADMIN", 1);
+    saveScopedLatestLookupState(1L, 101L, "ADMIN_SETTLE", "SCHEDULER", 2);
+    saveScopedLatestLookupState(1L, 101L, "ADMIN_SETTLE", "MANUAL_ADMIN", 3);
+
+    List<MarketplaceReservationActionStateEntity> result =
+        actionStateRepository.findLatestByReservationIdAndActionTypeAndRequestSourceWithLock(
+            1L, "ADMIN_SETTLE", "SCHEDULER", PageRequest.of(0, 1));
+
+    assertThat(result)
+        .singleElement()
+        .satisfies(
+            state -> {
+              assertThat(state.getRequestSource()).isEqualTo("SCHEDULER");
+              assertThat(state.getAttemptNo()).isEqualTo(2);
+            });
+  }
+
   private void saveState(
       String intentPublicId, String actionType, String errorCode, LocalDateTime updatedAt) {
     actionStateRepository.saveAndFlush(
@@ -135,6 +156,27 @@ class MarketplaceReservationActionStateJpaRepositoryTest {
             .errorCode(errorCode)
             .createdAt(updatedAt)
             .updatedAt(updatedAt)
+            .build());
+  }
+
+  private void saveScopedLatestLookupState(
+      Long reservationId, Long escrowId, String actionType, String requestSource, int attemptNo) {
+    boolean manualAdmin = "MANUAL_ADMIN".equals(requestSource);
+    actionStateRepository.saveAndFlush(
+        MarketplaceReservationActionStateEntity.builder()
+            .reservationId(reservationId)
+            .escrowId(escrowId)
+            .actionType(actionType)
+            .actorType(manualAdmin ? "ADMIN" : "SYSTEM")
+            .actorUserId(manualAdmin ? 77L : null)
+            .requestSource(requestSource)
+            .attemptNo(attemptNo)
+            .attemptToken("attempt-" + requestSource + "-" + attemptNo)
+            .status("PREPARATION_FAILED")
+            .reasonCode("BUYER_CONFIRMATION_TIMEOUT")
+            .retryable(false)
+            .createdAt(LocalDateTime.of(2026, 5, 23, 12, attemptNo))
+            .updatedAt(LocalDateTime.of(2026, 5, 23, 12, attemptNo))
             .build());
   }
 

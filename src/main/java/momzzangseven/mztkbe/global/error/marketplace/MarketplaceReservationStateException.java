@@ -18,4 +18,8 @@ public class MarketplaceReservationStateException extends BusinessException {
       ErrorCode errorCode, String message, Throwable cause) {
     super(errorCode, message, cause);
   }
+
+  public String stableCode() {
+    return null;
+  }
 }

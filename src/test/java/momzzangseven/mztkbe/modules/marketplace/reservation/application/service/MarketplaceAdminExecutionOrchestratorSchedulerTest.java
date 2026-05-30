@@ -3,10 +3,13 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 
 import java.math.BigInteger;
 import java.time.Clock;
@@ -45,6 +48,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Marketp
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionRequestSource;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationActionStateStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowActorType;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowFlow;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationEscrowStatus;
@@ -92,6 +96,15 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
             loadReservationExecutionCandidatePort,
             ReservationTestTransactionPort.direct(),
             Clock.fixed(Instant.parse("2026-05-21T12:00:00Z"), ZoneOffset.UTC));
+    lenient()
+        .when(loadReservationActionStatePort.findActiveByReservationIdWithLock(anyLong()))
+        .thenReturn(Optional.empty());
+    lenient()
+        .when(
+            loadReservationActionStatePort
+                .findLatestByReservationIdAndActionTypeAndRequestSourceWithLock(
+                    anyLong(), any(), any()))
+        .thenReturn(Optional.empty());
   }
 
   @Test
@@ -130,11 +143,121 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
                 orchestrator.executeSchedulerRefund(
                     "scheduler-run-1", MarketplaceAdminRefundReasonCode.TRAINER_TIMEOUT, 1L))
         .isInstanceOf(MarketplaceReservationStateException.class)
-        .hasMessageContaining("ACTIVE_EXECUTION_EXISTS");
+        .hasMessageContaining("UNRESOLVED_MARKETPLACE_EXECUTION_EXISTS");
 
     then(saveReservationPort).shouldHaveNoInteractions();
     then(saveReservationActionStatePort).shouldHaveNoInteractions();
     then(buildExecutionPort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  void schedulerSettlementRejectsLockedEscrowProjectionDrift() {
+    Reservation reservation = approvedReservation();
+    given(loadReservationPort.findByIdWithLock(1L)).willReturn(Optional.of(reservation));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willReturn(
+            Optional.of(
+                escrow().toBuilder()
+                    .escrowStatus(ReservationEscrowStatus.ADMIN_SETTLE_PENDING)
+                    .build()));
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                orchestrator.executeSchedulerSettlement(
+                    "scheduler-run-1",
+                    momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                        .MarketplaceAdminSettleReasonCode.BUYER_CONFIRMATION_TIMEOUT,
+                    1L))
+        .isInstanceOf(MarketplaceReservationStateException.class)
+        .hasMessageContaining(MarketplaceAdminReviewValidationCode.INVALID_LOCAL_STATUS.name());
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(saveReservationActionStatePort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  void schedulerSettlementRejectsActivePreparingActionStateFromDirectActiveLookup() {
+    Reservation reservation = approvedReservation();
+    given(loadReservationPort.findByIdWithLock(1L)).willReturn(Optional.of(reservation));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willReturn(Optional.of(escrow()));
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(loadReservationActionStatePort.findActiveByReservationIdWithLock(1L))
+        .willReturn(
+            Optional.of(
+                MarketplaceReservationActionState.builder()
+                    .id(20L)
+                    .reservationId(1L)
+                    .escrowId(900L)
+                    .actionType(
+                        momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo
+                            .ReservationEscrowAction.ADMIN_SETTLE)
+                    .attemptToken("attempt-1")
+                    .status(ReservationActionStateStatus.PREPARING)
+                    .build()));
+
+    assertThatThrownBy(
+            () ->
+                orchestrator.executeSchedulerSettlement(
+                    "scheduler-run-2",
+                    momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                        .MarketplaceAdminSettleReasonCode.BUYER_CONFIRMATION_TIMEOUT,
+                    1L))
+        .isInstanceOf(MarketplaceReservationStateException.class)
+        .hasMessageContaining(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS.name());
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(saveReservationActionStatePort).shouldHaveNoInteractions();
+  }
+
+  @Test
+  void schedulerSettlementRejectsLatestNonRetryablePreparationFailure() {
+    Reservation reservation = approvedReservation();
+    given(loadReservationPort.findByIdWithLock(1L)).willReturn(Optional.of(reservation));
+    given(loadReservationEscrowPort.findByReservationIdWithLock(1L))
+        .willReturn(Optional.of(escrow()));
+    given(loadReservationActionStatePort.findLatestByReservationIdWithLock(1L))
+        .willReturn(Optional.empty());
+    given(
+            loadReservationActionStatePort
+                .findLatestByReservationIdAndActionTypeAndRequestSourceWithLock(
+                    1L,
+                    ReservationEscrowAction.ADMIN_SETTLE,
+                    ReservationActionRequestSource.SCHEDULER))
+        .willReturn(
+            Optional.of(
+                MarketplaceReservationActionState.builder()
+                    .id(21L)
+                    .reservationId(1L)
+                    .escrowId(900L)
+                    .actionType(
+                        momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo
+                            .ReservationEscrowAction.ADMIN_SETTLE)
+                    .requestSource(ReservationActionRequestSource.SCHEDULER)
+                    .attemptToken("attempt-previous")
+                    .status(ReservationActionStateStatus.PREPARATION_FAILED)
+                    .retryable(false)
+                    .build()));
+
+    assertThatThrownBy(
+            () ->
+                orchestrator.executeSchedulerSettlement(
+                    "scheduler-run-3",
+                    momzzangseven.mztkbe.modules.marketplace.reservation.application.dto
+                        .MarketplaceAdminSettleReasonCode.BUYER_CONFIRMATION_TIMEOUT,
+                    1L))
+        .isInstanceOf(MarketplaceReservationStateException.class)
+        .hasMessageContaining(
+            MarketplaceAdminReviewValidationCode.NON_RETRYABLE_PREPARATION_FAILED.name());
+
+    then(saveReservationPort).shouldHaveNoInteractions();
+    then(saveReservationActionStatePort).shouldHaveNoInteractions();
+    then(loadReservationActionStatePort)
+        .should(never())
+        .findLatestByReservationIdAndActionTypeWithLock(anyLong(), any());
   }
 
   @Test
@@ -619,6 +742,10 @@ class MarketplaceAdminExecutionOrchestratorSchedulerTest {
         .createdAt(LocalDateTime.of(2026, 5, 18, 10, 0))
         .version(7L)
         .build();
+  }
+
+  private Reservation approvedReservation() {
+    return pendingReservation().toBuilder().status(ReservationStatus.APPROVED).build();
   }
 
   private MarketplaceReservationEscrow escrow() {

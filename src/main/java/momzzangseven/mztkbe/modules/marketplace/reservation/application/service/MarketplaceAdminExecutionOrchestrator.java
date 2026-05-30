@@ -236,7 +236,28 @@ public class MarketplaceAdminExecutionOrchestrator {
         loadReservationActionStatePort
             .findLatestByReservationIdWithLock(reservationId)
             .orElse(null);
-    validateBaseExecutable(action, reservation, latest);
+    MarketplaceReservationActionState activeActionState =
+        loadReservationActionStatePort
+            .findActiveByReservationIdWithLock(reservationId)
+            .orElse(null);
+    MarketplaceReservationActionState latestSchedulerAdminSettleActionState =
+        action == ReservationEscrowAction.ADMIN_SETTLE
+                && source == ReservationActionRequestSource.SCHEDULER
+            ? loadReservationActionStatePort
+                .findLatestByReservationIdAndActionTypeAndRequestSourceWithLock(
+                    reservationId,
+                    ReservationEscrowAction.ADMIN_SETTLE,
+                    ReservationActionRequestSource.SCHEDULER)
+                .orElse(null)
+            : null;
+    validateBaseExecutable(
+        action,
+        source,
+        reservation,
+        escrow,
+        latest,
+        activeActionState,
+        latestSchedulerAdminSettleActionState);
     validateReasonWindow(action, reasonCode, reservation);
 
     String attemptToken = UUID.randomUUID().toString();
@@ -534,8 +555,12 @@ public class MarketplaceAdminExecutionOrchestrator {
 
   private void validateBaseExecutable(
       ReservationEscrowAction action,
+      ReservationActionRequestSource source,
       Reservation reservation,
-      MarketplaceReservationActionState latestActionState) {
+      MarketplaceReservationEscrow escrow,
+      MarketplaceReservationActionState latestActionState,
+      MarketplaceReservationActionState activeActionState,
+      MarketplaceReservationActionState latestSchedulerAdminSettleActionState) {
     ReservationStatus expected =
         action == ReservationEscrowAction.ADMIN_REFUND
             ? ReservationStatus.PENDING
@@ -545,15 +570,49 @@ public class MarketplaceAdminExecutionOrchestrator {
         || reservation.getEffectiveEscrowFlow() != ReservationEscrowFlow.USER_EIP7702) {
       throw conflict(MarketplaceAdminReviewValidationCode.INVALID_LOCAL_STATUS);
     }
+    validateLockedEscrowProjection(reservation, escrow);
     if (reservation.getCurrentExecutionIntentPublicId() != null
+        || activeActionState != null
         || (latestActionState != null
             && latestActionState.getStatus() != null
             && latestActionState.getStatus().isActive())) {
       throw conflict(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS);
     }
+    validateSchedulerPreparationFailure(action, source, latestSchedulerAdminSettleActionState);
     if (executionCandidateGuard != null
         && executionCandidateGuard.hasBlockingExecutionForAnyMarketplaceAction(reservation)) {
-      throw conflict(MarketplaceAdminReviewValidationCode.ACTIVE_EXECUTION_EXISTS);
+      throw conflict(MarketplaceAdminReviewValidationCode.UNRESOLVED_MARKETPLACE_EXECUTION_EXISTS);
+    }
+  }
+
+  private void validateLockedEscrowProjection(
+      Reservation reservation, MarketplaceReservationEscrow escrow) {
+    if (escrow.getEscrowFlow() != ReservationEscrowFlow.USER_EIP7702
+        || escrow.getEscrowStatus() != ReservationEscrowStatus.LOCKED) {
+      throw conflict(MarketplaceAdminReviewValidationCode.INVALID_LOCAL_STATUS);
+    }
+    if (escrow.getOrderKey() == null
+        || reservation.getOrderKey() == null
+        || !reservation.getOrderKey().equals(escrow.getOrderKey())) {
+      throw conflict(MarketplaceAdminReviewValidationCode.INVALID_LOCAL_STATUS);
+    }
+  }
+
+  private void validateSchedulerPreparationFailure(
+      ReservationEscrowAction action,
+      ReservationActionRequestSource source,
+      MarketplaceReservationActionState latestSchedulerAdminSettleActionState) {
+    if (action != ReservationEscrowAction.ADMIN_SETTLE
+        || source != ReservationActionRequestSource.SCHEDULER
+        || latestSchedulerAdminSettleActionState == null) {
+      return;
+    }
+    if (latestSchedulerAdminSettleActionState.getStatus()
+        != ReservationActionStateStatus.PREPARATION_FAILED) {
+      return;
+    }
+    if (!Boolean.TRUE.equals(latestSchedulerAdminSettleActionState.getRetryable())) {
+      throw conflict(MarketplaceAdminReviewValidationCode.NON_RETRYABLE_PREPARATION_FAILED);
     }
   }
 
@@ -894,6 +953,11 @@ public class MarketplaceAdminExecutionOrchestrator {
     private AdminPhaseCStaleException(String code, String message) {
       super(ErrorCode.MARKETPLACE_RESERVATION_INVALID_STATUS, message);
       this.code = code;
+    }
+
+    @Override
+    public String stableCode() {
+      return code;
     }
 
     private String code() {
