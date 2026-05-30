@@ -76,6 +76,14 @@ google:
     revoke-uri: https://oauth2.googleapis.com/revoke
 
 
+# 계정상태 denylist (negative cache) — 인증 hot path 0 connection
+account:
+  status-registry:
+    enabled: true # warmup + scheduler @ConditionalOnProperty (matchIfMissing=true)
+    reconcile:
+      cron: "0 */5 * * * *" # 기본 5분 주기 (멀티 인스턴스 시 단축 고려)
+      zone: Asia/Seoul
+
 # 튜닝/정책값은 yml 상수로 유지
 withdrawal:
   external-disconnect:

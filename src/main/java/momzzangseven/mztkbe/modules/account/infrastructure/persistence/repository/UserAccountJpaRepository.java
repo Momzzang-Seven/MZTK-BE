@@ -67,6 +67,13 @@ public interface UserAccountJpaRepository extends JpaRepository<UserAccountEntit
   List<ManagedUserAccountStatusProjection> findManagedUserAccountStatusesByStatus(
       @Param("status") AccountStatus status);
 
+  @Query(
+      "SELECT ua.userId AS userId, ua.status AS status "
+          + "FROM UserAccountEntity ua "
+          + "WHERE ua.status <> :status")
+  List<ManagedUserAccountStatusProjection> findManagedUserAccountStatusesByStatusNot(
+      @Param("status") AccountStatus status);
+
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM UserAccountEntity ua WHERE ua.userId = :userId")
   void deleteByUserId(@Param("userId") Long userId);
