@@ -97,9 +97,13 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       // 근거리 스케줄러를 전부 비활성화한다.
       //   - TransactionIssuerWorker (@Scheduled fixedDelay 1s, web3.reward-token.enabled 게이트)
       "web3.reward-token.enabled=false",
-      //   - AccountStatusRegistryReconciliationScheduler (5분 cron, 이 플래그는 reconcile/warmup
-      //     스케줄러만 게이트하고 denylist 이벤트 핸들러는 게이트하지 않으므로 시나리오 (2)/(2-evict) 안전)
-      "account.status-registry.enabled=false",
+      //   - AccountStatusRegistryReconciliationScheduler: registry 자체는 enabled=true 로 둬야 한다.
+      //     MOM-464 fail-closed 후 enabled=false 는 hot path 를 DB fallback 으로 라우팅하므로 이 테스트가
+      //     검증하려는 "denylist hot path = DB 0회" 가 성립하지 않는다. 따라서 registry 는 켜두고, 5분 cron
+      //     reconcile 이 측정 윈도우(특히 시나리오 (4) 의 JVM-global Hikari counter) 안에서 connection 을
+      //     잡지 않도록 cron 을 사실상 발사 안 하는 값으로 민다. warmup 1회는 컨텍스트 기동 시(측정 전)에 끝난다.
+      "account.status-registry.enabled=true",
+      "account.status-registry.reconcile.cron=0 0 0 29 2 ?",
       //   - ExternalDisconnectRetryScheduler (@Scheduled fixedDelay, 무조건) 의 발사를 테스트 윈도우
       //     밖으로 밀어낸다.
       "withdrawal.external-disconnect.fixed-delay=86400000"
