@@ -4,8 +4,8 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: 20      # 2026-05-28 부하테스트(RESULT_LOAD): pool=10 이 단일 병목, RDS 여력 충분(conns 11/max 79)
-      connection-timeout: 5000   # 30s → 5s: doomed 요청의 30초 슬롯 점유가 cascade 를 비가역화 → fail-fast
+      maximum-pool-size: ${HIKARI-MAX-POOL-SIZE}      # 2026-05-28 부하테스트(RESULT_LOAD): pool=10 이 단일 병목, RDS 여력 충분(conns 11/max 79)
+      connection-timeout: ${HIKARI-CONNECTION-TIMEOUT}   # 30s → 5s: doomed 요청의 30초 슬롯 점유가 cascade 를 비가역화 → fail-fast
 
   sql:
     init:

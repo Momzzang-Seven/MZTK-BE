@@ -71,11 +71,13 @@ def esc(s):
 
 
 def line_chart(filename, title, ylabel, series, npoints,
-               ymax, yticks=5, refline=None, annotations=None):
-    """series: [{label,color,data:[v|None]}]  refline: (value,label)
-       annotations: [(index, value, text)]"""
+               ymax, yticks=5, refline=None, annotations=None,
+               y2max=None, y2ticks=5, y2label=None):
+    """series: [{label,color,data:[v|None],axis?:"right"}]  refline: (value,label)
+       annotations: [(index, value, text)]
+       y2max/y2label: optional right-hand axis; series with axis=="right" scale to it."""
     W, H = 880, 380
-    ml, mr, mt, mb = 66, 48, 60, 66
+    ml, mr, mt, mb = 66, (62 if y2max else 48), 60, 66
     pw, ph = W - ml - mr, H - mt - mb
     font = "-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif"
 
@@ -84,6 +86,9 @@ def line_chart(filename, title, ylabel, series, npoints,
 
     def py(v):
         return mt + ph * (1 - v / ymax)
+
+    def py2(v):
+        return mt + ph * (1 - v / y2max)
 
     s = []
     s.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" '
@@ -104,6 +109,21 @@ def line_chart(filename, title, ylabel, series, npoints,
     s.append(f'<text x="17" y="{cy:.0f}" font-size="11" fill="#8b9099" '
              f'text-anchor="middle" transform="rotate(-90 17 {cy:.0f})">'
              f'{esc(ylabel)}</text>')
+
+    # right-hand axis (for series with axis=="right")
+    if y2max:
+        for k in range(y2ticks + 1):
+            gv = y2max * k / y2ticks
+            gy = py2(gv)
+            s.append(f'<text x="{ml+pw+9}" y="{gy+4:.1f}" font-size="11" '
+                     f'text-anchor="start" fill="#8b9099">{fmt_num(gv)}</text>')
+        s.append(f'<line x1="{ml+pw}" y1="{mt}" x2="{ml+pw}" y2="{mt+ph}" '
+                 f'stroke="#c4c8ce" stroke-width="1.5"/>')
+        if y2label:
+            s.append(f'<text x="{W-12}" y="{cy:.0f}" font-size="11" '
+                     f'fill="#8b9099" text-anchor="middle" '
+                     f'transform="rotate(-90 {W-12} {cy:.0f})">'
+                     f'{esc(y2label)}</text>')
 
     # x ticks at stage boundaries / time markers
     xticks = [t for t in CFG["xticks"] if t < npoints]
@@ -139,6 +159,8 @@ def line_chart(filename, title, ylabel, series, npoints,
 
     # series
     for sr in series:
+        yfn = py2 if (y2max and sr.get("axis") == "right") else py
+        dash = ' stroke-dasharray="7 4"' if sr.get("axis") == "right" else ""
         seg, segs = [], []
         for i, v in enumerate(sr["data"]):
             if v is None:
@@ -146,20 +168,20 @@ def line_chart(filename, title, ylabel, series, npoints,
                     segs.append(seg)
                 seg = []
             else:
-                seg.append((px(i), py(v)))
+                seg.append((px(i), yfn(v)))
         if len(seg) > 1:
             segs.append(seg)
         for pts in segs:
             d = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
             s.append(f'<polyline points="{d}" fill="none" '
                      f'stroke="{sr["color"]}" stroke-width="2.2" '
-                     f'stroke-linejoin="round"/>')
+                     f'stroke-linejoin="round"{dash}/>')
         # per-point markers only when sparse; dense high-res charts (5s step,
         # 80+ points) would turn into an unreadable dotted band — line only.
         if npoints <= 80:
             for i, v in enumerate(sr["data"]):
                 if v is not None:
-                    s.append(f'<circle cx="{px(i):.1f}" cy="{py(v):.1f}" r="2.4" '
+                    s.append(f'<circle cx="{px(i):.1f}" cy="{yfn(v):.1f}" r="2.4" '
                              f'fill="{sr["color"]}"/>')
 
     if annotations:
@@ -200,7 +222,8 @@ def resolve_series(chart):
     for sr, data in rows:
         if data is None:
             data = [vu_at(i) for i in range(n)]
-        out.append({"label": sr["label"], "color": sr["color"], "data": data})
+        out.append({"label": sr["label"], "color": sr["color"], "data": data,
+                    "axis": sr.get("axis")})
     return out, n
 
 
@@ -213,18 +236,23 @@ def main():
             print(f"  SKIP {ch['file']}: Prometheus 가 데이터를 반환하지 않음 "
                   f"(쿼리/구간/instrumentation 확인)")
             continue
-        ann = None
+        ann = []
         am = ch.get("annotate_max")
         if am:
             s = series[am["series"]]["data"]
             idx = max(range(len(s)), key=lambda i: (s[i] or 0))
             if s[idx] is not None:
-                ann = [(idx, s[idx],
-                        am["label"].replace("{v}", str(int(s[idx]))))]
+                ann.append((idx, s[idx],
+                            am["label"].replace("{v}", str(int(s[idx])))))
+        # explicit annotations: [index, value, text] on the left axis
+        for a in ch.get("annotations", []):
+            ann.append(tuple(a))
         refline = tuple(ch["refline"]) if ch.get("refline") else None
         line_chart(f"{NAME}_{ch['file']}.svg", ch["title"], ch["ylabel"],
                    series, n, ymax=ch["ymax"], yticks=ch.get("yticks", 5),
-                   refline=refline, annotations=ann)
+                   refline=refline, annotations=(ann or None),
+                   y2max=ch.get("y2max"), y2ticks=ch.get("y2ticks", 5),
+                   y2label=ch.get("y2label"))
     print("done.")
 
 
