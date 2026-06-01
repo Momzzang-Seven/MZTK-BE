@@ -353,6 +353,25 @@ class TransactionWorkPersistenceAdapterTest {
   }
 
   @Test
+  void markUnconfirmedForSponsorNonceReview_setsBroadcastedAtForSignedReview() {
+    Web3TransactionEntity entity = baseEntity(18L, Web3TxStatus.SIGNED);
+    entity.setTxHash("0x" + "f".repeat(64));
+    entity.setSignedAt(FIXED_NOW.minusMinutes(1));
+    entity.setProcessingBy("signed-recovery-worker");
+    entity.setProcessingUntil(FIXED_NOW.plusMinutes(1));
+    when(repository.findById(18L)).thenReturn(Optional.of(entity));
+
+    adapter.markUnconfirmedForSponsorNonceReview(18L, "SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED");
+
+    assertThat(entity.getStatus()).isEqualTo(Web3TxStatus.UNCONFIRMED);
+    assertThat(entity.getFailureReason()).isEqualTo("SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED");
+    assertThat(entity.getBroadcastedAt()).isEqualTo(FIXED_NOW);
+    assertThat(entity.getProcessingBy()).isNull();
+    assertThat(entity.getProcessingUntil()).isNull();
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
+  }
+
+  @Test
   void claimForProcessing_updatesLockWhenStatusAndLockAreClaimable() {
     Query updateQuery = mockQuery();
     LocalDateTime processingUntil = FIXED_NOW.plusSeconds(30);
