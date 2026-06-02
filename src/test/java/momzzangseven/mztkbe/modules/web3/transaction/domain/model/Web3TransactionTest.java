@@ -1156,6 +1156,42 @@ class Web3TransactionTest {
   }
 
   @Test
+  void markUnconfirmedForSponsorNonceReview_setsBroadcastedAtWhenMissing() {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        Web3Transaction.reconstitute(
+            13L,
+            "idem-sponsor-review",
+            Web3ReferenceType.USER_TO_USER,
+            "ref-sponsor-review",
+            1L,
+            2L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            3L,
+            Web3TxStatus.SIGNED,
+            "0x" + "f".repeat(64),
+            now.minusMinutes(3),
+            null,
+            null,
+            "0xf86c",
+            null,
+            now.plusMinutes(1),
+            "worker-1",
+            now.minusDays(1),
+            now.minusDays(1));
+
+    tx.markUnconfirmedForSponsorNonceReview("SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED", now);
+
+    assertThat(tx.getStatus()).isEqualTo(Web3TxStatus.UNCONFIRMED);
+    assertThat(tx.getFailureReason()).isEqualTo("SPONSOR_NONCE_OPERATOR_REVIEW_REQUIRED");
+    assertThat(tx.getBroadcastedAt()).isEqualTo(now);
+    assertThat(tx.getProcessingBy()).isNull();
+    assertThat(tx.getProcessingUntil()).isNull();
+  }
+
+  @Test
   void updateStatus_throws_whenFinalStateTransitions() {
     LocalDateTime now = LocalDateTime.now();
     Web3Transaction tx =

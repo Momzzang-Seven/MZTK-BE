@@ -236,6 +236,9 @@ public class Web3Transaction {
     }
     status = Web3TxStatus.UNCONFIRMED;
     failureReason = reason;
+    if (broadcastedAt == null) {
+      broadcastedAt = nowForState;
+    }
     clearProcessingLock();
   }
 
