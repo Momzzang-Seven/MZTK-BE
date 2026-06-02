@@ -18,6 +18,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionI
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCandidatesUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCleanupViewUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentStateUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -51,7 +54,14 @@ class ExecutionIntentControllerTest {
 
   @Autowired private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @MockitoBean private GetExecutionIntentUseCase getExecutionIntentUseCase;
+  @MockitoBean(
+      extraInterfaces = {
+        GetExecutionIntentStateUseCase.class,
+        GetExecutionIntentCandidatesUseCase.class,
+        GetExecutionIntentCleanupViewUseCase.class
+      })
+  private GetExecutionIntentUseCase getExecutionIntentUseCase;
+
   @MockitoBean private ExecuteExecutionIntentUseCase executeExecutionIntentUseCase;
 
   @MockitoBean
