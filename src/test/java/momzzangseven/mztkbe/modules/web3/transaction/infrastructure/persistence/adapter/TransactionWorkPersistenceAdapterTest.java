@@ -21,18 +21,27 @@ import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ManageTransactionRecoveryPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceAttemptStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotAttemptEntity;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.nonce.NonceSlotJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,12 +55,15 @@ class TransactionWorkPersistenceAdapterTest {
 
   @Mock private EntityManager entityManager;
   @Mock private Web3TransactionJpaRepository repository;
+  @Mock private NonceSlotJpaRepository nonceSlotRepository;
 
   private TransactionWorkPersistenceAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new TransactionWorkPersistenceAdapter(entityManager, repository, FIXED_CLOCK);
+    adapter =
+        new TransactionWorkPersistenceAdapter(
+            entityManager, repository, nonceSlotRepository, FIXED_CLOCK);
   }
 
   @Test
@@ -435,8 +447,153 @@ class TransactionWorkPersistenceAdapterTest {
     assertThat(snapshots.getFirst().txHash()).isEqualTo("0x" + "c".repeat(64));
   }
 
+  @Test
+  void loadByIdForUpdate_mapsRecoverySnapshotWhenFound() {
+    Web3TransactionEntity entity = baseEntity(30L, Web3TxStatus.CREATED);
+    entity.setReferenceType(Web3ReferenceType.LEVEL_UP_REWARD);
+    entity.setReferenceId("reward-30");
+    entity.setFailureReason(Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code());
+    when(entityManager.find(
+            Web3TransactionEntity.class, 30L, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE))
+        .thenReturn(entity);
+
+    Optional<ManageTransactionRecoveryPort.RecoverySnapshot> snapshot =
+        adapter.loadByIdForUpdate(30L);
+
+    assertThat(snapshot).isPresent();
+    assertThat(snapshot.get().transactionId()).isEqualTo(30L);
+    assertThat(snapshot.get().txType()).isEqualTo(Web3TxType.EIP1559);
+    assertThat(snapshot.get().failureReason())
+        .isEqualTo(Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code());
+  }
+
+  @Test
+  void clearFailureForRequeue_clearsFailureAndLockForEligibleCreatedReward() {
+    Web3TransactionEntity entity = baseEntity(31L, Web3TxStatus.CREATED);
+    entity.setReferenceType(Web3ReferenceType.LEVEL_UP_REWARD);
+    entity.setReferenceId("reward-31");
+    entity.setFailureReason(Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code());
+    entity.setProcessingBy("issuer-worker");
+    entity.setProcessingUntil(FIXED_NOW.plusMinutes(2));
+    when(entityManager.find(
+            Web3TransactionEntity.class, 31L, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE))
+        .thenReturn(entity);
+
+    ManageTransactionRecoveryPort.RequeueMutation result = adapter.clearFailureForRequeue(31L);
+
+    assertThat(result.transactionId()).isEqualTo(31L);
+    assertThat(result.status()).isEqualTo(Web3TxStatus.CREATED);
+    assertThat(result.originalFailureReason())
+        .isEqualTo(Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code());
+    assertThat(entity.getFailureReason()).isNull();
+    assertThat(entity.getProcessingBy()).isNull();
+    assertThat(entity.getProcessingUntil()).isNull();
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
+  }
+
+  @Test
+  void clearFailureForRequeue_reactivatesDroppedSlotWhenReleasedByTransaction() {
+    Web3TransactionEntity entity = baseEntity(32L, Web3TxStatus.CREATED);
+    entity.setReferenceType(Web3ReferenceType.LEVEL_UP_REWARD);
+    entity.setReferenceId("reward-32");
+    entity.setFailureReason(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code());
+    entity.setNonce(51L);
+    entity.setProcessingBy("issuer-worker");
+    entity.setProcessingUntil(FIXED_NOW.plusMinutes(2));
+    when(entityManager.find(
+            Web3TransactionEntity.class, 32L, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE))
+        .thenReturn(entity);
+    NonceSlotEntity slot =
+        droppedSlot(
+            entity.getId(), entity.getNonce(), Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
+    NonceSlotAttemptEntity attempt =
+        droppedAttempt(
+            slot.getReleasedAttemptId(),
+            entity.getId(),
+            entity.getNonce(),
+            Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
+    when(nonceSlotRepository.findByScopeForUpdate(
+            entity.getChainId(), entity.getFromAddress(), entity.getNonce()))
+        .thenReturn(Optional.of(slot));
+    when(entityManager.find(
+            NonceSlotAttemptEntity.class,
+            slot.getReleasedAttemptId(),
+            jakarta.persistence.LockModeType.PESSIMISTIC_WRITE))
+        .thenReturn(attempt);
+
+    ManageTransactionRecoveryPort.RequeueMutation result = adapter.clearFailureForRequeue(32L);
+
+    assertThat(result.transactionId()).isEqualTo(32L);
+    assertThat(result.status()).isEqualTo(Web3TxStatus.CREATED);
+    assertThat(result.originalFailureReason())
+        .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code());
+    assertThat(entity.getNonce()).isEqualTo(51L);
+    assertThat(entity.getFailureReason()).isNull();
+    assertThat(entity.getProcessingBy()).isNull();
+    assertThat(entity.getProcessingUntil()).isNull();
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
+    assertThat(slot.getStatus()).isEqualTo(SponsorNonceSlotStatus.RESERVED);
+    assertThat(slot.getActiveAttemptId()).isEqualTo(attempt.getId());
+    assertThat(slot.getActiveTxId()).isEqualTo(entity.getId());
+    assertThat(slot.getReleasedAttemptId()).isNull();
+    assertThat(slot.getReleasedTxId()).isNull();
+    assertThat(slot.getReleaseReason()).isNull();
+    assertThat(attempt.getStatus()).isEqualTo(SponsorNonceAttemptStatus.RESERVED);
+    assertThat(attempt.getTerminalReason()).isNull();
+  }
+
+  @Test
+  void clearFailureForRequeue_rejectsNonceWhenDroppedSlotBelongsToOtherTransaction() {
+    Web3TransactionEntity entity = baseEntity(33L, Web3TxStatus.CREATED);
+    entity.setReferenceType(Web3ReferenceType.LEVEL_UP_REWARD);
+    entity.setReferenceId("reward-33");
+    entity.setFailureReason(Web3TxFailureReason.PREVALIDATE_REVERT.code());
+    entity.setNonce(52L);
+    entity.setProcessingBy("issuer-worker");
+    entity.setProcessingUntil(FIXED_NOW.plusMinutes(2));
+    when(entityManager.find(
+            Web3TransactionEntity.class, 33L, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE))
+        .thenReturn(entity);
+    when(nonceSlotRepository.findByScopeForUpdate(
+            entity.getChainId(), entity.getFromAddress(), entity.getNonce()))
+        .thenReturn(
+            Optional.of(
+                droppedSlot(99L, entity.getNonce(), Web3TxFailureReason.PREVALIDATE_REVERT)));
+
+    assertThatThrownBy(() -> adapter.clearFailureForRequeue(33L))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("pre-sign transaction");
+
+    assertThat(entity.getNonce()).isEqualTo(52L);
+    assertThat(entity.getFailureReason()).isEqualTo(Web3TxFailureReason.PREVALIDATE_REVERT.code());
+    assertThat(entity.getProcessingBy()).isEqualTo("issuer-worker");
+    assertThat(entity.getProcessingUntil()).isEqualTo(FIXED_NOW.plusMinutes(2));
+  }
+
+  @Test
+  void clearFailureForRequeue_rejectsNonceWhenSlotIsStillReserved() {
+    Web3TransactionEntity entity = baseEntity(34L, Web3TxStatus.CREATED);
+    entity.setReferenceType(Web3ReferenceType.LEVEL_UP_REWARD);
+    entity.setReferenceId("reward-34");
+    entity.setFailureReason(Web3TxFailureReason.SIGNATURE_INVALID.code());
+    entity.setNonce(53L);
+    when(entityManager.find(
+            Web3TransactionEntity.class, 34L, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE))
+        .thenReturn(entity);
+    when(nonceSlotRepository.findByScopeForUpdate(
+            entity.getChainId(), entity.getFromAddress(), entity.getNonce()))
+        .thenReturn(Optional.of(reservedSlot(entity.getId(), entity.getNonce())));
+
+    assertThatThrownBy(() -> adapter.clearFailureForRequeue(34L))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("pre-sign transaction");
+
+    assertThat(entity.getNonce()).isEqualTo(53L);
+    assertThat(entity.getFailureReason()).isEqualTo(Web3TxFailureReason.SIGNATURE_INVALID.code());
+  }
+
   private Query mockQuery() {
-    Query query = org.mockito.Mockito.mock(Query.class);
+    Query query = Mockito.mock(Query.class);
     when(query.setParameter(any(String.class), any())).thenReturn(query);
     return query;
   }
@@ -458,6 +615,60 @@ class TransactionWorkPersistenceAdapterTest {
         .status(status)
         .createdAt(now)
         .updatedAt(now)
+        .build();
+  }
+
+  private NonceSlotEntity droppedSlot(
+      Long releasedTxId, Long nonce, Web3TxFailureReason releaseReason) {
+    return NonceSlotEntity.builder()
+        .chainId(11155111L)
+        .fromAddress("0x" + "a".repeat(40))
+        .nonce(nonce)
+        .status(SponsorNonceSlotStatus.DROPPED)
+        .attemptNo(0)
+        .releasedAttemptId(1001L)
+        .releasedTxId(releasedTxId)
+        .releasedAt(FIXED_NOW.minusMinutes(1))
+        .releaseReason(releaseReason.code())
+        .replacementPrepareAttemptCount(0)
+        .broadcastRecoveryAttemptCount(0)
+        .version(0L)
+        .createdAt(FIXED_NOW.minusMinutes(2))
+        .updatedAt(FIXED_NOW.minusMinutes(1))
+        .build();
+  }
+
+  private NonceSlotAttemptEntity droppedAttempt(
+      Long attemptId, Long transactionId, Long nonce, Web3TxFailureReason terminalReason) {
+    return NonceSlotAttemptEntity.builder()
+        .id(attemptId)
+        .chainId(11155111L)
+        .fromAddress("0x" + "a".repeat(40))
+        .nonce(nonce)
+        .attemptNo(0)
+        .txId(transactionId)
+        .status(SponsorNonceAttemptStatus.DROPPED)
+        .idempotencyKey("attempt-" + transactionId)
+        .terminalReason(terminalReason.code())
+        .createdAt(FIXED_NOW.minusMinutes(2))
+        .updatedAt(FIXED_NOW.minusMinutes(1))
+        .build();
+  }
+
+  private NonceSlotEntity reservedSlot(Long activeTxId, Long nonce) {
+    return NonceSlotEntity.builder()
+        .chainId(11155111L)
+        .fromAddress("0x" + "a".repeat(40))
+        .nonce(nonce)
+        .status(SponsorNonceSlotStatus.RESERVED)
+        .attemptNo(0)
+        .activeAttemptId(1001L)
+        .activeTxId(activeTxId)
+        .replacementPrepareAttemptCount(0)
+        .broadcastRecoveryAttemptCount(0)
+        .version(0L)
+        .createdAt(FIXED_NOW.minusMinutes(2))
+        .updatedAt(FIXED_NOW.minusMinutes(1))
         .build();
   }
 }

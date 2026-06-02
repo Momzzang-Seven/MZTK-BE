@@ -24,8 +24,12 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefu
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminSettlementUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.BulkRequeueWeb3TransactionsCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.RequeueWeb3TransactionCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.service.BulkRequeueWeb3TransactionsService;
 import momzzangseven.mztkbe.modules.web3.transaction.application.service.MarkTransactionSucceededService;
+import momzzangseven.mztkbe.modules.web3.transaction.application.service.RequeueWeb3TransactionService;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ArchiveTreasuryWalletCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableTreasuryWalletCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.service.ArchiveTreasuryWalletService;
@@ -164,6 +168,57 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation.targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
     assertThat(annotation.operatorId()).isEqualTo("#command.operatorId()");
     assertThat(annotation.targetId()).isEqualTo("#command.transactionId()");
+  }
+
+  @Test
+  @DisplayName("RequeueWeb3TransactionService.execute 는 WEB3_TRANSACTION admin audit 메타데이터를 가진다")
+  void requeueWeb3TransactionService_isAnnotatedWithWeb3TransactionTargetType()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        RequeueWeb3TransactionService.class
+            .getMethod("execute", RequeueWeb3TransactionCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("TRANSACTION_REQUEUE");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorId()");
+    assertThat(annotation.targetId()).isEqualTo("#command.transactionId()");
+    assertThat(annotation.detail())
+        .containsExactly(
+            "reason=#command.reason()",
+            "evidence=#command.evidence()",
+            "previousStatus=#result != null ? #result.previousStatus().name() : null",
+            "status=#result != null ? #result.status().name() : null",
+            "originalFailureReason=#result != null ? #result.originalFailureReason() : null");
+    assertThat(detailKeys(annotation)).doesNotContainAnyElementsOf(RESERVED_AUDIT_DETAIL_KEYS);
+  }
+
+  @Test
+  @DisplayName("BulkRequeueWeb3TransactionsService.execute 는 BULK admin audit 메타데이터를 가진다")
+  void bulkRequeueWeb3TransactionsService_isAnnotatedWithBulkAuditDetail()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        BulkRequeueWeb3TransactionsService.class
+            .getMethod("execute", BulkRequeueWeb3TransactionsCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("TRANSACTION_REQUEUE_BULK");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorId()");
+    assertThat(annotation.targetId()).isEqualTo("'BULK'");
+    assertThat(annotation.detail())
+        .containsExactly(
+            "requested=#command.requestedCount()",
+            "unique=#command.uniqueTransactionIds().size()",
+            "reason=#command.reason()",
+            "evidence=#command.evidence()",
+            "succeeded=#result != null ? #result.succeeded() : null",
+            "failed=#result != null ? #result.failed() : null",
+            "rejected=#result != null ? #result.rejected() : null",
+            "notFound=#result != null ? #result.notFound() : null");
+    assertThat(detailKeys(annotation)).doesNotContainAnyElementsOf(RESERVED_AUDIT_DETAIL_KEYS);
   }
 
   @Test

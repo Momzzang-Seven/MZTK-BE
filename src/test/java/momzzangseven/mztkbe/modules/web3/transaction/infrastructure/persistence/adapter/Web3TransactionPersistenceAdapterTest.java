@@ -74,6 +74,7 @@ class Web3TransactionPersistenceAdapterTest {
     assertThat(tx.getId()).isEqualTo(9L);
     assertThat(tx.getReferenceType()).isEqualTo(Web3ReferenceType.LEVEL_UP_REWARD);
     assertThat(tx.getReferenceId()).isEqualTo("101");
+    assertThat(tx.getTxType()).isEqualTo(Web3TxType.EIP1559);
   }
 
   @Test
@@ -87,9 +88,12 @@ class Web3TransactionPersistenceAdapterTest {
 
     assertThat(tx.getCreatedAt()).isEqualTo(FIXED_NOW);
     assertThat(tx.getUpdatedAt()).isEqualTo(FIXED_NOW);
+    assertThat(tx.getTxType()).isEqualTo(Web3TxType.EIP1559);
     verify(repository)
         .saveAndFlush(
-            org.mockito.ArgumentMatchers.argThat(entity -> entity.getChainId() == 11155111L));
+            org.mockito.ArgumentMatchers.argThat(
+                entity ->
+                    entity.getChainId() == 11155111L && entity.getTxType() == Web3TxType.EIP1559));
   }
 
   private CreateLevelUpRewardTxIntentCommand validCommand() {
