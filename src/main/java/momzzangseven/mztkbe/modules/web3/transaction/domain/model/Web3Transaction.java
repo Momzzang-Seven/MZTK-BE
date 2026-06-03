@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.web3.transaction.domain.model;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
+import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -13,6 +15,19 @@ import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 @Getter
 @Builder(access = AccessLevel.PRIVATE, toBuilder = true)
 public class Web3Transaction {
+  private static final Set<Web3TxFailureReason> REQUEUE_ALLOWLIST =
+      EnumSet.of(
+          Web3TxFailureReason.KMS_DESCRIBE_TERMINAL,
+          Web3TxFailureReason.TREASURY_KEY_MISSING,
+          Web3TxFailureReason.TREASURY_WALLET_INACTIVE,
+          Web3TxFailureReason.TREASURY_TOKEN_INSUFFICIENT,
+          Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND,
+          Web3TxFailureReason.PREVALIDATE_REVERT,
+          Web3TxFailureReason.PREVALIDATE_TRANSFER_FALSE,
+          Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL,
+          Web3TxFailureReason.SIGNATURE_INVALID,
+          Web3TxFailureReason.FROM_ADDRESS_MISMATCH);
+
   private Long id;
   private String idempotencyKey;
   private Web3ReferenceType referenceType;
@@ -23,6 +38,7 @@ public class Web3Transaction {
   private String fromAddress;
   private String toAddress;
   private BigInteger amountWei;
+  private Web3TxType txType;
   private Long nonce;
 
   private Web3TxStatus status;
@@ -49,7 +65,32 @@ public class Web3Transaction {
       String toAddress,
       BigInteger amountWei,
       LocalDateTime now) {
+    return createIntent(
+        idempotencyKey,
+        referenceType,
+        referenceId,
+        fromUserId,
+        toUserId,
+        fromAddress,
+        toAddress,
+        amountWei,
+        Web3TxType.EIP1559,
+        now);
+  }
+
+  public static Web3Transaction createIntent(
+      String idempotencyKey,
+      Web3ReferenceType referenceType,
+      String referenceId,
+      Long fromUserId,
+      Long toUserId,
+      String fromAddress,
+      String toAddress,
+      BigInteger amountWei,
+      Web3TxType txType,
+      LocalDateTime now) {
     validateCore(idempotencyKey, referenceType, referenceId, fromAddress, toAddress, amountWei);
+    validateTxType(txType);
     if (now == null) {
       throw new Web3InvalidInputException(Web3ValidationMessage.NOW_REQUIRED);
     }
@@ -62,6 +103,7 @@ public class Web3Transaction {
         .fromAddress(fromAddress)
         .toAddress(toAddress)
         .amountWei(amountWei)
+        .txType(txType)
         .status(Web3TxStatus.CREATED)
         .createdAt(now)
         .updatedAt(now)
@@ -90,7 +132,56 @@ public class Web3Transaction {
       String processingBy,
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
+    return reconstitute(
+        id,
+        idempotencyKey,
+        referenceType,
+        referenceId,
+        fromUserId,
+        toUserId,
+        fromAddress,
+        toAddress,
+        amountWei,
+        Web3TxType.EIP1559,
+        nonce,
+        status,
+        txHash,
+        signedAt,
+        broadcastedAt,
+        confirmedAt,
+        signedRawTx,
+        failureReason,
+        processingUntil,
+        processingBy,
+        createdAt,
+        updatedAt);
+  }
+
+  public static Web3Transaction reconstitute(
+      Long id,
+      String idempotencyKey,
+      Web3ReferenceType referenceType,
+      String referenceId,
+      Long fromUserId,
+      Long toUserId,
+      String fromAddress,
+      String toAddress,
+      BigInteger amountWei,
+      Web3TxType txType,
+      Long nonce,
+      Web3TxStatus status,
+      String txHash,
+      LocalDateTime signedAt,
+      LocalDateTime broadcastedAt,
+      LocalDateTime confirmedAt,
+      String signedRawTx,
+      String failureReason,
+      LocalDateTime processingUntil,
+      String processingBy,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
     validateCore(idempotencyKey, referenceType, referenceId, fromAddress, toAddress, amountWei);
+    validateTxType(txType);
     if (status == null) {
       throw new Web3InvalidInputException(Web3ValidationMessage.STATUS_REQUIRED);
     }
@@ -104,6 +195,7 @@ public class Web3Transaction {
         .fromAddress(fromAddress)
         .toAddress(toAddress)
         .amountWei(amountWei)
+        .txType(txType)
         .nonce(nonce)
         .status(status)
         .txHash(txHash)
@@ -121,6 +213,57 @@ public class Web3Transaction {
 
   public String referenceKey() {
     return referenceType + ":" + referenceId;
+  }
+
+  public RequeueDecision clearFailureForRequeue() {
+    return clearFailureForRequeue(false);
+  }
+
+  public RequeueDecision clearFailureForRequeue(boolean allowDroppedNonceReservation) {
+    if (status != Web3TxStatus.CREATED) {
+      throw new Web3TransactionStateInvalidException(
+          "requeue requires CREATED status: current=" + status);
+    }
+    if (referenceType != Web3ReferenceType.LEVEL_UP_REWARD) {
+      throw new Web3TransactionStateInvalidException(
+          "requeue supports LEVEL_UP_REWARD only: current=" + referenceType);
+    }
+    if (txType != Web3TxType.EIP1559) {
+      throw new Web3TransactionStateInvalidException(
+          "requeue supports EIP1559 only: current=" + txType);
+    }
+    if (!hasText(failureReason)) {
+      throw new Web3TransactionStateInvalidException("requeue requires failureReason");
+    }
+
+    Web3TxFailureReason parsedFailureReason = parseFailureReason(failureReason);
+    if (parsedFailureReason.isRetryable()) {
+      throw new Web3TransactionStateInvalidException(
+          "requeue does not support retryable failureReason: current="
+              + parsedFailureReason.code());
+    }
+    if (!REQUEUE_ALLOWLIST.contains(parsedFailureReason)) {
+      throw new Web3TransactionStateInvalidException(
+          "requeue failureReason is not allowlisted: current=" + parsedFailureReason.code());
+    }
+    if (hasText(txHash)
+        || hasText(signedRawTx)
+        || signedAt != null
+        || broadcastedAt != null
+        || confirmedAt != null) {
+      throw new Web3TransactionStateInvalidException(
+          "requeue requires pre-sign transaction without on-chain progress");
+    }
+    if (nonce != null && !allowDroppedNonceReservation) {
+      throw new Web3TransactionStateInvalidException(
+          "requeue requires pre-sign transaction without on-chain progress");
+    }
+
+    String originalFailureReason = failureReason;
+    Web3TxStatus previousStatus = status;
+    failureReason = null;
+    clearProcessingLock();
+    return new RequeueDecision(previousStatus, originalFailureReason, status);
   }
 
   public void assignNonce(long assignedNonce) {
@@ -311,6 +454,46 @@ public class Web3Transaction {
     }
     if (amountWei == null || amountWei.signum() < 0) {
       throw new Web3InvalidInputException(Web3ValidationMessage.AMOUNT_WEI_NON_NEGATIVE);
+    }
+  }
+
+  private static void validateTxType(Web3TxType txType) {
+    if (txType == null) {
+      throw new Web3InvalidInputException("txType is required");
+    }
+  }
+
+  private static boolean hasText(String value) {
+    return value != null && !value.isBlank();
+  }
+
+  private static Web3TxFailureReason parseFailureReason(String failureReason) {
+    try {
+      return Web3TxFailureReason.valueOf(failureReason);
+    } catch (IllegalArgumentException e) {
+      for (Web3TxFailureReason candidate : Web3TxFailureReason.values()) {
+        if (failureReason.startsWith(candidate.code() + "_")) {
+          return candidate;
+        }
+      }
+      throw new Web3TransactionStateInvalidException(
+          "requeue failureReason is unknown: current=" + failureReason, e);
+    }
+  }
+
+  public record RequeueDecision(
+      Web3TxStatus previousStatus, String originalFailureReason, Web3TxStatus newStatus) {
+
+    public RequeueDecision {
+      if (previousStatus == null) {
+        throw new Web3InvalidInputException("previousStatus is required");
+      }
+      if (!hasText(originalFailureReason)) {
+        throw new Web3InvalidInputException("originalFailureReason is required");
+      }
+      if (newStatus == null) {
+        throw new Web3InvalidInputException("newStatus is required");
+      }
     }
   }
 }

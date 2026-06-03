@@ -13,15 +13,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.AdminWeb3TransactionView;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.BulkRequeueAdminWeb3TransactionItemResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.BulkRequeueAdminWeb3TransactionsCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.BulkRequeueAdminWeb3TransactionsResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetSponsorNonceSlotsQuery;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetSponsorNonceSlotsResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarkTransactionSucceededResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.RequeueAdminWeb3TransactionCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.RequeueAdminWeb3TransactionResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.SponsorNonceSlotAdminView;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.GetSponsorNonceSlotsUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.MarkTransactionSucceededUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -59,6 +68,21 @@ class TransactionControllerTest {
 
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
   @MockitoBean private GetSponsorNonceSlotsUseCase getSponsorNonceSlotsUseCase;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.admin.application.port.in
+          .RequeueAdminWeb3TransactionUseCase
+      requeueAdminWeb3TransactionUseCase;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.admin.application.port.in
+          .BulkRequeueAdminWeb3TransactionsUseCase
+      bulkRequeueAdminWeb3TransactionsUseCase;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.admin.application.port.in
+          .LoadAdminWeb3TransactionsUseCase
+      loadAdminWeb3TransactionsUseCase;
 
   @Test
   @DisplayName("POST /admin/web3/transactions/{txId}/mark-succeeded 성공")
@@ -223,6 +247,193 @@ class TransactionControllerTest {
   }
 
   @Test
+  @DisplayName("GET /admin/web3/transactions 성공")
+  void getTransactions_success() throws Exception {
+    given(loadAdminWeb3TransactionsUseCase.execute(any()))
+        .willReturn(
+            new PageImpl<>(
+                List.of(
+                    new AdminWeb3TransactionView(
+                        11L,
+                        "idem-11",
+                        "LEVEL_UP_REWARD",
+                        "reward-11",
+                        "EIP1559",
+                        null,
+                        7L,
+                        "0x" + "a".repeat(40),
+                        "0x" + "b".repeat(40),
+                        "CREATED",
+                        null,
+                        Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        LocalDateTime.parse("2026-06-02T10:00:00"),
+                        LocalDateTime.parse("2026-06-02T10:05:00"))),
+                PageRequest.of(0, 50),
+                1));
+
+    mockMvc
+        .perform(
+            get("/admin/web3/transactions")
+                .with(adminPrincipal(9L))
+                .param("failureReason", "KMS_DESCRIBE_TERMINAL"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.content[0].transactionId").value(11))
+        .andExpect(jsonPath("$.data.content[0].txType").value("EIP1559"))
+        .andExpect(jsonPath("$.data.content[0].failureReason").value("KMS_DESCRIBE_TERMINAL"));
+
+    verify(loadAdminWeb3TransactionsUseCase).execute(any());
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/transactions 인증 없으면 401")
+  void getTransactions_unauthenticated_returns401() throws Exception {
+    mockMvc.perform(get("/admin/web3/transactions")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(loadAdminWeb3TransactionsUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/{txId}/requeue 성공")
+  void requeue_success() throws Exception {
+    given(requeueAdminWeb3TransactionUseCase.execute(any(RequeueAdminWeb3TransactionCommand.class)))
+        .willReturn(
+            new RequeueAdminWeb3TransactionResult(
+                5L, "CREATED", "CREATED", "KMS_DESCRIBE_TERMINAL", true));
+
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/5/requeue")
+                .with(adminPrincipal(9L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("reason", "IAM restored", "evidence", "ops-1234"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.transactionId").value(5))
+        .andExpect(jsonPath("$.data.requeued").value(true))
+        .andExpect(jsonPath("$.data.originalFailureReason").value("KMS_DESCRIBE_TERMINAL"));
+
+    verify(requeueAdminWeb3TransactionUseCase)
+        .execute(any(RequeueAdminWeb3TransactionCommand.class));
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/requeue 성공")
+  void bulkRequeue_success() throws Exception {
+    given(
+            bulkRequeueAdminWeb3TransactionsUseCase.execute(
+                any(BulkRequeueAdminWeb3TransactionsCommand.class)))
+        .willReturn(
+            new BulkRequeueAdminWeb3TransactionsResult(
+                3,
+                2,
+                1,
+                0,
+                1,
+                0,
+                List.of(
+                    new BulkRequeueAdminWeb3TransactionItemResult(
+                        5L, "REQUEUED", "CREATED", "CREATED", "KMS_DESCRIBE_TERMINAL", null),
+                    new BulkRequeueAdminWeb3TransactionItemResult(
+                        6L,
+                        "REJECTED",
+                        "UNCONFIRMED",
+                        "UNCONFIRMED",
+                        "RECEIPT_TIMEOUT",
+                        "requeue requires CREATED status: current=UNCONFIRMED"))));
+
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/requeue")
+                .with(adminPrincipal(9L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "transactionIds", List.of(5, 6, 5),
+                            "reason", "IAM restored",
+                            "evidence", "ops-1234"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.requested").value(3))
+        .andExpect(jsonPath("$.data.unique").value(2))
+        .andExpect(jsonPath("$.data.items[0].result").value("REQUEUED"))
+        .andExpect(jsonPath("$.data.items[1].result").value("REJECTED"));
+
+    verify(bulkRequeueAdminWeb3TransactionsUseCase)
+        .execute(any(BulkRequeueAdminWeb3TransactionsCommand.class));
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/{txId}/requeue USER 권한이면 403")
+  void requeue_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/5/requeue")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("reason", "IAM restored", "evidence", "ops-1234"))))
+        .andExpect(status().isForbidden());
+
+    verifyNoInteractions(requeueAdminWeb3TransactionUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/requeue TRAINER 권한이면 403")
+  void bulkRequeue_forbiddenForTrainer_returns403() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/requeue")
+                .with(trainerPrincipal(3L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "transactionIds", List.of(5, 6),
+                            "reason", "IAM restored",
+                            "evidence", "ops-1234"))))
+        .andExpect(status().isForbidden());
+
+    verifyNoInteractions(bulkRequeueAdminWeb3TransactionsUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/requeue 인증 없으면 401")
+  void bulkRequeue_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/requeue")
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "transactionIds", List.of(5, 6),
+                            "reason", "IAM restored",
+                            "evidence", "ops-1234"))))
+        .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(bulkRequeueAdminWeb3TransactionsUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/{txId}/requeue 인증 없으면 401")
+  void requeue_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/5/requeue")
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("reason", "IAM restored", "evidence", "ops-1234"))))
+        .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(requeueAdminWeb3TransactionUseCase);
+  }
+
+  @Test
   @DisplayName("GET /admin/web3/nonce-slots 성공")
   void getNonceSlots_success() throws Exception {
     String sponsor = "0x" + "a".repeat(40);
@@ -331,6 +542,11 @@ class TransactionControllerTest {
   private org.springframework.test.web.servlet.request.RequestPostProcessor stepUpPrincipal(
       Long userId) {
     return authenticatedPrincipal(userId, "ROLE_USER", "ROLE_STEP_UP");
+  }
+
+  private org.springframework.test.web.servlet.request.RequestPostProcessor trainerPrincipal(
+      Long userId) {
+    return authenticatedPrincipal(userId, "ROLE_TRAINER");
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor nullUserPrincipal() {

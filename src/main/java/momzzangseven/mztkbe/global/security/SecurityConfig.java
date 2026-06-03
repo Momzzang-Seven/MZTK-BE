@@ -278,6 +278,12 @@ public class SecurityConfig {
                     .requestMatchers(
                         HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/admin/web3/transactions")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/web3/transactions/{txId}/requeue")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/web3/transactions/requeue")
+                    .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(
                         HttpMethod.POST,
                         "/admin/web3/wallet-registrations/replay-confirmed-approval")

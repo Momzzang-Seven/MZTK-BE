@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -14,14 +15,28 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ManageTransactionRecoveryPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceAttemptStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.nonce.SponsorNonceSlotStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotAttemptEntity;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.nonce.NonceSlotEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.nonce.NonceSlotJpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +49,10 @@ import org.springframework.transaction.annotation.Transactional;
  * issuer/receipt/recovery workers.
  */
 public class TransactionWorkPersistenceAdapter
-    implements LoadTransactionWorkPort, LoadTransactionPort, UpdateTransactionPort {
+    implements LoadTransactionWorkPort,
+        LoadTransactionPort,
+        UpdateTransactionPort,
+        ManageTransactionRecoveryPort {
 
   private static final String NON_RETRYABLE_FAILURE_REASON_SQL =
       Arrays.stream(Web3TxFailureReason.values())
@@ -61,6 +79,7 @@ public class TransactionWorkPersistenceAdapter
 
   private final EntityManager entityManager;
   private final Web3TransactionJpaRepository repository;
+  private final NonceSlotJpaRepository nonceSlotRepository;
   private final Clock appClock;
 
   /** Claims transactions by status with lock ttl and worker ownership in one transaction. */
@@ -249,6 +268,67 @@ public class TransactionWorkPersistenceAdapter
   }
 
   @Override
+  @Transactional
+  public Optional<RecoverySnapshot> loadByIdForUpdate(Long transactionId) {
+    if (transactionId == null || transactionId <= 0) {
+      throw new Web3InvalidInputException("transactionId must be positive");
+    }
+    return Optional.ofNullable(loadForUpdate(transactionId)).map(this::toRecoverySnapshot);
+  }
+
+  @Override
+  @Transactional(
+      noRollbackFor = {Web3InvalidInputException.class, Web3TransactionStateInvalidException.class})
+  public RequeueMutation clearFailureForRequeue(Long transactionId) {
+    if (transactionId == null || transactionId <= 0) {
+      throw new Web3InvalidInputException("transactionId must be positive");
+    }
+
+    Web3TransactionEntity entity = loadForUpdate(transactionId);
+    if (entity == null) {
+      throw new Web3TransactionNotFoundException(transactionId);
+    }
+
+    Web3Transaction transaction = toDomain(entity);
+    DroppedNonceReservation droppedNonceReservation =
+        loadDroppedNonceReservationForRequeue(entity).orElse(null);
+    Web3Transaction.RequeueDecision decision =
+        transaction.clearFailureForRequeue(droppedNonceReservation != null);
+    LocalDateTime now = LocalDateTime.now(appClock);
+    if (droppedNonceReservation != null) {
+      reactivateDroppedNonceReservation(droppedNonceReservation, now);
+    }
+    apply(entity, transaction);
+    entity.setUpdatedAt(now);
+    return new RequeueMutation(
+        entity.getId(),
+        transaction.getStatus(),
+        decision.previousStatus(),
+        decision.originalFailureReason());
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Page<RecoverySnapshot> loadPage(RecoveryQuery query) {
+    if (query == null) {
+      throw new Web3InvalidInputException("query is required");
+    }
+
+    Specification<Web3TransactionEntity> specification =
+        Specification.where(hasStatus(query.status()))
+            .and(hasFailureReason(query.failureReason()))
+            .and(hasReferenceType(query.referenceType()))
+            .and(hasReferenceId(query.referenceId()))
+            .and(hasTxType(query.txType()));
+
+    return repository
+        .findAll(
+            specification,
+            PageRequest.of(query.page(), query.size(), Sort.by(Sort.Order.asc("id"))))
+        .map(this::toRecoverySnapshot);
+  }
+
+  @Override
   @Transactional(readOnly = true)
   public Optional<LoadTransactionPort.TransactionSnapshot> loadById(Long transactionId) {
     if (transactionId == null || transactionId <= 0) {
@@ -325,6 +405,11 @@ public class TransactionWorkPersistenceAdapter
         .orElseThrow(() -> new Web3TransactionNotFoundException(transactionId));
   }
 
+  private Web3TransactionEntity loadForUpdate(Long transactionId) {
+    return entityManager.find(
+        Web3TransactionEntity.class, transactionId, LockModeType.PESSIMISTIC_WRITE);
+  }
+
   private Web3Transaction toDomain(Web3TransactionEntity entity) {
     return Web3Transaction.reconstitute(
         entity.getId(),
@@ -336,6 +421,7 @@ public class TransactionWorkPersistenceAdapter
         entity.getFromAddress(),
         entity.getToAddress(),
         entity.getAmountWei(),
+        entity.getTxType(),
         entity.getNonce(),
         entity.getStatus(),
         entity.getTxHash(),
@@ -349,6 +435,118 @@ public class TransactionWorkPersistenceAdapter
         entity.getCreatedAt(),
         entity.getUpdatedAt());
   }
+
+  private RecoverySnapshot toRecoverySnapshot(Web3TransactionEntity entity) {
+    return new RecoverySnapshot(
+        entity.getId(),
+        entity.getIdempotencyKey(),
+        entity.getReferenceType(),
+        entity.getReferenceId(),
+        entity.getTxType(),
+        entity.getFromUserId(),
+        entity.getToUserId(),
+        entity.getFromAddress(),
+        entity.getToAddress(),
+        entity.getStatus(),
+        entity.getTxHash(),
+        entity.getFailureReason(),
+        entity.getNonce(),
+        entity.getSignedRawTx(),
+        entity.getSignedAt(),
+        entity.getBroadcastedAt(),
+        entity.getConfirmedAt(),
+        entity.getProcessingBy(),
+        entity.getProcessingUntil(),
+        entity.getCreatedAt(),
+        entity.getUpdatedAt());
+  }
+
+  private Optional<DroppedNonceReservation> loadDroppedNonceReservationForRequeue(
+      Web3TransactionEntity entity) {
+    if (entity.getNonce() == null || entity.getChainId() == null) {
+      return Optional.empty();
+    }
+    if (entity.getFromAddress() == null || entity.getFromAddress().isBlank()) {
+      return Optional.empty();
+    }
+
+    String fromAddress = EvmAddress.of(entity.getFromAddress()).value();
+    return nonceSlotRepository
+        .findByScopeForUpdate(entity.getChainId(), fromAddress, entity.getNonce())
+        .filter(slot -> isDroppedReleasedByTransaction(slot, entity))
+        .flatMap(slot -> loadReleasedAttemptForUpdate(slot, entity));
+  }
+
+  private boolean isDroppedReleasedByTransaction(
+      NonceSlotEntity slot, Web3TransactionEntity entity) {
+    return slot.getStatus() == SponsorNonceSlotStatus.DROPPED
+        && entity.getId() != null
+        && entity.getId().equals(slot.getReleasedTxId())
+        && slot.getReleasedAttemptId() != null
+        && entity.getFailureReason() != null
+        && entity.getFailureReason().equals(slot.getReleaseReason())
+        && slot.getActiveTxId() == null
+        && slot.getActiveAttemptId() == null
+        && slot.getActiveTxHash() == null;
+  }
+
+  private Optional<DroppedNonceReservation> loadReleasedAttemptForUpdate(
+      NonceSlotEntity slot, Web3TransactionEntity entity) {
+    NonceSlotAttemptEntity attempt =
+        entityManager.find(
+            NonceSlotAttemptEntity.class,
+            slot.getReleasedAttemptId(),
+            LockModeType.PESSIMISTIC_WRITE);
+    if (attempt == null || !isDroppedAttemptOwnedByTransaction(attempt, slot, entity)) {
+      return Optional.empty();
+    }
+    return Optional.of(new DroppedNonceReservation(slot, attempt));
+  }
+
+  private boolean isDroppedAttemptOwnedByTransaction(
+      NonceSlotAttemptEntity attempt, NonceSlotEntity slot, Web3TransactionEntity entity) {
+    return attempt.getStatus() == SponsorNonceAttemptStatus.DROPPED
+        && entity.getId().equals(attempt.getTxId())
+        && slot.getChainId().equals(attempt.getChainId())
+        && slot.getFromAddress().equals(attempt.getFromAddress())
+        && slot.getNonce().equals(attempt.getNonce())
+        && attempt.getTxHash() == null
+        && attempt.getSignedAt() == null
+        && attempt.getBroadcastStartedAt() == null
+        && attempt.getBroadcastedAt() == null;
+  }
+
+  private void reactivateDroppedNonceReservation(
+      DroppedNonceReservation reservation, LocalDateTime now) {
+    NonceSlotEntity slot = reservation.slot();
+    NonceSlotAttemptEntity attempt = reservation.attempt();
+
+    slot.setStatus(SponsorNonceSlotStatus.RESERVED);
+    slot.setActiveAttemptId(attempt.getId());
+    slot.setActiveTxId(attempt.getTxId());
+    slot.setActiveTxHash(null);
+    slot.setReleasedAttemptId(null);
+    slot.setReleasedTxId(null);
+    slot.setReleasedAt(null);
+    slot.setReleaseReason(null);
+    slot.setStuckReason(null);
+    slot.setReplacementClaimOwner(null);
+    slot.setReplacementClaimExpiresAt(null);
+    slot.setReplacementPrepareAttemptCount(0);
+    slot.setBroadcastStartedAt(null);
+    slot.setLastBroadcastedAt(null);
+    slot.setBroadcastRecoveryClaimOwner(null);
+    slot.setBroadcastRecoveryClaimToken(null);
+    slot.setBroadcastRecoveryClaimExpiresAt(null);
+    slot.setBroadcastRecoveryAttemptCount(0);
+    slot.setUpdatedAt(now);
+
+    attempt.setStatus(SponsorNonceAttemptStatus.RESERVED);
+    attempt.setTerminalReason(null);
+    attempt.setUpdatedAt(now);
+  }
+
+  private record DroppedNonceReservation(NonceSlotEntity slot, NonceSlotAttemptEntity attempt) {}
 
   private void apply(Web3TransactionEntity entity, Web3Transaction domain) {
     entity.setNonce(domain.getNonce());
@@ -419,5 +617,34 @@ public class TransactionWorkPersistenceAdapter
           """;
       default -> "";
     };
+  }
+
+  private Specification<Web3TransactionEntity> hasStatus(Web3TxStatus status) {
+    return (root, query, cb) ->
+        status == null ? cb.conjunction() : cb.equal(root.get("status"), status);
+  }
+
+  private Specification<Web3TransactionEntity> hasFailureReason(String failureReason) {
+    return (root, query, cb) ->
+        failureReason == null
+            ? cb.conjunction()
+            : cb.equal(root.get("failureReason"), failureReason);
+  }
+
+  private Specification<Web3TransactionEntity> hasReferenceType(Web3ReferenceType referenceType) {
+    return (root, query, cb) ->
+        referenceType == null
+            ? cb.conjunction()
+            : cb.equal(root.get("referenceType"), referenceType);
+  }
+
+  private Specification<Web3TransactionEntity> hasReferenceId(String referenceId) {
+    return (root, query, cb) ->
+        referenceId == null ? cb.conjunction() : cb.equal(root.get("referenceId"), referenceId);
+  }
+
+  private Specification<Web3TransactionEntity> hasTxType(Web3TxType txType) {
+    return (root, query, cb) ->
+        txType == null ? cb.conjunction() : cb.equal(root.get("txType"), txType);
   }
 }

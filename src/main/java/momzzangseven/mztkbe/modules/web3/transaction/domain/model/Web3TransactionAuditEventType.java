@@ -8,6 +8,7 @@ public enum Web3TransactionAuditEventType {
   RECEIPT_POLL,
   STATE_CHANGE,
   CS_OVERRIDE,
+  REQUEUE,
   AUTHORIZATION,
   LIMIT_CHECK
 }

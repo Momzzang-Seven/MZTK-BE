@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SaveTr
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
@@ -59,6 +60,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
                 command.fromAddress().value(),
                 command.toAddress().value(),
                 command.amountWei(),
+                Web3TxType.EIP1559,
                 LocalDateTime.now(appClock)));
 
     try {
@@ -98,6 +100,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
         entity.getFromAddress(),
         entity.getToAddress(),
         entity.getAmountWei(),
+        entity.getTxType(),
         entity.getNonce(),
         entity.getStatus(),
         entity.getTxHash(),
@@ -124,6 +127,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
         .toAddress(transaction.getToAddress())
         .amountWei(transaction.getAmountWei())
         .chainId(web3CoreProperties.getChainId())
+        .txType(transaction.getTxType())
         .nonce(transaction.getNonce())
         .status(transaction.getStatus())
         .txHash(transaction.getTxHash())
