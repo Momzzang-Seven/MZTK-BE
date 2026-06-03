@@ -8,6 +8,9 @@ import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class Web3TransactionTest {
 
@@ -1605,5 +1608,313 @@ class Web3TransactionTest {
     assertThatThrownBy(() -> tx.updateStatus(Web3TxStatus.PENDING, null, null, now))
         .isInstanceOf(Web3TransactionStateInvalidException.class)
         .hasMessageContaining("invalid transition");
+  }
+
+  @Test
+  void clearFailureForRequeue_clearsFailureReasonAndProcessingLock_forAllowlistedCreatedReward() {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        Web3Transaction.reconstitute(
+            99L,
+            "idem-requeue",
+            Web3ReferenceType.LEVEL_UP_REWARD,
+            "reward-99",
+            null,
+            7L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            Web3TxType.EIP1559,
+            null,
+            Web3TxStatus.CREATED,
+            null,
+            null,
+            null,
+            null,
+            null,
+            Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(),
+            now.plusMinutes(5),
+            "issuer-worker",
+            now,
+            now);
+
+    Web3Transaction.RequeueDecision result = tx.clearFailureForRequeue();
+
+    assertThat(result.previousStatus()).isEqualTo(Web3TxStatus.CREATED);
+    assertThat(result.originalFailureReason())
+        .isEqualTo(Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code());
+    assertThat(tx.getStatus()).isEqualTo(Web3TxStatus.CREATED);
+    assertThat(tx.getFailureReason()).isNull();
+    assertThat(tx.getProcessingBy()).isNull();
+    assertThat(tx.getProcessingUntil()).isNull();
+  }
+
+  @Test
+  void clearFailureForRequeue_throws_whenTxTypeIsNotEip1559() {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        Web3Transaction.reconstitute(
+            100L,
+            "idem-requeue-7702",
+            Web3ReferenceType.LEVEL_UP_REWARD,
+            "reward-100",
+            null,
+            7L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            Web3TxType.EIP7702,
+            null,
+            Web3TxStatus.CREATED,
+            null,
+            null,
+            null,
+            null,
+            null,
+            Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(),
+            null,
+            null,
+            now,
+            now);
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("requeue supports EIP1559 only");
+  }
+
+  @Test
+  void clearFailureForRequeue_throws_whenFailureReasonIsRetryable() {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        Web3Transaction.reconstitute(
+            101L,
+            "idem-requeue-retryable",
+            Web3ReferenceType.LEVEL_UP_REWARD,
+            "reward-101",
+            null,
+            7L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            Web3TxType.EIP1559,
+            null,
+            Web3TxStatus.CREATED,
+            null,
+            null,
+            null,
+            null,
+            null,
+            Web3TxFailureReason.RPC_UNAVAILABLE.code(),
+            null,
+            null,
+            now,
+            now);
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("retryable failureReason");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"nonce", "txHash", "signedRawTx", "signedAt", "broadcastedAt", "confirmedAt"})
+  void clearFailureForRequeue_throws_whenPreSignInvariantIsBroken(String progressedField) {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        Web3Transaction.reconstitute(
+            102L,
+            "idem-requeue-progress",
+            Web3ReferenceType.LEVEL_UP_REWARD,
+            "reward-102",
+            null,
+            7L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            Web3TxType.EIP1559,
+            "nonce".equals(progressedField) ? 3L : null,
+            Web3TxStatus.CREATED,
+            "txHash".equals(progressedField) ? "0xabc" : null,
+            "signedAt".equals(progressedField) ? now.minusMinutes(3) : null,
+            "broadcastedAt".equals(progressedField) ? now.minusMinutes(2) : null,
+            "confirmedAt".equals(progressedField) ? now.minusMinutes(1) : null,
+            "signedRawTx".equals(progressedField) ? "0xf86c" : null,
+            Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(),
+            null,
+            null,
+            now,
+            now);
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("pre-sign transaction");
+  }
+
+  @Test
+  void clearFailureForRequeue_allowsNonce_whenDroppedReservationIsVerified() {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        requeueCandidate(
+            207L,
+            Web3ReferenceType.LEVEL_UP_REWARD,
+            Web3TxType.EIP1559,
+            51L,
+            Web3TxStatus.CREATED,
+            Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(),
+            now);
+
+    Web3Transaction.RequeueDecision result = tx.clearFailureForRequeue(true);
+
+    assertThat(result.previousStatus()).isEqualTo(Web3TxStatus.CREATED);
+    assertThat(result.originalFailureReason())
+        .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code());
+    assertThat(tx.getNonce()).isEqualTo(51L);
+    assertThat(tx.getFailureReason()).isNull();
+    assertThat(tx.getProcessingBy()).isNull();
+    assertThat(tx.getProcessingUntil()).isNull();
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Web3TxFailureReason.class,
+      names = {
+        "KMS_DESCRIBE_TERMINAL",
+        "TREASURY_KEY_MISSING",
+        "TREASURY_WALLET_INACTIVE",
+        "TREASURY_TOKEN_INSUFFICIENT",
+        "PREVALIDATE_INVALID_COMMAND",
+        "PREVALIDATE_REVERT",
+        "PREVALIDATE_TRANSFER_FALSE",
+        "KMS_SIGN_FAILED_TERMINAL",
+        "SIGNATURE_INVALID",
+        "FROM_ADDRESS_MISMATCH"
+      })
+  void clearFailureForRequeue_allowsEveryPhaseOneReason(Web3TxFailureReason failureReason) {
+    Web3Transaction tx = requeueCandidate(200L, failureReason.code());
+
+    Web3Transaction.RequeueDecision result = tx.clearFailureForRequeue();
+
+    assertThat(result.originalFailureReason()).isEqualTo(failureReason.code());
+    assertThat(tx.getFailureReason()).isNull();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"INVALID_SIGNED_TX", "RECEIPT_TIMEOUT", "RECEIPT_TIMEOUT_60S"})
+  void clearFailureForRequeue_rejectsNonAllowlistedTerminalReason(String failureReason) {
+    Web3Transaction tx = requeueCandidate(201L, failureReason);
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("not allowlisted");
+  }
+
+  @Test
+  void clearFailureForRequeue_rejectsUnknownFailureReason() {
+    Web3Transaction tx = requeueCandidate(202L, "UNKNOWN_TERMINAL_REASON");
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("unknown");
+  }
+
+  @Test
+  void clearFailureForRequeue_rejectsMissingFailureReason() {
+    Web3Transaction tx = requeueCandidate(203L, null);
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("requires failureReason");
+  }
+
+  @Test
+  void clearFailureForRequeue_rejectsBlankFailureReason() {
+    Web3Transaction tx = requeueCandidate(204L, " ");
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("requires failureReason");
+  }
+
+  @Test
+  void clearFailureForRequeue_rejectsNonLevelUpRewardReference() {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        requeueCandidate(
+            205L,
+            Web3ReferenceType.USER_TO_USER,
+            Web3TxType.EIP1559,
+            null,
+            Web3TxStatus.CREATED,
+            Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(),
+            now);
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("LEVEL_UP_REWARD");
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Web3TxStatus.class,
+      names = {"SIGNED", "PENDING", "UNCONFIRMED", "SUCCEEDED", "FAILED_ONCHAIN"})
+  void clearFailureForRequeue_rejectsNonCreatedStatus(Web3TxStatus status) {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        requeueCandidate(
+            206L,
+            Web3ReferenceType.LEVEL_UP_REWARD,
+            Web3TxType.EIP1559,
+            null,
+            status,
+            Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(),
+            now);
+
+    assertThatThrownBy(tx::clearFailureForRequeue)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("CREATED status");
+  }
+
+  private Web3Transaction requeueCandidate(Long id, String failureReason) {
+    return requeueCandidate(
+        id,
+        Web3ReferenceType.LEVEL_UP_REWARD,
+        Web3TxType.EIP1559,
+        null,
+        Web3TxStatus.CREATED,
+        failureReason,
+        LocalDateTime.now());
+  }
+
+  private Web3Transaction requeueCandidate(
+      Long id,
+      Web3ReferenceType referenceType,
+      Web3TxType txType,
+      Long nonce,
+      Web3TxStatus status,
+      String failureReason,
+      LocalDateTime now) {
+    return Web3Transaction.reconstitute(
+        id,
+        "idem-requeue-" + id,
+        referenceType,
+        "reward-" + id,
+        null,
+        7L,
+        "0x" + "a".repeat(40),
+        "0x" + "b".repeat(40),
+        BigInteger.ONE,
+        txType,
+        nonce,
+        status,
+        null,
+        null,
+        null,
+        null,
+        null,
+        failureReason,
+        now.plusMinutes(5),
+        "issuer-worker",
+        now,
+        now);
   }
 }

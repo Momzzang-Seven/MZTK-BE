@@ -41,6 +41,21 @@ class Web3ConditionalEndpointsDisabledControllerTest {
       txMarkTransactionSucceededUseCase;
 
   @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.admin.application.port.in
+          .RequeueAdminWeb3TransactionUseCase
+      txRequeueAdminWeb3TransactionUseCase;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.admin.application.port.in
+          .BulkRequeueAdminWeb3TransactionsUseCase
+      txBulkRequeueAdminWeb3TransactionsUseCase;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.admin.application.port.in
+          .LoadAdminWeb3TransactionsUseCase
+      txLoadAdminWeb3TransactionsUseCase;
+
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
@@ -74,6 +89,18 @@ class Web3ConditionalEndpointsDisabledControllerTest {
                             "manual",
                             "evidence",
                             "ops"))))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  @DisplayName("reward-token 비활성화 시 transaction requeue endpoint는 404")
+  void transactionRequeueEndpoint_disabled_returns404() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/1/requeue")
+                .with(adminPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("reason", "manual", "evidence", "ops"))))
         .andExpect(status().isNotFound());
   }
 

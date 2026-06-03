@@ -8,18 +8,14 @@ import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.Marketplace
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceInternalExecutionPolicyStatus;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.LoadMarketplaceAdminExecutionAuthorityUseCase;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceInternalExecutionPolicyPort;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
 @RequiredArgsConstructor
 @ConditionalOnMarketplaceAdminEnabled
-@ConditionalOnBean({
-  LoadMarketplaceInternalExecutionPolicyPort.class,
-  LoadMarketplaceAdminExecutionAuthorityUseCase.class
-})
 public class MarketplaceAdminExecutionConfigurationValidator {
 
   private static final String ENABLE_MARKETPLACE_ADMIN_SETTLE_MESSAGE =
@@ -37,10 +33,10 @@ public class MarketplaceAdminExecutionConfigurationValidator {
       "Marketplace admin execution signer is not registered as relayer at startup: "
           + "signerAddress=%s";
 
-  private final LoadMarketplaceInternalExecutionPolicyPort
-      loadMarketplaceInternalExecutionPolicyPort;
-  private final LoadMarketplaceAdminExecutionAuthorityUseCase
-      loadMarketplaceAdminExecutionAuthorityUseCase;
+  private final ObjectProvider<LoadMarketplaceInternalExecutionPolicyPort>
+      loadMarketplaceInternalExecutionPolicyPortProvider;
+  private final ObjectProvider<LoadMarketplaceAdminExecutionAuthorityUseCase>
+      loadMarketplaceAdminExecutionAuthorityUseCaseProvider;
 
   @Value("${web3.marketplace.admin.fail-fast:false}")
   private boolean failFast;
@@ -51,6 +47,13 @@ public class MarketplaceAdminExecutionConfigurationValidator {
   }
 
   void validateConfiguration() {
+    LoadMarketplaceInternalExecutionPolicyPort loadMarketplaceInternalExecutionPolicyPort =
+        requireBean(
+            loadMarketplaceInternalExecutionPolicyPortProvider.getIfAvailable(),
+            "Marketplace admin execution requires LoadMarketplaceInternalExecutionPolicyPort");
+    if (loadMarketplaceInternalExecutionPolicyPort == null) {
+      return;
+    }
     MarketplaceInternalExecutionPolicyStatus policy =
         loadMarketplaceInternalExecutionPolicyPort.load();
     if (!policy.enabled()) {
@@ -64,6 +67,13 @@ public class MarketplaceAdminExecutionConfigurationValidator {
       throw new IllegalStateException(ENABLE_MARKETPLACE_ADMIN_REFUND_MESSAGE);
     }
 
+    LoadMarketplaceAdminExecutionAuthorityUseCase loadMarketplaceAdminExecutionAuthorityUseCase =
+        requireBean(
+            loadMarketplaceAdminExecutionAuthorityUseCaseProvider.getIfAvailable(),
+            "Marketplace admin execution requires LoadMarketplaceAdminExecutionAuthorityUseCase");
+    if (loadMarketplaceAdminExecutionAuthorityUseCase == null) {
+      return;
+    }
     MarketplaceAdminExecutionAuthorityStatus authority =
         loadMarketplaceAdminExecutionAuthorityUseCase.execute();
     if (!authority.serverSignerAvailable() || authority.serverSignerAddress() == null) {
@@ -80,6 +90,14 @@ public class MarketplaceAdminExecutionConfigurationValidator {
       handleMisconfiguration(
           RELAYER_NOT_REGISTERED_MESSAGE.formatted(authority.serverSignerAddress()), null);
     }
+  }
+
+  private <T> T requireBean(T bean, String message) {
+    if (bean != null) {
+      return bean;
+    }
+    handleMisconfiguration(message, null);
+    return null;
   }
 
   private void handleMisconfiguration(String message, RuntimeException cause) {
