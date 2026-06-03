@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,8 +34,8 @@ class MarketplaceAdminExecutionConfigurationValidatorTest {
   void setUp() {
     validator =
         new MarketplaceAdminExecutionConfigurationValidator(
-            loadMarketplaceInternalExecutionPolicyPort,
-            loadMarketplaceAdminExecutionAuthorityUseCase);
+            provider(loadMarketplaceInternalExecutionPolicyPort),
+            provider(loadMarketplaceAdminExecutionAuthorityUseCase));
   }
 
   @Test
@@ -65,6 +66,31 @@ class MarketplaceAdminExecutionConfigurationValidatorTest {
         .thenReturn(MarketplaceAdminExecutionAuthorityStatus.serverRelayerOnly());
 
     assertThatCode(validator::validateConfiguration).doesNotThrowAnyException();
+  }
+
+  @Test
+  @DisplayName("fail-fast=false 이면 authority use case 누락은 startup 을 막지 않는다")
+  void validateConfiguration_allowsMissingAuthorityUseCaseWhenFailFastOff() {
+    validator =
+        new MarketplaceAdminExecutionConfigurationValidator(
+            provider(loadMarketplaceInternalExecutionPolicyPort), provider(null));
+    when(loadMarketplaceInternalExecutionPolicyPort.load()).thenReturn(enabledPolicy());
+
+    assertThatCode(validator::validateConfiguration).doesNotThrowAnyException();
+  }
+
+  @Test
+  @DisplayName("fail-fast=true 이면 authority use case 누락을 startup 에서 차단한다")
+  void validateConfiguration_rejectsMissingAuthorityUseCaseWhenFailFastOn() {
+    validator =
+        new MarketplaceAdminExecutionConfigurationValidator(
+            provider(loadMarketplaceInternalExecutionPolicyPort), provider(null));
+    ReflectionTestUtils.setField(validator, "failFast", true);
+    when(loadMarketplaceInternalExecutionPolicyPort.load()).thenReturn(enabledPolicy());
+
+    assertThatThrownBy(validator::validateConfiguration)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("LoadMarketplaceAdminExecutionAuthorityUseCase");
   }
 
   @Test
@@ -99,5 +125,41 @@ class MarketplaceAdminExecutionConfigurationValidatorTest {
         "0x2222222222222222222222222222222222222222",
         true,
         MarketplaceAdminExecutionAuthorityStatus.RELAYER_REGISTRATION_REGISTERED);
+  }
+
+  private static <T> ObjectProvider<T> provider(T bean) {
+    return new ObjectProvider<>() {
+      @Override
+      public T getObject(Object... args) {
+        return bean;
+      }
+
+      @Override
+      public T getObject() {
+        return bean;
+      }
+
+      @Override
+      public T getIfAvailable() {
+        return bean;
+      }
+
+      @Override
+      public T getIfUnique() {
+        return bean;
+      }
+
+      @Override
+      public java.util.Iterator<T> iterator() {
+        return bean == null
+            ? java.util.Collections.emptyIterator()
+            : java.util.Collections.singleton(bean).iterator();
+      }
+
+      @Override
+      public java.util.stream.Stream<T> stream() {
+        return bean == null ? java.util.stream.Stream.empty() : java.util.stream.Stream.of(bean);
+      }
+    };
   }
 }

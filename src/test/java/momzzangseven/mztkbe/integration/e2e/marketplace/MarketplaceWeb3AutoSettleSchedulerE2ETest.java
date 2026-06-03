@@ -30,10 +30,14 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentS
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.persistence.repository.Web3ExecutionIntentJpaRepository;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminEscrowExecutionRequest;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceAdminExecutionAuthorityStatus;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceInternalExecutionPolicyStatus;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.dto.MarketplaceUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.BuildMarketplaceAdminExecutionDraftUseCase;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.in.LoadMarketplaceAdminExecutionAuthorityUseCase;
+import momzzangseven.mztkbe.modules.web3.marketplace.application.port.out.LoadMarketplaceInternalExecutionPolicyPort;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.marketplace.domain.vo.MarketplaceExecutionResourceType;
 import org.junit.jupiter.api.BeforeEach;
@@ -276,10 +280,30 @@ class MarketplaceWeb3AutoSettleSchedulerE2ETest extends E2ETestBase {
 
     @Bean
     @Primary
+    LoadMarketplaceInternalExecutionPolicyPort testLoadMarketplaceInternalExecutionPolicyPort() {
+      return () -> new MarketplaceInternalExecutionPolicyStatus(true, true, true);
+    }
+
+    @Bean
+    @Primary
     LoadMarketplaceAdminExecutionAuthorityPort testLoadMarketplaceAdminExecutionAuthorityPort() {
       return () ->
           new MarketplaceAdminExecutionAuthorityView(
               false, "SERVER_RELAYER_ONLY", true, wallet('f'), true, false, false);
+    }
+
+    @Bean
+    @Primary
+    LoadMarketplaceAdminExecutionAuthorityUseCase
+        testLoadMarketplaceAdminExecutionAuthorityUseCase() {
+      return () ->
+          new MarketplaceAdminExecutionAuthorityStatus(
+              false,
+              MarketplaceAdminExecutionAuthorityStatus.SERVER_RELAYER_ONLY,
+              true,
+              wallet('f'),
+              true,
+              MarketplaceAdminExecutionAuthorityStatus.RELAYER_REGISTRATION_REGISTERED);
     }
   }
 }
