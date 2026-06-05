@@ -10,9 +10,15 @@
 ```bash
 git pull
 mv docs docs.local                              # 기존 개인 docs 가 있다면 personal 영역으로 이동 (없으면 skip)
+./install-git-hooks.sh                          # Git hook 설치
+ls scripts/agents/hooks/                        # check-architecture-rules.py, check-agent-link.py 확인
+```
+
+Claude Code나 Codex CLI를 사용한다면 아래 명령도 실행합니다.
+
+```bash
 python3 scripts/agents/setup-skill-links.py     # .claude/skills → .agents/skills 링크 1회 생성
-ls .claude/skills/                              # 9 개 공유 skill 인식 확인 (개인 skill 추가 시 더 많을 수 있음)
-ls scripts/agents/hooks/                        # check-architecture-rules.py, check-agent-link.py 2 개 확인
+ls .claude/skills/                              # 공유 skill 인식 확인 (개인 skill 추가 시 더 많을 수 있음)
 ```
 
 `setup-skill-links.py` 는 cross-platform — macOS/Linux 는 symlink, Windows native 는 directory junction (Developer Mode 불필요, `cmd.exe` 만 있으면 동작) 을 생성한다. 멱등하므로 여러 번 실행해도 안전.
