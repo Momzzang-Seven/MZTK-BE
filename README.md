@@ -1,3 +1,15 @@
+<p align="center">
+  <img src="./assets/readme/HYU_symbol_basic.svg" width="44" alt="한양대학교 심볼" />
+  &nbsp;&nbsp;
+  <img src="./assets/readme/HYU_logotype_ERICA_blue_kor.svg" width="260" alt="한양대학교 ERICA" />
+</p>
+
+<p align="center">
+  <img src="./assets/readme/hyu-capstone-award.svg" width="600" alt="한양대학교 ERICA 소프트웨어융합대학 캡스톤페어 우수상" />
+</p>
+
+---
+
 # <img src="./assets/readme/momzzang-logo.svg" width="46" align="center" alt="몸짱토큰 로고" /> 몸짱토큰 Backend
 
 운동 인증, XP/레벨, 커뮤니티, 마켓플레이스, Web3 토큰 보상을 연결하는 Spring Boot 기반 API 서버입니다.
